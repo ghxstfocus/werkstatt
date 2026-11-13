@@ -6219,3 +6219,17 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - GitHub Actions Quality-Gate fuer den vollständigen Fix-Stand: [Run 43390871808](https://github.com/ghxstfocus/werkstatt/actions/runs/43390871808) erfolgreich.
 - Ergebnis: 2.184 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden.
 - Der Lauf deckt den Standard-Reflection-Pfad ueber fuenf Reparaturschritte, Reviewer-Nachpruefung nach leerem Patch sowie den aktiven Task mit sichtbarem Verify-Timeline-Event ab.
+
+
+## 2026-11-13 — OP-401: Chatfragen an Run-Checkpoint binden
+
+- Run-gebundene Lesejobs werden erst an einem bestätigten Inbox-Checkpoint gestartet. Vor dem Acknowledge erstellt der Loop einen verwalteten Snapshot des exakten Run-Worktrees; Quelle, Snapshot-Pfad, HEAD und Fingerprint werden am Job und im Checkpoint protokolliert.
+- Der Worker validiert Snapshot-Identität und Inhalt vor dem Lesen. Fehlende, veränderte oder nicht passende Snapshots beenden den Job sichtbar und fail-closed. Nach dem Job wird nur der genau zugehörige Snapshot bereinigt; Cleanup-Fehler werden als Audit-Ereignis geführt.
+- Ein Zwischen-CI-Lauf deckte einen fehlerhaften Testaufbau auf: Das Manifest verwendete eine Platzhalter-Job-ID statt der tatsächlich erzeugten ID. Der Test bindet den Snapshot jetzt an die echte Job-ID. Zusätzlich ist das Cleanup-Audit-Ereignis im Katalog registriert.
+- Quality-Gate [Run 43397231589](https://github.com/ghxstfocus/werkstatt/actions/runs/43397231589): 2.190 Tests bestanden, 5 übersprungen; Ruff, Mypy, AST und Audit-Katalog grün. Der Doku-/OP-Abgleich und ein erneuter CI-Lauf nach diesem Protokolleintrag stehen noch aus.
+
+## Folgeprüfung nach Loop- und UI-Stabilisierung
+
+- Eine Werkstatt-Chatantwort zu den letzten 24 Stunden hat PROGRESS.md zunächst vom Dateianfang gelesen und Zeichen-Offsets fälschlich wie Zeilenpositionen behandelt. Dadurch behauptete sie unbelegt, neuere Einträge fehlten, und wollte erst nach Nachfrage ans Dateiende gehen.
+- Bei der späteren Korrektur wurde derselbe Offsetfehler wiederholt. Folgeprüfung: Chat-Dateiwerkzeuge und Prompt-/Tool-Verhalten gegen große append-only Dokumente prüfen; Lesen muss Dateiende, Suchtreffer und tatsächliche Tool-Limits belegen, bevor Vollständigkeit behauptet oder eine Rückfrage gestellt wird. Als reproduzierbaren Fall mit den konkreten Zeitstempeln und Tool-Aufrufen dokumentieren.
+- Dieser Punkt ist vorgemerkt und wird nach Loop- und UI-Stabilisierung separat untersucht; er ist durch die aktuelle OP-401-Änderung nicht behoben.
