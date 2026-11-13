@@ -1143,22 +1143,128 @@ def _tl_aggregate_aktiv(
 ) -> dict[str, Any]:
     """Wer arbeitet JETZT am Run?
 
-    Kriterium: letztes Event ist 'in progress' (endet auf _start, ist
-    llm_call, llm_call_start oder loop_task_start). Wenn dieses Event
-    hoechstens ``stale_after_s`` alt ist, liefert die Funktion
-    {rolle, aktion, seit_s, kind}. Sonst {} (haengt oder nichts laeuft).
-
-    Die 300s-Grenze ist Absicht: ein Loop, der 5 Minuten kein Event
-    schreibt, ist entweder gecrasht oder blockiert — dann soll die UI
-    nicht faelschlich 'laeuft' zeigen.
+    Offene Tasks bleiben aktiv, bis ein Task-Abschluss oder ein Run-Ende
+    protokolliert ist. Dadurch loeschen Builder-/Verify-Kontext-Events den
+    laufenden Task nicht aus der Aktiv-Anzeige. Die Stale-Grenze gilt weiter.
     """
     from datetime import UTC
     from datetime import datetime as _dt
 
     if not run_events:
         return {}
-    letztes = run_events[-1]
-    kind = str(letztes.get("kind", ""))
+
+    terminal_runs = {
+        "loop_failed", "loop_erfolg", "loop_ended", "loop_stopped",
+        "loop_aborted", "summary",
+    }
+    task_terminals = {
+        "loop_task_ok", "loop_task_failed", "loop_task_blocked",
+    }
+    latest = run_events[-1]
+    latest_kind = str(latest.get("kind", ""))
+
+    # Ein offener Gate-Dialog hat Vorrang vor dem noch nicht abgeschlossenen
+    # Task, weil der Run an dieser Stelle tatsaechlich auf den Menschen wartet.
+    if latest_kind == "gate_open":
+        ts_raw = latest.get("timestamp") or latest.get("ts") or ""
+        try:
+            ts = _dt.fromisoformat(str(ts_raw))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=UTC)
+            delta_s = (_dt.now(UTC) - ts).total_seconds()
+        except (ValueError, TypeError):
+            return {}
+        if delta_s < 0 or delta_s > stale_after_s:
+            return {}
+        return {
+            "rolle": "loop",
+            "aktion": "wartet auf Antwort",
+            "seit_s": int(delta_s),
+            "kind": latest_kind,
+        }
+
+    # Das letzte Task-Start-Event bleibt bis zum passenden terminalen
+    # Task-Event offen. Zwischenereignisse wie builder_file_context,
+    # verify stages oder LLM heartbeats beschreiben den aktiven Task weiter.
+    task_start_index: int | None = None
+    for index, event in enumerate(run_events):
+        event_kind = str(event.get("kind", ""))
+        if event_kind == "loop_task_start":
+            task_start_index = index
+        elif event_kind in task_terminals:
+            task_start_index = None
+
+    if (
+        task_start_index is not None
+        and latest_kind not in terminal_runs
+    ):
+        task_start = run_events[task_start_index]
+        task_payload = task_start.get("payload")
+        if not isinstance(task_payload, dict):
+            task_payload = {}
+        task_name = str(
+            task_payload.get("name") or task_payload.get("text") or "",
+        ).strip()
+
+        # Parallel laufende Chat-Jobs duerfen den eigentlichen Loop-Task in
+        # der Control-Anzeige nicht verdecken.
+        activity = next(
+            (
+                event for event in reversed(run_events[task_start_index:])
+                if not str(event.get("kind", "")).startswith("chat_job_")
+            ),
+            task_start,
+        )
+        activity_kind = str(activity.get("kind", ""))
+        role = "loop"
+        for event in reversed(run_events[task_start_index:]):
+            event_kind = str(event.get("kind", ""))
+            if event_kind.startswith("chat_job_"):
+                continue
+            candidate_role = _tl_rolle(
+                str(event.get("agent", "")), event_kind,
+            )
+            if candidate_role != "loop":
+                role = candidate_role
+                break
+
+        ts_raw = activity.get("timestamp") or activity.get("ts") or ""
+        try:
+            ts = _dt.fromisoformat(str(ts_raw))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=UTC)
+            delta_s = (_dt.now(UTC) - ts).total_seconds()
+        except (ValueError, TypeError):
+            return {}
+        if delta_s < 0 or delta_s > stale_after_s:
+            return {}
+
+        verbs = {
+            "builder": "baut",
+            "reviewer": "prueft den Code",
+            "verify": "verifiziert",
+            "reflection": "behebt den Befund",
+            "explorer": "untersucht das Repository",
+            "scout": "prueft den Auftrag",
+            "architect": "formt den Plan",
+            "planner": "zerlegt den Plan",
+        }
+        verb = verbs.get(role, "bearbeitet")
+        action = f"{verb}: {task_name}" if task_name else f"{verb} den Task"
+        # Ein heartbeat enthaelt konkreteren Task-/Dateikontext als der
+        # generische Task-Name; diesen behalten wir fuer die Live-Anzeige.
+        if activity_kind == "llm_call_heartbeat":
+            action = _tl_detail(activity_kind, activity) or action
+        return {
+            "rolle": role,
+            "aktion": action[:120],
+            "seit_s": int(delta_s),
+            "kind": activity_kind or "loop_task_start",
+            "task_id": task_payload.get("task_id"),
+        }
+
+    letztes = latest
+    kind = latest_kind
     agent = str(letztes.get("agent", ""))
     ts_raw = letztes.get("timestamp") or letztes.get("ts") or ""
 
@@ -1174,11 +1280,14 @@ def _tl_aggregate_aktiv(
         )
     )
     if not ist_aktiv:
-        # OP-394: Grace-Fenster — gerade-fertig-Events grace_s lang zeigen
+        # Gerade abgeschlossene Schritte bleiben kurz sichtbar, werden aber
+        # nach dem Grace-Fenster korrekt als abgeschlossen dargestellt.
         if grace_s > 0 and (
             kind.endswith(("_ok", "_failed", "_done"))
-            or kind in ("chat_job_succeeded", "chat_job_failed", "chat_job_cancelled")
-            or kind == "summary"
+            or kind in (
+                "chat_job_succeeded", "chat_job_failed",
+                "chat_job_cancelled", "summary",
+            )
         ):
             try:
                 ts_g = _dt.fromisoformat(str(ts_raw))
@@ -1207,14 +1316,6 @@ def _tl_aggregate_aktiv(
     if delta_s < 0 or delta_s > stale_after_s:
         return {}
 
-    if kind == "gate_open":
-        return {
-            "rolle": "loop",
-            "aktion": "wartet auf Antwort",
-            "seit_s": int(delta_s),
-            "kind": kind,
-        }
-
     payload = letztes.get("payload")
     if not isinstance(payload, dict):
         payload = {}
@@ -1225,7 +1326,6 @@ def _tl_aggregate_aktiv(
         "seit_s": int(delta_s),
         "kind": kind,
     }
-
 
 def aggregate_swimlane(
     projekt: str, run_id: str | None = None,
