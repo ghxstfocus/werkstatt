@@ -740,18 +740,23 @@ def test_oversized_task_split_rejects_malformed_criterion_refs():
             "criterion_refs": [{"unexpected": "object"}],
         }]}),
     )
-    with patch("werkstatt.planner.ask_llm", return_value=reply), \
-         patch("werkstatt.planner._with_spinner", side_effect=lambda _label, fn: fn()):
-        with pytest.raises(TaskGraphError, match="ungueltige criterion_refs"):
-            _llm_split_einzel_task(
-                "## werkstatt/demo.py\nAendere die Funktion.",
-                {
-                    "id": "t1",
-                    "criterion_refs": ["AC1"],
-                    "task_files": ["werkstatt/demo.py"],
-                    "description": "x" * 2600,
-                },
-                "fake",
-                Path("."),
-                "demo",
-            )
+    with (
+        patch("werkstatt.planner.ask_llm", return_value=reply),
+        patch(
+            "werkstatt.planner._with_spinner",
+            side_effect=lambda _label, fn: fn(),
+        ),
+        pytest.raises(TaskGraphError, match="ungueltige criterion_refs"),
+    ):
+        _llm_split_einzel_task(
+            "## werkstatt/demo.py\nAendere die Funktion.",
+            {
+                "id": "t1",
+                "criterion_refs": ["AC1"],
+                "task_files": ["werkstatt/demo.py"],
+                "description": "x" * 2600,
+            },
+            "fake",
+            Path("."),
+            "demo",
+        )
