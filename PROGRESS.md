@@ -6019,3 +6019,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der RunRecord blieb bei HTTP-Resume unverändert `failed`; die Registry zeigte den frisch gestarteten Worker als `running`, aber der Overlay-Bootstrapmarker wurde nach 15 Sekunden nicht angelegt und es gab keine Worker-Ausgabe.
 - Die Diagnose prüft im CI-Fehlerfall nun zusätzlich Prozesskommando, Kernel-Status/Wartekanal und ausschließlich die relevanten `PYTHONPATH`-/Bootstrap-Variablen. Das grenzt Prozessstart, Modulauflösung und Importstillstand voneinander ab.
 - Ursache und produktive Korrektur sind bis zum nächsten Diagnose-Run offen.
+
+
+## 2026-11-13 — Python-Importpfad im Resume-Diagnosetest
+
+- Beim fehlgeschlagenen CI-Resume laeuft der Python-Prozess, erreicht aber weder den Test-Loop-Bootstrap noch die Renderer-Loginitialisierung. Die zusaetzliche Diagnose markiert nun bereits den Import des isolierten `werkstatt`-Pakets und gibt begrenzte Python-/Werkstatt-Mappings aus `/proc` aus.
+- So unterscheiden wir den Test-Overlay-Import vom produktiven Modulpfad, bevor die Recovery-Akzeptanz angepasst wird.

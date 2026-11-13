@@ -550,6 +550,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     (stub_package / "__init__.py").write_text(
         "import os\n"
         "from pathlib import Path\n"
+        "Path(os.environ['WERKSTATT_PACKAGE_BOOT']).write_text('package', encoding='utf-8')\n"
         "__path__ = [str(Path(__file__).parent), "
         "os.environ['WERKSTATT_REAL_PACKAGE']]\n",
         encoding="utf-8",
@@ -601,7 +602,9 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     )
     monkeypatch.setenv("WERKSTATT_TEST_PROJECT_DIR", str(project_dir))
     worker_boot = tmp_path / "resume-worker-booted"
+    package_boot = tmp_path / "resume-package-booted"
     monkeypatch.setenv("WERKSTATT_WORKER_BOOT", str(worker_boot))
+    monkeypatch.setenv("WERKSTATT_PACKAGE_BOOT", str(package_boot))
     verify_marker = tmp_path / "phase-end-verify-ran"
     monkeypatch.setenv("WERKSTATT_VERIFY_MARKER", str(verify_marker))
     monkeypatch.setenv(
@@ -651,6 +654,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
             proc_state = ""
             proc_wchan = ""
             proc_env = ""
+            proc_maps = ""
             if worker_proc is not None and worker_proc.is_dir():
                 proc_cmdline = (
                     (worker_proc / "cmdline").read_bytes()
@@ -664,6 +668,10 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
                     "",
                 )
                 proc_wchan = (worker_proc / "wchan").read_text().strip()
+                proc_maps = "\\n".join(
+                    line for line in (worker_proc / "maps").read_text().splitlines()
+                    if "werkstatt" in line.lower() or "python" in line.lower()
+                )[:4000]
                 proc_env = ";".join(
                     entry.decode("utf-8", errors="replace")
                     for entry in (worker_proc / "environ").read_bytes().split(b"\\0")
@@ -675,8 +683,9 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
                 f"run={record!r}; worker_returncode="
                 f"{worker.poll() if worker is not None else None}; "
                 f"registry={registry_snapshot!r}; worker_boot={worker_boot.exists()}; "
+                f"package_boot={package_boot.exists()}; "
                 f"cmdline={proc_cmdline!r}; state={proc_state!r}; "
-                f"wchan={proc_wchan!r}; env={proc_env!r}; "
+                f"wchan={proc_wchan!r}; env={proc_env!r}; maps={proc_maps!r}; "
                 f"worker_log={log!r}; other_logs={extra_logs!r}"
             )
         assert record["run_id"] == run_id
