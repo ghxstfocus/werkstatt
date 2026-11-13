@@ -515,13 +515,11 @@ def test_run_inbox_outbox_replays_after_interrupted_handoff(
         return original_mark(store, job_id)
 
     def _dispatch_after_reconcile(
-        _db_path: Path, _project: str, _project_dir: Path,
+        dispatch_db: Path, _project: str, _project_dir: Path,
     ) -> None:
-        message = events.claim_run_message(
-            "demo", "run-active", "test-worker", kind="job_notice",
-        )
-        assert message is not None
-        dispatched.append(str(message["message_id"]))
+        queued_jobs = ChatJobStore(dispatch_db).queued()
+        assert len(queued_jobs) == 1
+        dispatched.append(f"chat-job:{queued_jobs[0]['job_id']}")
 
     monkeypatch.setattr(ChatJobStore, "mark_run_inbox_enqueued", _crash_after_inbox_write)
     monkeypatch.setattr(chat_jobs, "_dispatch_pending", _dispatch_after_reconcile)
