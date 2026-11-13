@@ -194,7 +194,8 @@ def test_open_task_remains_active_after_builder_context_event(
 
     aktiv = inspector.aggregate_live_feed("werkstatt")["aktiv"]
 
-    assert aktiv["kind"] == "builder_file_context"
+    assert aktiv["kind"] == "loop_task_start"
+    assert aktiv["activity_kind"] == "builder_file_context"
     assert aktiv["rolle"] == "builder"
     assert aktiv["task_id"] == "task-1"
     assert "baut" in aktiv["aktion"]
