@@ -5968,3 +5968,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der integrierte Test bestaetigt bereits die erfolgreiche Annahme des HTTP-Resume, aber der RunRecord blieb beim ersten Versuch im Status running statt completed.
 - Der Test gibt deshalb den prozessgebundenen Worker-Log bei Fehlschlag aus und beendet den gestarteten Subprozess auch im Fehlerfall. Der naechste CI-Lauf soll die konkrete Ursache liefern.
+
+
+## 2026-11-13 — HTTP-Resume-Fehlerdiagnose
+
+- Der integrierte Resume-Test bestaetigt die HTTP-Annahme, aber der RunRecord erreicht nicht completed. Der Worker-Log wird im Fehlerfall ausgegeben; der Subprozess wird auch bei Testfehler beendet.
+- Der letzte CI-Commit enthielt diese Diagnoseaenderung noch nicht; dieser Commit korrigiert den gespeicherten Teststand. Die Ursache im produktiven Resume-Pfad ist weiterhin offen.

@@ -594,22 +594,46 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     app_module._LOOP_LOG_HANDLES.clear()
     app_module._PAUSIERTE_LOOPS.clear()
 
-    response = TestClient(app_module.app).post(
-        "/api/projects/demo/resume",
-    )
-    assert response.status_code == 200, response.text
-    assert response.json()["resume"] is True
-    assert response.json()["run_id"] == run_id
+    try:
+        response = TestClient(app_module.app).post(
+            "/api/projects/demo/resume",
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["resume"] is True
+        assert response.json()["run_id"] == run_id
 
-    deadline = time.monotonic() + 15
-    record = None
-    while time.monotonic() < deadline:
-        record = store.get_run_record("demo", run_id)
-        if record and record["status"] in {"completed", "failed"}:
-            break
-        time.sleep(0.05)
+        deadline = time.monotonic() + 15
+        record = None
+        while time.monotonic() < deadline:
+            record = store.get_run_record("demo", run_id)
+            if record and record["status"] in {"completed", "failed"}:
+                break
+            time.sleep(0.05)
 
-    assert record is not None
-    assert record["status"] == "completed", json.dumps(record, default=str)
-    assert record["checkpoint"]["exit_code"] == 0
-    assert record["checkpoint"]["run_id"] == run_id
+        assert record is not None
+        if record["status"] != "completed":
+            log_path = project_dir / ".werkstatt" / "logs" / f"loop-{run_id}.log"
+            log = (
+                log_path.read_text(encoding="utf-8", errors="replace")
+                if log_path.is_file()
+                else "(no worker log)"
+            )
+            assert record["status"] == "completed", (
+                f"run={record!r}; worker_log={log}"
+            )
+        assert record["checkpoint"]["exit_code"] == 0
+        assert record["checkpoint"]["run_id"] == run_id
+    finally:
+        process = app_module._LAUFENDE_LOOPS.pop("demo", None)
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        handle = app_module._LOOP_LOG_HANDLES.pop("demo", None)
+        if handle is not None:
+            handle.close()
+        app_module._LOOP_RUN_IDS.pop("demo", None)
+        app_module._PAUSIERTE_LOOPS.discard("demo")
