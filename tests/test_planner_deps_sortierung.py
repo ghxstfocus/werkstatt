@@ -68,9 +68,11 @@ def test_zyklus_wird_vor_planfreigabe_abgelehnt_und_auditiert() -> None:
         {"id": "t1", "dependencies": ["t2"]},
         {"id": "t2", "dependencies": ["t1"]},
     ]
-    with patch("werkstatt.planner.audit") as mock_audit:
-        with pytest.raises(TaskGraphError, match="Abhaengigkeitszyklus"):
-            _topo_sort_tasks(tasks, pd=Path("/tmp/x"), pn="test")
+    with (
+        patch("werkstatt.planner.audit") as mock_audit,
+        pytest.raises(TaskGraphError, match="Abhaengigkeitszyklus"),
+    ):
+        _topo_sort_tasks(tasks, pd=Path("/tmp/x"), pn="test")
     kinds = [call.args[0] for call in mock_audit.call_args_list]
     assert "planner_deps_zyklus" in kinds
 
