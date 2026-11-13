@@ -348,7 +348,7 @@ def test_post_build_recovery_rechecks_full_phase_and_targets_new_failures(
 
     assert tasks._reflect_verify_failure(state, phase="post_build") is True
     assert [
-        call.kwargs["verify_stage_ids"]
-        for call in recovery.call_args_list
+        call["verify_stage_ids"]
+        for call in recovery_calls
     ] == [{"pytest_regression"}, {"ruff"}]
     assert full_verify.call_count == 2
