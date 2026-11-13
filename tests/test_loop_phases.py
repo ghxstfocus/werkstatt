@@ -544,10 +544,47 @@ def test_task_ende_auditiert_kriterienfortschritt_nach_gruenem_task(tmp_path):
         "covered": ["AC1"],
         "remaining": ["AC2"],
         "error": None,
+        "next_step_type": "task",
+        "next_task_id": "t2",
+        "next_step": "Weiter mit t2",
+        "decision_summary": (
+            "Offene Kriterien bleiben im freigegebenen Task-Graph; "
+            "der naechste ausfuehrbare Task wird fortgesetzt."
+        ),
+        "evidence": [
+            "Task t1 als done gespeichert",
+            "Abgedeckt: AC1",
+            "Offen: AC2",
+        ],
     }
 
 
 @pytest.mark.parametrize("task_status", ["failed", "blocked", "pending", "running", "missing"])
+def test_task_ende_zeigt_phase_end_verify_als_naechsten_schritt(tmp_path):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.task_runner import _task_ende
+
+    state = _state(tmp_path)
+    phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Einzelnes Ziel",
+        [{"id": "t1", "name": "Implementierung", "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["Ziel ist belegt"],
+    )
+    events = []
+
+    with patch("werkstatt.task_runner.audit", lambda *args: events.append(args)), \
+         patch("werkstatt.progress.append"):
+        _task_ende(state, phase_state, "t1", ok=True, name="Implementierung")
+
+    event = next(item for item in events if item[0] == "loop_criteria_progress")
+    assert event[1]["next_step_type"] == "phase_end_verify"
+    assert event[1]["next_step"] == "Phase-End-Verify ausfuehren"
+    assert event[1]["decision_summary"].startswith(
+        "Der Task-Graph ist abgeschlossen;"
+    )
+
+
 def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
     tmp_path, monkeypatch, task_status,
 ):

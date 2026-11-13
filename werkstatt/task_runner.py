@@ -148,6 +148,52 @@ def _task_ende(
                     isinstance(_criterion_progress, dict)
                     and _criterion_progress.get("tracked") is True
                 ):
+                    _next_task = None
+                    try:
+                        _candidate = phase_state.get_next_task()
+                        if isinstance(_candidate, dict):
+                            _next_task = _candidate
+                    except Exception:
+                        _next_task = None
+                    _next_task_id = (
+                        str(_next_task.get("id") or "").strip()
+                        if _next_task else ""
+                    )
+                    _next_task_name = (
+                        str(_next_task.get("name") or "").strip()
+                        if _next_task else ""
+                    )
+                    if _next_task_id:
+                        _next_step_type = "task"
+                        _next_step = (
+                            f"Weiter mit {_next_task_id}"
+                            + (f": {_next_task_name}" if _next_task_name else "")
+                        )
+                        _decision = (
+                            "Offene Kriterien bleiben im freigegebenen Task-Graph; "
+                            "der naechste ausfuehrbare Task wird fortgesetzt."
+                        )
+                    else:
+                        try:
+                            _all_tasks_done = phase_state.is_complete() is True
+                        except Exception:
+                            _all_tasks_done = False
+                        if _all_tasks_done:
+                            _next_step_type = "phase_end_verify"
+                            _next_step = "Phase-End-Verify ausfuehren"
+                            _decision = (
+                                "Der Task-Graph ist abgeschlossen; jetzt wird "
+                                "das Gesamtziel mit der Abschlusspruefung belegt."
+                            )
+                        else:
+                            _next_step_type = "resolve_open_tasks"
+                            _next_step = (
+                                "Offene oder blockierte Tasks und Abhaengigkeiten klaeren"
+                            )
+                            _decision = (
+                                "Kein weiterer Task ist ausfuehrbar; offene "
+                                "Abhaengigkeiten muessen vor dem Abschluss geklaert werden."
+                            )
                     audit(
                         "loop_criteria_progress",
                         {
@@ -161,6 +207,17 @@ def _task_ende(
                             "covered": _criterion_progress.get("covered", []),
                             "remaining": _criterion_progress.get("uncovered", []),
                             "error": _criterion_progress.get("error"),
+                            "next_step_type": _next_step_type,
+                            "next_task_id": _next_task_id or None,
+                            "next_step": _next_step,
+                            "decision_summary": _decision,
+                            "evidence": [
+                                f"Task {task_id} als done gespeichert",
+                                "Abgedeckt: "
+                                + ", ".join(_criterion_progress.get("covered", [])),
+                                "Offen: "
+                                + ", ".join(_criterion_progress.get("uncovered", [])),
+                            ],
                         },
                         pd,
                         getattr(state, "project_name", "?"),

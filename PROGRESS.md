@@ -6219,3 +6219,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - GitHub Actions Quality-Gate fuer den vollständigen Fix-Stand: [Run 43390871808](https://github.com/ghxstfocus/werkstatt/actions/runs/43390871808) erfolgreich.
 - Ergebnis: 2.184 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 0, Audit-Katalog bestanden.
 - Der Lauf deckt den Standard-Reflection-Pfad ueber fuenf Reparaturschritte, Reviewer-Nachpruefung nach leerem Patch sowie den aktiven Task mit sichtbarem Verify-Timeline-Event ab.
+
+
+## 2026-11-13 — Nächster belegter Schritt nach grünem Task
+
+- Beim Taskabschluss wurde der Fortschritt der Akzeptanzkriterien bereits auditiert, aber der nächste Schritt fehlte in diesem Ereignis. Damit ließ sich in der Control-Timeline nicht erkennen, ob der Loop einen freigegebenen Task fortsetzt, offene/blockierte Abhängigkeiten klärt oder zur Abschlussprüfung übergeht.
+- Das Kriterienfortschritts-Ereignis trägt nun die gespeicherten Kriterienbelege, eine kurze Entscheidungszusammenfassung und den nächsten ausführbaren Task. Sind alle Tasks erledigt, nennt es die Phase-End-Verify; ohne ausführbaren Task meldet es die nötige Klärung offener Abhängigkeiten.
+- Die Timeline zeigt den nächsten Schritt kompakt hinter der Kriterienabdeckung. Es werden keine rohen Modellgedanken protokolliert.
+- Regressionstests prüfen Task-Fortsetzung, Übergang zur Phase-End-Verify und lesbare Timeline-Ausgabe. Vollständige CI-Verifikation folgt.
