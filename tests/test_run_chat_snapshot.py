@@ -173,9 +173,6 @@ def test_run_job_uses_then_removes_checkpoint_snapshot(
     project_dir = _repo(tmp_path / "project")
     (project_dir / "README.md").write_text("captured state\n", encoding="utf-8")
     monkeypatch.setattr(run_snapshot, "werkstatt_home", lambda: tmp_path / "state")
-    snapshot = run_snapshot.create_project_snapshot(
-        project_dir, "demo", "run-3", "job-3",
-    )
     chat_db = tmp_path / "chat.db"
     monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
     jobs = ChatJobStore(tmp_path / "jobs.db")
@@ -186,6 +183,9 @@ def test_run_job_uses_then_removes_checkpoint_snapshot(
         "request-key-checkpoint-003",
         run_id="run-3",
         project="demo",
+    )
+    snapshot = run_snapshot.create_project_snapshot(
+        project_dir, "demo", "run-3", job["job_id"],
     )
     assert jobs.set_run_snapshot(
         job["job_id"],
