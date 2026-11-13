@@ -5942,3 +5942,4 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Die gezielte CI-Verifikation dieses Fixes läuft nach Commit; OP-397 bleibt offen, bis auch der produktive Resume-/Follow-up-Pfad vollständig integriert und belegt ist.
 
 - Der erste Quality-Gate-Lauf [43337317796](https://github.com/ghxstfocus/werkstatt/actions/runs/43337317796) bestand 2146 Tests, scheiterte aber an einem bestehenden Event-Store-Test, der noch den abgeloesten gemeinsamen Cursor erwartete. Der Test ist auf `job_notice_offset` umgestellt; die erneute CI-Verifikation folgt.
+- Die Korrektur und der angepasste Event-Store-Vertrag sind mit Quality-Gate-Lauf [43337580294](https://github.com/ghxstfocus/werkstatt/actions/runs/43337580294) auf `f68c78b` verifiziert: 2147 Tests bestanden, 5 übersprungen, Ruff/Mypy/AST/Audit-Katalog ohne Fehler, `ok=true`, `regression=false`.
