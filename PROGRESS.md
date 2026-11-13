@@ -6046,4 +6046,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Die Prozesssuche erkannte einen lebenden Resume-Worker mit passender Projekt-/Run-CLI, aber anderem Python-Executable nicht als Worker. Bei abgelaufener `starting`-Reservierung konnte das fälschlich `idle` ergeben und einen zweiten Writer erlauben.
 - Ein passender, gleichnamiger Worker unter einem anderen Interpreter gilt nun als mehrdeutig; die Registry bleibt `orphaned` und sperrt neue Runs fail-closed.
-- Regressionstest simuliert einen neuen Server-Interpreter bei gleichzeitig lebendem alten Worker und belegt, dass kein zweiter Run reserviert werden kann. CI-Verifikation steht aus.
+- Der Regressionstest simuliert einen Server-Interpreterwechsel bei lebendem Alt-Worker und belegt, dass keine zweite Run-Reservierung erfolgt.
+- Quality Gate Run [43354116256](https://github.com/ghxstfocus/werkstatt/actions/runs/43354116256) ist auf `b65cb83` grün: 2.150 Tests bestanden, Ruff/Mypy/AST/Audit-Katalog ohne Fehler.

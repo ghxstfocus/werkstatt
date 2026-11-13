@@ -4,10 +4,10 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Stand: `f20ec83092d3e7687b816ec2f6beb0bd228efc20`
-(`style(test): sort resume recovery test imports`).
+Gepruefter Stand: `b65cb83dcb501e4db146062f4f76014326fc9612`
+(`fix(loop): keep old-interpreter workers fail closed`).
 GitHub Actions Quality Gate:
-[Run 43352637612](https://github.com/ghxstfocus/werkstatt/actions/runs/43352637612).
+[Run 43354116256](https://github.com/ghxstfocus/werkstatt/actions/runs/43352637612).
 
 ## Kurzbefund
 
