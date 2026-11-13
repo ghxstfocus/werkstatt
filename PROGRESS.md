@@ -6256,3 +6256,18 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Regressionstest belegt beides: `done` bleibt bestehen und der Checkpoint-Ausfall erscheint sichtbar. GitHub Actions Quality Gate [43417405532](https://github.com/ghxstfocus/werkstatt/actions/runs/43417405532) erfolgreich: 2.186 Tests bestanden, 5 übersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
 
 - Ein zusaetzlicher Integrationsregressionstest fuehrt den Taskabschluss mit einem temporaeren Kriterienfehler aus und laesst anschliessend die echte Phase-End-Verify laufen. Er prueft, dass die Kriterienberechnung dort erneut aufgerufen wird und Erfolg erst nach dem zweiten, gruenen Zielabgleich moeglich ist. GitHub Actions Quality Gate [Run 43419490145](https://github.com/ghxstfocus/werkstatt/actions/runs/43419490145) erfolgreich: 2.187 Tests bestanden, 5 uebersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
+
+
+### Chat-Kontext — aktuelle Fortschritte aus PROGRESS.md (2026-11-13)
+
+Die Chat-Funktion `read_status` lieferte bisher den Anfang der append-only
+`PROGRESS.md`. Bei langen Dateien zeigte das fruehe Projekthistorie statt
+der neuesten Arbeit. Die Ausgabe ist jetzt begrenzt und markiert die
+Richtung des Auszugs: Queue am Anfang von `docs/STATUS.md`, neueste
+Eintraege am Ende von `PROGRESS.md`. Ein Regressionstest belegt, dass
+junge Eintraege sichtbar sind und alte Historie nicht als aktueller Stand
+erscheint. Das beseitigt eine konkrete Ursache fuer die beobachtete falsche
+Zusammenfassung; der Chat muss fuer exakte Fundstellen weiterhin gezielt
+`grep` bzw. `read_file` verwenden. Die Standard-Chat-Schleife ist im
+aktuellen Code unbegrenzt; identische wiederholte Werkzeugzyklen werden
+stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
