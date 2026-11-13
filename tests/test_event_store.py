@@ -3,6 +3,7 @@
 import json
 import sqlite3
 import time
+from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -370,6 +371,45 @@ def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
     )
     assert audit_events[0][1]["audit_id"] == (
         f"RUN-run-followup-CHAT-FOLLOWUP-{seq}"
+    )
+    audit_payload = audit_events[0][0][1]
+    assert "request" not in audit_payload
+    assert audit_payload["request_sha256"] == sha256(
+        b"Check the ADRs",
+    ).hexdigest()
+
+
+def test_task_checkpoint_rejects_non_text_followup_without_ack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.phases import tasks
+
+    monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-invalid-followup", "Keep goal")
+    store.enqueue_run_message(
+        "demo", "run-invalid-followup", "chat-followup:invalid",
+        "chat_followup_request", {
+            "proposal_id": "invalid",
+            "project": "demo",
+            "session_id": "session-1",
+            "parent_run_id": "run-invalid-followup",
+            "base_commit": None,
+            "request": ["not", "text"],
+        },
+    )
+
+    with pytest.raises(TypeError, match="gültigen Text"):
+        tasks._persist_run_checkpoint(
+            store,
+            "demo",
+            "run-invalid-followup",
+            SimpleNamespace(data={"tasks": []}),
+            {"id": "next-task"},
+        )
+
+    assert not store.run_message_acknowledged(
+        "demo", "run-invalid-followup", "chat-followup:invalid",
     )
 
 

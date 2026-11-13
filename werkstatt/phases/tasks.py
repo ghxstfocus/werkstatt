@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -245,12 +246,18 @@ def _persist_run_checkpoint(
                 "zum gebundenen Projekt, Run oder Basis-Commit",
             )
         claimed.append(message)
+        request = payload.get("request", "")
+        if not isinstance(request, str):
+            raise TypeError(
+                f"Chat-Folgeauftrag {message['message_id']} hat keinen "
+                "gültigen Text",
+            )
         followups.append({
             "seq": message["seq"],
             "message_id": message["message_id"],
             "proposal_id": payload["proposal_id"],
             "session_id": payload["session_id"],
-            "request": payload.get("request", ""),
+            "request": request,
             "op_id": payload.get("op_id"),
             "base_commit": payload.get("base_commit"),
             "queued_at_checkpoint_version": payload.get("checkpoint_version"),
@@ -272,10 +279,16 @@ def _persist_run_checkpoint(
     ]
     for item in new_followups:
         seq = item["seq"]
+        audit_item = {
+            key: value for key, value in item.items() if key != "request"
+        }
+        audit_item["request_sha256"] = sha256(
+            str(item["request"]).encode("utf-8"),
+        ).hexdigest()
         audit_result = audit(
             "loop_chat_followup_queued",
             {
-                **item,
+                **audit_item,
                 "result_summary": (
                     "Ein bestätigter Chat-Folgeauftrag wurde am sicheren "
                     "Checkpoint sichtbar gemacht."

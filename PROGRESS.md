@@ -6411,3 +6411,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Geprüft: die drei gezielten API-, Checkpoint- und Chat-Frontend-Regressionstests bestanden; vollständiges Ruff, Python-Syntax, JavaScript-Syntax, Doku-Drift und `git diff --check` bestanden. Ein breiterer lokaler Testlauf wurde durch einen `KeyboardInterrupt` unterbrochen und wird nicht als bestanden gewertet.
 - PR-CI: 2213 Tests, Ruff und Syntaxprüfungen bestanden; Quality Gate fand anschließend einen Mypy-Typfehler bei der aktiven Run-ID. Die Guard-Bedingung wurde verschärft; gezielte Tests und Ruff erneut grün. Mypy ist lokal nicht installiert, die korrigierte Quality-Gate-CI läuft erneut.
 - Grenze dieses Schritts: Die fachliche Klassifikation, Freigabe und dynamische Neuplanung des Folgeauftrags sind noch nicht implementiert; der Auftrag ist zunächst nur dauerhaft aufgenommen und sichtbar.
+
+## 2026-11-13 — Folgeauftragstext aus globalem Audit heraushalten
+
+- Der Checkpoint-Audit-Eintrag speichert nicht mehr den vollständigen Chat-Folgeauftrag, sondern dessen SHA-256-Fingerprint. Der Originaltext bleibt im projektgebundenen Inbox-/Checkpoint-Datensatz zur weiteren Bearbeitung.
+- Ungültige Nicht-Text-Payloads werden am Checkpoint mit einem Typfehler fail-closed abgewiesen.
+- Verifikation: gezielter Checkpoint-Test, Ruff, Bytecode-Kompilierung und `git diff --check`.
