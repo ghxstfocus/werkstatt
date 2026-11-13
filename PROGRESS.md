@@ -5932,3 +5932,11 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Der erste Lauf [43335457552](https://github.com/ghxstfocus/werkstatt/actions/runs/43335457552) fand nach 2146 bestandenen Tests einen neuen Mypy-Fehler. Die Typbehandlung wurde korrigiert; Lauf [43335805170](https://github.com/ghxstfocus/werkstatt/actions/runs/43335805170) auf Commit `0fe3ae5` ist vollstaendig gruen: 2146 Tests bestanden, 5 uebersprungen, Ruff/Mypy/AST/Audit-Katalog ohne Fehler und Quality Gate `ok=true`.
 - ADR-0022 wurde gemaess freigegebenem UI-Plan neu gefasst: Projektuebersicht als Default ohne Projekt, Modusleiste unter Projektleiste, Chat als zentraler Steuerungsort, Cockpit/Control/Debug/Runs als Sichten auf denselben Run-Zustand und Gates als Chat-Karten mit optionaler Modal-Detailansicht. GitHub Actions Quality Gate [43336137658](https://github.com/ghxstfocus/werkstatt/actions/runs/43336137658) auf Commit `8e5d141` ist erfolgreich.
 - Diese Arbeit schliesst weder OP-397 noch den Umbau aus ADR-0032 ab: Der Replay-Test prueft einen konkreten Checkpoint-Absturz; der zielorientierte Koordinator, integrierte Wiederaufnahme produktiver Worker und zehn UI-Runs bleiben offen.
+
+
+## 2026-11-13 — Run-Inbox-Cursor nach Nachrichtentyp getrennt
+
+- Der Task-Checkpoint-Worker beansprucht ausschliesslich `job_notice`-Nachrichten. Generische Fragen und Steuerungsnachrichten bleiben damit für ihren eigenen Consumer verfügbar.
+- Der bisher gemeinsame `inbox_offset` konnte über eine nicht verarbeitete Nachricht hinweg springen. Er wird beim nächsten Checkpoint entfernt und durch `job_notice_offset` ersetzt; bereits projizierte Sequenzen verhindern Replay-Duplikate während der Migration.
+- Regressionstest: Frage vor Job-Hinweis einreihen, Checkpoint laufen lassen, danach belegen, dass der Job-Hinweis projiziert und quittiert ist und die Frage weiterhin beansprucht werden kann.
+- Die gezielte CI-Verifikation dieses Fixes läuft nach Commit; OP-397 bleibt offen, bis auch der produktive Resume-/Follow-up-Pfad vollständig integriert und belegt ist.

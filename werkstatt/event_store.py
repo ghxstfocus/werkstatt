@@ -408,21 +408,26 @@ class EventStore:
         worker_id: str,
         *,
         lease_seconds: float = 30.0,
+        kind: str | None = None,
     ) -> dict[str, Any] | None:
-        """Claim the oldest available message; each claim increments its fence."""
+        """Claim the oldest available message, optionally by consumer kind."""
         if lease_seconds <= 0:
             raise ValueError("lease_seconds muss positiv sein")
         now = time.time()
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
-            row = conn.execute(
+            sql = (
                 "SELECT seq, message_id, kind, payload, fencing_token "
                 "FROM run_inbox WHERE project=? AND run_id=? "
                 "AND (status='pending' OR "
-                "(status='leased' AND lease_until<=?)) "
-                "ORDER BY seq LIMIT 1",
-                (project, run_id, now),
-            ).fetchone()
+                "(status='leased' AND lease_until<=?))"
+            )
+            params: list[Any] = [project, run_id, now]
+            if kind is not None:
+                sql += " AND kind=?"
+                params.append(kind)
+            sql += " ORDER BY seq LIMIT 1"
+            row = conn.execute(sql, params).fetchone()
             if row is None:
                 conn.commit()
                 return None

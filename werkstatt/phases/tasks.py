@@ -89,6 +89,7 @@ def _persist_run_checkpoint(
     for _ in range(20):
         message = store.claim_run_message(
             project_name, run_id, worker_id, lease_seconds=120,
+            kind="job_notice",
         )
         if message is None:
             break
@@ -104,22 +105,34 @@ def _persist_run_checkpoint(
         })
 
     checkpoint = dict(record["checkpoint"])
+    # The legacy shared cursor could skip non-job inbox messages. Consumers
+    # now keep independent cursors, so do not expose that ambiguous offset.
+    checkpoint.pop("inbox_offset", None)
     try:
-        inbox_offset = int(checkpoint.get("inbox_offset", 0))
+        notice_offset = int(checkpoint.get("job_notice_offset", 0))
     except (TypeError, ValueError):
-        inbox_offset = 0
-    # The checkpoint is written before inbox acknowledgement. If the worker
-    # dies in that gap, a later lease retry must not project the same notice
-    # twice into the durable checkpoint.
-    notices_above_offset: list[dict[str, object]] = []
-    for notice in notices:
-        seq = notice.get("seq")
-        if isinstance(seq, int) and seq > inbox_offset:
-            notices_above_offset.append(notice)
-    notices = notices_above_offset
+        notice_offset = 0
     prior_notices = checkpoint.get("job_notices", [])
     if not isinstance(prior_notices, list):
         prior_notices = []
+    prior_notice_seqs = {
+        item.get("seq") for item in prior_notices
+        if isinstance(item, dict) and isinstance(item.get("seq"), int)
+    }
+    # This consumer handles job notices only. Its cursor must not advance the
+    # shared inbox cursor past questions or controls that another consumer has
+    # not handled. Prior seq values also migrate checkpoints written by the
+    # previous shared-offset implementation without replaying stored notices.
+    notices_above_offset: list[dict[str, object]] = []
+    for notice in notices:
+        seq = notice.get("seq")
+        if (
+            isinstance(seq, int)
+            and seq > notice_offset
+            and seq not in prior_notice_seqs
+        ):
+            notices_above_offset.append(notice)
+    notices = notices_above_offset
     checkpoint["job_notices"] = (prior_notices + notices)[-50:]
     checkpoint["safe_point"] = {
         "phase": "build",
@@ -132,8 +145,8 @@ def _persist_run_checkpoint(
         ],
     }
     if claimed:
-        checkpoint["inbox_offset"] = max(
-            inbox_offset,
+        checkpoint["job_notice_offset"] = max(
+            notice_offset,
             max(int(message["seq"]) for message in claimed),
         )
     if run_state is not None:
