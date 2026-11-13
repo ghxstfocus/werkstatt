@@ -51,11 +51,17 @@ def _reflect_verify_failure(state: RunState, phase: str) -> bool:
     if not isinstance(errors, list):
         errors = []
     failed = {
-        str(error).split(":", 1)[0].strip()
-        for error in errors
-        if ":" in str(error)
+        stage_id
+        for stage_id in configured
+        if any(
+            str(error).startswith((
+                f"{stage_id}:",
+                f"{stage_id}-Fehler:",
+            ))
+            for error in errors
+        )
     }
-    targeted = sorted(configured & failed)
+    targeted = sorted(failed)
     budget = state.budget if isinstance(state.budget, dict) else {}
     has_run_budget = any(
         isinstance(budget.get(key), int)
