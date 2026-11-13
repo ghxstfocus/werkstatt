@@ -33,6 +33,12 @@ def fake_llm(monkeypatch):
     return _set
 
 
+def test_prompt_directs_recent_append_only_reads_to_tail_evidence():
+    assert "read_file mit tail_chars" in chat_agent._SYSTEM_PROMPT
+    assert "Eine gekuerzte oder partielle Ausgabe belegt niemals" in chat_agent._SYSTEM_PROMPT
+    assert "Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich" in chat_agent._SYSTEM_PROMPT
+
+
 def test_chat_loop_ohne_tool(session, fake_llm) -> None:
     fake_llm({"role": "assistant", "content": "Hallo!"})
     antwort = chat_agent.chat_loop(session, "Hi")
