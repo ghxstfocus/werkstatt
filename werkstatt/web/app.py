@@ -1425,14 +1425,20 @@ def create_app() -> FastAPI:
         basis = _PROJECTS_BASE / projektname
         basis_ref = ref
         record = _loop_registry().read(projektname)
-        if run_id is not None:
-            run_id = _pruefe_run_id(run_id)
-            if record is None or record.get("run_id") != run_id:
+        if record is not None:
+            registry_run_id = record.get("run_id")
+            if not isinstance(registry_run_id, str):
+                raise HTTPException(
+                    status_code=409, detail="Registry-Run-ID ist ungueltig",
+                )
+            if run_id is not None and _pruefe_run_id(run_id) != registry_run_id:
                 raise HTTPException(status_code=404, detail="Run nicht gefunden")
-        elif record is not None:
-            run_id = record.get("run_id")
+            run_id = registry_run_id
+        elif run_id is not None:
+            _pruefe_run_id(run_id)
+            raise HTTPException(status_code=404, detail="Run nicht gefunden")
 
-        if record is not None and record.get("run_id") == run_id:
+        if record is not None:
             context = record.get("context")
             source = context.get("source") if isinstance(context, dict) else None
             if isinstance(source, dict) and source.get("kind") == "github":

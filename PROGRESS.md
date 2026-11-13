@@ -6428,3 +6428,4 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Befund: Der Workbench-Diff las ausschliesslich den Server-Projektordner, waehrend verbundene GitHub-Runs in einem separaten Worktree arbeiten. Dadurch konnte die UI Loop-Aenderungen nicht zeigen.
 - Der Diff-Endpunkt verwendet jetzt den validierten Worktree des registrierten Runs und vergleicht standardmaessig gegen dessen gepinnte Ausgangsrevision. Lokale Projekte behalten den Checkout-/HEAD-Pfad; nicht mehr passende Run-IDs werden abgewiesen.
 - Regressionstest erstellt einen GitHub-Run-Worktree mit Aenderung und belegt, dass die API genau diesen Diff gegen die Start-SHA liefert.
+- Der erste integrierte Quality-Gate-Lauf fand nach 2.216 erfolgreichen Tests einen Mypy-Befund zur optionalen Registry-Run-ID. Der Handler validiert sie jetzt vor der Worktree-Aufloesung; explizite, nicht registrierte Run-IDs antworten mit 404, ungueltige Registry-Daten mit 409.
