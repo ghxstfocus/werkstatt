@@ -745,7 +745,6 @@ def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
     tmp_path, monkeypatch,
 ):
     from werkstatt.phase_state import PhaseState
-    from werkstatt.phases import _common
     from werkstatt.task_runner import _task_ende
 
     phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
