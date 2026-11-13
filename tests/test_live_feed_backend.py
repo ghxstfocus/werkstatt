@@ -161,6 +161,46 @@ def test_aktiv_grace_5s(projektion, tmp_path):
     assert aktiv.get("gerade_fertig") is True, aktiv
     assert aktiv.get("kind") == "loop_task_ok"
 
+def test_open_task_remains_active_after_builder_context_event(
+    projektion, tmp_path,
+):
+    """Zwischenereignisse des Builders duerfen den Task-Spinner nicht loeschen."""
+    jetzt = datetime.now(UTC)
+    _schreibe(tmp_path, [
+        {
+            "kind": "loop_started", "run_id": "r-active-task",
+            "project": "werkstatt",
+            "timestamp": (jetzt - timedelta(seconds=15)).isoformat(),
+            "agent": "agent_pipeline",
+        },
+        {
+            "kind": "loop_task_start", "run_id": "r-active-task",
+            "project": "werkstatt",
+            "timestamp": (jetzt - timedelta(seconds=8)).isoformat(),
+            "agent": "agent_pipeline",
+            "payload": {
+                "task_id": "task-1",
+                "name": "Reconnect-Anzeige vervollstaendigen",
+            },
+        },
+        {
+            "kind": "builder_file_context", "run_id": "r-active-task",
+            "project": "werkstatt",
+            "timestamp": jetzt.isoformat(),
+            "agent": "builder",
+            "payload": {"files": ["static/chat.js"]},
+        },
+    ])
+
+    aktiv = inspector.aggregate_live_feed("werkstatt")["aktiv"]
+
+    assert aktiv["kind"] == "builder_file_context"
+    assert aktiv["rolle"] == "builder"
+    assert aktiv["task_id"] == "task-1"
+    assert "baut" in aktiv["aktion"]
+    assert "Reconnect-Anzeige" in aktiv["aktion"]
+
+
 def test_chat_job_events_join_project_live_feed(projektion, tmp_path):
     jetzt = datetime.now(UTC)
     _schreibe(tmp_path, [
