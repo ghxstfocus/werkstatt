@@ -649,6 +649,17 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "PYTHONPATH",
         os.pathsep.join((str(overlay_root), str(repo_root))),
     )
+    startup_probe = subprocess.run(
+        [sys.executable, "-E", "-S", "-c", "print('python-startup-ok')"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert startup_probe.returncode == 0, (
+        f"Python worker startup failed: {startup_probe.stdout!r} "
+        f"{startup_probe.stderr!r}"
+    )
     monkeypatch.setattr(app_module, "_PROJECTS_BASE", project_base)
     monkeypatch.setattr(app_module, "_loop_registry", lambda: registry)
     app_module._LAUFENDE_LOOPS.clear()

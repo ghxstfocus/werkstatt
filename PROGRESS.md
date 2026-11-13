@@ -6064,3 +6064,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der Importtrace endet weiterhin vor dem Bootstrap bei der Initialisierung des Python-Interpreters. Der Launcher ignoriert jetzt mit `-E` geerbte `PYTHON*`-Variablen; Overlay, Projektcode und installierte Bibliotheken werden danach gezielt durch den Test-Bootstrap auf den Importpfad gesetzt.
 - Der naechste Quality-Gate-Lauf prueft erneut den produktiven HTTP-Resume bis zum Phase-End-Verify, ohne die Recovery-Akzeptanz abzuschwaechen.
+
+
+## 2026-11-13 — Python-Interpreter-Preflight fuer Resume
+
+- Der HTTP-gestartete Worker bleibt vor dem Test-Bootstrap stehen, obwohl Python mit `-E -S` gestartet wird. Vor dem HTTP-Aufruf prueft derselbe CI-Prozess nun denselben Interpreter und dieselben Startup-Flags mit einem isolierten `-c`-Aufruf (5-Sekunden-Timeout).
+- Der Preflight macht sichtbar, ob das Problem die allgemeine Python-Initialisierung in diesem Runner betrifft oder nur den durch die API gestarteten Worker.
