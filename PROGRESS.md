@@ -6453,3 +6453,4 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 
 - **CI-Nachbesserung:** Wiederholte/stale Ergebnis-Persistierung auf bereits terminalen Runs bleibt jetzt idempotent und veraendert den terminalen Datensatz nicht. Regressionstest deckt ab, dass ein zweiter Aufruf mit abweichendem Exitcode keinen abgeschlossenen Run ueberschreibt.
 - **CI-Befund:** Der Linux-Gesamttest (2222 bestanden, 5 uebersprungen), Ruff und JavaScript-Syntax waren gruen; Quality Gate fand zwei Mypy-Typfehler am terminalen Statusparameter. Der Status ist nun als `Literal["completed", "failed"]` typisiert.
+- **Verifikation:** GitHub Actions Quality Gate Run [43450127576](https://github.com/ghxstfocus/werkstatt/actions/runs/43450127576) fuer Commit `3bdf805`: erfolgreich. Damit sind auf Linux Pytest (2222 bestanden, 5 uebersprungen), Ruff, Mypy, AST und Audit-Katalog erfolgreich; OP-401/402 und OP-382 bleiben wie oben dokumentiert offen.
