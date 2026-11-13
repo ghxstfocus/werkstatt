@@ -139,6 +139,41 @@ def test_run_record_starting_transitions_to_running_once(
     )
 
 
+def test_run_record_pins_versioned_start_context_across_worker_retry(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    context = {
+        "schema_version": 1,
+        "goal": "Continue OP-397",
+        "source": {"kind": "github", "pinned_sha": "abc123"},
+    }
+
+    starting = store.create_run_record(
+        "demo", "run-context", "Continue OP-397", status="starting",
+        base_commit="abc123", start_context=context,
+    )
+    assert starting["start_context"] == context
+    assert starting["start_context_version"] == 1
+
+    with pytest.raises(ValueError, match="anderem Startkontext"):
+        store.create_run_record(
+            "demo", "run-context", "Continue OP-397",
+            start_context={**context, "goal": "Different task"},
+        )
+    unchanged = store.get_run_record("demo", "run-context")
+    assert unchanged is not None
+    assert unchanged["status"] == "starting"
+    assert unchanged["start_context"] == context
+
+    # The worker retry must not erase the originating request or repin it.
+    running = store.create_run_record(
+        "demo", "run-context", "Continue OP-397", base_commit="def456",
+    )
+    assert running["status"] == "running"
+    assert running["base_commit"] == "abc123"
+    assert running["start_context"] == context
+
 def test_run_status_transition_uses_compare_and_swap(
     tmp_path: Path,
 ) -> None:
@@ -803,5 +838,7 @@ def test_run_lease_schema_migrates_existing_run_records(tmp_path: Path) -> None:
     store = EventStore(db_pfad=db)
     record = store.get_run_record("demo", "legacy")
     assert record is not None
+    assert record["start_context"] == {}
+    assert record["start_context_version"] == 0
     token = store.acquire_run_lease("demo", "legacy", "worker")
     assert token == 1

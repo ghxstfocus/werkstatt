@@ -156,12 +156,14 @@ def test_loop_subprozess_start_stop(
         )
     _reset_loop_registry(app_modul)
     run_records: list[tuple[str, str, str]] = []
+    recorded_start_contexts: list[dict[str, Any] | None] = []
 
     class _RecordingEventStore(_NullEventStore):
         def create_run_record(
             self, project: str, run_id: str, target: str, **_kwargs: Any,
         ) -> dict[str, Any]:
             run_records.append((project, run_id, target))
+            recorded_start_contexts.append(_kwargs.get("start_context"))
             return super().create_run_record(project, run_id, target, **_kwargs)
 
     fake_popen = _fake_popen(aufrufe, kwargs_log=popen_kwargs)
@@ -212,6 +214,7 @@ def test_loop_subprozess_start_stop(
     assert context["source"]["kind"] == "local"
     assert context["origin"] == "web"
     assert context["selection_reason"]["kind"] == "explicit_op"
+    assert recorded_start_contexts == [context]
 
     zweite = client.post("/api/projects/demo/start")
     assert zweite.status_code == 200

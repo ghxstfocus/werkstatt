@@ -95,6 +95,7 @@ class EventStore:
                 "status TEXT NOT NULL, "
                 "target TEXT NOT NULL DEFAULT '', "
                 "base_commit TEXT, "
+                "start_context_json TEXT NOT NULL DEFAULT '{}', "
                 "checkpoint_json TEXT NOT NULL DEFAULT '{}', "
                 "checkpoint_version INTEGER NOT NULL DEFAULT 0, "
                 "updated_at TEXT NOT NULL, "
@@ -109,6 +110,7 @@ class EventStore:
                 )
             }
             for column, definition in (
+                ("start_context_json", "TEXT NOT NULL DEFAULT '{}'"),
                 ("lease_owner", "TEXT"),
                 ("lease_until", "REAL"),
                 ("fencing_token", "INTEGER NOT NULL DEFAULT 0"),
@@ -149,15 +151,25 @@ class EventStore:
         *,
         base_commit: str | None = None,
         status: str = "running",
+        start_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Create/reuse a run identity and acknowledge a worker's initial start."""
+        """Create/reuse a run and pin its versioned originating request."""
         now = datetime.now(UTC).isoformat()
+        serialized_context = (
+            json.dumps(start_context, ensure_ascii=False, sort_keys=True)
+            if start_context is not None
+            else None
+        )
         with closing(self._connect()) as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO run_records "
-                "(project, run_id, status, target, base_commit, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (project, run_id, status, target, base_commit, now),
+                "(project, run_id, status, target, base_commit, "
+                "start_context_json, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    project, run_id, status, target, base_commit,
+                    serialized_context or "{}", now,
+                ),
             )
             # The Web API publishes the durable run identity before Popen so
             # chat jobs can attach during startup. The worker later fills the
@@ -169,6 +181,29 @@ class EventStore:
                     "AND base_commit IS NULL",
                     (base_commit, now, project, run_id, target),
                 )
+            if serialized_context is not None:
+                conn.execute(
+                    "UPDATE run_records SET start_context_json=?, updated_at=? "
+                    "WHERE project=? AND run_id=? AND target=? "
+                    "AND start_context_json='{}'",
+                    (serialized_context, now, project, run_id, target),
+                )
+            row = conn.execute(
+                "SELECT project, run_id, status, target, base_commit, "
+                "checkpoint_json, checkpoint_version, updated_at, "
+                "start_context_json "
+                "FROM run_records WHERE project=? AND run_id=?",
+                (project, run_id),
+            ).fetchone()
+            if row is None:
+                conn.rollback()
+                raise sqlite3.IntegrityError("RunRecord konnte nicht angelegt werden")
+            if row[3] != target:
+                conn.rollback()
+                raise ValueError("Run-ID existiert bereits mit anderem Ziel")
+            if serialized_context is not None and row[8] != serialized_context:
+                conn.rollback()
+                raise ValueError("Run-ID existiert bereits mit anderem Startkontext")
             # The web API writes "starting" before Popen. The worker's first
             # idempotent create call is the durable starting -> running edge.
             if status == "running":
@@ -180,15 +215,14 @@ class EventStore:
                 )
             row = conn.execute(
                 "SELECT project, run_id, status, target, base_commit, "
-                "checkpoint_json, checkpoint_version, updated_at "
+                "checkpoint_json, checkpoint_version, updated_at, "
+                "start_context_json "
                 "FROM run_records WHERE project=? AND run_id=?",
                 (project, run_id),
             ).fetchone()
             conn.commit()
-        if row is None:
+        if row is None:  # Defensive guard for unexpected SQLite behavior.
             raise sqlite3.IntegrityError("RunRecord konnte nicht angelegt werden")
-        if row[3] != target:
-            raise ValueError("Run-ID existiert bereits mit anderem Ziel")
         return self._run_record_from_row(row)
 
     def transition_run_status(
@@ -218,12 +252,23 @@ class EventStore:
             checkpoint = json.loads(row[5])
         except (TypeError, json.JSONDecodeError):
             checkpoint = {}
+        try:
+            start_context = json.loads(row[8]) if len(row) > 8 else {}
+        except (TypeError, json.JSONDecodeError):
+            start_context = {}
+        if not isinstance(start_context, dict):
+            start_context = {}
+        context_version = start_context.get("schema_version", 0)
+        if not isinstance(context_version, int) or isinstance(context_version, bool):
+            context_version = 0
         return {
             "project": row[0],
             "run_id": row[1],
             "status": row[2],
             "target": row[3],
             "base_commit": row[4],
+            "start_context": start_context,
+            "start_context_version": context_version,
             "checkpoint": checkpoint,
             "checkpoint_version": int(row[6]),
             "updated_at": row[7],
@@ -236,7 +281,8 @@ class EventStore:
         with closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT project, run_id, status, target, base_commit, "
-                "checkpoint_json, checkpoint_version, updated_at "
+                "checkpoint_json, checkpoint_version, updated_at, "
+                "start_context_json "
                 "FROM run_records WHERE project=? AND run_id=?",
                 (project, run_id),
             ).fetchone()

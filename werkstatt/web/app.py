@@ -1003,7 +1003,11 @@ def create_app() -> FastAPI:
                 if not resume_mode:
                     try:
                         EventStore().create_run_record(
-                            projektname, run_id, aufgabe, status="starting",
+                            projektname,
+                            run_id,
+                            aufgabe,
+                            status="starting",
+                            start_context=run_context,
                         )
                     except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
                         registry.set_state(projektname, run_id, "idle")
