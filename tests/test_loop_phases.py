@@ -777,6 +777,7 @@ def test_task_ende_auditiert_fehlgeschlagenen_kriterien_checkpoint(
         "task_id": "t1",
         "error_type": "RuntimeError",
         "next_step": (
-            "Kriterienfortschritt am naechsten sicheren Checkpoint erneut pruefen"
+            "Phase-End-Verify prueft den Zielabgleich erneut; "
+            "Erfolg bleibt bis dahin offen"
         ),
     }
