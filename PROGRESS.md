@@ -6495,3 +6495,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Lokale Verifikation:** Betroffene Tests 24 bestanden; Ruff und strikte Doku-Drift-Prüfung bestanden. Das lokale Windows-Quality-Gate konnte die Linux-Kommandos nicht ausführen; der Windows-Gesamttestlauf enthielt plattformfremde Altfehler.
 - **Linux-CI:** GitHub Actions Quality Gate [43499741171](https://github.com/ghxstfocus/werkstatt/actions/runs/43499741171), PR-Merge-Ref `e5abe40` / Branch-Commit `ec84cdf`: 2.238 bestanden, 5 übersprungen; Ruff, Mypy, AST (390 Dateien), Audit-Katalog und JavaScript-Syntax erfolgreich; `ok=true`, `regression=false`.
 - **Ergebnis:** OP-372-Akzeptanzkriterien auf dem geprüften Branch erfüllt; OP-372 aus `docs/STATUS.md` entfernt. Änderung ist in PR #10 zur Übernahme nach `main`.
+
+## 2026-11-13 — OP-372-Abschluss nach Queue-Bereinigung verifiziert
+
+- **CI-Nachbesserung:** Nach dem ordnungsgemäßen Entfernen der erledigten OP-372 aus `docs/STATUS.md` erwartete ein Chat-Tool-Test sie weiterhin als offene OP. Der Test prüft jetzt den geschlossenen Zustand anhand des Progress-Belegs und der CI-Run-ID, statt eine erledigte OP in der offenen Queue zu verlangen.
+- **Verifikation:** GitHub Actions Quality Gate [43500911166](https://github.com/ghxstfocus/werkstatt/actions/runs/43500911166), Run 744, Commit `6d459e0`: erfolgreich. Die betroffenen lokalen Tests bestanden (25); Ruff und strikte Doku-Drift-Prüfung bestanden. Sechs nicht betroffene Chat-Tool-Tests konnten lokal unter Windows wegen der fest konfigurierten, hier fehlenden `/opt/werkstatt`-Projektwurzel nicht laufen; Linux-CI ist dafür maßgeblich.
+- **Ergebnis:** OP-372 bleibt abgeschlossen; Test und Dokumentationsstatus stimmen mit der Queue-Konvention überein.
