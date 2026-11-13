@@ -103,6 +103,23 @@ def test_append_with_event_id_is_idempotent_and_project_scoped(
 
 
 
+def test_run_record_wrong_target_retry_does_not_mutate_base_commit(
+    tmp_path: Path,
+) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-target", "Original target")
+
+    with pytest.raises(ValueError, match="anderem Ziel"):
+        store.create_run_record(
+            "demo", "run-target", "Different target", base_commit="wrong-pin",
+        )
+
+    record = store.create_run_record(
+        "demo", "run-target", "Original target", base_commit="correct-pin",
+    )
+    assert record["base_commit"] == "correct-pin"
+
+
 def test_run_record_checkpoint_is_compare_and_swap(tmp_path: Path) -> None:
     store = EventStore(db_pfad=tmp_path / "events.db")
     record = store.create_run_record(

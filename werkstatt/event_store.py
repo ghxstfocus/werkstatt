@@ -155,8 +155,9 @@ class EventStore:
             if base_commit is not None:
                 conn.execute(
                     "UPDATE run_records SET base_commit=?, updated_at=? "
-                    "WHERE project=? AND run_id=? AND base_commit IS NULL",
-                    (base_commit, now, project, run_id),
+                    "WHERE project=? AND run_id=? AND target=? "
+                    "AND base_commit IS NULL",
+                    (base_commit, now, project, run_id, target),
                 )
             row = conn.execute(
                 "SELECT project, run_id, status, target, base_commit, "
