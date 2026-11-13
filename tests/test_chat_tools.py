@@ -89,7 +89,7 @@ def test_read_file_offsets_are_character_offsets_and_truncation_is_explicit(tmp_
 
 def test_read_file_tail_reports_actual_range_and_file_length(tmp_path):
     (tmp_path / "progress.md").write_text(
-        "alt\\n" + "x" * 200 + "\\nneuester Eintrag\\n",
+        "alt\n" + "x" * 200 + "\nneuester Eintrag\n",
         encoding="utf-8",
     )
     result = chat_tools.execute_tool(
@@ -97,9 +97,9 @@ def test_read_file_tail_reports_actual_range_and_file_length(tmp_path):
         project_dir=tmp_path,
     )
     assert "Dateiende-Auszug:" in result
-    assert "von 217" in result
+    assert "von 222" in result
     assert "Frueheren Inhalt gezielt mit read_file(start=0, end=" in result
-    assert result.endswith("neuester Eintrag\\n")
+    assert result.endswith("neuester Eintrag\n")
     assert len(result.encode("utf-8")) <= chat_tools._MAX_READ_BYTES
 
 
