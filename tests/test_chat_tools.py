@@ -64,7 +64,7 @@ def test_read_file_liest_projekt() -> None:
 
 
 def test_read_file_offsets_are_character_offsets_and_truncation_is_explicit(tmp_path):
-    (tmp_path / "offset.txt").write_text("ä\\nbeta", encoding="utf-8")
+    (tmp_path / "offset.txt").write_text("ä\nbeta", encoding="utf-8")
     offset_result = chat_tools.execute_tool(
         "read_file", {"path": "offset.txt", "start": 2, "end": 6},
         project_dir=tmp_path,
