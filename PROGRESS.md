@@ -6127,3 +6127,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Eine gezielte Recovery beweist nur, dass die zuvor roten Stages wieder gruen sind. Der Task-Loop fuehrt deshalb jetzt danach die vollstaendige Post-Build-Verify erneut aus, bevor er zum Reviewer weitergeht.
 - Findet die Vollpruefung eine neue rote Stage, wird diese im selben Recovery-Zyklus gezielt repariert. Wiederkehrende identische Stage-Sets stoppen mit einem Stagnationsbeleg statt sich endlos zu wiederholen.
 - Regressionstests decken den neuen Stage-Befund und die erneute Vollpruefung ab. Quality-Gate-Nachweis folgt; OP-398 und der adaptive Run-Kern bleiben offen.
+
+
+## 2026-11-13 — OP-398: Recovery-Regressionstest korrigiert
+
+- Beim erneuten Test-Review wurde ein Fixture-Fehler entdeckt: Die simulierten Verify-Ergebnisse wurden beim Testaufbau statt zwischen den Recovery-Aufrufen gesetzt. Das Fixture aktualisiert den Fehlerzustand jetzt pro Aufruf, damit der Test tatsaechlich den Wechsel von einer roten Stage zu einer neu roten Stage prueft.
+- Die Quality-Gate-Pipeline fuer den Recovery-Zyklus laeuft erneut.
