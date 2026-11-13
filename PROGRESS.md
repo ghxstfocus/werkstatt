@@ -6045,4 +6045,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der echte HTTP-Resume-Prozess blieb im CI vor dem Bootstrap-Marker stehen, obwohl ein direkter Kontrollstart mit denselben Interpreter- und Isolationsflags funktionierte. Der Test-Launcher startet den Worker jetzt ohne den zusaetzlichen Python-Importtrace (`-v`).
 - Der Akzeptanztest behaelt den produktiven HTTP-Resume, den echten CLI-Einstieg, RunRecord, gespeicherten PhaseState und Phase-End-Verify bei.
-- Wiederholte Zwischenhypothesen und Preflight-Notizen sind zu diesem Befund zusammengezogen. Der aktuelle CI-Lauf muss noch bestaetigen, dass der fehlgeschlagene Run erfolgreich fortgesetzt wird.
+- Die Testisolation ersetzt nun nur `app_module.sys` statt das globale `sys`-Modul zu veraendern. Vor dem HTTP-Aufruf prueft der Test denselben Shell-Launcher und dieselben CLI-Argumente separat; so trennt ein kuenftiger Fehler klar zwischen Launcher und API-Resume.
+- Der aktuelle CI-Lauf muss noch bestaetigen, dass der fehlgeschlagene Run erfolgreich fortgesetzt wird.

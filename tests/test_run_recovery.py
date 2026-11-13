@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -629,7 +630,9 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     monkeypatch.setenv("WERKSTATT_TEST_OVERLAY", str(overlay_root))
     monkeypatch.setenv("WERKSTATT_REPO_ROOT", str(repo_root))
     monkeypatch.setenv("WERKSTATT_TEST_PYTHON", sys.executable)
-    monkeypatch.setattr(app_module.sys, "executable", str(worker_launcher))
+    monkeypatch.setattr(
+        app_module, "sys", SimpleNamespace(executable=str(worker_launcher)),
+    )
     monkeypatch.setenv("WERKSTATT_TEST_PROJECT_DIR", str(project_dir))
     bootstrap_started = tmp_path / "resume-bootstrap-started"
     monkeypatch.setenv("WERKSTATT_BOOTSTRAP_STARTED", str(bootstrap_started))
@@ -678,6 +681,19 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     assert bootstrap_probe.returncode == 0, (
         f"Resume bootstrap probe failed: {bootstrap_probe.stdout!r} "
         f"{bootstrap_probe.stderr[-3000:]!r}"
+    )
+    launcher_probe = subprocess.run(
+        [str(worker_launcher), "-m", "werkstatt.loop", "--help"],
+        cwd=tmp_path,
+        env=bootstrap_probe_env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert launcher_probe.returncode == 0, (
+        f"Resume launcher probe failed: {launcher_probe.stdout!r} "
+        f"{launcher_probe.stderr[-3000:]!r}"
     )
     monkeypatch.setattr(app_module, "_PROJECTS_BASE", project_base)
     monkeypatch.setattr(app_module, "_loop_registry", lambda: registry)
