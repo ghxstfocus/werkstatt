@@ -6480,3 +6480,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** `read_status` listet alle OP-IDs kompakt und akzeptiert optional eine validierte `op_id`, fuer die genau der vollstaendige Quellabschnitt ausgegeben wird. Doppelte IDs werden als mehrdeutig markiert. Der Chat-Prompt verlangt bei konkreten OPs den exakten OP-Block und die dort genannten Dateien zu lesen, bevor er behauptet, eine Schicht fehle oder den Nutzer nach einem bereits dokumentierten Pfad fragt.
 - **Verifikation:** `tests/test_chat_agent.py`: 28 bestanden. Gezielte `read_status`-Regressionen fuer spaet liegende OPs, die echte OP-372-AK sowie ungueltige/duplizierte IDs: 4 bestanden. Ruff, strikte Doku-Drift-Pruefung und `git diff --check` bestanden. Linux-CI fuer den Branch steht aus.
 - **Grenze:** Diese Aenderung verbessert den Chat-Kontext und die Planvorbereitung; sie schliesst OP-372 nicht ab und startet keinen Loop.
+
+## 2026-11-13 — Resume-Endpunkt im Recovery-Test bis zum echten Worker verfolgen
+
+- **Befund:** Der Produktions-Resume-Test pruefte zwar den HTTP-Handler und danach den echten CLI-Resume, fing aber `Popen` ab und startete den CLI-Prozess anschliessend separat. Damit war die kritische HTTP-zu-Worker-Kante nicht durchgehend belegt. Ein zweiter Testfehler trat lokal unter Windows auf, weil der POSIX-Test `os.killpg` voraussetzte und sein Fake-Worker kein `terminate()` bereitstellte.
+- **Aenderung:** Der Integrationstest laesst jetzt den Resume-Endpunkt den echten Produktions-CLI-Worker starten und wartet auf dessen Abschluss samt Phase-End-Verify. Der POSIX-Fake ist unter Windows korrekt isoliert.
+- **Verifikation:** Lokal unter Windows/Python 3.14: `tests/test_run_recovery.py` 11 bestanden, 2 Linux-only uebersprungen; Ruff und `git diff --check` bestanden. Linux-CI muss den echten Endpoint-Worker-Pfad noch bestaetigen.
+- **Grenze:** Ein echter Absturz und Neustart des Webserver-Prozesses ist durch diese Testaenderung weiterhin nicht simuliert.
