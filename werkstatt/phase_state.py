@@ -64,8 +64,10 @@ class PhaseState:
             self.data = {}
             return False
 
-        criteria_tracking = data.get("criteria_tracking")
-        if criteria_tracking is not None and not isinstance(criteria_tracking, bool):
+        if (
+            "criteria_tracking" in data
+            and not isinstance(data["criteria_tracking"], bool)
+        ):
             self.data = {}
             return False
 
@@ -154,7 +156,7 @@ class PhaseState:
                     "criterion_refs muessen eine Liste nichtleerer IDs sein"
                 )
 
-        criteria_tracking = any(
+        criteria_tracking = bool(akzeptanzkriterien) or any(
             "criterion_refs" in task for task in tasks
         )
         now = datetime.datetime.now(datetime.UTC).isoformat()

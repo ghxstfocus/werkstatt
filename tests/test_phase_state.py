@@ -246,6 +246,17 @@ def test_invalid_criteria_tracking_marker_rejects_checkpoint(tmp_path):
     assert ps.data == {}
 
 
+def test_null_criteria_tracking_marker_rejects_checkpoint(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.path.write_text(
+        "project: testprojekt\ncriteria_tracking: null\ntasks: []\n",
+        encoding="utf-8",
+    )
+
+    assert ps.load() is False
+    assert ps.data == {}
+
+
 def test_checkpoint_cannot_disable_tracking_with_references(tmp_path):
     ps = PhaseState("testprojekt", base_dir=tmp_path)
     ps.path.write_text(
@@ -259,6 +270,21 @@ def test_checkpoint_cannot_disable_tracking_with_references(tmp_path):
 
     assert ps.load() is False
     assert ps.data == {}
+
+
+def test_new_plan_with_criteria_but_no_task_mapping_is_invalid(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new(
+        "Fehlende Kriterienzuordnung",
+        [{"id": "t1"}],
+        akzeptanzkriterien=["Ein verbindliches Ziel"],
+    )
+
+    progress = ps.criteria_progress()
+    assert progress["tracked"] is True
+    assert progress["valid"] is False
+    assert progress["uncovered"] == ["AC1"]
+    assert progress["error"] == "invalid_criterion_refs:t1"
 
 
 def test_criteria_progress_rejects_unknown_reference(tmp_path):
