@@ -44,7 +44,8 @@ def test_chat_loop_reads_latest_append_only_entry_from_tail_evidence(
 ) -> None:
     path = tmp_path / "PROGRESS.md"
     path.write_text(
-        "historischer Eintrag\\n" * 80 + "2026-11-13 — neuester belegter Eintrag\\n",
+        "".join(f"historischer Eintrag {i:03d}\\n" for i in range(80))
+        + "2026-11-13 — neuester belegter Eintrag\\n",
         encoding="utf-8",
     )
     calls = 0
@@ -73,7 +74,7 @@ def test_chat_loop_reads_latest_append_only_entry_from_tail_evidence(
         evidence = messages[-1]["content"]
         assert "Dateiende-Auszug:" in evidence
         assert "neuester belegter Eintrag" in evidence
-        assert "historischer Eintrag" not in evidence
+        assert "historischer Eintrag 000" not in evidence
         return {"choices": [{"message": {
             "role": "assistant",
             "content": "Der neueste belegte Eintrag ist vom 2026-11-13.",
