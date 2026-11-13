@@ -116,15 +116,27 @@ def _validate_github_worktree(
     listed = _git(project_dir, "worktree", "list", "--porcelain")
     top_level = _git(worktree, "rev-parse", "--show-toplevel")
     branch = _git(worktree, "branch", "--show-current")
+    listed_paths = {
+        Path(line.removeprefix("worktree ")).resolve()
+        for line in listed.stdout.splitlines()
+        if line.startswith("worktree ")
+    }
     if (
         listed.returncode != 0
-        or str(worktree) not in listed.stdout.splitlines()
+        or worktree not in listed_paths
         or top_level.returncode != 0
         or Path(top_level.stdout.strip()).resolve() != worktree
         or branch.returncode != 0
         or branch.stdout.strip() != run_branch
     ):
         raise RunRecoveryError("Git-Worktree-Zuordnung oder Run-Branch ist inkonsistent.")
+    pinned_is_ancestor = _git(
+        worktree, "merge-base", "--is-ancestor", pinned_sha, "HEAD",
+    )
+    if pinned_is_ancestor.returncode != 0:
+        raise RunRecoveryError(
+            "Run-Worktree stammt nicht mehr von der gepinnten Remote-Revision ab.",
+        )
     return worktree
 
 

@@ -6417,3 +6417,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Der Checkpoint-Audit-Eintrag speichert nicht mehr den vollständigen Chat-Folgeauftrag, sondern dessen SHA-256-Fingerprint. Der Originaltext bleibt im projektgebundenen Inbox-/Checkpoint-Datensatz zur weiteren Bearbeitung.
 - Ungültige Nicht-Text-Payloads werden am Checkpoint mit einem Typfehler fail-closed abgewiesen.
 - Verifikation: gezielter Checkpoint-Test, Ruff, Bytecode-Kompilierung und `git diff --check`.
+
+## 2026-11-13 — GitHub-Run-Recovery an gepinnte Historie binden
+
+- Recovery validiert jetzt zusaetzlich, dass der Run-Branch weiterhin von der beim Start gepinnten Remote-Revision abstammt. Ein umgehaengter Branch mit fremder Historie wird vor dem Resume abgewiesen.
+- Regressionstest prueft sowohl gueltige Wiederaufnahme als auch einen danach auf eine unabhaengige Historie gesetzten Run-Branch.
