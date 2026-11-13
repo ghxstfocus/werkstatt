@@ -6133,3 +6133,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Beim erneuten Test-Review wurde ein Fixture-Fehler entdeckt: Die simulierten Verify-Ergebnisse wurden beim Testaufbau statt zwischen den Recovery-Aufrufen gesetzt. Das Fixture aktualisiert den Fehlerzustand jetzt pro Aufruf, damit der Test tatsaechlich den Wechsel von einer roten Stage zu einer neu roten Stage prueft.
 - Die Quality-Gate-Pipeline fuer den Recovery-Zyklus laeuft erneut.
+
+
+## 2026-11-13 — OP-398: Testassertion fuer Full-Verify-Schleife
+
+- Der erste CI-Lauf fuer die Vollpruefung fand einen Fehler im neuen Regressionstest: Die Argumente wurden aus dem Mock-Call statt aus dem Callback-Verlauf gelesen. Die Produktionslogik und Ruff waren gruen; der Test prueft jetzt die tatsaechlich zwischen den beiden Recovery-Aufrufen erfassten Stage-IDs.
+- Erneute Quality-Gate-Ausfuehrung laeuft.
