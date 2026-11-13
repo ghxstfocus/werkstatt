@@ -35,7 +35,7 @@ Arbeitsgraphen und Evidence Ledger.
 | Commit und Verify | Commit-Pruefungen pinnen Parent-HEAD und Index-Tree. Nach einem Commit laeuft die vollstaendige Phase-End-Verify erneut; Snapshot-Abweichungen verhindern Erfolg. |
 | Run-Ergebnis | Ein gruener Teilcheck genuegt nicht. Offene/fehlgeschlagene Tasks oder rotes Verify verhindern den Erfolg. |
 | Prozessstatus | Die Registry ueberlebt Webserver-Neustarts und kann lebende Worker wiederfinden. Sie und der RunRecord bleiben getrennte Speichervertraege. |
-| Run-Inbox | SQLite speichert Nachrichten idempotent mit Lease/Fencing. Die Chat-Job-API stellt derzeit `job_notice` ein; der Task-Loop konsumiert diese Hinweise an Task-Grenzen und schreibt sie crash-sicher in den Checkpoint. Fragen, Steueraktionen, Gate-Antworten und Schreibauftraege sind noch keine vollstaendig integrierten Koordinator-Ereignisse. |
+| Run-Inbox | SQLite speichert Nachrichten idempotent mit Lease/Fencing. Run-gebundene Chatjobs fuehren zusaetzlich eine Outbox-Markierung: Inbox-Eintrag wird vor Worker-Dispatch geschrieben und bei Reconnect/Resume idempotent reconciliert. Der Task-Loop konsumiert Hinweise an Task-Grenzen und schreibt sie crash-sicher in den Checkpoint. Fragen, Steueraktionen, Gate-Antworten und Schreibauftraege sind noch keine vollstaendig integrierten Koordinator-Ereignisse. |
 | Control-Timeline | Viele Rollen- und Verify-Schritte sind sichtbar. Lueckenloses Builder-/LLM-Eventing und eine einheitliche Run-Projektion bleiben offen. |
 
 ## Nachgewiesene Start-Race und Korrektur
@@ -46,6 +46,14 @@ spaeter im Loop. Die Chat-Job-API erkennt bereits den Registry-Zustand
 `starting`, konnte aber mangels RunRecord keine `job_notice`-Nachricht
 einstellen. Der Chatjob wurde trotzdem angenommen. Damit konnte ein waehrend
 des Starts eingereichter Job ohne Run-Inbox-Verknuepfung bleiben.
+
+Seit dem Outbox-Fix wird der Chatjob zuerst persistent angelegt, die
+Run-Inbox-Nachricht idempotent per `chat-job:<job_id>` geschrieben und erst
+danach der Worker dispatcht. Ein lokaler `run_inbox_enqueued`-Marker wird
+nach erfolgreichem Inbox-Commit gesetzt. Wenn der Prozess zwischen Inbox-
+Commit und Marker ausfaellt, schreibt Resume dieselbe Message-ID erneut;
+der Event-Store dedupliziert den Retry. Fehlt der RunRecord temporaer, bleibt
+der Outbox-Eintrag offen und wird vor spaeterem Resume erneut versucht.
 
 Der Webstart legt den RunRecord jetzt vor `Popen` mit Status
 `starting` an. Der Worker-Aufruf wechselt denselben Record idempotent und

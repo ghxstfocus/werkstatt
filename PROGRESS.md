@@ -6072,3 +6072,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Webstarts persistieren den RunRecord als `starting`; der Worker bestaetigt seinen Start idempotent als `running`.
 - Wenn `Popen` fehlschlaegt oder der autonome Auswahlbeleg nicht geschrieben werden kann, wird `starting → failed` per Status-CAS gesetzt. Der Run bleibt nicht irrtuemlich als laufend markiert und sein Checkpoint bleibt unveraendert.
 - Event-Store- und Web-Regressionstests decken Statusuebergaenge und den fehlgeschlagenen Workerstart ab. Quality Gate Run [43357750948](https://github.com/ghxstfocus/werkstatt/actions/runs/43357750948) ist gruen: 2.154 Tests bestanden; Ruff/Mypy ohne Fehler, AST 387 Dateien ohne Fehler, Audit-Katalog bestanden.
+
+## 2026-11-13 — Chatjob-Run-Inbox-Outbox
+
+- Run-gebundene Chatjobs werden vor Worker-Dispatch idempotent in die Run-Inbox eingetragen. Ein lokaler Outbox-Marker wird erst nach bestaetigtem Inbox-Commit gesetzt.
+- Resume/Reconnect gleicht offene Outbox-Eintraege erneut ab; dieselbe stabile Chatjob-ID verhindert Duplikate nach Prozessabbruch zwischen Inbox-Commit und Marker.
+- Tests decken den Abbruch genau in diesem Fenster sowie einen beim ersten Versuch noch fehlenden RunRecord ab. Der Quality-Gate-Nachweis folgt fuer den resultierenden Commit.

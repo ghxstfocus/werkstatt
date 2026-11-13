@@ -68,6 +68,7 @@ class ChatJobStore:
                 " updated_at TEXT NOT NULL, worker_id TEXT,"
                 " heartbeat_at TEXT, cancel_requested INTEGER NOT NULL DEFAULT 0,"
                 " context_seq INTEGER, run_id TEXT, project TEXT,"
+                " run_inbox_enqueued INTEGER NOT NULL DEFAULT 0,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -98,6 +99,11 @@ class ChatJobStore:
                 conn.execute("ALTER TABLE jobs ADD COLUMN run_id TEXT")
             if "project" not in columns:
                 conn.execute("ALTER TABLE jobs ADD COLUMN project TEXT")
+            if "run_inbox_enqueued" not in columns:
+                conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN run_inbox_enqueued INTEGER "
+                    "NOT NULL DEFAULT 0"
+                )
             event_columns = {
                 str(row["name"])
                 for row in conn.execute("PRAGMA table_info(job_events)")
@@ -182,6 +188,36 @@ class ChatJobStore:
                 "SELECT * FROM jobs WHERE state='queued' ORDER BY rowid",
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def pending_run_inbox(
+        self,
+        project: str,
+        *,
+        limit: int = 500,
+        after_rowid: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Returns a stable page of run-bound jobs with unfinished handoffs."""
+        if limit < 1:
+            return []
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT rowid AS outbox_seq,job_id,session_id,mode,context_seq,run_id "
+                "FROM jobs WHERE project=? AND run_id IS NOT NULL "
+                "AND run_inbox_enqueued=0 AND rowid>? ORDER BY rowid LIMIT ?",
+                (project, max(0, after_rowid), limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_run_inbox_enqueued(self, job_id: str) -> bool:
+        """Marks the outbox delivered only after the idempotent inbox write."""
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                "UPDATE jobs SET run_inbox_enqueued=1,updated_at=? "
+                "WHERE job_id=? AND run_inbox_enqueued=0",
+                (_now(), job_id),
+            )
+            conn.commit()
+            return cur.rowcount == 1
 
     def claim(self, job_id: str, worker_id: str = "test-worker") -> bool:
         """Beansprucht atomar einen Job; Session-Kontext bleibt pro Job isoliert."""
@@ -608,7 +644,7 @@ def _run_job(
                 )
         heartbeat_stop.set()
         heartbeat_thread.join(timeout=_WORKER_HEARTBEAT_SECONDS + 1)
-        _dispatch_pending(db_path, project, project_dir)
+        resume_chat_jobs(project, project_dir, db_path=db_path)
     return True
 
 
@@ -618,6 +654,8 @@ def _dispatch_pending(
     store = ChatJobStore(db_path)
     store.recover_abandoned_jobs()
     for job in store.queued():
+        if job.get("run_id") and not job.get("run_inbox_enqueued"):
+            continue
         key = f"{db_path.resolve()}:{job['job_id']}"
         with _FUTURES_LOCK:
             current = _FUTURES.get(key)
@@ -677,11 +715,57 @@ def sync_completed_job_turns(
     return added
 
 
+def reconcile_run_inbox(
+    project: str,
+    *,
+    db_path: Path | None = None,
+    event_store: Any | None = None,
+    limit: int = 500,
+) -> int:
+    """Replays the chat-job outbox into the run inbox using stable message IDs."""
+    path = Path(db_path) if db_path else _db_path(project)
+    store = ChatJobStore(path)
+    if event_store is None:
+        from werkstatt.event_store import EventStore
+
+        event_store = EventStore()
+
+    reconciled = 0
+    after_rowid = 0
+    while True:
+        jobs = store.pending_run_inbox(
+            project, limit=limit, after_rowid=after_rowid,
+        )
+        if not jobs:
+            return reconciled
+        after_rowid = int(jobs[-1]["outbox_seq"])
+        for job in jobs:
+            run_id = str(job["run_id"])
+            if event_store.get_run_record(project, run_id) is None:
+                continue
+            job_id = str(job["job_id"])
+            event_store.enqueue_run_message(
+                project,
+                run_id,
+                f"chat-job:{job_id}",
+                "job_notice",
+                {
+                    "job_id": job_id,
+                    "session_id": str(job["session_id"]),
+                    "mode": str(job["mode"]),
+                    "context_seq": job["context_seq"],
+                },
+            )
+            if store.mark_run_inbox_enqueued(job_id):
+                reconciled += 1
+
+
 def resume_chat_jobs(
     project: str, project_dir: Path, *, db_path: Path | None = None,
 ) -> None:
-    """Re-dispatch queued jobs and expire leases lost in a server restart."""
+    """Reconciles run notices before dispatching queued jobs after restart."""
     path = Path(db_path) if db_path else _db_path(project)
+    reconcile_run_inbox(project, db_path=path)
     _dispatch_pending(path, project, Path(project_dir))
 
 
@@ -697,7 +781,7 @@ def enqueue_chat_job(
     context_seq: int | None = None,
     run_id: str | None = None,
 ) -> dict[str, Any]:
-    """Persistiert einen Job mit festem Kontext-Wasserstand und dispatcht ihn."""
+    """Persists a job with a fixed context watermark and reconciles its inbox."""
     path = Path(db_path) if db_path else _db_path(project)
     store = ChatJobStore(path)
     job, created = store.create(
@@ -706,5 +790,6 @@ def enqueue_chat_job(
         run_id=run_id,
         project=project,
     )
+    reconcile_run_inbox(project, db_path=path)
     _dispatch_pending(path, project, Path(project_dir))
     return {"job": job, "created": created}

@@ -491,3 +491,102 @@ def test_job_events_are_projected_to_timeline_exactly_once(
     assert projected_ids == [(f"chat-job:{job['job_id']}:1",)]
 
 
+
+
+def test_run_inbox_outbox_replays_after_interrupted_handoff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, event_store
+
+    jobs_db = tmp_path / "chat-jobs.db"
+    events = event_store.EventStore(tmp_path / "events.db")
+    events.create_run_record("demo", "run-active", "Pruefe Repo")
+    monkeypatch.setattr(event_store, "EventStore", lambda: events)
+    dispatched: list[str] = []
+    original_mark = ChatJobStore.mark_run_inbox_enqueued
+    mark_calls = 0
+
+    def _crash_after_inbox_write(store: ChatJobStore, job_id: str) -> bool:
+        nonlocal mark_calls
+        mark_calls += 1
+        if mark_calls == 1:
+            raise RuntimeError("simulierter Prozessabbruch nach Inbox-Commit")
+        return original_mark(store, job_id)
+
+    def _dispatch_after_reconcile(
+        _db_path: Path, _project: str, _project_dir: Path,
+    ) -> None:
+        message = events.claim_run_message(
+            "demo", "run-active", "test-worker", kind="job_notice",
+        )
+        assert message is not None
+        dispatched.append(str(message["message_id"]))
+
+    monkeypatch.setattr(ChatJobStore, "mark_run_inbox_enqueued", _crash_after_inbox_write)
+    monkeypatch.setattr(chat_jobs, "_dispatch_pending", _dispatch_after_reconcile)
+
+    with pytest.raises(RuntimeError, match="simulierter Prozessabbruch"):
+        chat_jobs.enqueue_chat_job(
+            "demo", tmp_path, "session-a", "Frage waehrend Run",
+            "read", "request-key-outbox-001", db_path=jobs_db,
+            context_seq=4, run_id="run-active",
+        )
+
+    persisted = ChatJobStore(jobs_db).queued()
+    assert len(persisted) == 1
+    job_id = str(persisted[0]["job_id"])
+    assert dispatched == []
+
+    chat_jobs.resume_chat_jobs("demo", tmp_path, db_path=jobs_db)
+
+    assert dispatched == [f"chat-job:{job_id}"]
+    message = events.claim_run_message(
+        "demo", "run-active", "verify-worker", kind="job_notice",
+    )
+    assert message is not None
+    assert message["message_id"] == f"chat-job:{job_id}"
+    assert events.acknowledge_run_message(
+        message["seq"], "verify-worker", message["fencing_token"],
+    )
+    assert events.claim_run_message(
+        "demo", "run-active", "verify-worker", kind="job_notice",
+    ) is None
+    assert ChatJobStore(jobs_db).get(job_id)["run_inbox_enqueued"] == 1
+
+
+def test_run_inbox_outbox_waits_for_run_record_then_reconciles(
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_jobs, event_store
+
+    jobs_db = tmp_path / "chat-jobs.db"
+    events = event_store.EventStore(tmp_path / "events.db")
+    job, _ = ChatJobStore(jobs_db).create(
+        "session-a", "Frage waehrend starting", "read",
+        "request-key-outbox-002", context_seq=3,
+        run_id="run-starting", project="demo",
+    )
+
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 0
+    assert ChatJobStore(jobs_db).get(job["job_id"])["run_inbox_enqueued"] == 0
+
+    events.create_run_record("demo", "run-starting", "Pruefe Repo")
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 1
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=events,
+    ) == 0
+    message = events.claim_run_message(
+        "demo", "run-starting", "test-worker", kind="job_notice",
+    )
+    assert message is not None
+    assert message["payload"] == {
+        "job_id": job["job_id"],
+        "session_id": "session-a",
+        "mode": "read",
+        "context_seq": 3,
+    }
