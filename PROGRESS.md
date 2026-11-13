@@ -6271,3 +6271,13 @@ Zusammenfassung; der Chat muss fuer exakte Fundstellen weiterhin gezielt
 `grep` bzw. `read_file` verwenden. Die Standard-Chat-Schleife ist im
 aktuellen Code unbegrenzt; identische wiederholte Werkzeugzyklen werden
 stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
+
+
+## 2026-11-13 — Arbeitsvertrag: Ziel halten, erneut abgleichen, exakt dokumentieren
+
+- Der Nutzer hat den Qualitaetsmassstab praezisiert: Werkstatt soll wie ein zielorientierter Assistent weiterarbeiten, Zwischenanliegen aufnehmen, wiederholt den Ist-Stand abgleichen und erledigte Schritte mit belastbaren Belegen dokumentieren.
+- ADR-0032 legt diesen Ablauf jetzt explizit fest: Hauptziel und Run-Identitaet bleiben bei Zwischenfragen erhalten; neue Nachrichten werden klassifiziert; Checkpoints gleichen Freigabe, Kriterien, Inbox, Code/Doku, Verify-Belege und Reparaturversuche ab. Gruene Teilpruefungen gelten nur fuer ihren geprueften SHA und beenden keinen noch offenen Auftrag.
+- Dokumentationsvertrag geschaerft: relevante Aenderungen bekommen PROGRESS mit tatsaechlich ausgefuehrten Checks; STATUS schliesst OPs nur nach belegten Kriterien; ROADMAP/ARCHITECTURE/ADRs werden bei passender Fokus- bzw. Verhaltensaenderung aktualisiert. Die Abschlussantwort wird gegen Diff und exakten Pruefstand abgeglichen.
+- OP-401 uebernimmt die Verhaltens- und Regressionserwartungen fuer Zwischenfragen, Folgeauftraege und erneuten Ziel-/Doku-Abgleich.
+- **Wichtig: Das ist eine Spezifikations- und Queue-Aenderung, keine Behauptung, dass der adaptive Run-Koordinator bereits implementiert ist.** Laut Ist-Aufnahme konsumiert der Task-Loop weiterhin nur `job_notice`; Fragen, Steuerung, Gate-Antworten und Schreibauftraege haben noch keinen vollstaendigen produktiven Dispatcher. Diese Implementierung bleibt offen in OP-401/ADR-0032 M1.
+- Geaendert: `docs/adr/ADR-0032-adaptiver-zielorientierter-run-kern.md`, `docs/STATUS.md`, `PROGRESS.md`. Code- oder Laufzeittests wurden fuer diese reine Doku-Aenderung nicht ausgefuehrt.
