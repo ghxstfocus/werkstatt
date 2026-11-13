@@ -75,7 +75,7 @@ def test_snapshot_rejects_source_mutation_during_copy(
         return value
 
     monkeypatch.setattr(run_snapshot, "_digest", changing_digest)
-    with pytest.raises(run_snapshot.SnapshotError, match="gewaendert"):
+    with pytest.raises(run_snapshot.SnapshotError, match="geaendert"):
         run_snapshot.create_project_snapshot(source, "demo", "run-2", "job-2")
 
     assert not list((tmp_path / "state").rglob("job-2"))
