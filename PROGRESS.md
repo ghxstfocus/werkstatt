@@ -6025,3 +6025,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Beim fehlgeschlagenen CI-Resume laeuft der Python-Prozess, erreicht aber weder den Test-Loop-Bootstrap noch die Renderer-Loginitialisierung. Die zusaetzliche Diagnose markiert nun bereits den Import des isolierten `werkstatt`-Pakets und gibt begrenzte Python-/Werkstatt-Mappings aus `/proc` aus.
 - So unterscheiden wir den Test-Overlay-Import vom produktiven Modulpfad, bevor die Recovery-Akzeptanz angepasst wird.
+
+
+## 2026-11-13 — Isolierter Resume-Test trotz editable Install
+
+- CI zeigte, dass der gestartete Python-Prozess die Test-Paket- und Loop-Bootmarker nicht erreicht; das Verhalten trat nach `pip install -e .` auf, bevor der echte Loop-Testpfad begann.
+- Der Test-Overlay entfernt jetzt im Subprozess den setuptools-Editable-Meta-Path-Finder. Die reguläre Paketauflösung nutzt danach den isolierten Overlay und dessen expliziten Pfad zum echten Werkstatt-Code. Damit bleiben produktiver CLI-Resume, HTTP-Route, Run-Lease, Checkpoint und Finalizer echt; nur externe Seiteneffekte sind gestubbt.
+- Die erneute CI-Verifikation steht aus.
