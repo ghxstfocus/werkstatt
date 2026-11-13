@@ -59,8 +59,13 @@ Commit und Marker ausfaellt, schreibt Resume dieselbe Message-ID erneut;
 der Event-Store dedupliziert den Retry. Fehlt der RunRecord temporaer, bleibt
 der Outbox-Eintrag offen und wird vor spaeterem Resume erneut versucht.
 
-Der Webstart legt den RunRecord jetzt vor `Popen` mit Status
-`starting` an. Der Worker-Aufruf wechselt denselben Record idempotent und
+Der Webstart legt den RunRecord vor `Popen` mit Status `starting` an. Seit
+13. November 2026 persistiert er dort zusaetzlich den versionierten
+`start_context` (Nutzerziel, OP, Ursprung, freigegebener Vorschlag und
+gepinnte Projektquelle). Ein Worker-Retry darf diesen Kontext nicht ersetzen;
+ein Konflikt wird vor einer Lifecycle-Aenderung abgelehnt. Alte Datenbanken
+erhalten die Spalte additiv und lesen Legacy-Runs mit leerem Kontext und
+Version 0. Der Worker-Aufruf wechselt denselben Record idempotent und
 zielgebunden nach `running`; ein fehlgeschlagener Spawn markiert den Record
 per Compare-and-Swap als `failed`, ohne den Checkpoint zu veraendern. Der
 Worker fuellt ausserdem den noch leeren `base_commit` nach, ohne einen bereits
@@ -69,9 +74,10 @@ den Spawn-Fehlerpfad.
 
 ## Verbleibender Architekturabstand zu ADR-0032
 
-1. **Gemeinsame Run-SSOT fehlt:** Ziel, Freigabe, Basis, Checkpoint,
-   naechste Aktion und Prozessstatus liegen weiterhin in getrennten
-   Komponenten.
+1. **Gemeinsame Run-SSOT fehlt weiterhin:** Der RunRecord enthaelt jetzt den
+   unveraenderlichen Startkontext und Checkpoint. Registry, Prozessstatus,
+   Freigabedetails und naechste Aktion sind aber noch nicht vollstaendig in
+   einen atomar abgeglichenen Run-Vertrag migriert.
 2. **Inbox ist nur teilweise integriert:** `job_notice` wird persistiert
    und checkpoint-sicher konsumiert. Fragen, Control, Gate-Antworten und
    Schreibauftraege veraendern den Arbeitsgraphen noch nicht.
@@ -89,6 +95,17 @@ den Spawn-Fehlerpfad.
    autonomer Wiederaufnahme bleibt offen.
 6. **UI-Projektionen sind getrennt:** Chat, Control, Runs und Prozessstatus
    beziehen Teile ihrer Fakten aus verschiedenen Speicher-/API-Pfaden.
+
+## M1-Fortschritt: versionierter Startkontext im RunRecord
+
+Der Webstart schreibt denselben `run_context` in die Prozess-Registry und den
+RunRecord, bevor der Worker startet. Der RunRecord bleibt dabei die
+persistente Quelle fuer Replay und Recovery; das Registry-Feld bleibt aus
+Rueckwaertskompatibilitaetsgruenden bestehen. Bei einem Retry ohne Kontext
+bleibt der gespeicherte Wert erhalten. Ein Retry mit abweichendem Kontext
+bricht fail-closed ab, bevor der Status von `starting` zu `running` wechselt.
+Migration und Worker-Retry sind durch EventStore-Tests abgedeckt. Dies ist ein
+abgegrenzter M1-Baustein, kein Abschluss von OP-397 oder ADR-0032.
 
 Diese Punkte sind keine fertige Zielarchitektur. Verbindlich sind
 [ADR-0032](adr/ADR-0032-adaptiver-zielorientierter-run-kern.md) und
