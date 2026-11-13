@@ -325,9 +325,9 @@ def _persist_run_result(
             and current["checkpoint"].get("exit_code") == exit_code
         ):
             return
-        raise RuntimeError(
-            "Run-Ergebnis kann nach terminalem Status nicht geaendert werden",
-        )
+        # Terminal records are immutable. A duplicate/stale caller must not
+        # overwrite them with a different exit code or status.
+        return
     if run_state is not None:
         from werkstatt.phases.tasks import _persist_run_checkpoint
 

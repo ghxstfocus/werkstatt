@@ -641,6 +641,26 @@ def test_failed_run_result_is_persisted(tmp_path: Path) -> None:
     assert result["checkpoint"]["exit_code"] == 1
 
 
+def test_duplicate_terminal_run_result_does_not_rewrite_existing_record(
+    tmp_path: Path,
+) -> None:
+    from werkstatt.loop import _persist_run_result
+
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-terminal-duplicate", "Finish task")
+    _persist_run_result(store, "demo", "run-terminal-duplicate", 0)
+
+    # A stale or repeated caller cannot turn an already completed run into a
+    # failed run, or replace its recorded exit code.
+    _persist_run_result(store, "demo", "run-terminal-duplicate", 1)
+    result = store.get_run_record("demo", "run-terminal-duplicate")
+
+    assert result is not None
+    assert result["status"] == "completed"
+    assert result["checkpoint"]["exit_code"] == 0
+    assert result["checkpoint_version"] == 1
+
+
 def test_terminal_run_transition_refuses_unacknowledged_inbox(
     tmp_path: Path,
 ) -> None:

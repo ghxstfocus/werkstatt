@@ -6450,3 +6450,5 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Terminale Checkpoint-Updates pruefen jetzt in derselben `BEGIN IMMEDIATE`-Transaktion, ob alle Run-Inbox-Eintraege bestaetigt sind. Der Loop drainiert vor dem Abschluss die bekannten Job-/Folgeauftragstypen und wiederholt den Drain, falls zwischen Checkpoint und CAS eine neue Nachricht eintraf. Unbekannte offene Nachrichtentypen beenden den Abschluss fail-closed.
 - **Grenze:** Ein bestaetigter Folgeauftrag wird dadurch dauerhaft und sichtbar aufgenommen; automatische Scope-Einordnung und Replanung bleiben weiterhin OP-401/402.
 - **Verifikation:** Event-Store-, Inbox-Replay-, Loop-Main-, Loop-Phasen- und Phase-Review-Tests: 102 bestanden, 1 Windows-SIGTERM-Test plattformbedingt ausgelassen. Der dedizierte Race-Test injiziert die Nachricht exakt zwischen Drain und terminalem CAS.
+
+- **CI-Nachbesserung:** Wiederholte/stale Ergebnis-Persistierung auf bereits terminalen Runs bleibt jetzt idempotent und veraendert den terminalen Datensatz nicht. Regressionstest deckt ab, dass ein zweiter Aufruf mit abweichendem Exitcode keinen abgeschlossenen Run ueberschreibt.
