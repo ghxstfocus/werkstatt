@@ -44,8 +44,8 @@ def test_chat_loop_reads_latest_append_only_entry_from_tail_evidence(
 ) -> None:
     path = tmp_path / "PROGRESS.md"
     path.write_text(
-        "".join(f"historischer Eintrag {i:03d}\\n" for i in range(80))
-        + "2026-11-13 — neuester belegter Eintrag\\n",
+        "".join(f"historischer Eintrag {i:03d}\n" for i in range(80))
+        + "2026-11-13 — neuester belegter Eintrag\n",
         encoding="utf-8",
     )
     calls = 0
