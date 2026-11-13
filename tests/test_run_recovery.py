@@ -555,12 +555,14 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "os.environ['WERKSTATT_REAL_PACKAGE']]\n",
         encoding="utf-8",
     )
-    (overlay_root / "sitecustomize.py").write_text(
-        "import sys\\n"
+    sitecustomize = overlay_root / "sitecustomize.py"
+    sitecustomize.write_text(
+        "import sys\n"
         "sys.meta_path[:] = [finder for finder in sys.meta_path "
-        "if not type(finder).__module__.startswith('__editable__')]\\n",
+        "if not type(finder).__module__.startswith('__editable__')]\n",
         encoding="utf-8",
     )
+    compile(sitecustomize.read_text(encoding="utf-8"), str(sitecustomize), "exec")
     (stub_package / "loop.py").write_text(
         "import os, sys\n"
         "from pathlib import Path\n"
