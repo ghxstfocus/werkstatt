@@ -90,6 +90,26 @@ def test_read_status_liefert_inhalt() -> None:
     assert "STATUS.md" in r or "PROGRESS.md" in r
 
 
+def test_read_status_liefert_neuesten_progress_abschnitt(tmp_path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text("## Offene Punkte\\n", encoding="utf-8")
+    (docs / "PROGRESS.md").write_text(
+        "ALTE-GESCHICHTE\\n" + ("Vergangener Eintrag\\n" * 2_000)
+        + "## 2026-11-13 — letzter belegter Schritt\\n"
+        + "Neuester Beleg: zielabgleich erneut ausgefuehrt.\\n",
+        encoding="utf-8",
+    )
+
+    result = chat_tools.execute_tool("read_status", {}, project_dir=tmp_path)
+
+    assert "2026-11-13 — letzter belegter Schritt" in result
+    assert "Neuester Beleg: zielabgleich erneut ausgefuehrt." in result
+    assert "ALTE-GESCHICHTE" not in result
+    assert "neuester Dateischluss" in result
+    assert "fruehere Zeichen ausgelassen" in result
+
+
 def test_git_log_funktioniert() -> None:
     r = chat_tools.execute_tool("git_log", {"n": 3})
     assert len(r) > 0
