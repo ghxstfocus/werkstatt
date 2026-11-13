@@ -104,8 +104,11 @@ persistente Quelle fuer Replay und Recovery; das Registry-Feld bleibt aus
 Rueckwaertskompatibilitaetsgruenden bestehen. Bei einem Retry ohne Kontext
 bleibt der gespeicherte Wert erhalten. Ein Retry mit abweichendem Kontext
 bricht fail-closed ab, bevor der Status von `starting` zu `running` wechselt.
-Migration und Worker-Retry sind durch EventStore-Tests abgedeckt. Dies ist ein
-abgegrenzter M1-Baustein, kein Abschluss von OP-397 oder ADR-0032.
+Der Recovery-Pfad vergleicht nun beide gespeicherten Kontexte und lehnt eine
+Abweichung ab; Legacy-RunRecords ohne Kontext bleiben wiederaufnehmbar, sofern
+die Registry den bisherigen Kontext enthaelt. Migration, Worker-Retry und
+Recovery-Konsistenz sind durch Tests abgesichert. Dies ist ein abgegrenzter
+M1-Baustein, kein Abschluss von OP-397 oder ADR-0032.
 
 Diese Punkte sind keine fertige Zielarchitektur. Verbindlich sind
 [ADR-0032](adr/ADR-0032-adaptiver-zielorientierter-run-kern.md) und
