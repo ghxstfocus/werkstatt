@@ -553,7 +553,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "cfg = {'project_dir': os.environ['WERKSTATT_TEST_PROJECT_DIR'], "
         "'venv_python': sys.executable, 'docs': {}}\n"
         "loop.load_project_config = lambda _project: cfg\n"
-        "loop.load_env = lambda _name: None\n"
+        "loop.load_env = lambda *_args: None\n"
         "orchestrator.load_project_config = lambda _project: cfg\n"
         "orchestrator.load_docs = lambda *_args: {}\n"
         "loop._phase_explorer_and_setup = "

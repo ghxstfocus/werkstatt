@@ -5986,3 +5986,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - CI-Worker-Log zeigte, dass `python -m werkstatt.loop` wegen des geerbten Repository-CWD das echte Modul vor dem Test-Overlay importierte und dadurch die Testkonfiguration umging.
 - Der HTTP-Recovery-Test startet seinen Subprozess jetzt aus `tmp_path`; damit greift das isolierte Overlay, waehrend CLI-Einstieg, HTTP-Recovery, Checkpoint, Finalizer und RunRecord weiterhin produktiv laufen.
+
+
+## 2026-11-13 — Resume-Worker erreicht CLI
+
+- Nach dem isolierten Arbeitsverzeichnis importiert der Worker nachweislich das Test-Overlay und erreicht den echten `loop.main()`-Resume-Pfad.
+- Der Worker-Log zeigt den naechsten Fixture-Fehler: `load_env()` wird produktiv ohne Argument aufgerufen; der Stub verlangte unzutreffend eins. Der Stub akzeptiert jetzt die reale Aufrufform.
+- Der HTTP-Ende-zu-Ende-Nachweis ist weiterhin offen, bis RunRecord und Checkpoint erfolgreich terminal sind.
