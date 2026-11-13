@@ -4,9 +4,10 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Code-Stand: `3fcb1c6` (Quality-Gate-Run
-[43386828673](https://github.com/ghxstfocus/werkstatt/actions/runs/43386828673)).
-Der Lauf ist fuer diesen Commit erfolgreich. Seit der letzten Bestandsaufnahme
+Gepruefter Hauptlinienstand: `ebb3b73`. Der zusaetzliche Recovery-Beleg aus
+PR #8 wurde auf Commit `2130019` mit Quality-Gate-Run
+[43488902240](https://github.com/ghxstfocus/werkstatt/actions/runs/43488902240)
+erfolgreich verifiziert. Seit der letzten Bestandsaufnahme
 wurden unter anderem Akzeptanzkriterien explizit auf Tasks abgebildet und als
 Checkpoint-Daten erhalten, Verify-Reparaturen auf betroffene Stages begrenzt
 und danach die vollstaendige Phase-End-Pruefung erneut ausgefuehrt. Der
@@ -34,7 +35,7 @@ Arbeitsgraphen und Evidence Ledger.
 |---|---|
 | Laufsteuerung | `run_pipeline_loop` ruft Setup, Plan, Task-Loop und Finalizer in fester Folge auf. Phasen bleiben Runtime-Steuerung. |
 | Failure Records | Rote Abschlusspruefungen liefern redigierte, Run-gebundene Befunde mit Stage, Exit-Code, HEAD und Worktree-Fingerprint. Recovery zielt auf fehlgeschlagene Verify-Stages; nach einer Reparatur wird die vollstaendige Phase-End-Pruefung erneut ausgefuehrt. Wiederholte Befunde ohne wirksame Worktree-Aenderung stoppen fail-closed. |
-| Recovery | Der Resume-Akzeptanztest prueft HTTP-Route, dieselbe Run-ID und `--resume`, dann die Ausfuehrung bis zur erfolgreichen Phase-End-Verify. Der CLI-Aufruf laeuft im Test-Hauptthread; ein separater Probe prueft den Launcher. Ein echter vom HTTP-Endpunkt gestarteter Worker, der nach einem Webserver-Absturz autonom denselben Run wiederaufnimmt, ist nicht durchgehend belegt. |
+| Recovery | `test_resume_endpoint_runs_production_cli_to_completed_run` laesst den HTTP-Resume-Endpunkt den echten CLI-Worker starten und prueft denselben Run bis zum erfolgreichen Phase-End-Verify: Run-ID, terminaler Exitcode, Checkpoint-Version, Verify-Marker und weiterhin erledigte Tasks. `test_resume_route_recovers_after_real_worker_exit` prueft zusaetzlich Reattach ueber eine neue Registry-Instanz und den Resume-Aufruf nach Worker-Ende. Ein tatsaechlicher Webserver-Absturz mit anschliessendem Serverneustart und autonomer Wiederaufnahme ist weiterhin nicht E2E belegt. |
 | Commit und Verify | Commit-Pruefungen pinnen Parent-HEAD und Index-Tree. Nach einem Commit laeuft die vollstaendige Phase-End-Verify erneut; Snapshot-Abweichungen verhindern Erfolg. |
 | Run-Ergebnis | Ein gruener Teilcheck genuegt nicht. Task-Akzeptanzkriterien werden vor dem Gate auf Abdeckung geprueft und Referenzen bleiben im Checkpoint erhalten. Offene/fehlgeschlagene Tasks, nicht abgedeckte Kriterien oder rotes Verify verhindern den Erfolg. |
 | Prozessstatus | Die Registry ueberlebt Webserver-Neustarts und kann lebende Worker wiederfinden. Sie und der RunRecord bleiben getrennte Speichervertraege. |
@@ -82,9 +83,10 @@ den Spawn-Fehlerpfad.
 4. **Evidence Ledger fehlt:** Einzelne Verify-/Audit-Belege existieren,
    aber es gibt keine einheitliche Kriterium-zu-Beleg-Zuordnung mit Quelle,
    Befehl, Exit-Code, SHA und Artefakt-Hash.
-5. **Recovery ist nicht vollstaendig E2E belegt:** Der integrierte
-   Webserver-Absturz mit autonomer Wiederaufnahme eines gestarteten Workers
-   bleibt offen.
+5. **Recovery ist nicht vollstaendig E2E belegt:** HTTP-Resume startet und
+   finalisiert nachweislich denselben Run in einem echten Workerprozess.
+   Der integrierte Webserver-Absturz mit anschliessendem Neustart und
+   autonomer Wiederaufnahme bleibt offen.
 6. **UI-Projektionen sind getrennt:** Chat, Control, Runs und Prozessstatus
    beziehen Teile ihrer Fakten aus verschiedenen Speicher-/API-Pfaden.
 
