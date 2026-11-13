@@ -111,10 +111,12 @@ def _persist_run_checkpoint(
     # The checkpoint is written before inbox acknowledgement. If the worker
     # dies in that gap, a later lease retry must not project the same notice
     # twice into the durable checkpoint.
-    notices = [
-        notice for notice in notices
-        if int(notice["seq"]) > inbox_offset
-    ]
+    notices_above_offset: list[dict[str, object]] = []
+    for notice in notices:
+        seq = notice.get("seq")
+        if isinstance(seq, int) and seq > inbox_offset:
+            notices_above_offset.append(notice)
+    notices = notices_above_offset
     prior_notices = checkpoint.get("job_notices", [])
     if not isinstance(prior_notices, list):
         prior_notices = []
