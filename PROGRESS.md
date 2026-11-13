@@ -6070,3 +6070,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der HTTP-gestartete Worker bleibt vor dem Test-Bootstrap stehen, obwohl Python mit `-E -S` gestartet wird. Vor dem HTTP-Aufruf prueft derselbe CI-Prozess nun denselben Interpreter und dieselben Startup-Flags mit einem isolierten `-c`-Aufruf (5-Sekunden-Timeout).
 - Der Preflight macht sichtbar, ob das Problem die allgemeine Python-Initialisierung in diesem Runner betrifft oder nur den durch die API gestarteten Worker.
+
+
+## 2026-11-13 — Preflight auf echten Python-Pfad korrigiert
+
+- Der erste Preflight-Aufruf verwendete nach dem Test-Monkeypatch versehentlich erneut den Launcher statt des Python-Interpreters; das erklaert, warum sein Trace Overlay-Imports enthielt.
+- Die Probe nutzt jetzt den vor dem Monkeypatch gesicherten Interpreterpfad aus `WERKSTATT_TEST_PYTHON`. Erst damit ist der Kontrolllauf unabhaengig vom HTTP-Worker-Launcher.
