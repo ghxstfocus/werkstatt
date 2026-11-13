@@ -546,9 +546,18 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
     from werkstatt.phases import finalize, tasks
 
     planned = [{"id": "t1", "name": "Implementierung"}]
-    phase_state = PhaseState("testproj", base_dir=tmp_path / ".werkstatt")
+    checkpoint_dir = tmp_path / ".werkstatt"
+    phase_state = PhaseState("testproj", base_dir=checkpoint_dir)
     phase_state.init_new("Resume Abschlusspruefung", planned)
     phase_state.mark_done("t1")
+    phase_state.run_id = "testproj-resume-run"
+    phase_state.save()
+
+    # Simuliere den Prozessneustart: Nur der persistierte Checkpoint bleibt.
+    phase_state = PhaseState("testproj", base_dir=checkpoint_dir)
+    assert phase_state.load()
+    assert phase_state.run_id == "testproj-resume-run"
+    assert phase_state.data["tasks"][0]["status"] == "done"
 
     state = _state(tmp_path)
     state.tasks = planned

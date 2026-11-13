@@ -5943,3 +5943,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der erste Quality-Gate-Lauf [43337317796](https://github.com/ghxstfocus/werkstatt/actions/runs/43337317796) bestand 2146 Tests, scheiterte aber an einem bestehenden Event-Store-Test, der noch den abgeloesten gemeinsamen Cursor erwartete. Der Test ist auf `job_notice_offset` umgestellt; die erneute CI-Verifikation folgt.
 - Die Korrektur und der angepasste Event-Store-Vertrag sind mit Quality-Gate-Lauf [43337580294](https://github.com/ghxstfocus/werkstatt/actions/runs/43337580294) auf `f68c78b` verifiziert: 2147 Tests bestanden, 5 übersprungen, Ruff/Mypy/AST/Audit-Katalog ohne Fehler, `ok=true`, `regression=false`.
+
+
+## 2026-11-13 — Resume-Verify-Test aus gespeichertem Checkpoint
+
+- Der Phase-End-Resume-Test speichert den All-done-PhaseState jetzt inklusive Run-ID auf Platte und lädt ihn in einer neuen Instanz wieder, bevor Task-Loop und Phase-End-Verify ausgeführt werden.
+- Damit deckt der Test die serialisierte Checkpoint-Grenze nach einem Prozessneustart ab. Er beweist weiterhin keinen echten Worker-/Webserver-Restart; OP-397 bleibt bis zum integrierten Produktivpfad offen.
