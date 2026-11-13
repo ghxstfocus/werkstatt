@@ -584,6 +584,7 @@ def test_task_ende_zeigt_phase_end_verify_als_naechsten_schritt(tmp_path):
     )
 
 
+@pytest.mark.parametrize("task_status", ["failed", "blocked", "pending", "running", "missing"])
 def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
     tmp_path, monkeypatch, task_status,
 ):
