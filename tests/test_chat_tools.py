@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -179,6 +180,68 @@ def test_read_status_liefert_neuesten_progress_abschnitt(tmp_path) -> None:
     assert "FALSCHE DOKU-KOPIE" not in result
     assert "neuester Dateischluss" in result
     assert "fruehere Zeichen ausgelassen" in result
+
+
+def test_read_status_finds_exact_op_beyond_bounded_status_head(tmp_path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    status = (
+        "## Offene Punkte\n"
+        "### OP-396: Langer Chat-Vertrag\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** " + ("lange Kriterien " * 1_200) + "\n"
+        "### OP-372: Projection-Status semantisch vergleichen\n"
+        "- **Status:** open\n"
+        "- **Betroffene Dateien:** werkstatt/projection.py, UI-Status und Tests\n"
+        "- **Akzeptanzkriterien:** JSONL und SQLite nur fuer denselben Zeitraum\n"
+    )
+    (docs / "STATUS.md").write_text(status, encoding="utf-8")
+    (docs / "ROADMAP.md").write_text("## Fokus\n", encoding="utf-8")
+    (docs / "ARCHITECTURE.md").write_text("## Architektur\n", encoding="utf-8")
+    (tmp_path / "PROGRESS.md").write_text("## Neuester Stand\n", encoding="utf-8")
+
+    result = chat_tools.execute_tool(
+        "read_status", {"op_id": "OP-372"}, project_dir=tmp_path,
+    )
+
+    assert "STATUS-OP-Index" in result
+    assert "OP-372: Projection-Status semantisch vergleichen" in result
+    assert "Vollstaendiger Abschnitt OP-372" in result
+    assert "Betroffene Dateien:** werkstatt/projection.py" in result
+    assert "JSONL und SQLite nur fuer denselben Zeitraum" in result
+
+
+def test_read_status_op_372_matches_current_status_source() -> None:
+    result = chat_tools.execute_tool(
+        "read_status", {"op_id": "OP-372"}, project_dir=Path.cwd(),
+    )
+
+    assert "Vollstaendiger Abschnitt OP-372" in result
+    assert "JSONL- und SQLite-Zaehler werden nur fuer denselben Zeitraum" in result
+    assert "projection_status als strukturiertes Feld" not in result
+
+
+def test_read_status_rejects_ambiguous_or_invalid_op_id(tmp_path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    status = (
+        "### OP-372: Erster Eintrag\n- **Status:** open\n"
+        "### OP-372: Duplikat\n- **Status:** open\n"
+    )
+    (docs / "STATUS.md").write_text(status, encoding="utf-8")
+    (docs / "ROADMAP.md").write_text("", encoding="utf-8")
+    (docs / "ARCHITECTURE.md").write_text("", encoding="utf-8")
+    (tmp_path / "PROGRESS.md").write_text("", encoding="utf-8")
+
+    duplicate = chat_tools.execute_tool(
+        "read_status", {"op_id": "OP-372"}, project_dir=tmp_path,
+    )
+    invalid = chat_tools.execute_tool(
+        "read_status", {"op_id": "OP-372; delete"}, project_dir=tmp_path,
+    )
+
+    assert "mehrdeutig" in duplicate
+    assert "Ungueltige OP-ID" in invalid
 
 
 def test_git_log_funktioniert() -> None:

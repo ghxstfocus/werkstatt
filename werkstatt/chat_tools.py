@@ -338,7 +338,25 @@ def _diagnose(_args: dict[str, Any]) -> str:
     }, ensure_ascii=False)
 
 
-def _read_status(_args: dict[str, Any]) -> str:
+def _op_block(status_text: str, op_id: str) -> str:
+    """Return one complete, exact OP section from STATUS.md."""
+    if not re.fullmatch(r"OP-[0-9]+", op_id):
+        return f"Ungueltige OP-ID: {op_id!r}; erwartet wird OP-<Zahl>."
+    headings = list(re.finditer(
+        r"(?m)^###\s+(OP-[0-9]+)\s*:\s*.*$", status_text,
+    ))
+    matches = [index for index, match in enumerate(headings) if match.group(1) == op_id]
+    if not matches:
+        return f"{op_id} kommt in docs/STATUS.md nicht vor."
+    if len(matches) > 1:
+        return f"{op_id} kommt mehrfach in docs/STATUS.md vor; Auswahl ist mehrdeutig."
+    index = matches[0]
+    start = headings[index].start()
+    end = headings[index + 1].start() if index + 1 < len(headings) else len(status_text)
+    return status_text[start:end].strip()
+
+
+def _read_status(args: dict[str, Any]) -> str:
     """Read current queue, roadmap, architecture and the root progress tail."""
     teile: list[str] = []
     try:
@@ -355,13 +373,41 @@ def _read_status(_args: dict[str, Any]) -> str:
     except Exception as exc:  # noqa: BLE001
         teile.append(f"## OP-Zusammenfassung: Fehler ({exc})\n")
 
+    basis = _aktives_projekt_dir()
+    requested_op = str(args.get("op_id", "")).strip().upper()
+    if requested_op:
+        status_path = basis / "docs" / "STATUS.md"
+        if not status_path.is_file():
+            return "docs/STATUS.md fehlt im aktiven Projekt."
+        try:
+            status_text = status_path.read_text(
+                encoding="utf-8", errors="replace",
+            )
+        except OSError as exc:
+            return f"docs/STATUS.md konnte nicht gelesen werden: {exc}"
+        op_index = re.findall(
+            r"(?m)^###\s+(OP-[0-9]+)\s*:\s*(.*)$", status_text,
+        )
+        if op_index:
+            index_text = "\n".join(
+                f"- {op_id}: {title.strip()}"
+                for op_id, title in op_index
+            )
+            teile.append(f"## STATUS-OP-Index\n{index_text}\n")
+        teile.append(
+            f"## Vollstaendiger Abschnitt {requested_op} "
+            "aus docs/STATUS.md\n"
+            + _op_block(status_text, requested_op)
+            + "\n"
+        )
+        return "\n".join(teile)
+
     dokumente = (
         ("docs/STATUS.md", 12_000, "head"),
         ("docs/ROADMAP.md", 8_000, "head"),
         ("docs/ARCHITECTURE.md", 8_000, "head"),
         ("PROGRESS.md", 16_000, "tail"),
     )
-    basis = _aktives_projekt_dir()
     for name, limit, richtung in dokumente:
         pfad = basis / name
         if pfad.is_file():
@@ -390,6 +436,19 @@ def _read_status(_args: dict[str, Any]) -> str:
             else:
                 text = inhalt
             teile.append(f"## {name}\n{text}\n")
+            if name == "docs/STATUS.md":
+                # The long, high-priority OPs can push later queue entries
+                # beyond the bounded head excerpt. Always expose a compact
+                # index and allow callers to retrieve one complete OP block.
+                op_index = re.findall(
+                    r"(?m)^###\s+(OP-[0-9]+)\s*:\s*(.*)$", inhalt,
+                )
+                if op_index:
+                    index_text = "\n".join(
+                        f"- {op_id}: {title.strip()}"
+                        for op_id, title in op_index
+                    )
+                    teile.append(f"## STATUS-OP-Index\n{index_text}\n")
         else:
             teile.append(f"## {name}\n[Fehlt im aktiven Projekt.]\n")
 
@@ -816,10 +875,15 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "read_status": {
         "description": (
             "Liest die aktuelle STATUS-Queue, ROADMAP, ARCHITECTURE und "
-            "den neuesten Auszug aus der Root-PROGRESS.md; bei Bedarf mit "
-            "grep gezielt Fundstellen nachpruefen."
+            "den neuesten Auszug aus der Root-PROGRESS.md. Der kompakte "
+            "STATUS-OP-Index listet alle OPs; gib op_id wie OP-372 an, um "
+            "den vollstaendigen Originalabschnitt trotz gekuerzter Queue "
+            "zu lesen. Betroffene Dateien daraus direkt mit read_file pruefen."
         ),
-        "parameters": {"type": "object", "properties": {}},
+        "parameters": {
+            "type": "object",
+            "properties": {"op_id": {"type": "string"}},
+        },
         "fn": _read_status,
         "mode": "read",
     },

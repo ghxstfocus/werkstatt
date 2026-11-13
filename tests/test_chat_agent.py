@@ -430,6 +430,15 @@ def test_system_prompt_routes_next_work_questions_through_selector() -> None:
     assert "Bei Mehrdeutigkeit fragst du" in chat_agent._SYSTEM_PROMPT
     assert "veraendert nichts" in chat_agent._SYSTEM_PROMPT
 
+
+def test_system_prompt_requires_exact_op_evidence_before_planning() -> None:
+    assert "read_status mit genau dieser op_id" in chat_agent._SYSTEM_PROMPT
+    assert "STATUS-Auszug" in chat_agent._SYSTEM_PROMPT
+    assert "nie durch Erinnerung" in chat_agent._SYSTEM_PROMPT
+    assert "passende akzeptierte ADRs" in chat_agent._SYSTEM_PROMPT
+    assert "explizit genannten Pfade" in chat_agent._SYSTEM_PROMPT
+    assert "nicht nach einem Modulnamen" in chat_agent._SYSTEM_PROMPT
+
 def test_system_prompt_requires_verified_file_line_citations() -> None:
     assert "grep" in chat_agent._SYSTEM_PROMPT
     assert "Zeichen-Offsets und keine Zeilennummern" in chat_agent._SYSTEM_PROMPT
