@@ -6120,3 +6120,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Prozess- und Timeoutfehler aus Verify werden als `stage-Fehler: …` protokolliert. Die Build-Recovery erkennt dieses Format jetzt ebenso wie normale `stage: …`-Fehler und bleibt auf die tatsaechlich rote Stage begrenzt.
 - Der Regressionstest deckt die Ausnahmeform ab. Die Quality-Gate-Pruefung fuer diesen Fix laeuft; OP-398 und der Umbau des festen Phasenkoerns bleiben offen.
+
+
+## 2026-11-13 — OP-398: Vollpruefung nach gezielter Post-Build-Recovery
+
+- Eine gezielte Recovery beweist nur, dass die zuvor roten Stages wieder gruen sind. Der Task-Loop fuehrt deshalb jetzt danach die vollstaendige Post-Build-Verify erneut aus, bevor er zum Reviewer weitergeht.
+- Findet die Vollpruefung eine neue rote Stage, wird diese im selben Recovery-Zyklus gezielt repariert. Wiederkehrende identische Stage-Sets stoppen mit einem Stagnationsbeleg statt sich endlos zu wiederholen.
+- Regressionstests decken den neuen Stage-Befund und die erneute Vollpruefung ab. Quality-Gate-Nachweis folgt; OP-398 und der adaptive Run-Kern bleiben offen.
