@@ -6577,3 +6577,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** `_grep` verwendet jetzt ERE (`-E`), und die Tool-Beschreibung weist Alternation explizit aus. Der System-Prompt verpflichtet den Chat bei widerspruechlichen Treffern zum erneuten Lesen des Quellbereichs und zur Bevorzugung bestaetigter positiver Belege.
 - **Regression:** Neuer Tool-Test fuer `alpha|beta`; Prompt-Test fuer den Belegkonflikt-Grundsatz.
 - **Verifikation:** Windows: Prompt-Regression bestanden; ERE-Lauf wegen fehlendem GNU grep uebersprungen. Der groessere Chat-Testsatz hatte 6 bestehende Umgebungsausfaelle, weil Standardtests `/opt/werkstatt` erwarten; 70 Tests bestanden. Linux-Serverlauf vor diesem Fix: 2.259 bestanden, 5 uebersprungen (Commit `4c3c240`).
+
+## 2026-11-14 — Architect bekommt verifizierte Ziel-APIs trotz Scout-Kuerzung
+
+- **Befund:** Im Scout-Pfad ersetzt der kompakte Scout-Bericht die Explorer-Rohdaten. Der Architect sah dadurch nicht zwingend die aktuellen Signaturen der in STATUS/Scout genannten Zieldateien und konnte Plan-Schritte auf nicht vorhandene APIs stuetzen.
+- **Aenderung:** Der Architect-Prompt ergaenzt im Scout-Pfad einen deterministischen, aus dem aktuellen AST-Index gerenderten Signaturauszug fuer OP-, Scout- und Explorer-Zieldateien. Scout-Symbole werden neben der aktuellen Signatur angezeigt, damit Abweichungen wie `tail(von_audit_id)` gegen `tail(von_anfang)` explizit erkennbar sind. Unbekannte Signaturen werden nicht als vorhanden behauptet; neue APIs muessen als neu bezeichnet werden. Der Auszug ist auf acht Dateien und 64 Signaturen begrenzt und wird nicht parallel zum bestehenden Explorer-AST-Fallback dupliziert.
+- **Regressionen:** Abdeckung fuer OP-374s konkrete Signatur `Projector.tail(self, von_anfang)`, fuer die Inspector-Signatur, fuer ausgeschlossene Fremddateien sowie fuer Pfad-Traversal und Begrenzung des Auszugs.
+- **Verifikation:** Ausstehend.

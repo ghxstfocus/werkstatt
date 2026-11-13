@@ -132,6 +132,143 @@ def _format_scout_auftrag(auftrag: dict, max_prosa: int = 3000) -> str:
     return "\n".join(teile)
 
 
+def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
+    """Render current AST signatures for files named by this work item.
+
+    The Scout excerpt is intentionally compact and can omit a relevant API.
+    This deterministic block lets the Architect distinguish existing
+    interfaces from methods it is proposing to add.
+    """
+    import re
+
+    api_index = getattr(state, "api_index_cache", None) or {}
+    if not isinstance(api_index, dict) or not api_index:
+        return ""
+
+    candidates: list[str] = []
+
+    def add_path(value: object) -> None:
+        if not isinstance(value, str):
+            return
+        normalized = value.strip().replace("\\", "/")
+        if (
+            normalized.startswith("/")
+            or ".." in normalized.split("/")
+            or not re.fullmatch(r"[A-Za-z0-9_./-]+", normalized)
+        ):
+            return
+        if normalized.endswith(".py") and normalized not in candidates:
+            candidates.append(normalized)
+
+    fields = _extrahiere_op_felder(
+        getattr(state, "aufgabe", ""),
+        (getattr(state, "docs", None) or {}).get("status", ""),
+    )
+    for field_name in ("betroffene_dateien", "tests"):
+        field_text = str(fields.get(field_name) or "")
+        for match in re.findall(r"[A-Za-z0-9_./\\-]+\.py", field_text):
+            add_path(match)
+
+    scout_report = getattr(state, "scout_auftrag", None) or {}
+    for item in scout_report.get("relevante_dateien", []):
+        if isinstance(item, dict):
+            add_path(item.get("pfad"))
+    for path in (scout_report.get("api_auszug") or {}):
+        add_path(path)
+    scout_apis = scout_report.get("api_auszug") or {}
+    if not isinstance(scout_apis, dict):
+        scout_apis = {}
+
+    if isinstance(explorer_ctx, dict):
+        for item in explorer_ctx.get("key_files") or []:
+            if isinstance(item, dict):
+                add_path(item.get("file"))
+
+    if not candidates:
+        return ""
+
+    lines = [
+        "## Verifizierte aktuelle API-Signaturen (deterministischer AST-Index)",
+        "Nur diese bestehenden Signaturen sind im Quellcode belegt. Ein",
+        "nicht aufgefuehrtes API darf nicht als bestehend beschrieben werden.",
+        "Neue APIs duerfen vorgeschlagen werden, muessen aber als neu markiert sein.",
+        "Vergleiche Scout-Symbole mit der Signatur hier; bei Abweichung gilt der AST.",
+    ]
+    signature_budget = 64
+    for path in candidates[:8]:
+        entry = api_index.get(path)
+        if entry is None:
+            entry = api_index.get(path.replace("/", "\\"))
+        lines.append(f"### {path}")
+        if not isinstance(entry, dict):
+            lines.append("(im aktuellen Python-AST-Index nicht vorhanden)")
+            continue
+        requested = scout_apis.get(path, [])
+        requested_names: set[str] = set()
+        if isinstance(requested, (list, tuple)):
+            for symbol in requested:
+                if isinstance(symbol, str):
+                    display_symbol = symbol.replace("\r", " ").replace("\n", " ")[:160]
+                    qualified = display_symbol.split("(", 1)[0]
+                    requested_names.update(
+                        part for part in qualified.split(".")
+                        if part and part.isidentifier()
+                    )
+                    lines.append(f"Scout nennt: {display_symbol}")
+        symbols = 0
+        for function in entry.get("functions", []):
+            if signature_budget <= 0:
+                break
+            if not isinstance(function, dict):
+                continue
+            if requested_names and function.get("name") not in requested_names:
+                continue
+            args = ", ".join(function.get("args", []))
+            result = f" -> {function['return']}" if function.get("return") else ""
+            lines.append(f"def {function.get('name', '?')}({args}){result}")
+            symbols += 1
+            signature_budget -= 1
+        for class_info in entry.get("classes", []):
+            if signature_budget <= 0:
+                break
+            if not isinstance(class_info, dict):
+                continue
+            class_name = class_info.get("name", "?")
+            method_names = {
+                method.get("name") for method in class_info.get("methods", [])
+                if isinstance(method, dict)
+            }
+            if requested_names and not (
+                class_name in requested_names
+                or method_names.intersection(requested_names)
+            ):
+                continue
+            lines.append(f"class {class_name}:")
+            for method in class_info.get("methods", []):
+                if signature_budget <= 0:
+                    break
+                if not isinstance(method, dict):
+                    continue
+                if requested_names and method.get("name") not in requested_names:
+                    continue
+                args = ", ".join(method.get("args", []))
+                result = f" -> {method['return']}" if method.get("return") else ""
+                lines.append(
+                    f"  def {method.get('name', '?')}({args}){result}"
+                )
+                symbols += 1
+                signature_budget -= 1
+        if not symbols:
+            if requested_names:
+                lines.append("(keines der vom Scout genannten Symbole im AST belegt)")
+            else:
+                lines.append("(keine Top-Level-Funktionen oder Klassen im AST-Index)")
+        if signature_budget <= 0:
+            lines.append("(Signaturauszug begrenzt; weitere APIs hier nicht aufgefuehrt)")
+            break
+    return "<verified_target_apis>\n" + "\n".join(lines) + "\n</verified_target_apis>"
+
+
 def _format_explorer_findings(f: dict) -> str:
     """M-WelleE: Explorer-Findings als Prompt-Block."""
     if not isinstance(f, dict) or not f:
@@ -491,6 +628,15 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
         _sa_str = _format_scout_auftrag(state.scout_auftrag)
         if _sa_str:
             parts.append(_sa_str)
+
+    # Keep the compact Scout summary, but independently expose exact AST
+    # signatures for the files this OP and the Scout actually named.
+    _target_apis = (
+        _format_target_api_evidence(state, explorer_ctx)
+        if _hat_scout_auftrag else ""
+    )
+    if _target_apis:
+        parts.append(_target_apis)
 
     # === M-Welle-I: EXPLORER-FINDINGS + SCOUT-API (Welle E + D3 komplett) ===
     # OP-385: Fallback-Pfad — nur wenn scout_auftrag leer/nicht gesetzt.
