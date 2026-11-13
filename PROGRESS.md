@@ -6176,3 +6176,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
   Die beiden vorangegangenen roten Laeufe deckten die zu breite Erkennung leerer
   Referenzen auf; der finale Checkpoint verfolgt nur explizite, nichtleere
   Kriterienzuordnungen. OP-398 bleibt offen.
+
+
+## 2026-11-13 — Chat: wiederkehrende Werkzeugzyklen erkennen
+
+- Die Chat-Werkzeugschleife hat keine Standard-Rundengrenze. Die Stagnationspruefung erkennt jetzt neben unmittelbar wiederholten Aufrufen auch alternierende Zyklen bis zur Periodenlaenge drei anhand identischer Werkzeug-Eingaben und -Ergebnisse.
+- Beim ersten erkannten Zyklus bekommt das Modell einen konkreten Kurskorrektur-Hinweis; wiederholt sich derselbe Zyklus danach erneut, formuliert es eine belegte Abschlussantwort mit offenen Punkten. Abbruch und echte Budgetgrenzen bleiben davon getrennt.
+- Tests decken A→B→A→B, direkte Wiederholung und mehr als fuenf erfolgreiche Werkzeugrunden ab. Quality-Gate-Nachweis folgt.

@@ -32,6 +32,18 @@ def _check_cancel(cancel_check: Callable[[], bool] | None) -> None:
         raise ChatCancelled("Chat-Auftrag abgebrochen")
 
 
+def _repeated_tool_cycle(
+    fingerprints: list[str], *, max_period: int = 3,
+) -> tuple[str, ...] | None:
+    """Find repeated suffix cycles without imposing a total round limit."""
+    for period in range(1, min(max_period, len(fingerprints) // 2) + 1):
+        previous = fingerprints[-2 * period:-period]
+        current = fingerprints[-period:]
+        if previous == current:
+            return tuple(current)
+    return None
+
+
 _DEBUGGER_PROMPT = """Der Mensch hat diesen Turn im Debug-Modus gestartet.
 Du darfst Projekt-Tests mit pytest_run ausfuehren und temporaere Tests
 ausschliesslich unter .werkstatt/temp_tests/ mit write_temp_test anlegen.
@@ -570,8 +582,8 @@ def chat_loop(
     if max_rounds is not None and max_rounds < 0:
         raise ValueError("max_rounds darf nicht negativ sein")
     _rounds = 0
-    _previous_tool_fingerprint: str | None = None
-    _stagnant_rounds = 0
+    _recent_tool_fingerprints: list[str] = []
+    _warned_tool_cycles: set[tuple[str, ...]] = set()
     while max_rounds is None or _rounds < max_rounds:
         _check_cancel(cancel_check)
         _rounds += 1
@@ -642,26 +654,25 @@ def chat_loop(
                 _round_evidence, ensure_ascii=False, sort_keys=True,
             ).encode("utf-8")
         ).hexdigest()
-        if _fingerprint == _previous_tool_fingerprint:
-            _stagnant_rounds += 1
-        else:
-            _stagnant_rounds = 0
-        _previous_tool_fingerprint = _fingerprint
-        if _stagnant_rounds == 1:
+        _recent_tool_fingerprints.append(_fingerprint)
+        _recent_tool_fingerprints = _recent_tool_fingerprints[-6:]
+        _cycle = _repeated_tool_cycle(_recent_tool_fingerprints)
+        if _cycle is not None:
+            if _cycle in _warned_tool_cycles:
+                return _finalisiere_chat(
+                    messages, session, grund="stagnation",
+                    on_chunk=on_chunk, cancel_check=cancel_check,
+                )
+            _warned_tool_cycles.add(_cycle)
             messages.append({
                 "role": "system",
                 "content": (
-                    "Fortschrittskontrolle: Der letzte Werkzeugzyklus hat "
-                    "dieselben Eingaben und Ergebnisse wie der vorherige. "
-                    "Wiederhole ihn nicht; nutze vorhandene Belege oder waehle "
-                    "einen anderen, gezielten Pruefschritt."
+                    "Fortschrittskontrolle: Ein Werkzeugzyklus wiederholt "
+                    "sich mit denselben Eingaben und Ergebnissen. Waehle "
+                    "einen anderen, gezielten Pruefschritt oder beende mit "
+                    "den vorhandenen Belegen und offenen Punkten."
                 ),
             })
-        elif _stagnant_rounds >= 2:
-            return _finalisiere_chat(
-                messages, session, grund="stagnation",
-                on_chunk=on_chunk, cancel_check=cancel_check,
-            )
 
     return _finalisiere_chat(
         messages, session, grund="round_limit",

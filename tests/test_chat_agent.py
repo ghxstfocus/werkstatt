@@ -69,6 +69,58 @@ def test_chat_loop_mit_tool_call(session, fake_llm) -> None:
     assert len(tr["payload"]["content"]) > 0
 
 
+def test_repeated_tool_cycle_detects_alternating_stagnation() -> None:
+    assert chat_agent._repeated_tool_cycle(["a", "b", "a", "b"]) == ("a", "b")
+    assert chat_agent._repeated_tool_cycle(["a", "b", "a"]) is None
+    assert chat_agent._repeated_tool_cycle(["a", "a"]) == ("a",)
+
+
+def test_chat_loop_beendet_wiederkehrenden_abwechselnden_toolzyklus(
+    session, fake_llm, tmp_path: Path,
+) -> None:
+    def _tool_call(name: str, call_id: str) -> dict[str, Any]:
+        return {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": call_id,
+                "type": "function",
+                "function": {"name": name, "arguments": "{}"},
+            }],
+        }
+
+    tools = {
+        "read_a": {
+            "description": "Read fixture A.",
+            "parameters": {"type": "object", "properties": {}},
+            "fn": lambda _args: "Evidence A",
+            "mode": "read",
+        },
+        "read_b": {
+            "description": "Read fixture B.",
+            "parameters": {"type": "object", "properties": {}},
+            "fn": lambda _args: "Evidence B",
+            "mode": "read",
+        },
+    }
+    fake_llm(
+        _tool_call("read_a", "a1"),
+        _tool_call("read_b", "b1"),
+        _tool_call("read_a", "a2"),
+        _tool_call("read_b", "b2"),
+        _tool_call("read_a", "a3"),
+        _tool_call("read_b", "b3"),
+        {"role": "assistant", "content": "Belegte Antwort mit offenem Punkt."},
+    )
+
+    answer = chat_agent.chat_loop(
+        session, "Pruefe diesen Auftrag", tools=tools, project_dir=tmp_path,
+    )
+
+    assert answer == "Belegte Antwort mit offenem Punkt."
+    assert session.load()[-1]["payload"]["text"] == answer
+
+
 def test_chat_loop_stagnation_liefert_belegte_antwort(session, fake_llm) -> None:
     wieder = {
         "role": "assistant",
