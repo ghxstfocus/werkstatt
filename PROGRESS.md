@@ -5904,3 +5904,10 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 - Verifiziert auf Commit `fb02ec0`: GitHub Quality Gate erfolgreich,
   2144 Tests bestanden, 5 uebersprungen, Ruff/Mypy/AST/Audit-Katalog ohne
   Fehler, Quality Gate `ok=true`, `regression=false`.
+
+
+## OP-397 — HTTP-Reconnect nach Webserver-Neustart (2026-11-13)
+
+- Neuer Linux-Integrationstest startet einen echten Probe-Loop-Worker und zwei voneinander getrennte Uvicorn-Webserver-Prozesse nacheinander gegen dieselbe persistente SQLite-Registry. Beide HTTP-Control-Abfragen muessen denselben laufenden PID, dieselbe Run-ID und denselben gespeicherten Startkontext melden; das Beenden des Webservers darf den Worker nicht beenden.
+- Nach dem Beenden des Probe-Workers muss der zweite Webserver ueber HTTP den Zustand auf idle erkennen. Der Test nutzt isolierte Projekt-, State- und Modulpfade; er fuehrt weder produktive Projekte noch echte Loop-Modellaufrufe aus. Der bestehende API-Test deckt den Resume-Start mit `--resume` separat ab.
+- Dieser Test schliesst die bisherige Luecke „Webserver laeuft nur im Testprozess“. Er belegt weiterhin keinen vollstaendigen produktiven Run; OP-397 und OP-382 bleiben offen.
