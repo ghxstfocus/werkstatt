@@ -224,7 +224,84 @@ def _persist_run_checkpoint(
             "error_sha256": payload.get("error_sha256"),
         })
 
+    followups: list[dict[str, object]] = []
+    for _ in range(20):
+        message = store.claim_run_message(
+            project_name, run_id, worker_id, lease_seconds=120,
+            kind="chat_followup_request",
+        )
+        if message is None:
+            break
+        payload = message["payload"]
+        if (
+            payload.get("project") != project_name
+            or payload.get("parent_run_id") != run_id
+            or not isinstance(payload.get("session_id"), str)
+            or not isinstance(payload.get("proposal_id"), str)
+            or payload.get("base_commit") != record.get("base_commit")
+        ):
+            raise RuntimeError(
+                f"Chat-Folgeauftrag {message['message_id']} passt nicht "
+                "zum gebundenen Projekt, Run oder Basis-Commit",
+            )
+        claimed.append(message)
+        followups.append({
+            "seq": message["seq"],
+            "message_id": message["message_id"],
+            "proposal_id": payload["proposal_id"],
+            "session_id": payload["session_id"],
+            "request": payload.get("request", ""),
+            "op_id": payload.get("op_id"),
+            "base_commit": payload.get("base_commit"),
+            "queued_at_checkpoint_version": payload.get("checkpoint_version"),
+            "status": "received",
+        })
+
     checkpoint = dict(record["checkpoint"])
+    prior_followups = checkpoint.get("chat_followup_requests", [])
+    if not isinstance(prior_followups, list):
+        prior_followups = []
+    prior_followup_seqs = {
+        item.get("seq") for item in prior_followups
+        if isinstance(item, dict) and isinstance(item.get("seq"), int)
+    }
+    new_followups = [
+        item for item in followups
+        if isinstance(item.get("seq"), int)
+        and item.get("seq") not in prior_followup_seqs
+    ]
+    for item in new_followups:
+        seq = item["seq"]
+        audit_result = audit(
+            "loop_chat_followup_queued",
+            {
+                **item,
+                "result_summary": (
+                    "Ein bestätigter Chat-Folgeauftrag wurde am sicheren "
+                    "Checkpoint sichtbar gemacht."
+                ),
+                "decision_summary": (
+                    "Das aktive Hauptziel bleibt bestehen; dieser Eintrag "
+                    "wird noch nicht automatisch in den Task-Graph übernommen."
+                ),
+                "next_step": (
+                    "Anliegen, Abhängigkeiten und Freigabeumfang mit dem "
+                    "aktiven Ziel abgleichen, bevor Tasks geändert werden."
+                ),
+            },
+            run_state.project_dir if run_state is not None else Path.cwd(),
+            project_name,
+            run_id=run_id,
+            audit_id=f"RUN-{run_id}-CHAT-FOLLOWUP-{seq}",
+        )
+        if audit_result is False:
+            raise RuntimeError(
+                f"Chat-Folgeauftrag {item.get('proposal_id')} konnte "
+                "nicht auditiert werden",
+            )
+    checkpoint["chat_followup_requests"] = (
+        prior_followups + new_followups
+    )[-50:]
     # The legacy shared cursor could skip non-job inbox messages. Consumers
     # now keep independent cursors, so do not expose that ambiguous offset.
     checkpoint.pop("inbox_offset", None)

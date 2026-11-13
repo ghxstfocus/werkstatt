@@ -313,6 +313,66 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
     ) is None
 
 
+def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.phases import tasks
+
+    audit_events: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _audit(*args: object, **kwargs: object) -> bool:
+        audit_events.append((args, kwargs))
+        return True
+
+    monkeypatch.setattr(tasks, "audit", _audit)
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record(
+        "demo", "run-followup", "Keep original goal", base_commit="abc123",
+    )
+    seq = store.enqueue_run_message(
+        "demo", "run-followup", "chat-followup:proposal-1",
+        "chat_followup_request", {
+            "proposal_id": "proposal-1",
+            "project": "demo",
+            "session_id": "session-1",
+            "parent_run_id": "run-followup",
+            "base_commit": "abc123",
+            "checkpoint_version": 0,
+            "request": "Check the ADRs",
+            "op_id": "OP-401",
+        },
+    )
+
+    tasks._persist_run_checkpoint(
+        store,
+        "demo",
+        "run-followup",
+        SimpleNamespace(data={"tasks": []}),
+        {"id": "next-task"},
+    )
+
+    record = store.get_run_record("demo", "run-followup")
+    assert record is not None
+    assert record["target"] == "Keep original goal"
+    assert record["checkpoint"]["chat_followup_requests"] == [{
+        "seq": seq,
+        "message_id": "chat-followup:proposal-1",
+        "proposal_id": "proposal-1",
+        "session_id": "session-1",
+        "request": "Check the ADRs",
+        "op_id": "OP-401",
+        "base_commit": "abc123",
+        "queued_at_checkpoint_version": 0,
+        "status": "received",
+    }]
+    assert store.run_message_acknowledged(
+        "demo", "run-followup", "chat-followup:proposal-1",
+    )
+    assert audit_events[0][1]["audit_id"] == (
+        f"RUN-run-followup-CHAT-FOLLOWUP-{seq}"
+    )
+
+
 def test_task_checkpoint_retries_chat_notice_audit_idempotently(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

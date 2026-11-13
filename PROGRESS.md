@@ -6403,3 +6403,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Der alte Werkstatt-Chat zeigte wiederholt `maxrounds=5 erreicht, keine finale Antwort`. Im aktuellen Code ist das Standardbudget bereits unbegrenzt; der bisherige Test pruefte aber nur ein explizit gesetztes Ein-Runden-Budget und schloss einen Rueckfall auf fuenf Standardrunden nicht aus.
 - **Aenderung:** Ein Regressionstest laesst den normalen Chat-Turn sieben unterschiedliche Werkzeugrunden ausfuehren und verlangt anschliessend eine finale Antwort. Das bildet den Nutzerfall direkt ab, ohne die explizite Abbruch-/Stagnationskontrolle zu entfernen.
 - **Verifikation:** Gezielter Test bestanden (1 passed); Ruff fuer `tests/test_chat_agent.py` bestanden. Die Dokumentations- und Gesamtpruefungen folgen separat; dieser Test belegt nur den Chat-Rundenvertrag, nicht die noch offene Schreibauftrags-Uebergabe aus OP-401.
+# 2026-11-13 — Chat-Folgeauftrag am Loop-Checkpoint dauerhaft aufnehmen
+
+- Ein bestätigter Chat-Start während eines bereits laufenden Projekt-Runs wird nicht mehr als „nicht gestartet“ verworfen.
+- Die Run-Inbox speichert den Auftrag idempotent mit Projekt, Chat-Session, Parent-Run, Basis-Commit, Checkpoint-Version und optionaler OP-ID.
+- Der Loop übernimmt den Eintrag am Task-Checkpoint in den Run-Checkpoint und schreibt ein stabiles Audit-Ereignis. Das bestehende Hauptziel bleibt unverändert.
+- Geprüft: die drei gezielten API-, Checkpoint- und Chat-Frontend-Regressionstests bestanden; vollständiges Ruff, Python-Syntax, JavaScript-Syntax, Doku-Drift und `git diff --check` bestanden. Ein breiterer lokaler Testlauf wurde durch einen `KeyboardInterrupt` unterbrochen und wird nicht als bestanden gewertet.
+- Grenze dieses Schritts: Die fachliche Klassifikation, Freigabe und dynamische Neuplanung des Folgeauftrags sind noch nicht implementiert; der Auftrag ist zunächst nur dauerhaft aufgenommen und sichtbar.

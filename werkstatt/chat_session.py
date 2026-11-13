@@ -178,6 +178,9 @@ class ChatSession:
                 elif kind == "loop_action_not_started":
                     status = "not_started"
                     result = payload.get("result") or payload
+                elif kind == "loop_action_queued":
+                    status = "queued"
+                    result = payload.get("result") or payload
             if proposal is None:
                 conn.commit()
                 return None

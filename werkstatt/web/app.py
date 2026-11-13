@@ -1850,20 +1850,63 @@ def create_app() -> FastAPI:
                     result.get("gestartet") is False
                     and result.get("grund") == "laeuft_bereits"
                 ):
-                    error = (
-                        "Loop laeuft bereits; Auftrag wurde nicht gestartet "
-                        "oder eingereiht."
+                    active_run_id = _LOOP_RUN_IDS.get(projekt)
+                    run_record = (
+                        EventStore().get_run_record(projekt, active_run_id)
+                        if isinstance(active_run_id, str) and active_run_id
+                        else None
                     )
-                    session.append("loop_action_not_started", {
+                    if run_record is None:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                "Aktiver Run hat keinen belastbaren Checkpoint; "
+                                "der Folgeauftrag wurde nicht angenommen."
+                            ),
+                        )
+                    followup = {
                         "proposal_id": proposal_id,
-                        "error": error,
-                        "result": result,
+                        "project": projekt,
+                        "session_id": sid,
+                        "parent_run_id": active_run_id,
+                        "base_commit": run_record.get("base_commit"),
+                        "checkpoint_version": run_record.get("checkpoint_version"),
+                        "request": arguments.get("aufgabe", ""),
+                        "op_id": arguments.get("op_id"),
+                    }
+                    try:
+                        inbox_seq = EventStore().enqueue_run_message(
+                            projekt,
+                            active_run_id,
+                            f"chat-followup:{proposal_id}",
+                            "chat_followup_request",
+                            followup,
+                        )
+                    except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=f"Folgeauftrag nicht dauerhaft angenommen: {exc}",
+                        ) from exc
+                    followup["inbox_seq"] = inbox_seq
+                    detail = (
+                        "Folgeauftrag dauerhaft eingereiht und am nächsten "
+                        "sicheren Checkpoint zur Einordnung sichtbar. Das "
+                        "Hauptziel bleibt erhalten; Ausführung erst nach "
+                        "Einordnung und nötiger Freigabe."
+                    )
+                    session.append("loop_action_queued", {
+                        "proposal_id": proposal_id,
+                        "run_id": active_run_id,
+                        "inbox_seq": inbox_seq,
+                        "request": followup["request"],
+                        "detail": detail,
+                        "result": {"run_id": active_run_id, "inbox_seq": inbox_seq},
                     })
                     return {
                         "proposal_id": proposal_id,
-                        "state": "not_started",
-                        "detail": error,
-                        "result": result,
+                        "state": "queued",
+                        "detail": detail,
+                        "result": {"run_id": active_run_id, "inbox_seq": inbox_seq},
                     }
             elif action == "pause":
                 result = project_pause(projekt)
