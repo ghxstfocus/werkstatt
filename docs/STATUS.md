@@ -119,7 +119,7 @@ Letzte Aktualisierung: 2026-11-13.
 - **Betroffene Dateien:** werkstatt/web/inspector.py, static/overview.js und Tests
 - **Akzeptanzkriterien:** Projekt- und Gesamtwerte zeigen erfolgreiche, fehlgeschlagene und abgebrochene Runs getrennt. Fehlerklassen sind normalisiert und auf belegte Events zurueckfuehrbar. Leere Daten oder partielle Historie werden ehrlich als unvollstaendig dargestellt.
 - **Tests:** Aggregation, Fehlerklassen, Nullwerte und UI-Rendering.
-- **Blockiert von:** OP-372, OP-374
+- **Blockiert von:** OP-374
 
 ### OP-394: Live-Feed semantisch und stabil sortieren
 - **Status:** open

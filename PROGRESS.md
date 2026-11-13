@@ -6565,3 +6565,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Regression:** Der Checkpoint-Test deckt ungueltigen Nicht-Text sowie whitespace-only Inhalt ab und prueft, dass beides unquittiert bleibt.
 - **Verifikation:** `tests/test_event_store.py`: 28 bestanden; Ruff, strikter Doku-Drift-Check und `git diff --check` bestanden. GitHub Actions Quality Gate [43518178481](https://github.com/ghxstfocus/werkstatt/actions/runs/43518178481) fuer Commit `48f5659`: erfolgreich. `main` enthaelt bereits den API-seitigen OP-Aufgabentext-Fix aus PR #16; der Serverlauf auf `7cdd6b6` ergab 2.258 bestanden und 5 uebersprungen.
 - **Grenze:** Das schuetzt die Inbox vor nicht ausfuehrbaren Follow-ups; Klassifikation, Scope-Abgleich und Uebernahme in den Arbeitsgraphen bleiben OP-401 offen.
+## 2026-11-13 — veralteten OP-372-Blocker aus OP-375 entfernt
+
+- **Befund:** OP-372 ist laut Abschlussbeleg oben abgeschlossen und nicht mehr in `docs/STATUS.md` offen. OP-375 fuehrte OP-372 dennoch weiter als Blocker.
+- **Aenderung:** OP-375 wartet jetzt nur noch auf die weiterhin offene OP-374. Die Roadmap kennzeichnet OP-372 als abgeschlossen.
+- **Verifikation:** Dokumentations-Drift-Pruefung und Queue-Abgleich ausgefuehrt.
