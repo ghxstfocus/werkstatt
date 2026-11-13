@@ -5974,3 +5974,9 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 
 - Der integrierte Resume-Test bestaetigt die HTTP-Annahme, aber der RunRecord erreicht nicht completed. Der Worker-Log wird im Fehlerfall ausgegeben; der Subprozess wird auch bei Testfehler beendet.
 - Der letzte CI-Commit enthielt diese Diagnoseaenderung noch nicht; dieser Commit korrigiert den gespeicherten Teststand. Die Ursache im produktiven Resume-Pfad ist weiterhin offen.
+
+
+## 2026-11-13 — Resume-Worker-Diagnose in CI
+
+- Ruff stoppte den Diagnoselauf, bevor der neue Worker-Log sichtbar werden konnte: `json` war nach der Assertion-Umstellung unbenutzt. Der lokale Import wurde entfernt.
+- Der naechste Quality-Gate-Lauf soll den eigentlichen Subprozess-Fehler samt Worker-Log offenlegen; OP-397 bleibt bis zur erfolgreichen produktiven HTTP-Resume-Recovery offen.

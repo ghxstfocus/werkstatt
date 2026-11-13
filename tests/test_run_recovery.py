@@ -485,7 +485,6 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")
 
-    import json
     import os
     import time
 
