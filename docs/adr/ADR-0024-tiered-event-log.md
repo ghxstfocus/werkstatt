@@ -62,6 +62,17 @@ werkstatt/projection.py::Projector:
 SQLite-Schema: events(event_id UNIQUE, ...) mit INSERT ... ON CONFLICT
 IGNORE. Checkpoint-Tabelle projection_state(key, value).
 
+Der Health-Vergleich (OP-372) zaehlt nicht die gesamte historische SQLite-
+Tabelle gegen die aktive Quelle. Seine gemeinsame Basis sind die eindeutigen
+`event_id`s aus den fortlaufenden, nicht migrierten JSONL-Dateien. Die
+SQLite-Zahl zaehlt nur Zeilen mit einer ID aus genau dieser Quellmenge;
+SQLite-Zeilen ausserhalb der Basis werden separat ausgewiesen und erzeugen
+keine falsche Driftmeldung durch historische Migrationen. API und Statusleiste
+zeigen Basis, ersten Quellereignis-Anker und den Zeitbereich der Quelle.
+Fehlerhafte JSONL-Zeilen oder fehlende/ungueltige Zeitstempel machen den
+Vergleich unvollstaendig und verhindern eine gruene Health-Anzeige. Der
+Event-Store bleibt global gemaess ADR-0023.
+
 Kern-Regel: SQLite wird ausschliesslich vom Projektor beschrieben.
 
 ## Konsequenzen
