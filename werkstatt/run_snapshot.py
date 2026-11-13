@@ -13,7 +13,13 @@ from pathlib import Path, PurePosixPath
 
 from werkstatt.paths import werkstatt_home
 
-__all__ = ["ProjectSnapshot", "SnapshotError", "create_project_snapshot", "remove_project_snapshot"]
+__all__ = [
+    "ProjectSnapshot",
+    "SnapshotError",
+    "create_project_snapshot",
+    "remove_project_snapshot",
+    "validate_project_snapshot",
+]
 
 
 class SnapshotError(RuntimeError):
@@ -55,9 +61,12 @@ def _file_lists(root: Path) -> tuple[list[str], list[str]]:
     untracked = _git(
         root, "ls-files", "--others", "--exclude-standard", "-z",
     ).split("\0")
-    return sorted(item for item in tracked if item), sorted(
-        item for item in untracked if item
+    tracked_files = sorted(item for item in tracked if item)
+    untracked_files = sorted(
+        item for item in untracked
+        if item and item != ".werkstatt-snapshot.json"
     )
+    return tracked_files, untracked_files
 
 
 def _digest(root: Path, paths: list[str]) -> str:
@@ -155,8 +164,8 @@ def create_project_snapshot(
             and manifest.get("run_id") == run_id
             and manifest.get("job_id") == job_id
         ):
-            return ProjectSnapshot(
-                final_path, str(manifest["head"]), str(manifest["fingerprint"]),
+            return validate_project_snapshot(
+                final_path, source, project, run_id, job_id,
             )
         raise SnapshotError("Snapshot-ID gehoert zu einem anderen Auftrag.")
 
@@ -232,22 +241,78 @@ def create_project_snapshot(
             shutil.rmtree(temporary, ignore_errors=True)
 
 
-def remove_project_snapshot(
+def validate_project_snapshot(
     snapshot_path: Path,
     project_dir: Path,
     project: str,
     run_id: str,
     job_id: str,
-) -> bool:
-    """Remove only the exact managed snapshot addressed by its job identity."""
+) -> ProjectSnapshot:
+    """Validate managed path, identity, Git HEAD and the captured file digest."""
     source = Path(project_dir).resolve()
-    expected = (_managed_root(source, project, run_id) / _valid_id(job_id, "Job"))
+    project = _valid_id(project, "Projekt")
+    run_id = _valid_id(run_id, "Run")
+    job_id = _valid_id(job_id, "Job")
+    expected = _managed_root(source, project, run_id) / job_id
     actual = Path(snapshot_path)
     if actual.is_symlink() or actual.resolve() != expected.resolve():
-        raise SnapshotError("Snapshot-Cleanup ausserhalb des verwalteten Job-Pfads.")
+        raise SnapshotError("Snapshot-Pfad liegt ausserhalb des verwalteten Job-Pfads.")
+    try:
+        manifest = json.loads(
+            (actual / ".werkstatt-snapshot.json").read_text(encoding="utf-8"),
+        )
+    except (OSError, ValueError) as exc:
+        raise SnapshotError("Snapshot-Manifest fehlt oder ist ungueltig.") from exc
+    if (
+        manifest.get("project") != project
+        or manifest.get("run_id") != run_id
+        or manifest.get("job_id") != job_id
+    ):
+        raise SnapshotError("Snapshot-Identitaet stimmt nicht ueberein.")
+    head = _git(actual, "rev-parse", "HEAD").strip()
+    tracked, untracked = _file_lists(actual)
+    fingerprint = _digest(actual, sorted(set(tracked + untracked)))
+    if (
+        head != manifest.get("head")
+        or fingerprint != manifest.get("fingerprint")
+    ):
+        raise SnapshotError("Snapshot-Inhalt stimmt nicht mit seinem Manifest ueberein.")
+    return ProjectSnapshot(actual, head, fingerprint)
+
+
+def remove_project_snapshot(
+    snapshot_path: Path,
+    project: str,
+    run_id: str,
+    job_id: str,
+) -> bool:
+    """Remove only the exact managed snapshot addressed by its job identity."""
+    project = _valid_id(project, "Projekt")
+    run_id = _valid_id(run_id, "Run")
+    job_id = _valid_id(job_id, "Job")
+    root = (werkstatt_home() / ".werkstatt" / "chat-snapshots").resolve()
+    actual = Path(snapshot_path)
+    if actual.is_symlink():
+        raise SnapshotError("Snapshot-Cleanup lehnt symbolische Pfade ab.")
+    resolved = actual.resolve()
+    try:
+        relative = resolved.relative_to(root)
+    except ValueError as exc:
+        raise SnapshotError("Snapshot-Cleanup ausserhalb des verwalteten Bereichs.") from exc
+    if (
+        len(relative.parts) != 3
+        or not re.fullmatch(r"[a-f0-9]{20}", relative.parts[0])
+        or relative.parts[1:] != (run_id, job_id)
+    ):
+        raise SnapshotError("Snapshot-Cleanup stimmt nicht mit Job-ID ueberein.")
     if not actual.exists():
         return False
-    manifest = json.loads((actual / ".werkstatt-snapshot.json").read_text())
+    try:
+        manifest = json.loads(
+            (actual / ".werkstatt-snapshot.json").read_text(encoding="utf-8"),
+        )
+    except (OSError, ValueError) as exc:
+        raise SnapshotError("Snapshot-Cleanup-Manifest fehlt oder ist ungueltig.") from exc
     if (
         manifest.get("project") != project
         or manifest.get("run_id") != run_id

@@ -49,6 +49,12 @@ def test_snapshot_contains_exact_tracked_and_untracked_worktree_state(
     assert not (snapshot.path / "obsolete.txt").exists()
     assert _git(snapshot.path, "rev-parse", "HEAD") == snapshot.head
     assert _git(snapshot.path, "status", "--short")
+    assert run_snapshot.validate_project_snapshot(
+        snapshot.path, source, "demo", "run-1", "job-1",
+    ) == snapshot
+    assert run_snapshot.remove_project_snapshot(
+        snapshot.path, "demo", "run-1", "job-1",
+    )
 
 
 def test_snapshot_rejects_source_mutation_during_copy(
@@ -90,5 +96,5 @@ def test_snapshot_rejects_symlink_escape_and_cleanup_outside_root(
 
     with pytest.raises(run_snapshot.SnapshotError, match="Cleanup"):
         run_snapshot.remove_project_snapshot(
-            outside, source, "demo", "run-3", "job-3",
+            outside, "demo", "run-3", "job-3",
         )
