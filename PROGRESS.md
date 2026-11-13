@@ -6501,3 +6501,17 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **CI-Nachbesserung:** Nach dem ordnungsgemäßen Entfernen der erledigten OP-372 aus `docs/STATUS.md` erwartete ein Chat-Tool-Test sie weiterhin als offene OP. Der Test prüft jetzt den geschlossenen Zustand anhand des Progress-Belegs und der CI-Run-ID, statt eine erledigte OP in der offenen Queue zu verlangen.
 - **Verifikation:** GitHub Actions Quality Gate [43500911166](https://github.com/ghxstfocus/werkstatt/actions/runs/43500911166), Run 744, Commit `6d459e0`: erfolgreich. Die betroffenen lokalen Tests bestanden (25); Ruff und strikte Doku-Drift-Prüfung bestanden. Sechs nicht betroffene Chat-Tool-Tests konnten lokal unter Windows wegen der fest konfigurierten, hier fehlenden `/opt/werkstatt`-Projektwurzel nicht laufen; Linux-CI ist dafür maßgeblich.
 - **Ergebnis:** OP-372 bleibt abgeschlossen; Test und Dokumentationsstatus stimmen mit der Queue-Konvention überein.
+
+## 2026-11-13 — OP-Start im Chat nur mit passendem Tool-Beleg bestaetigen
+
+- **Live-Befund:** Bei einem expliziten Umsetzungsauftrag kann das Modell in Freitext behaupten, es koenne nicht schreiben oder habe einen Loop-Vorschlag angelegt, ohne `request_loop_action` aufzurufen. Die UI erhaelt dann keine bestaetigbare Aktionskarte. Ein Tool-Aufruf fuer eine andere OP darf ebenfalls nicht als Uebergabe des Nutzerauftrags gelten.
+- **Aenderung:** Explizite OP-Umsetzungsauftraege erhalten einen gezielten zweiten Handoff-Versuch, wenn der erste Modellaufruf ohne Tool endet. Startvorschlaege werden nur dann als vorhanden bestaetigt, wenn das Tool fuer genau dieselbe OP `zustand="proposal"` zurueckgegeben hat. Ein abweichender OP-Start wird vor Ausfuehrung fail-closed abgelehnt; ohne passenden Tool-Beleg meldet der Chat eindeutig, dass nichts gestartet wurde. Reine OP-Fragen loesen keinen Handoff aus.
+- **Nachpruefung:** Der erste Linux-CI-Lauf bestand mit 2.242 Pytests (5 uebersprungen), Ruff, AST und Audit-Katalog, fand aber drei Mypy-Fehler beim Eingrenzen des optionalen Tool-Belegs. Der Erfolgs-/Fehlerpfad grenzt den Beleg jetzt explizit ein.
+- **Verifikation:** Lokal unter Windows/Python 3.14: `tests/test_chat_agent.py` 36 bestanden; Ruff und Doku-Drift-Pruefung bestanden. Lokales Mypy ist nicht installiert; der aktualisierte Linux-CI-Lauf steht noch aus. Die Windows-Vollsuite ist wegen plattformabhaengiger bestehender Tests kein gueltiger Gesamtbeleg.
+- **Grenze:** Der Chat legt weiterhin nur einen Vorschlag an. Der Listener des Produktionsservers ist nicht von diesem lokalen Worktree aktualisiert; der Nutzer muss nach dem Pull den tatsaechlichen Listener kontrolliert neu starten.
+
+## 2026-11-13 — Mehrdeutige OP-Umsetzungsauftraege vor Handoff klaeren
+
+- **Befund:** Die OP-Erkennung nahm bei einer ausdruecklichen Umsetzungsanfrage die erste OP-ID im gesamten Text. Bei mehreren Referenzen, etwa „Bearbeite OP-372; OP-373 ist blockiert“, konnte dadurch die falsche OP als Ziel festgelegt werden.
+- **Aenderung:** Der Chat erkennt mehrere unterschiedliche OP-IDs in einem Umsetzungsauftrag und fragt vor jedem Modell- oder Tool-Aufruf nach, welche OP gemeint ist. Es wird dabei kein Startvorschlag erzeugt. Eine einzelne OP-ID behaelt den bestehenden Handoff-Pfad.
+- **Verifikation:** Lokal unter Windows/Python 3.14: `tests/test_chat_agent.py` 38 bestanden, Ruff und `git diff --check` bestanden. Doku-Drift-Pruefung nach Eintrag bestanden. Linux-CI fuer den Branch steht aus.

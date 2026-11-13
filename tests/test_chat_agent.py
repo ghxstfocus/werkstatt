@@ -46,6 +46,25 @@ def test_prompt_hands_implementation_requests_to_the_loop():
     assert "den Auftrag zu kopieren" in prompt
     assert "der Loop vor Schreibarbeit sein\nPlan-Gate zeigt" in prompt
     assert "Bei einer reinen Plan-/Analysefrage ohne Umsetzungswunsch" in prompt
+    assert "niemals, einen Startvorschlag angelegt zu haben" in prompt
+    assert 'zustand="proposal"' in prompt
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Bearbeite OP-372 vollstaendig nach den AK.", "OP-372"),
+        ("Bitte OP-372 fixen und testen.", "OP-372"),
+        ("Kannst du erklaeren, was OP-372 bedeutet?", None),
+        ("Was macht OP-372?", None),
+        ("Welche OP waere ein guter Test?", None),
+        ("Bearbeite OP-372; OP-373 ist blockiert.", None),
+    ],
+)
+def test_explicit_op_execution_intent_is_distinguished_from_questions(
+    message: str, expected: str | None,
+) -> None:
+    assert chat_agent._explicit_op_execution_request(message) == expected
 
 
 def test_chat_loop_can_handoff_explicit_op_implementation_request(
@@ -98,12 +117,197 @@ def test_chat_loop_can_handoff_explicit_op_implementation_request(
         project_dir=tmp_path,
     )
 
-    assert "wartet auf deine Bestaetigung" in answer
+    assert "Startvorschlag fuer OP-321 ist im Chat" in answer
     proposal = next(
         event for event in session.load()
         if event["kind"] == "loop_action_proposed"
     )
     assert proposal["payload"]["arguments"] == {"op_id": "OP-321"}
+
+
+def test_ambiguous_op_execution_request_asks_before_model_or_handoff(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _unexpected_model_call(*_args, **_kwargs):
+        raise AssertionError("Mehrdeutiger OP-Auftrag darf nicht ans Modell gehen")
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _unexpected_model_call)
+
+    answer = chat_agent.chat_loop(
+        session,
+        "Bearbeite OP-321; OP-322 ist blockiert.",
+    )
+
+    assert "OP-321, OP-322" in answer
+    assert "Welche davon" in answer
+    assert "keinen Startvorschlag angelegt" in answer
+    assert not any(
+        event["kind"] == "loop_action_proposed" for event in session.load()
+    )
+
+
+def test_explicit_op_request_retries_missing_tool_handoff(
+    session: ChatSession,
+    fake_llm,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_session
+
+    monkeypatch.setattr(
+        chat_session,
+        "_db_pfad",
+        lambda _project: session.db_pfad,
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n",
+        encoding="utf-8",
+    )
+    fake_llm(
+        {"role": "assistant", "content": "Ich habe keine Schreibwerkzeuge."},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "start-op-321",
+                "type": "function",
+                "function": {
+                    "name": "request_loop_action",
+                    "arguments": json.dumps({
+                        "action": "start",
+                        "op_id": "OP-321",
+                    }),
+                },
+            }],
+        },
+        {"role": "assistant", "content": "Vorschlag angelegt."},
+    )
+    results: list[dict[str, Any]] = []
+
+    answer = chat_agent.chat_loop(
+        session,
+        "Bearbeite OP-321 vollstaendig.",
+        project_dir=tmp_path,
+        on_tool_result=lambda _name, content: results.append(json.loads(content)),
+    )
+
+    assert "Startvorschlag fuer OP-321 ist im Chat" in answer
+    assert results[0]["zustand"] == "proposal"
+    proposals = [
+        event for event in session.load()
+        if event["kind"] == "loop_action_proposed"
+    ]
+    assert len(proposals) == 1
+    assert proposals[0]["payload"]["arguments"] == {"op_id": "OP-321"}
+
+
+def test_explicit_op_request_never_claims_proposal_without_tool_evidence(
+    session: ChatSession,
+    fake_llm,
+    tmp_path: Path,
+) -> None:
+    fake_llm(
+        {"role": "assistant", "content": "Ich habe den Vorschlag erstellt."},
+        {"role": "assistant", "content": "Vorschlag ist erstellt."},
+    )
+
+    answer = chat_agent.chat_loop(
+        session,
+        "Bearbeite OP-321 vollstaendig.",
+        project_dir=tmp_path,
+    )
+
+    assert "keinen bestaetigten Loop-Startvorschlag erzeugt" in answer
+    assert "Es wurde nichts gestartet" in answer
+    assert not any(
+        event["kind"] == "loop_action_proposed" for event in session.load()
+    )
+
+
+def test_explicit_op_request_rejects_handoff_for_different_op(
+    session: ChatSession,
+    fake_llm,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_session
+
+    monkeypatch.setattr(
+        chat_session,
+        "_db_pfad",
+        lambda _project: session.db_pfad,
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n"
+        "\n"
+        "### OP-322: Andere Arbeit\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Anderes Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_322.py\n",
+        encoding="utf-8",
+    )
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "start-op-322",
+                "type": "function",
+                "function": {
+                    "name": "request_loop_action",
+                    "arguments": json.dumps({
+                        "action": "start",
+                        "op_id": "OP-322",
+                    }),
+                },
+            }],
+        },
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "start-op-321",
+                "type": "function",
+                "function": {
+                    "name": "request_loop_action",
+                    "arguments": json.dumps({
+                        "action": "start",
+                        "op_id": "OP-321",
+                    }),
+                },
+            }],
+        },
+        {"role": "assistant", "content": "Start angefragt."},
+    )
+    results: list[dict[str, Any]] = []
+
+    answer = chat_agent.chat_loop(
+        session,
+        "Bearbeite OP-321 vollstaendig.",
+        project_dir=tmp_path,
+        on_tool_result=lambda _name, content: results.append(json.loads(content)),
+    )
+
+    assert results[0]["zustand"] == "invalid"
+    assert results[1]["zustand"] == "proposal"
+    assert "Startvorschlag fuer OP-321 ist im Chat" in answer
+    proposals = [
+        event for event in session.load()
+        if event["kind"] == "loop_action_proposed"
+    ]
+    assert len(proposals) == 1
+    assert proposals[0]["payload"]["arguments"] == {"op_id": "OP-321"}
 
 
 def test_chat_loop_reads_latest_append_only_entry_from_tail_evidence(
