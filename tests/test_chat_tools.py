@@ -87,6 +87,36 @@ def test_read_file_offsets_are_character_offsets_and_truncation_is_explicit(tmp_
     assert "nächsten start-Offset" in schema
 
 
+def test_read_file_tail_reports_actual_range_and_file_length(tmp_path):
+    (tmp_path / "progress.md").write_text(
+        "alt\\n" + "x" * 200 + "\\nneuester Eintrag\\n",
+        encoding="utf-8",
+    )
+    result = chat_tools.execute_tool(
+        "read_file", {"path": "progress.md", "tail_chars": 32},
+        project_dir=tmp_path,
+    )
+    assert "Dateiende-Auszug:" in result
+    assert "von 217" in result
+    assert "Frueheren Inhalt gezielt mit read_file(start=0, end=" in result
+    assert result.endswith("neuester Eintrag\\n")
+    assert len(result.encode("utf-8")) <= chat_tools._MAX_READ_BYTES
+
+
+def test_read_file_tail_rejects_conflicting_or_unbounded_ranges(tmp_path):
+    (tmp_path / "progress.md").write_text("inhalt", encoding="utf-8")
+    assert "nicht mit start/end kombiniert" in chat_tools.execute_tool(
+        "read_file",
+        {"path": "progress.md", "tail_chars": 10, "start": 1},
+        project_dir=tmp_path,
+    )
+    assert "zwischen 1 und 49000" in chat_tools.execute_tool(
+        "read_file",
+        {"path": "progress.md", "tail_chars": 50_000},
+        project_dir=tmp_path,
+    )
+
+
 def test_grep_findet_pattern() -> None:
     r = chat_tools.execute_tool(
         "grep", {"pattern": "chat_loop", "path": "werkstatt/chat_agent.py"},
