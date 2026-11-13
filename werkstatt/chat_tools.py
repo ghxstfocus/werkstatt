@@ -290,11 +290,30 @@ def _read_status(_args: dict[str, Any]) -> str:
         pfad = _aktives_projekt_dir() / name
         if pfad.is_file():
             try:
-                limit = 200_000 if "STATUS" in name else 20_000
-                text = pfad.read_text(encoding="utf-8", errors="replace")[:limit]
+                inhalt = pfad.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            teile.append(f"## {name}\n{text}\n")
+            limit = 12_000 if name.endswith("STATUS.md") else 16_000
+            if len(inhalt) > limit:
+                if name.endswith("PROGRESS.md"):
+                    start = len(inhalt) - limit
+                    zeilenende = inhalt.find("\\n", start)
+                    if zeilenende >= start and zeilenende - start <= 2_000:
+                        start = zeilenende + 1
+                    text = (
+                        f"[Auszug: neuester Dateischluss; {start} fruehere Zeichen "
+                        f"ausgelassen von {len(inhalt)} Zeichen insgesamt.]\\n"
+                        + inhalt[start:]
+                    )
+                else:
+                    text = (
+                        f"[Auszug: Dateianfang; {len(inhalt) - limit} Zeichen "
+                        f"am Ende ausgelassen von {len(inhalt)} Zeichen insgesamt.]\\n"
+                        + inhalt[:limit]
+                    )
+            else:
+                text = inhalt
+            teile.append(f"## {name}\\n{text}\\n")
 
     return "\n".join(teile) if teile else "(STATUS.md/PROGRESS.md nicht gefunden)"
 
@@ -707,7 +726,7 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         "mode": "read",
     },
     "read_status": {
-        "description": "STATUS.md + PROGRESS.md (Kopf).",
+        "description": "STATUS.md-Queue und neuester PROGRESS.md-Auszug; bei Bedarf mit grep gezielt nachpruefen.",
         "parameters": {"type": "object", "properties": {}},
         "fn": _read_status,
         "mode": "read",
