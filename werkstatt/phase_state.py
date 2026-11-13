@@ -78,12 +78,18 @@ class PhaseState:
         for task in data.get("tasks", []):
             task_id = task.get("id")
             dependencies = task.get("dependencies") or []
+            criterion_refs = task.get("criterion_refs") or []
             if (
                 not isinstance(task_id, str)
                 or not task_id.strip()
                 or task_id in task_ids
                 or not isinstance(dependencies, list)
                 or any(not isinstance(dependency, str) for dependency in dependencies)
+                or not isinstance(criterion_refs, list)
+                or any(
+                    not isinstance(ref, str) or not ref.strip()
+                    for ref in criterion_refs
+                )
             ):
                 self.data = {}
                 return False
@@ -128,6 +134,14 @@ class PhaseState:
             for task_id in task_ids
         ) or len(set(task_ids)) != len(task_ids):
             raise ValueError("Phase-State braucht eindeutige, nichtleere Task-IDs")
+        for task in tasks:
+            refs = task.get("criterion_refs") or []
+            if not isinstance(refs, list) or any(
+                not isinstance(ref, str) or not ref.strip() for ref in refs
+            ):
+                raise ValueError(
+                    "criterion_refs muessen eine Liste nichtleerer IDs sein"
+                )
 
         now = datetime.datetime.now(datetime.UTC).isoformat()
         self.data = {
@@ -151,6 +165,9 @@ class PhaseState:
                     # weg, get_next_task sieht keine Deps, Tasks
                     # laufen unabhaengig (Loop-Test-5, 2026-11-05).
                     "dependencies": t.get("dependencies") or [],
+                    # OP-398: Kriterienzuordnung muss Resume ueberleben,
+                    # damit Zielabgleich dieselben Planbelege verwendet.
+                    "criterion_refs": list(t.get("criterion_refs") or []),
                     "status": "pending",
                     "decision": None,
                     "failure": None,
