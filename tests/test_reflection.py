@@ -234,6 +234,51 @@ def test_targeted_recovery_continues_past_five_rounds_until_stage_passes(
     assert verifications[0] == 13
 
 
+def test_default_reflection_continues_past_five_rounds_until_verify_passes(
+    tmp_path, monkeypatch,
+):
+    """Der normale Repair-Pfad endet durch Evidenz, nicht nach fuenf Runden."""
+    state = _make_state(tmp_path)
+    state.patches = [{"file": "app.py", "old_string": "old", "new_string": "new"}]
+    mocks = _setup_mocks(monkeypatch)
+    monkeypatch.setattr(
+        reflection, "_apply_patches_with_diagnose",
+        MagicMock(return_value=(1, [])), raising=False,
+    )
+    monkeypatch.setattr(
+        reflection, "_diff_hash_for_state",
+        lambda _state: f"hash-{len(mocks.run_builder.call_args_list)}",
+        raising=False,
+    )
+    verifications = [0]
+
+    def verify_all(st, phase=None, stage_ids=None):
+        verifications[0] += 1
+        st.last_verify_errors = (
+            [] if verifications[0] > 12
+            else ["pytest_regression: still failing"]
+        )
+        return verifications[0] > 12
+
+    monkeypatch.setattr(
+        reflection, "_verify_patches", verify_all, raising=False,
+    )
+    mocks.run_builder.side_effect = lambda st: setattr(
+        st, "patches", [{"file": "app.py", "old_string": "old", "new_string": "new"}],
+    ) or True
+
+    # max_runden absichtlich ausgelassen: der Standardpfad ist adaptiv.
+    result = reflection._reflection_loop(
+        state,
+        error_context="pytest_regression failed",
+        phase="phase_end",
+    )
+
+    assert result is True
+    assert mocks.run_builder.call_count > 5
+    assert verifications[0] > 12
+
+
 def test_post_build_verify_recovery_targets_failed_stages_with_run_budget(
     tmp_path, monkeypatch,
 ):
