@@ -4,7 +4,7 @@ Format gemaess `DOC_CONVENTIONS.md` §5. Diese Queue enthaelt nur offene, konkre
 
 `—` bedeutet: vor dem Start konkretisieren. Der Arbeitsfokus steht in `docs/ROADMAP.md`; abgeschlossene oder verworfene Arbeit steht in `PROGRESS.md`.
 
-Letzte Aktualisierung: 2026-11-12.
+Letzte Aktualisierung: 2026-11-13.
 
 ## Offene Punkte
 ### OP-404: Codeguardian als unabhaengige Schutz- und Evidenzschicht
@@ -104,14 +104,6 @@ Letzte Aktualisierung: 2026-11-12.
 - **Akzeptanzkriterien:** Debug-Diagnosen referenzieren einen belegten Run-/Gate-Fehler desselben Projekts. Eine Freigabe bindet sich an Basis-HEAD und Diff-Hash und uebergibt genau diesen Patch als Auftrag an den normalen Loop. Diagnose oder Vorschlag schreibt selbst keinen Code und umgeht kein Gate.
 - **Tests:** Patch-Hash, Projekt-/Run-Isolation, Einmaligkeit und Ablehnung.
 - **Blockiert von:** OP-396
-
-### OP-372: Projection-Status semantisch vergleichen
-- **Status:** open
-- **Typ:** data-integrity
-- **Betroffene Dateien:** werkstatt/projection.py, UI-Status und Tests
-- **Akzeptanzkriterien:** JSONL- und SQLite-Zaehler werden nur fuer denselben Zeitraum und dieselbe Basis verglichen. API und UI zeigen Vergleichsbasis und Zeitraum, damit historische Migrationen keine falsche Driftmeldung erzeugen. Rebuild und wiederholte Projektion bleiben idempotent.
-- **Tests:** Migrationsanker, Event-Deduplizierung und UI-Anzeige.
-- **Blockiert von:** —
 
 ### OP-374: Backfill reproduzierbar und letzte Runs korrekt anzeigen
 - **Status:** open
