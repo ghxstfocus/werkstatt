@@ -43,25 +43,10 @@ from ._common import (
 
 
 def _reflect_verify_failure(state: RunState, phase: str) -> bool:
-    """Recover only the failing verify stages, using the configured run budget."""
+    """Recover failing verify stages and re-run the complete phase contract."""
     from werkstatt.verify import _stage_ids
 
     configured = set(_stage_ids(Path(state.project_dir)))
-    errors = getattr(state, "last_verify_errors", None)
-    if not isinstance(errors, list):
-        errors = []
-    failed = {
-        stage_id
-        for stage_id in configured
-        if any(
-            str(error).startswith((
-                f"{stage_id}:",
-                f"{stage_id}-Fehler:",
-            ))
-            for error in errors
-        )
-    }
-    targeted = sorted(failed)
     budget = state.budget if isinstance(state.budget, dict) else {}
     has_run_budget = any(
         isinstance(budget.get(key), int)
@@ -69,7 +54,60 @@ def _reflect_verify_failure(state: RunState, phase: str) -> bool:
         and budget[key] > 0
         for key in ("max_llm_calls", "max_minutes")
     )
-    if targeted and has_run_budget:
+    seen_stage_sets: set[tuple[str, ...]] = set()
+
+    while True:
+        errors = getattr(state, "last_verify_errors", None)
+        if not isinstance(errors, list):
+            errors = []
+        targeted = sorted({
+            stage_id
+            for stage_id in configured
+            if any(
+                str(error).startswith((
+                    f"{stage_id}:",
+                    f"{stage_id}-Fehler:",
+                ))
+                for error in errors
+            )
+        })
+        if not targeted or not has_run_budget:
+            reason = (
+                "verify_stage_unbekannt" if not targeted
+                else "run_budget_fehlt"
+            )
+            audit(
+                "loop_reflection_bounded_fallback",
+                {
+                    "phase": phase,
+                    "reason": reason,
+                    "failed_stage_ids": sorted({
+                        str(error).split(":", 1)[0].strip()
+                        for error in errors
+                        if ":" in str(error)
+                    }),
+                    "configured_stage_ids": sorted(configured),
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            return _reflection_loop(state)
+
+        stage_set = tuple(targeted)
+        if stage_set in seen_stage_sets:
+            audit(
+                "loop_reflection_stagnation_abort",
+                {
+                    "phase": phase,
+                    "stage_ids": list(stage_set),
+                    "reason": "verify_stage_set_recurred_after_full_check",
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            return False
+        seen_stage_sets.add(stage_set)
+
         audit(
             "loop_reflection_targeted_recovery",
             {
@@ -84,29 +122,19 @@ def _reflect_verify_failure(state: RunState, phase: str) -> bool:
             state.project_dir,
             state.project_name,
         )
-        return _reflection_loop(
+        if not _reflection_loop(
             state,
             max_runden=None,
             phase=phase,
             verify_stage_ids=set(targeted),
-        )
+        ):
+            return False
 
-    reason = (
-        "verify_stage_unbekannt" if not targeted
-        else "run_budget_fehlt"
-    )
-    audit(
-        "loop_reflection_bounded_fallback",
-        {
-            "phase": phase,
-            "reason": reason,
-            "failed_stage_ids": sorted(failed),
-            "configured_stage_ids": sorted(configured),
-        },
-        state.project_dir,
-        state.project_name,
-    )
-    return _reflection_loop(state)
+        # A targeted green result proves only those stages. Re-run the full
+        # phase contract before letting the task proceed to its reviewer.
+        hart_ok, _soft_errors = _verify_patches_soft(state, phase=phase)
+        if hart_ok:
+            return True
 
 
 def _audit_task_ok(
