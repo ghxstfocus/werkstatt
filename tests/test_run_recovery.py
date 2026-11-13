@@ -655,6 +655,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         capture_output=True,
         text=True,
         timeout=5,
+        check=False,
     )
     assert startup_probe.returncode == 0, (
         f"Python worker startup failed: {startup_probe.stdout!r} "
