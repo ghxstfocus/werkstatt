@@ -14,6 +14,7 @@ import signal
 import subprocess  # noqa: F401  # re-export: Tests patchen werkstatt.loop.subprocess
 import time  # noqa: F401  # re-export: Tests patchen werkstatt.loop.time
 from pathlib import Path
+from typing import Literal
 
 from werkstatt.apply_patches import (  # Fix AZ Stufe 4: Re-Export
     _apply_one_patch,
@@ -315,7 +316,9 @@ def _persist_run_result(
     phase_state: PhaseState | None = None,
 ) -> None:
     """Drain accepted chat input, then atomically mark the run terminal."""
-    status = "completed" if exit_code == 0 else "failed"
+    status: Literal["completed", "failed"] = (
+        "completed" if exit_code == 0 else "failed"
+    )
     current = store.get_run_record(project_name, run_id)
     if current is None:
         return

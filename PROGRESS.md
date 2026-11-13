@@ -6452,3 +6452,4 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation:** Event-Store-, Inbox-Replay-, Loop-Main-, Loop-Phasen- und Phase-Review-Tests: 102 bestanden, 1 Windows-SIGTERM-Test plattformbedingt ausgelassen. Der dedizierte Race-Test injiziert die Nachricht exakt zwischen Drain und terminalem CAS.
 
 - **CI-Nachbesserung:** Wiederholte/stale Ergebnis-Persistierung auf bereits terminalen Runs bleibt jetzt idempotent und veraendert den terminalen Datensatz nicht. Regressionstest deckt ab, dass ein zweiter Aufruf mit abweichendem Exitcode keinen abgeschlossenen Run ueberschreibt.
+- **CI-Befund:** Der Linux-Gesamttest (2222 bestanden, 5 uebersprungen), Ruff und JavaScript-Syntax waren gruen; Quality Gate fand zwei Mypy-Typfehler am terminalen Statusparameter. Der Status ist nun als `Literal["completed", "failed"]` typisiert.
