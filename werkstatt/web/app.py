@@ -6,6 +6,7 @@ Threadpool ausfuehrt; Start und Stop pro Projekt werden serialisiert.
 """
 
 import asyncio
+import json
 import os
 import re
 import signal
@@ -2005,14 +2006,34 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="mode ungueltig")
         sid = _pruefe_session_id(session_id)
         session = _cs.ChatSession(projekt, sid)
+        action_proposals: list[dict[str, Any]] = []
+
+        def _on_tool_result(tool_name: str, content: str) -> None:
+            if tool_name != "request_loop_action":
+                return
+            try:
+                proposal = json.loads(content)
+            except (TypeError, json.JSONDecodeError):
+                return
+            if (
+                isinstance(proposal, dict)
+                and proposal.get("zustand") in {"proposal", "needs_input"}
+            ):
+                action_proposals.append(proposal)
+
         try:
             projekt_dir = (_PROJECTS_BASE / projekt).resolve()
             antwort = _ca.chat_loop(
                 session, message, mode=mode, project_dir=projekt_dir,
+                on_tool_result=_on_tool_result,
             )
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
-        return {"session_id": sid, "antwort": antwort}
+        return {
+            "session_id": sid,
+            "antwort": antwort,
+            "action_proposals": action_proposals,
+        }
 
     @app.websocket("/api/projects/{name}/chat/stream")
     async def chat_stream(websocket: WebSocket, name: str) -> None:

@@ -1,6 +1,7 @@
 """Tests fuer OP-231: Chat-Endpoints in web/app.py."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -138,3 +139,33 @@ def test_send_mit_mock_liefert_antwort(app_client, monkeypatch) -> None:
     assert r.status_code == 200
     assert r.json()["session_id"] == sid
     assert r.json()["antwort"] == "antwort"
+
+
+def test_legacy_chat_route_returns_loop_action_proposal(app_client, monkeypatch) -> None:
+    from werkstatt import chat_agent as ca
+
+    proposal = {
+        "zustand": "proposal",
+        "proposal_id": "a" * 32,
+        "action": "start",
+        "arguments": {"op_id": "OP-372"},
+        "summary": "Loop starten: OP-372",
+        "task_preview": "OP-372: Arbeit gemaess Kriterien",
+        "project": "demo",
+    }
+
+    def _fake(session, message, mode="read", on_tool_result=None, **_kwargs):
+        if on_tool_result:
+            on_tool_result("request_loop_action", json.dumps(proposal))
+            on_tool_result("read_file", "interner Tool-Inhalt")
+        return "Der Vorschlag wartet auf deine Bestaetigung."
+
+    monkeypatch.setattr(ca, "chat_loop", _fake)
+    sid = app_client.post("/api/projects/demo/chat/new").json()["session_id"]
+    response = app_client.post(
+        "/api/projects/demo/chat",
+        json={"session_id": sid, "message": "Bearbeite OP-372"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["action_proposals"] == [proposal]

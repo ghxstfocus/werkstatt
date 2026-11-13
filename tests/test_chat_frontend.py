@@ -96,6 +96,19 @@ def test_chat_renders_explicit_loop_action_confirmation_card() -> None:
     assert 'proposal.task_preview' in js
 
 
+def test_loop_action_card_renders_from_live_and_legacy_tool_results() -> None:
+    js = _chat_js()
+    assert 'function _verarbeiteLoopActionErgebnis(name, content)' in js
+    assert '_verarbeiteLoopActionErgebnis(obj.name || "", obj.content || "")' in js
+    assert '_verarbeiteLoopActionErgebnis(name, content)' in js
+    assert '(data.action_proposals || []).forEach(function (proposal)' in js
+    result_start = js.index("function _jobToolResult")
+    result_end = js.index("function _jobFertig", result_start)
+    result = js[result_start:result_end]
+    assert "_verarbeiteLoopActionErgebnis(name, content);" in result
+    assert result.index("_verarbeiteLoopActionErgebnis(name, content);") > result.index("for (var i")
+
+
 def test_chat_surfaces_followup_checkpoint_receipt() -> None:
     js = _chat_js()
     assert 'kind === "loop_followup_checkpointed"' in js

@@ -481,6 +481,7 @@
       _streamStatus(_toolLabel(obj.name || "Projektkontext", obj.args || {}));
     } else if (obj.type === "tool_result") {
       _streamStatus("Ich werte das Ergebnis aus …");
+      _verarbeiteLoopActionErgebnis(obj.name || "", obj.content || "");
     } else if (obj.type === "done") {
       _streamDone(obj.antwort || "");
     } else if (obj.type === "error") {
@@ -800,6 +801,26 @@
     }
   }
 
+  function _verarbeiteLoopActionErgebnis(name, content) {
+    if (name !== "request_loop_action") return false;
+    try {
+      var proposal = typeof content === "string" ? JSON.parse(content || "{}") : content;
+      if (proposal.zustand === "proposal") {
+        _proposalKarte(proposal, "pending");
+        return true;
+      }
+      if (proposal.zustand === "needs_input") {
+        _karte(
+          "assistant",
+          "Dafür brauche ich noch eine Klärung: " +
+            (proposal.detail || JSON.stringify(proposal.auswahl || {})),
+        );
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
   function _proposalKarte(proposal, status) {
     if (!proposal || !proposal.proposal_id) return;
     var box = _el("chat-nachrichten");
@@ -902,20 +923,12 @@
       var item = job.toolCalls[i];
       if (item.name !== name || item.done) continue;
       item.done = true;
-      if (name === "request_loop_action") {
-        try {
-          var proposal = JSON.parse(content || "{}");
-          if (proposal.zustand === "proposal") _proposalKarte(proposal, "pending");
-          else if (proposal.zustand === "needs_input") {
-            _karte(
-              "assistant",
-              "Dafür brauche ich noch eine Klärung: " +
-                (proposal.detail || JSON.stringify(proposal.auswahl || {})),
-            );
-          }
-        } catch (e) {}
-      }
-      return;
+      break;
+    }
+    // Tool-Ergebnisse koennen nach einem UI-Reconnect ohne das zugehoerige
+    // tool_call-Event eintreffen. Der Vorschlag selbst ist die Autoritaet.
+    if (name === "request_loop_action") {
+      _verarbeiteLoopActionErgebnis(name, content);
     }
   }
 
@@ -1090,6 +1103,9 @@
         }),
       }).then(parseAntwort).then(function (data) {
         if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
+        (data.action_proposals || []).forEach(function (proposal) {
+          _verarbeiteLoopActionErgebnis("request_loop_action", proposal);
+        });
         if (assistantCard) _renderMarkdown(assistantCard, data.antwort || "");
         else if (data.antwort) _karte("assistant", data.antwort);
         _setzeChatStatus("Antwort fertig · " + projekt + " · Kompatibilitätsmodus", "ready");
