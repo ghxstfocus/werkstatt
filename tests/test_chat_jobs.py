@@ -154,6 +154,54 @@ def test_job_failure_is_visible_and_terminal(tmp_path: Path) -> None:
     assert failed["events"][-1]["payload"]["error"].startswith("RuntimeError")
 
 
+def test_inactive_run_fails_uncheckpointed_jobs_but_preserves_safe_replay(
+    tmp_path: Path,
+) -> None:
+    from werkstatt.chat_jobs import fail_uncheckpointed_jobs_for_inactive_run
+
+    store = ChatJobStore(tmp_path / "jobs.db")
+    uncheckpointed, _ = store.create(
+        "session-a", "Frage vor Run-Ende", "read",
+        "request-key-orphan-001", run_id="run-finished", project="demo",
+    )
+    replayable, _ = store.create(
+        "session-a", "Frage mit Checkpoint", "read",
+        "request-key-orphan-002", run_id="run-finished", project="demo",
+    )
+    active, _ = store.create(
+        "session-a", "Frage im aktiven Run", "read",
+        "request-key-orphan-003", run_id="run-active", project="demo",
+    )
+    assert store.set_run_snapshot(
+        replayable["job_id"], tmp_path, tmp_path / "snapshot",
+        "base-head", "fingerprint",
+    )
+
+    class _Events:
+        def run_message_acknowledged(
+            self, project: str, run_id: str, message_id: str,
+        ) -> bool:
+            return (
+                project == "demo"
+                and run_id == "run-finished"
+                and message_id == f"chat-job:{replayable['job_id']}"
+            )
+
+    failed = fail_uncheckpointed_jobs_for_inactive_run(
+        "demo", "run-active", db_path=store.db_path, event_store=_Events(),
+    )
+
+    assert failed == 1
+    failed_job = store.get(uncheckpointed["job_id"])
+    replayable_job = store.get(replayable["job_id"])
+    active_job = store.get(active["job_id"])
+    assert failed_job is not None and failed_job["state"] == "failed"
+    assert "Bitte sende den Auftrag erneut" in failed_job["error"]
+    assert failed_job["events"][-1]["payload"]["reason"] == "run_ended_before_checkpoint"
+    assert replayable_job is not None and replayable_job["state"] == "queued"
+    assert active_job is not None and active_job["state"] == "queued"
+
+
 def test_claim_allows_independent_turns_within_one_session(tmp_path: Path) -> None:
     store = ChatJobStore(tmp_path / "jobs.db")
     first, _ = store.create("session-a", "Erste Frage", "read", "request-key-a001")
