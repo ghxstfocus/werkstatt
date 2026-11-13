@@ -6252,5 +6252,5 @@ Projektbudgets fuer max_llm_calls und max_minutes stoppen weitere Modellaufrufe 
 ## 2026-11-13 — Kriterien-Checkpoint darf nicht still ausfallen
 
 - Review des grünen Task-Checkpoint-Schritts fand einen Fehlerpfad: Wenn die Kriterienberechnung oder das Fortschritts-Audit nach `mark_done` scheitert, blieb der Task korrekt erledigt, aber der fehlende Zielabgleich wurde still verschluckt.
-- Der Taskstatus bleibt erhalten; der Loop schreibt jetzt einen separaten, redigierten Fehlerbefund mit Task-ID, Fehlertyp und angekündigter Wiederprüfung am nächsten sicheren Checkpoint. Exception-Texte werden nicht persistiert.
+- Der Taskstatus bleibt erhalten; der Loop schreibt einen separaten, redigierten Fehlerbefund mit Task-ID und Fehlertyp. Die Meldung benennt jetzt den tatsächlich erzwungenen nächsten Schritt: Phase-End-Verify berechnet den Zielabgleich erneut; bei Fehlern oder offenen Kriterien wird kein `loop_erfolg` geschrieben. Exception-Texte werden nicht persistiert.
 - Regressionstest belegt beides: `done` bleibt bestehen und der Checkpoint-Ausfall erscheint sichtbar. GitHub Actions Quality Gate [43417405532](https://github.com/ghxstfocus/werkstatt/actions/runs/43417405532) erfolgreich: 2.186 Tests bestanden, 5 übersprungen; Ruff 0, Mypy 0, AST 387 Dateien/0 Fehler, Audit-Katalog bestanden; `ok: true`, `regression: false`.
