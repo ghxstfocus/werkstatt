@@ -6291,3 +6291,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - OP-401 uebernimmt die Verhaltens- und Regressionserwartungen fuer Zwischenfragen, Folgeauftraege und erneuten Ziel-/Doku-Abgleich.
 - **Wichtig: Das ist eine Spezifikations- und Queue-Aenderung, keine Behauptung, dass der adaptive Run-Koordinator bereits implementiert ist.** Laut Ist-Aufnahme konsumiert der Task-Loop weiterhin nur `job_notice`; Fragen, Steuerung, Gate-Antworten und Schreibauftraege haben noch keinen vollstaendigen produktiven Dispatcher. Diese Implementierung bleibt offen in OP-401/ADR-0032 M1.
 - Geaendert: `docs/adr/ADR-0032-adaptiver-zielorientierter-run-kern.md`, `docs/STATUS.md`, `PROGRESS.md`. Code- oder Laufzeittests wurden fuer diese reine Doku-Aenderung nicht ausgefuehrt.
+
+## 2026-11-13 — CI-Beleg fuer Checkpoint-Uebergabe
+
+- Der zuvor als ausstehend dokumentierte GitHub-CI-Lauf fuer die parallele Chat-Job-Uebergabe ist abgeschlossen: [Quality Gate Run 43425088713](https://github.com/ghxstfocus/werkstatt/actions/runs/43425088713) ist fuer Commit `48e10bf0ecc4f6167915b3b3cc7585ee8d9e7cda` erfolgreich.
+- Die GitHub-Actions-Schritte fuer JavaScript-Syntax, Ruff, pytest-Diagnose und Quality Gate sind alle erfolgreich. Der Run belegt den Commit im PR-Branch, nicht den Produktionsserver und nicht den gesamten ADR-0032-Umbau.
+- Der Implementierungsumfang bleibt bewusst begrenzt: Run-gebundene Lese-/Debugger-Jobs werden am sicheren Checkpoint sichtbar auditiert. Allgemeine Fragen, Steueraktionen, Gate-Antworten und Schreibauftraege sind weiterhin offen in OP-401; eine vollstaendige adaptive Run-SSOT ist damit nicht behauptet.
