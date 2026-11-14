@@ -220,6 +220,28 @@ def test_criteria_progress_requires_done_task_for_each_criterion(tmp_path):
     assert ps.criteria_progress()["covered"] == ["AC1", "AC2"]
 
 
+def test_criteria_progress_waits_for_all_tasks_sharing_split_criterion(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new(
+        "Geteiltes Akzeptanzkriterium",
+        [
+            {"id": "t1_a", "criterion_refs": ["AC1"]},
+            {"id": "t1_b", "criterion_refs": ["AC1"]},
+        ],
+        akzeptanzkriterien=["Gesamtziel des gesplitteten Tasks"],
+    )
+    ps.mark_done("t1_a")
+
+    progress = ps.criteria_progress()
+    assert progress["covered"] == []
+    assert progress["uncovered"] == ["AC1"]
+
+    ps.mark_done("t1_b")
+    progress = ps.criteria_progress()
+    assert progress["covered"] == ["AC1"]
+    assert progress["uncovered"] == []
+
+
 def test_plan_without_criteria_ignores_empty_ref_lists(tmp_path):
     ps = PhaseState("testprojekt", base_dir=tmp_path)
     ps.init_new(
