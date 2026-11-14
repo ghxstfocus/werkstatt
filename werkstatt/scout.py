@@ -247,6 +247,61 @@ def _scout_system_with_nachfolger(state=None) -> str:
     return "\n\n".join(parts)
 
 
+def _api_side_effect(node) -> str:
+    """Classify obvious database/file mutation at the callable boundary.
+
+    This is intentionally conservative: a database write or filesystem
+    mutation is ``write``; a callable containing only literal read SQL is
+    ``read``; everything else is ``unknown``. It is evidence for plan review,
+    not a proof that arbitrary Python is pure.
+    """
+    import ast as _ast
+    import re as _re
+
+    write = False
+    read_sql = False
+    unknown_sql = False
+    dml = _re.compile(r"^\s*(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)\b", _re.IGNORECASE)
+    read = _re.compile(r"^\s*(?:SELECT|WITH|PRAGMA|EXPLAIN)\b", _re.IGNORECASE)
+    mutators = {
+        "commit", "write_text", "write_bytes", "unlink", "replace",
+        "mkdir", "rmdir", "rename", "remove", "add", "delete", "flush",
+    }
+
+    for child in _ast.walk(node):
+        if not isinstance(child, _ast.Call):
+            continue
+        func = child.func
+        method = func.attr if isinstance(func, _ast.Attribute) else ""
+        if method in mutators:
+            write = True
+        if method != "execute":
+            continue
+        sql = ""
+        if child.args:
+            try:
+                sql = _ast.literal_eval(child.args[0])
+            except (ValueError, TypeError):
+                if isinstance(child.args[0], _ast.JoinedStr):
+                    sql = "".join(
+                        part.value for part in child.args[0].values
+                        if isinstance(part, _ast.Constant) and isinstance(part.value, str)
+                    )
+        if not isinstance(sql, str):
+            unknown_sql = True
+        elif dml.search(sql):
+            write = True
+        elif read.search(sql):
+            read_sql = True
+        else:
+            unknown_sql = True
+    if write:
+        return "write"
+    if read_sql and not unknown_sql:
+        return "read"
+    return "unknown"
+
+
 def _baue_api_index(project_dir) -> dict:
     """GOLD: Deterministischer API-Index (AST).
 
@@ -274,7 +329,9 @@ def _baue_api_index(project_dir) -> dict:
             _tree = _ast.parse(_src)
         except (OSError, SyntaxError):
             continue
-        _rel = str(_f.relative_to(_pd))
+        # Keep index keys platform independent; consumers and tests use repo
+        # relative POSIX paths even when the worker runs on Windows.
+        _rel = _f.relative_to(_pd).as_posix()
         _entry = {  # type: ignore[var-annotated]
             "all": [],
             "classes": [],
@@ -313,6 +370,7 @@ def _baue_api_index(project_dir) -> dict:
                             "name": _m.name,
                             "args": _args,
                             "return": _ret,
+                            "effects": _api_side_effect(_m),
                         })
                 _entry["classes"].append({
                     "name": _node.name,
@@ -330,6 +388,7 @@ def _baue_api_index(project_dir) -> dict:
                     "name": _node.name,
                     "args": _args,
                     "return": _ret,
+                    "effects": _api_side_effect(_node),
                 })
             elif isinstance(_node, _ast.ImportFrom):
                 _mod = _node.module or ""
@@ -445,8 +504,9 @@ def _finde_api(index: dict, name: str) -> list:
                         "pfad": _pfad,
                         "kind": "function",
                         "name": _fn["name"],
-                        "args": _fn["args"],
-                        "return": _fn["return"],
+                        "args": _fn.get("args", []),
+                        "return": _fn.get("return", ""),
+                        "effects": _fn.get("effects", "unknown"),
                     })
         # Top-Level-Konstante
         if not _class_hint:
@@ -477,8 +537,9 @@ def _finde_api(index: dict, name: str) -> list:
                     "kind": "method",
                     "class": _c["name"],
                     "name": _m["name"],
-                    "args": _m["args"],
-                    "return": _m["return"],
+                    "args": _m.get("args", []),
+                    "return": _m.get("return", ""),
+                    "effects": _m.get("effects", "unknown"),
                 })
     return _matches
 

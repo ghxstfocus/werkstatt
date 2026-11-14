@@ -561,6 +561,43 @@ def test_verify_patches_nutzt_venv_python(tmp_path):
     assert "python3" not in captured_cmds[0]
 
 
+def test_verify_resolves_bare_python3_to_project_venv(tmp_path):
+    """A generic config must not route module checks to the system Python."""
+    import json
+    from subprocess import CompletedProcess
+    from unittest.mock import patch
+
+    from werkstatt.verify import _verify_patches
+
+    st = _state(tmp_path)
+    st.project_name = "test-bare-python"
+    venv_python = tmp_path / ".venv" / "bin" / "python3"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("", encoding="utf-8")
+    venv_python.chmod(0o755)
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (contract_dir / "verify.json").write_text(json.dumps({
+        "stages": [{
+            "id": "ruff_changed",
+            "command": ["python3", "-m", "ruff", "check", "changed.py"],
+        }],
+    }), encoding="utf-8")
+    captured = []
+
+    def mock_run(cmd, **kwargs):
+        captured.append(list(cmd))
+        return CompletedProcess(cmd, 0, "", "")
+
+    with patch("werkstatt.orchestrator.load_project_config", return_value={
+        "venv_python": "python3", "project_dir": str(tmp_path),
+    }), patch("subprocess.run", side_effect=mock_run):
+        assert _verify_patches(st, phase="post_build") is True
+
+    assert captured[0][0] == str(venv_python)
+    assert captured[0][1:4] == ["-m", "ruff", "check"]
+
+
 def test_loop_task_read_only(tmp_path):
     """M-306d: read-only Task erzeugt keinen Patch."""
     st = _state(tmp_path)
