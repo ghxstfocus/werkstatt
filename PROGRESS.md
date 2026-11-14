@@ -6628,3 +6628,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **OP-Graph-Audit:** Die kanonische Queue enthaelt 17 offene OPs und 12 eingetragene Blocker-Kanten. Es gibt keine Referenzen auf fehlende OP-Abschnitte und keine Zyklen. Neun OPs haben keinen direkten Blocker-Eintrag; das allein belegt noch keine Startfaehigkeit, da Selector und Akzeptanzkriterien separat gelten.
 - **Verbleibende Kernluecke:** OP-398s zielorientierter Arbeitsgraph und OP-401s fachliche Disposition bestaetigter Folgeauftraege sind weiterhin offen. Die Inbox speichert und quittiert den Eingang, uebernimmt den Auftrag aber noch nicht in den Arbeitsgraphen.
 - **Verifikation:** Strikter Doku-Drift-Check und `git diff --check` bestanden; keine Codeaenderung in diesem Eintrag.
+
+## 2026-11-14 — OP-374 abgeschlossen und OP-375 entblockt
+
+- **Abschlussbeleg:** OP-374 wurde mit PR #29 auf `main` gemergt (`955711c`). Die Umsetzung liefert projektbezogenes, idempotentes `Projector.backfill(project)`, filtert Runs ohne belastbare Run-ID und weist Events ohne verifizierte Herkunft getrennt aus; solche Runs zaehlen nicht als verifizierter Erfolg.
+- **Verifikation:** Der OP-374-PR-Quality-Run [43590302361](https://github.com/ghxstfocus/werkstatt/actions/runs/43590302361) fuer `12c5c4d` bestand; der Server meldet auf Merge `955711c` 2.271 Tests bestanden und 5 uebersprungen. Tests decken Backfill-Wiederholung, Projektisolation, leere Run-IDs und unverifizierte Herkunft ab.
+- **Queue:** OP-374 aus den offenen Punkten entfernt. OP-375 bleibt offen, ist aber nicht mehr durch die abgeschlossene OP blockiert.
