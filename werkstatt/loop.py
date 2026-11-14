@@ -353,6 +353,18 @@ def _persist_run_result(
             if record is None:
                 return
             checkpoint = dict(record["checkpoint"])
+            if status == "completed":
+                followups = checkpoint.get("chat_followup_requests", [])
+                unresolved = [
+                    item for item in followups
+                    if isinstance(item, dict)
+                    and item.get("status") in {"received", "planning"}
+                ] if isinstance(followups, list) else []
+                if unresolved:
+                    raise RunInboxPendingError(
+                        "Run kann nicht erfolgreich enden; bestaetigte Chat-"
+                        "Folgeauftraege warten noch auf Plan und Freigabe.",
+                    )
             checkpoint["exit_code"] = exit_code
             version = store.finish_run_checkpoint(
                 project_name,
@@ -387,6 +399,136 @@ def _persist_run_result(
         raise RunInboxPendingError(
             "Run kann nicht terminal werden; offene Inbox-Nachricht(en): "
             + (", ".join(sorted(pending_kinds)) or "unbekannt"),
+        )
+
+
+def _finish_run_after_followups(
+    project_name: str,
+    state: RunState,
+    phase_state: PhaseState,
+    exit_code: int,
+) -> int:
+    """Drain follow-ups that race with finalization before ending the run.
+
+    A follow-up can arrive after the last task checkpoint but before the
+    terminal compare-and-swap. In that case, return to the safe coordinator
+    boundary, reconcile and execute the approved work, then verify/finalize
+    again. If planning or its approval gate cannot complete, leave a durable
+    failed/recoverable RunRecord instead of a dead worker marked running.
+    """
+    store = EventStore()
+    run_id = get_run_id()
+    rc = exit_code
+    while True:
+        check_run_lease(state)
+        try:
+            _persist_run_result(
+                store, project_name, run_id, rc,
+                run_state=state, phase_state=phase_state,
+            )
+            return rc
+        except RunInboxPendingError:
+            if rc != 0:
+                raise
+
+        record = store.get_run_record(project_name, run_id)
+        if record is None:
+            return rc
+        requests = record["checkpoint"].get("chat_followup_requests", [])
+        unresolved = [
+            item for item in requests
+            if isinstance(item, dict)
+            and item.get("status") in {"received", "planning"}
+        ] if isinstance(requests, list) else []
+        if not unresolved:
+            # Do not spin on an inbox message this coordinator cannot handle.
+            # Preserve the existing fail-closed diagnostic for that condition.
+            raise RunInboxPendingError(
+                "Run-Abschluss blockiert; keine verarbeitbare Follow-up-"
+                "Anfrage liegt im Checkpoint.",
+            )
+
+        from werkstatt.run_followups import (
+            FollowupReconciliationError,
+            reconcile_chat_followups,
+        )
+
+        try:
+            changed = reconcile_chat_followups(
+                state, phase_state, store, project_name, run_id,
+            )
+        except FollowupReconciliationError as exc:
+            audit(
+                "loop_failed",
+                {
+                    "reason": "chat_followup_finalization",
+                    "error": str(exc)[:500],
+                    "recoverable": True,
+                    "next_step": (
+                        "Run nach Behebung des Planungs- oder Gate-Problems "
+                        "mit dem gespeicherten Checkpoint fortsetzen."
+                    ),
+                },
+                state.project_dir,
+                project_name,
+                run_id=run_id,
+            )
+            _persist_run_result(
+                store, project_name, run_id, 1,
+                run_state=state, phase_state=phase_state,
+            )
+            return 1
+
+        if not changed:
+            latest = store.get_run_record(project_name, run_id)
+            latest_requests = (
+                latest["checkpoint"].get("chat_followup_requests", [])
+                if latest is not None else []
+            )
+            still_unresolved = [
+                item for item in latest_requests
+                if isinstance(item, dict)
+                and item.get("status") in {"received", "planning"}
+            ] if isinstance(latest_requests, list) else []
+            if still_unresolved:
+                # A timed-out human gate is a resumable wait, not success. The
+                # schema has no waiting status yet, so persist the run as
+                # failed/recoverable and preserve the pending request.
+                audit(
+                    "loop_failed",
+                    {
+                        "reason": "chat_followup_waiting_for_gate",
+                        "proposal_ids": [
+                            item.get("proposal_id") for item in still_unresolved
+                        ],
+                        "recoverable": True,
+                        "next_step": (
+                            "Gate beantworten und den Run aus seinem "
+                            "gespeicherten Checkpoint fortsetzen."
+                        ),
+                    },
+                    state.project_dir,
+                    project_name,
+                    run_id=run_id,
+                )
+                _persist_run_result(
+                    store, project_name, run_id, 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
+            continue
+
+        check_run_lease(state)
+        _rc_task, tasks_ok, tasks = _phase_tasks_loop(state, phase_state)
+        if _rc_task != 0:
+            _persist_run_result(
+                store, project_name, run_id, _rc_task,
+                run_state=state, phase_state=phase_state,
+            )
+            return _rc_task
+        check_run_lease(state)
+        rc = _phase_finalize(
+            state, tasks_ok, tasks, project_name, phase_state,
         )
 
 
@@ -586,12 +728,9 @@ def _run_pipeline_loop_impl(
     # Fix AZ Stufe 8-D: Phase-End-Review + Human-Gate + Verify + PROGRESS + Summary
     check_run_lease(state)
     rc = _phase_finalize(state, tasks_ok, tasks, project_name, phase_state)
-    check_run_lease(state)
-    _persist_run_result(
-        EventStore(), project_name, get_run_id(), rc,
-        run_state=state, phase_state=phase_state,
+    return _finish_run_after_followups(
+        project_name, state, phase_state, rc,
     )
-    return rc
 
 
 def _k13_rc(rc: int, tasks_ok: int) -> int:
@@ -1122,7 +1261,7 @@ def _emit_lifecycle_end(
         except Exception:  # noqa: BLE001
             pass
     try:
-        expire_for_run(run_id, grund=kind)
+        expire_for_run(run_id, grund=kind, project=effektives_projekt)
     except Exception:  # noqa: BLE001
         pass
 

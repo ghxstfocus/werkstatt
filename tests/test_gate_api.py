@@ -27,9 +27,19 @@ def _gate_client(
     }
 
     class _Store:
-        def query(self, run_id: str, *, kind: str | None = None) -> list[dict[str, Any]]:
+        def query(
+            self,
+            run_id: str,
+            *,
+            kind: str | None = None,
+            project: str | None = None,
+        ) -> list[dict[str, Any]]:
             assert run_id == "demo-run"
-            return [gate_open] if kind == "gate_open" else []
+            return (
+                [gate_open]
+                if kind == "gate_open" and project == "werkstatt"
+                else []
+            )
 
     monkeypatch.setattr(app_modul, "EventStore", _Store)
     audit_events: list[tuple[str, dict[str, Any]]] = []

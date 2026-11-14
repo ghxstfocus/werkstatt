@@ -187,16 +187,16 @@ den Spawn-Fehlerpfad.
    unveraenderlichen Startkontext und Checkpoint. Registry, Prozessstatus,
    Freigabedetails und naechste Aktion sind aber noch nicht vollstaendig in
    einen atomar abgeglichenen Run-Vertrag migriert.
-2. **Inbox ist nur teilweise integriert:** `job_notice` wird persistiert
-   und checkpoint-sicher konsumiert. Bestaetigte Chat-Folgeauftraege werden
-   ebenfalls dauerhaft der aktiven Run-Inbox zugeordnet. Explizite OPs
-   transportieren dabei ihren gespeicherten Vorschautext; fehlt der Inhalt,
-   wird die Annahme fail-closed abgelehnt. Die Aufgaben werden am Checkpoint
-   aber noch nicht fachlich disponiert oder in den Arbeitsgraphen uebernommen.
-   Der Checkpoint-Consumer weist leere/whitespace-only Inbox-Texte jetzt
-   ebenfalls fail-closed ab, bevor sie persistiert oder quittiert werden.
-   Fragen, Control und Gate-Antworten veraendern den Arbeitsgraphen ebenfalls
-   noch nicht.
+2. **Inbox ist teilweise integriert:** `job_notice` und terminale
+   Job-Ergebnisse werden checkpoint-sicher konsumiert. Bestaetigte
+   Schreib-Folgeauftraege werden jetzt am Task- und Abschluss-Checkpoint
+   separat geplant, mit dem bestehenden Graphen validiert und erst nach einem
+   Chat-Plan-Gate aufgenommen. Phasen, Kriterien und Tasks werden mit
+   stabilen IDs im Phase-State gespeichert und nach Recovery wieder geladen.
+   Der Abschluss-Race wird am sicheren Checkpoint erneut disponiert; bei
+   Planungsfehler oder Gate-Timeout bleibt der Auftrag erhalten und der Run
+   wird recoverable beendet. Das deckt noch nicht alle Inbox-Nachrichtentypen,
+   freien Scope-Aenderungen oder unabhaengigen Writer-Worktrees ab.
 3. **Zielorientierter Arbeitsgraph fehlt weiterhin:** Der Planner verwirft
    jetzt strukturell ungueltige Task-DAGs vor dem Plan-Gate und sortiert
    gueltige Abhaengigkeiten stabil. Der Run disponiert Tasks aber weiterhin
@@ -306,17 +306,23 @@ durch einen unverbundenen zweiten Statusspeicher zu verdoppeln.
 
 ### Aktuelle Inbox-Grenze
 
-Der Codepfad bestaetigt die dokumentierte OP-401-Luecke: `chat_followup_request`
-wird in `werkstatt/phases/tasks.py::_persist_run_checkpoint` validiert,
-auditiert und als `received` im RunCheckpoint abgelegt. Die Web-UI bekommt
-eine `loop_followup_checkpointed`-Rueckmeldung. Im Repository gibt es danach
-keinen Consumer, der diese Nachricht als Frage/Diagnose, Steuerung, innerhalb
-des freigegebenen Scopes liegenden Folgeauftrag oder Scope-Aenderung disponiert
-und gegebenenfalls den Task-Graph aktualisiert. Deshalb ist der Checkpoint
-ein dauerhafter Eingangsnachweis, aber noch keine Bearbeitungs- oder
-Abschlussbestaetigung fuer den Folgeauftrag. Diese Grenze muss bei OP-401/
-ADR-0032 erhalten bleiben, bis die Disposition und ihr Ergebnis-Gate umgesetzt
-und getestet sind.
+`chat_followup_request` wird an Task- und Abschluss-Checkpoints aus dem
+Event-Store gelesen. Der Koordinator plant den Folgeauftrag einzeln und
+validiert den kombinierten Task-Graphen, bevor er ein projekt-/run-gebundenes
+Chat-Plan-Gate oeffnet. Nach Freigabe werden Task-Graph, Kriterien und
+Phasenzuordnung idempotent im Phase-State persistiert; Ablehnung behaelt den
+Hauptgraphen unveraendert. Recovery laedt den gespeicherten Graphen und
+verarbeitet denselben Inbox-Eintrag nicht doppelt. Trifft ein bestaetigter
+Folgeauftrag waehrend des terminalen Run-CAS ein, kehrt der Lauf zum sicheren
+Abschluss-Checkpoint zurueck. Planungsfehler und Gate-Timeout erhalten den
+Auftrag fuer Recovery und markieren den Run nicht faelschlich als erfolgreich
+oder dauerhaft `running`.
+
+Die verbleibende Grenze ist die vollstaendige Inbox-Klassifikation: allgemeine
+Fragen, Loop-Steueraktionen, Gate-Antworten und scopeveraendernde Auftraege
+brauchen weiterhin getrennte, typsichere Disposition. Ebenso bleiben
+unabhaengige parallele Schreibauftraege und eigene Writer-Worktrees Teil von
+OP-401/402; die Folgeauftragsintegration schliesst OP-397 nicht ab.
 
 ## Nachtrag — Chatbemerkungen vom Loop-Auftrag trennen (2026-11-14)
 
