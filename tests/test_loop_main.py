@@ -500,7 +500,7 @@ def test_lifecycle_stop_emits_distinct_terminal_event(monkeypatch):
     )
     monkeypatch.setattr(
         gate_module, "expire_for_run",
-        lambda run_id, *, grund: expired.append((run_id, grund)),
+        lambda run_id, *, grund, project: expired.append((run_id, grund)),
     )
 
     loop._emit_lifecycle_end(False, "demo", stopped=True)

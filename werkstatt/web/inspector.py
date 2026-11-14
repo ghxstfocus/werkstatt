@@ -2306,7 +2306,9 @@ def _payload_von(ev: dict[str, Any]) -> dict[str, Any]:
     return dict(ev)
 
 
-def _audit_events(run_id: str | None = None) -> list[dict[str, Any]]:
+def _audit_events(
+    run_id: str | None = None, project: str | None = None,
+) -> list[dict[str, Any]]:
     """Liest die letzten 3 JSONL-Audit-Dateien, optional auf run_id gefiltert."""
     audit_dir = werkstatt_home() / "audit-logs"
     if not audit_dir.exists():
@@ -2341,6 +2343,8 @@ def _audit_events(run_id: str | None = None) -> list[dict[str, Any]]:
                         events.append(obj)
         except OSError:
             continue
+    if project:
+        events = [e for e in events if str(e.get("project", "")) == project]
     if run_id:
         return [e for e in events if str(e.get("run_id", "")) == run_id]
     # Default: letzter Run
@@ -2441,7 +2445,7 @@ def aggregate_gate_context(
 ) -> dict[str, Any]:
     """Alles was der Mensch braucht um ein Gate informiert zu entscheiden."""
     _frische_projektion()
-    events = _audit_events(run_id)
+    events = _audit_events(run_id, projekt)
     letzte_run_id = (
         str(events[-1].get("run_id") or run_id or "")
         if events else (run_id or "")
@@ -2508,13 +2512,17 @@ def aggregate_gate_context(
     if letzte_run_id:
         try:
             es = EventStore()
-            opens = es.query(letzte_run_id, kind="gate_open")
+            opens = es.query(letzte_run_id, kind="gate_open", project=projekt)
             beantwortet = {
                 (e.get("payload") or {}).get("gate_id")
-                for e in es.query(letzte_run_id, kind="gate_answered")
+                for e in es.query(
+                    letzte_run_id, kind="gate_answered", project=projekt,
+                )
             } | {
                 (e.get("payload") or {}).get("gate_id")
-                for e in es.query(letzte_run_id, kind="gate_expired")
+                for e in es.query(
+                    letzte_run_id, kind="gate_expired", project=projekt,
+                )
             }
             for ev in opens:
                 pa = ev.get("payload") or {}
@@ -2536,7 +2544,7 @@ def aggregate_gate_context(
     if offene and letzte_run_id:
         _terminal = {"loop_ended", "loop_failed", "loop_crashed"}
         try:
-            _run_evs = _audit_events(letzte_run_id)
+            _run_evs = _audit_events(letzte_run_id, projekt)
             if any(e.get("kind") in _terminal for e in _run_evs):
                 offene = []
         except Exception:  # noqa: S110

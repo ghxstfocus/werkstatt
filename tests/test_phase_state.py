@@ -45,6 +45,59 @@ def test_init_new_verwirft_ungueltige_criterion_refs(tmp_path):
     assert not ps.exists()
 
 
+def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new("Hauptziel", [{"id": "t1"}], akzeptanzkriterien=["Basis"])
+    added = [{
+        "id": "fu_task1",
+        "name": "Zwischenauftrag",
+        "dependencies": ["t1"],
+        "criterion_refs": ["AC2"],
+        "phase_id": "phase_fu",
+    }]
+
+    assert ps.append_followup_tasks(
+        added,
+        criteria=["Basis", "Folgekriterium"],
+        tests=["pytest -q"],
+        phases=[{"id": "phase_fu", "titel": "Follow-up", "tasks": ["fu_task1"]}],
+        followup_id="proposal-1",
+    ) == ["fu_task1"]
+    assert ps.append_followup_tasks(
+        added,
+        criteria=["Basis", "Folgekriterium"],
+        tests=["pytest -q"],
+        phases=[{"id": "phase_fu", "titel": "Follow-up", "tasks": ["fu_task1"]}],
+        followup_id="proposal-1",
+    ) == ["fu_task1"]
+
+    resumed = PhaseState("testprojekt", base_dir=tmp_path)
+    assert resumed.load()
+    assert [task["id"] for task in resumed.data["tasks"]] == ["t1", "fu_task1"]
+    assert resumed.data["tasks"][1]["source_followup_id"] == "proposal-1"
+    assert resumed.data["akzeptanzkriterien"] == ["Basis", "Folgekriterium"]
+    assert resumed.data["tests"] == ["pytest -q"]
+    assert resumed.data["phasen"] == [
+        {"id": "phase_fu", "titel": "Follow-up", "tasks": ["fu_task1"]},
+    ]
+
+
+def test_append_followup_tasks_rejects_unknown_dependency_without_mutation(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new("Hauptziel", [{"id": "t1"}])
+
+    with pytest.raises(ValueError, match="Abhaengigkeiten"):
+        ps.append_followup_tasks(
+            [{"id": "fu_task1", "dependencies": ["missing"]}],
+            criteria=[],
+            tests=[],
+            phases=[],
+            followup_id="proposal-1",
+        )
+
+    assert [task["id"] for task in ps.data["tasks"]] == ["t1"]
+
+
 def test_resume_findet_naechsten_task(tmp_path):
     ps = PhaseState("testprojekt", base_dir=tmp_path)
     ps.init_new("X", [{"id": "t1"}, {"id": "t2"}, {"id": "t3"}])

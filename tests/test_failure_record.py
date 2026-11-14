@@ -749,7 +749,7 @@ def test_phase_finalize_pauses_at_human_gate_and_resumes_after_green_verify(
         "werkstatt.progress.append", lambda *_args, **_kwargs: None,
     )
 
-    def answer_gate(kind, prompt, options):
+    def answer_gate(kind, prompt, options, **_kwargs):
         gate_calls.append((kind, prompt, options))
         return "j"
 
@@ -818,7 +818,7 @@ def test_recovery_gate_stops_after_failed_verify_without_worktree_change(
 
     monkeypatch.setattr(finalize, "_reflection_loop", unexpected_recovery)
 
-    def answer_gate(kind, prompt, options):
+    def answer_gate(kind, prompt, options, **_kwargs):
         gate_calls.append((kind, prompt, options))
         return "j"
 

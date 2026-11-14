@@ -201,6 +201,144 @@ class PhaseState:
         }
         self.save()
 
+    def append_followup_tasks(
+        self,
+        tasks: list[dict[str, Any]],
+        *,
+        criteria: list[str],
+        tests: list[Any],
+        phases: list[dict[str, Any]],
+        followup_id: str,
+    ) -> list[str]:
+        """Append an approved chat follow-up to the persisted task graph.
+
+        The stable follow-up ID makes replay after a crash idempotent. The
+        caller must validate the complete candidate graph and obtain its plan
+        approval before calling this method.
+        """
+        if not isinstance(followup_id, str) or not followup_id.strip():
+            raise ValueError("followup_id muss nichtleer sein")
+        existing_tasks = self.data.get("tasks", [])
+        if not isinstance(existing_tasks, list):
+            raise TypeError("Phase-State hat keine gueltige Task-Liste")
+        already_added = [
+            task for task in existing_tasks
+            if isinstance(task, dict)
+            and task.get("source_followup_id") == followup_id
+        ]
+        if already_added:
+            return [str(task["id"]) for task in already_added]
+
+        if not isinstance(tasks, list) or any(
+            not isinstance(task, dict) for task in tasks
+        ):
+            raise ValueError("Follow-up-Tasks muessen eine Liste von Objekten sein")
+        if not isinstance(criteria, list) or any(
+            not isinstance(criterion, str) or not criterion.strip()
+            for criterion in criteria
+        ):
+            raise ValueError("Follow-up-Kriterien muessen nichtleere Texte sein")
+        if not isinstance(tests, list):
+            raise TypeError("Follow-up-Tests muessen eine Liste sein")
+        if not isinstance(phases, list) or any(
+            not isinstance(phase, dict) for phase in phases
+        ):
+            raise ValueError("Follow-up-Phasen muessen eine Liste von Objekten sein")
+
+        existing_ids = {
+            task.get("id") for task in existing_tasks
+            if isinstance(task, dict) and isinstance(task.get("id"), str)
+        }
+        incoming_ids = [task.get("id") for task in tasks]
+        if (
+            any(not isinstance(task_id, str) or not task_id.strip()
+                for task_id in incoming_ids)
+            or len(set(incoming_ids)) != len(incoming_ids)
+            or existing_ids.intersection(incoming_ids)
+        ):
+            raise ValueError("Follow-up-Tasks brauchen eindeutige IDs")
+
+        all_ids = existing_ids | set(incoming_ids)
+        current_phases = self.data.get("phasen", [])
+        if not isinstance(current_phases, list):
+            raise TypeError("Phase-State hat ungueltige Phasen")
+        existing_phase_ids = {
+            phase.get("id") for phase in current_phases
+            if isinstance(phase, dict) and isinstance(phase.get("id"), str)
+        }
+        incoming_phase_ids = [phase.get("id") for phase in phases]
+        if (
+            any(not isinstance(phase_id, str) or not phase_id.strip()
+                for phase_id in incoming_phase_ids)
+            or len(set(incoming_phase_ids)) != len(incoming_phase_ids)
+            or existing_phase_ids.intersection(incoming_phase_ids)
+        ):
+            raise ValueError("Follow-up-Phasen brauchen eindeutige IDs")
+        all_phase_ids = existing_phase_ids | set(incoming_phase_ids)
+        normalized: list[dict[str, Any]] = []
+        for task in tasks:
+            dependencies = task.get("dependencies") or []
+            refs = task.get("criterion_refs") or []
+            phase_id = task.get("phase_id")
+            if (
+                not isinstance(dependencies, list)
+                or any(dep not in all_ids for dep in dependencies)
+                or (phase_id is not None and phase_id not in all_phase_ids)
+                or not isinstance(refs, list)
+                or any(
+                    not isinstance(ref, str)
+                    or not ref.startswith("AC")
+                    or not ref[2:].isdigit()
+                    or int(ref[2:]) < 1
+                    or int(ref[2:]) > len(criteria)
+                    for ref in refs
+                )
+            ):
+                raise ValueError("Follow-up-Task hat ungueltige Abhaengigkeiten/Kriterien")
+            normalized.append({
+                "id": task["id"],
+                "name": task.get("name", ""),
+                "description": task.get("description", ""),
+                "action": task.get("action"),
+                "phase_id": task.get("phase_id"),
+                "parent_id": task.get("parent_id"),
+                "task_files": task.get("task_files", []),
+                "dependencies": dependencies,
+                "criterion_refs": refs,
+                "status": "pending",
+                "decision": None,
+                "failure": None,
+                "verdict": "pending",
+                "source_followup_id": followup_id,
+            })
+
+        current_criteria = self.data.get("akzeptanzkriterien", [])
+        current_tests = self.data.get("tests", [])
+        if not isinstance(current_criteria, list):
+            raise TypeError("Phase-State hat ungueltige Akzeptanzkriterien")
+        if not isinstance(current_tests, list):
+            raise TypeError("Phase-State hat ungueltige Tests")
+        for phase in phases:
+            phase_tasks = phase.get("tasks") or []
+            parent_id = phase.get("parent_id")
+            if (
+                not isinstance(phase_tasks, list)
+                or any(task_id not in all_ids for task_id in phase_tasks)
+                or (parent_id is not None and parent_id not in all_phase_ids)
+            ):
+                raise ValueError("Follow-up-Phase hat ungueltige Tasks/Elternphase")
+        self.data["tasks"] = existing_tasks + normalized
+        self.data["akzeptanzkriterien"] = list(criteria)
+        self.data["tests"] = current_tests + list(tests)
+        self.data["phasen"] = current_phases + phases
+        self.data["criteria_tracking"] = bool(
+            self.data.get("criteria_tracking")
+            or any(task.get("criterion_refs") for task in normalized)
+        )
+        self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+        self.save()
+        return [str(task["id"]) for task in normalized]
+
     # --- Resume ---
 
     def get_next_task(self) -> dict | None:

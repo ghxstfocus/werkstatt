@@ -166,6 +166,7 @@ def _phase_end_recovery_pause(state: RunState, failure_record: dict) -> bool:
                 "phase_end_verify",
                 prompt,
                 "jne",
+                project_name=state.project_name,
             ).strip().lower()
         except Exception as exc:
             audit(

@@ -63,6 +63,7 @@ def _phase_review_gate(state: RunState) -> int:
         try:
             antwort = _gates_mod._frage_gate(
                 "phase_review", _prompt, "jne",
+                project_name=state.project_name,
             ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             audit_safe("loop_human_gate_eof",
