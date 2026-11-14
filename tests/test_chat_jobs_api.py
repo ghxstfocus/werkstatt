@@ -21,7 +21,7 @@ def client_and_base(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[An
     return TestClient(app_modul.app), tmp_path
 
 
-def test_chat_job_create_acknowledges_without_waiting_for_worker(
+def test_chat_question_is_independent_from_active_loop(
     client_and_base: tuple[Any, Path],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -29,32 +29,23 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
     from werkstatt import chat_jobs
     from werkstatt.web import app as app_modul
 
-    class _Registry:
-        def read(self, project: str) -> dict[str, str]:
-            assert project == "demo"
-            return {"run_id": "run-active", "state": "paused"}
+    def _unexpected_registry_read(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("Normale Chatfragen duerfen den Run nicht binden")
 
-    monkeypatch.setattr(app_modul, "_loop_registry", lambda: _Registry())
-    from werkstatt import event_store
-
-    class _EventStore:
-        def get_run_record(self, project: str, run_id: str) -> dict[str, str]:
-            assert (project, run_id) == ("demo", "run-active")
-            return {"status": "running"}
-
-    monkeypatch.setattr(event_store, "EventStore", _EventStore)
+    monkeypatch.setattr(app_modul, "_loop_registry", _unexpected_registry_read)
 
     def _accepted(*args: Any, **kwargs: Any) -> dict[str, Any]:
         assert kwargs["db_path"].name == "demo.db"
         assert isinstance(kwargs["context_seq"], int)
-        assert kwargs["run_id"] == "run-active"
+        assert kwargs["run_id"] is None
+        assert kwargs["snapshot_on_accept"] is True
         assert args[0] == "demo"
         assert "project" not in kwargs
         return {
             "job": {
                 "job_id": "a" * 32,
                 "state": "queued",
-                "run_id": kwargs["run_id"],
+                "run_id": None,
             },
             "created": True,
         }
@@ -73,7 +64,7 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
     assert response.status_code == 202
     assert response.json() == {
         "job_id": "a" * 32, "state": "queued", "created": True,
-        "run_id": "run-active",
+        "run_id": None,
     }
 
 

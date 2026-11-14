@@ -1719,25 +1719,6 @@ def create_app() -> FastAPI:
         try:
             sync_completed_job_turns(projekt, sid, db_path=db_path)
             context_seq = ChatSession(projekt, sid).max_seq()
-            loop_record = _loop_registry().read(projekt)
-            run_id = None
-            if (
-                loop_record is not None
-                and loop_record["state"] in ("starting", "running", "paused")
-            ):
-                candidate_run_id = str(loop_record["run_id"])
-                # The registry can briefly lag behind a terminal RunRecord.
-                # Only bind the chat job to the loop inbox when durable state
-                # still accepts messages; otherwise it remains a standalone
-                # chat job instead of being rejected during outbox replay.
-                from werkstatt.event_store import EventStore
-
-                run_record = EventStore().get_run_record(projekt, candidate_run_id)
-                if (
-                    run_record is not None
-                    and run_record.get("status") in {"starting", "running"}
-                ):
-                    run_id = candidate_run_id
             accepted = enqueue_chat_job(
                 projekt,
                 (_PROJECTS_BASE / projekt).resolve(),
@@ -1747,7 +1728,10 @@ def create_app() -> FastAPI:
                 idempotency_key,
                 db_path=db_path,
                 context_seq=context_seq,
-                run_id=run_id,
+                # Chat questions/comments must not enter the writer's inbox:
+                # they can outlive a run and must never stop or rebind it.
+                run_id=None,
+                snapshot_on_accept=True,
             )
         except IdempotencyConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc

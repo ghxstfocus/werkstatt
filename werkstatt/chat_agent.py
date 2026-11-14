@@ -61,6 +61,51 @@ def _explicit_op_execution_request(message: str) -> str | None:
     return op_ids[0] if len(op_ids) == 1 else None
 
 
+_LOOP_ACTION_INTENT = {
+    "start": re.compile(
+        r"\b(?:starte|starten|start|beginne|beginnen|bearbeite|bearbeiten|"
+        r"umsetzen|implementiere|implementieren|fixe|fixen|repariere|"
+        r"reparieren|erledige|erledigen)\b",
+        re.IGNORECASE,
+    ),
+    "pause": re.compile(r"\b(?:pausiere|pausieren|pause)\b", re.IGNORECASE),
+    "resume": re.compile(
+        r"\b(?:fortsetzen|fortsetze|weiterlaufen|fortfuehren|fortfuehre)\b",
+        re.IGNORECASE,
+    ),
+    "stop": re.compile(r"\b(?:stoppe|stoppen|abbrechen|abbruch)\b", re.IGNORECASE),
+}
+
+
+def _explicit_loop_action_intent(message: str, action: str) -> bool:
+    """Require an action verb in the current user turn before proposing control."""
+    pattern = _LOOP_ACTION_INTENT.get(action.casefold())
+    if pattern is None or pattern.search(message) is None:
+        return False
+    if "?" in message and not re.search(r"\bbitte\b", message, re.IGNORECASE):
+        return False
+    if action.casefold() == "start" and re.search(
+        r"\b(?:kann ich|soll ich|was sagst du|was meinst du)\b[^?]*\?",
+        message,
+        re.IGNORECASE,
+    ):
+        return False
+    if re.search(
+        r"\b(?:nicht|kein(?:e|en|er|es)?)\b.{0,40}\b"
+        r"(?:starte|starten|beginne|beginnen|bearbeite|bearbeiten|"
+        r"umsetzen|implementiere|implementieren|fixe|fixen|stoppe|"
+        r"stoppen|pausiere|pausieren|fortsetzen)\b|"
+        r"\b(?:starte|starten|beginne|beginnen|bearbeite|bearbeiten|"
+        r"umsetzen|implementiere|implementieren|fixe|fixen|stoppe|"
+        r"stoppen|pausiere|pausieren|fortsetzen)\b.{0,40}\b"
+        r"(?:nicht|kein(?:e|en|er|es)?)\b",
+        message,
+        re.IGNORECASE,
+    ):
+        return False
+    return True
+
+
 def _explicit_op_ids(message: str) -> tuple[str, ...]:
     """Return distinct OP references in an execution request, in text order."""
     return tuple(dict.fromkeys(
@@ -856,7 +901,18 @@ def chat_loop(
                 on_tool_call(name, args)
             requested_action = str(args.get("action", "")).casefold()
             requested_tool_op = str(args.get("op_id", "")).upper()
-            if (
+            if name == "request_loop_action" and not _explicit_loop_action_intent(
+                message, requested_action,
+            ):
+                ergebnis = json.dumps({
+                    "zustand": "not_requested",
+                    "detail": (
+                        "Die aktuelle Nutzernachricht enthaelt keinen expliziten "
+                        "Steuerungs- oder Umsetzungsauftrag. Es wurde kein "
+                        "Loop-Vorschlag angelegt."
+                    ),
+                }, ensure_ascii=False)
+            elif (
                 requested_op
                 and name == "request_loop_action"
                 and requested_action == "start"

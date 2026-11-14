@@ -71,8 +71,10 @@ class ChatJobStore:
                 " context_seq INTEGER, run_id TEXT, project TEXT,"
                 " run_inbox_enqueued INTEGER NOT NULL DEFAULT 0,"
                 " run_result_enqueued INTEGER NOT NULL DEFAULT 0,"
+                " snapshot_required INTEGER NOT NULL DEFAULT 0,"
                 " run_snapshot_source TEXT,run_snapshot_path TEXT,"
                 " run_snapshot_head TEXT,run_snapshot_fingerprint TEXT,"
+                " snapshot_id TEXT,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -113,6 +115,11 @@ class ChatJobStore:
                     "ALTER TABLE jobs ADD COLUMN run_result_enqueued INTEGER "
                     "NOT NULL DEFAULT 0"
                 )
+            if "snapshot_required" not in columns:
+                conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN snapshot_required INTEGER "
+                    "NOT NULL DEFAULT 0",
+                )
             for column in (
                 "run_snapshot_source",
                 "run_snapshot_path",
@@ -121,6 +128,8 @@ class ChatJobStore:
             ):
                 if column not in columns:
                     conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
+            if "snapshot_id" not in columns:
+                conn.execute("ALTER TABLE jobs ADD COLUMN snapshot_id TEXT")
             event_columns = {
                 str(row["name"])
                 for row in conn.execute("PRAGMA table_info(job_events)")
@@ -140,7 +149,7 @@ class ChatJobStore:
     def create(
         self, session_id: str, message: str, mode: str, idempotency_key: str,
         *, context_seq: int | None = None, run_id: str | None = None,
-        project: str | None = None,
+        project: str | None = None, snapshot_required: bool = False,
     ) -> tuple[dict[str, Any], bool]:
         """Atomar anlegen; wiederholter Key liefert den bestehenden Job."""
         now = _now()
@@ -161,12 +170,12 @@ class ChatJobStore:
             job_id = uuid.uuid4().hex
             conn.execute(
                 "INSERT INTO jobs(job_id,session_id,idempotency_key,message,"
-                "mode,state,created_at,updated_at,context_seq,run_id,project) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "mode,state,created_at,updated_at,context_seq,run_id,project,"
+                "snapshot_required) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (job_id, session_id, idempotency_key, message, mode,
                  "queued", now, now,
                  None if context_seq is None else max(0, context_seq),
-                 run_id, project),
+                 run_id, project, int(snapshot_required)),
             )
             conn.execute(
                 "INSERT INTO job_events(job_id,kind,payload,ts) VALUES(?,?,?,?)",
@@ -332,12 +341,70 @@ class ChatJobStore:
                 return False
             conn.execute(
                 "UPDATE jobs SET run_snapshot_source=?,run_snapshot_path=?,"
-                "run_snapshot_head=?,run_snapshot_fingerprint=?,updated_at=? "
+                "run_snapshot_head=?,run_snapshot_fingerprint=?,snapshot_id=run_id,"
+                "snapshot_required=0,updated_at=? "
                 "WHERE job_id=? AND state='queued'",
                 (*values, _now(), job_id),
             )
             conn.commit()
             return True
+
+    def set_standalone_snapshot(
+        self,
+        job_id: str,
+        snapshot_id: str,
+        source: Path,
+        snapshot_path: Path,
+        head: str,
+        fingerprint: str,
+    ) -> bool:
+        """Attach an immutable source snapshot to a standalone chat job."""
+        values = (
+            snapshot_id,
+            str(Path(source).resolve()),
+            str(Path(snapshot_path).resolve()),
+            head,
+            fingerprint,
+        )
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT state,run_id,snapshot_id,run_snapshot_source,"
+                "run_snapshot_path,run_snapshot_head,run_snapshot_fingerprint "
+                "FROM jobs WHERE job_id=?",
+                (job_id,),
+            ).fetchone()
+            if row is None or row["state"] != "queued" or row["run_id"]:
+                conn.rollback()
+                return False
+            previous = tuple(row[key] for key in (
+                "snapshot_id", "run_snapshot_source", "run_snapshot_path",
+                "run_snapshot_head", "run_snapshot_fingerprint",
+            ))
+            if any(value is not None for value in previous) and previous != values:
+                conn.rollback()
+                return False
+            conn.execute(
+                "UPDATE jobs SET snapshot_id=?,run_snapshot_source=?,"
+                "run_snapshot_path=?,run_snapshot_head=?,"
+                "run_snapshot_fingerprint=?,snapshot_required=0,updated_at=? "
+                "WHERE job_id=? AND state='queued'",
+                (*values, _now(), job_id),
+            )
+            conn.commit()
+            return True
+
+    def require_standalone_snapshot(self, job_id: str) -> bool:
+        """Fence a queued standalone job from dispatch until its tree is pinned."""
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                "UPDATE jobs SET snapshot_required=1,updated_at=? "
+                "WHERE job_id=? AND state='queued' AND run_id IS NULL "
+                "AND run_snapshot_path IS NULL",
+                (_now(), job_id),
+            )
+            conn.commit()
+            return cur.rowcount == 1
 
     def fail_queued(
         self,
@@ -761,25 +828,27 @@ def _run_job(
     heartbeat_thread.start()
     try:
         chat_project_dir = Path(project_dir)
-        if job.get("run_id"):
+        if job.get("run_id") or job.get("run_snapshot_path"):
             from werkstatt.run_snapshot import validate_project_snapshot
 
             source_value = job.get("run_snapshot_source")
             snapshot_value = job.get("run_snapshot_path")
+            snapshot_id = job.get("snapshot_id") or job.get("run_id")
             if (
                 not source_value
                 or not snapshot_value
+                or not snapshot_id
                 or not job.get("run_snapshot_head")
                 or not job.get("run_snapshot_fingerprint")
             ):
                 raise RuntimeError(
-                    "Run-gebundener Chatjob hat keinen Checkpoint-Snapshot.",
+                    "Chatjob hat keinen vollstaendigen Quell-Snapshot.",
                 )
             snapshot = validate_project_snapshot(
                 Path(snapshot_value),
                 Path(source_value),
                 project,
-                str(job["run_id"]),
+                str(snapshot_id),
                 job_id,
             )
             if (
@@ -826,14 +895,15 @@ def _run_job(
                 store.append_event(
                     job_id, "branch_cleanup_failed", {"error": str(exc)},
                 )
-        if job.get("run_id") and job.get("run_snapshot_path"):
+        snapshot_id = job.get("snapshot_id") or job.get("run_id")
+        if snapshot_id and job.get("run_snapshot_path"):
             try:
                 from werkstatt.run_snapshot import remove_project_snapshot
 
                 remove_project_snapshot(
                     Path(job["run_snapshot_path"]),
                     project,
-                    str(job["run_id"]),
+                    str(snapshot_id),
                     job_id,
                 )
             except (OSError, RuntimeError, ValueError) as exc:
@@ -852,6 +922,8 @@ def _dispatch_pending(
     store = ChatJobStore(db_path)
     store.recover_abandoned_jobs()
     for job in store.queued():
+        if job.get("snapshot_required") and not job.get("run_snapshot_path"):
+            continue
         if job.get("run_id"):
             if (
                 not job.get("run_inbox_enqueued")
@@ -1131,8 +1203,9 @@ def enqueue_chat_job(
     db_path: Path | None = None,
     context_seq: int | None = None,
     run_id: str | None = None,
+    snapshot_on_accept: bool = False,
 ) -> dict[str, Any]:
-    """Persists a job with a fixed context watermark and reconciles its inbox."""
+    """Persist a job, optionally pinning standalone work to an immutable tree."""
     path = Path(db_path) if db_path else _db_path(project)
     store = ChatJobStore(path)
     job, created = store.create(
@@ -1140,7 +1213,53 @@ def enqueue_chat_job(
         context_seq=context_seq,
         run_id=run_id,
         project=project,
+        snapshot_required=snapshot_on_accept and run_id is None,
     )
-    reconcile_run_inbox(project, db_path=path)
+    if snapshot_on_accept and run_id is None and job.get("state") == "queued":
+        store.require_standalone_snapshot(str(job["job_id"]))
+        job = store.get(str(job["job_id"])) or job
+    if (
+        snapshot_on_accept
+        and run_id is None
+        and job.get("state") == "queued"
+        and job.get("snapshot_required")
+        and not job.get("run_snapshot_path")
+    ):
+        snapshot_id = f"chat-{job['job_id']}"
+        snapshot_path: Path | None = None
+        try:
+            from werkstatt.run_snapshot import create_project_snapshot
+
+            snapshot = create_project_snapshot(
+                Path(project_dir), project, snapshot_id, str(job["job_id"]),
+            )
+            snapshot_path = snapshot.path
+            if not store.set_standalone_snapshot(
+                str(job["job_id"]), snapshot_id, Path(project_dir),
+                snapshot.path, snapshot.head, snapshot.fingerprint,
+            ):
+                raise RuntimeError("Chat-Snapshot konnte nicht gebunden werden.")
+            job = store.get(str(job["job_id"])) or job
+        except (OSError, RuntimeError, ValueError) as exc:
+            if snapshot_path is not None:
+                try:
+                    from werkstatt.run_snapshot import remove_project_snapshot
+
+                    remove_project_snapshot(
+                        snapshot_path, project, snapshot_id, str(job["job_id"]),
+                    )
+                except (OSError, RuntimeError, ValueError) as cleanup_error:
+                    store.append_event(
+                        str(job["job_id"]), "chat_snapshot_cleanup_failed",
+                        {"error": str(cleanup_error)},
+                    )
+            store.fail_queued(
+                str(job["job_id"]),
+                f"Projekt-Snapshot konnte nicht erstellt werden: {exc}",
+                reason="chat_snapshot_failed",
+            )
+            job = store.get(str(job["job_id"])) or job
+    if run_id is not None:
+        reconcile_run_inbox(project, db_path=path)
     _dispatch_pending(path, project, Path(project_dir))
     return {"job": job, "created": created}

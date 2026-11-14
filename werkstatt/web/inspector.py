@@ -740,7 +740,7 @@ def _run_aktiv(es: EventStore, run_id: str, schwelle_s: int = 120) -> bool:
 
 
 _TL_LABELS: dict[str, str] = {
-    "chat_job_queued": "Chat-Auftrag angenommen",
+    "chat_job_queued": "Chat-Antwort eingeplant",
     "chat_job_started": "Chat-Pruefung gestartet",
     "chat_job_chunk": "Chat-Antwort",
     "chat_job_tool_call": "Chat-Tool gestartet",

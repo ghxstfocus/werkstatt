@@ -158,7 +158,7 @@
   }
 
   var EVENT_TITEL = {
-    chat_job_queued: "Chat-Auftrag angenommen",
+    chat_job_queued: "Chat-Antwort eingeplant",
     chat_job_started: "Chat-Pruefung gestartet",
     chat_job_chunk: "Chat-Antwort",
     chat_job_tool_call: "Chat-Tool gestartet",
