@@ -123,6 +123,19 @@ def _format_scout_auftrag(auftrag: dict, max_prosa: int = 3000) -> str:
         teile.append("## Risiken (vom Scout)")
         for r in risiken[:10]:
             teile.append(f"- {str(r)[:200]}")
+    api_widersprueche = auftrag.get("api_widersprueche") or []
+    if isinstance(api_widersprueche, list) and api_widersprueche:
+        import json
+
+        teile.extend([
+            "",
+            "## Deterministischer API-Abgleich (Code-Index ist massgeblich)",
+            (
+                "Scout-API-Aussagen mit einem belegten Widerspruch; "
+                "nicht als bestehende Schnittstelle planen:"
+            ),
+            json.dumps(api_widersprueche[:10], ensure_ascii=False),
+        ])
     bereits = auftrag.get("bereits_erfuellt")
     if bereits:
         teile.append("")
