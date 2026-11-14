@@ -2230,9 +2230,12 @@ def aggregate_overview() -> dict[str, Any]:
         verteilung = _run_verteilung_30d(es, name)
         spark = _sparkline_30d(es, name)
         runs_7d_total = _runs_7d(es, name)
+        bekannte_runs = sum(
+            verteilung[k] for k in ("erfolg", "fehlgeschlagen", "abgebrochen")
+        )
         quote = (
-            round(verteilung["erfolg"] / verteilung["gesamt"], 2)
-            if verteilung["gesamt"] else None
+            round(verteilung["erfolg"] / bekannte_runs, 2)
+            if bekannte_runs else None
         )
 
         status_md = p / "docs" / "STATUS.md"

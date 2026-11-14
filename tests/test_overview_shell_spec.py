@@ -74,7 +74,11 @@ def test_projektstatus_und_run_outcomes_sind_semantisch_ausgezeichnet():
     assert ".overview-donut-aborted" in css
     assert ".overview-donut-unverified" in css
     assert ".overview-project-bar .unverified" in css
+    assert ".overview-project-success .unverified" in css
     assert '"Herkunft ungeklärt"' in js
+    assert '"Historie unvollständig"' in js
+    assert '" · unvollständig"' in js
+    assert '["unverified",results.unverified]' in js
 
 
 def test_starting_state_blockiert_doppelte_startbuttons():

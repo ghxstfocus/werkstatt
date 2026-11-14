@@ -3222,6 +3222,7 @@ body[data-mode="control"] .lf-step-detail {
 .overview-project-success .success { background: var(--sem-ok); }
 .overview-project-success .failed { background: var(--sem-error); }
 .overview-project-success .aborted { background: var(--sem-warn); }
+.overview-project-success .unverified { background: var(--text-muted); }
 .overview-project-last { color: var(--text-muted); font-size: 11px; }
 .overview-empty { grid-column: 1 / -1; padding: 28px; border: 1px dashed var(--border); border-radius: 12px; color: var(--text-dim); text-align: center; }
 @media (max-width: 720px) {

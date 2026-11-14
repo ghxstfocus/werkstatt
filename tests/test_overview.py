@@ -160,6 +160,31 @@ def test_aggregate_overview_baut_project_cards_und_weekly_top3(
     assert all(p["ops_offen"] == 1 for p in result["projekte"])
 
 
+def test_unverifizierte_runs_markieren_quote_als_unvollstaendig(
+    tmp_path: Path, monkeypatch,
+):
+    es = _events_db(tmp_path / "events.db", [
+        ("known", "loop_erfolg", "alpha", {}, 0, 1),
+        ("legacy", "loop_ended", "alpha", {}, 0, 0),
+    ])
+    project = tmp_path / "alpha"
+    (project / "docs").mkdir(parents=True)
+    (project / "docs" / "STATUS.md").write_text("## Open\n", encoding="utf-8")
+    monkeypatch.setattr(inspector, "EventStore", lambda: es)
+    monkeypatch.setattr(inspector, "_scan_projekte", lambda: [project])
+    monkeypatch.setattr(inspector, "parse_ops", lambda _p: [])
+    monkeypatch.setattr(
+        inspector, "aggregate_ambient",
+        lambda _n: {"loop_status": "idle", "last_run": None},
+    )
+
+    result = inspector.aggregate_overview()["projekte"][0]
+
+    assert result["erfolgsquote_30d"] == 1.0
+    assert result["ergebnisse_30d"]["unverified"] == 1
+    assert result["ergebnisse_30d"]["gesamt"] == 2
+
+
 def test_overview_ohne_projekte_hat_leere_metriken(
     tmp_path: Path, monkeypatch,
 ):

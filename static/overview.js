@@ -196,14 +196,21 @@
       card.appendChild(sparkline(p.runs_30d));
       var kpis = node("div", "overview-project-kpis");
       kpis.appendChild(node("span", "", fmt(p.runs_30d_total) + " Runs"));
-      kpis.appendChild(node("span", "", Math.round(Number(p.erfolgsquote_30d || 0) * 100) + "% Erfolg"));
+      var resultData = p.ergebnisse_30d || {};
+      var unknownRuns = Number(resultData.unverified || 0);
+      var quoteLabel = p.erfolgsquote_30d === null
+        ? (unknownRuns ? "Historie unvollständig" : "Noch keine Quote")
+        : Math.round(Number(p.erfolgsquote_30d) * 100) + "% Erfolg"
+          + (unknownRuns ? " · unvollständig" : "");
+      kpis.appendChild(node("span", "", quoteLabel));
       kpis.appendChild(node("span", "", fmt(p.ops_offen) + " offene OPs"));
       card.appendChild(kpis);
       var results = p.ergebnisse_30d || {};
       var resultTotal = Number(results.gesamt || 0);
       if (resultTotal) {
         var bar = node("span", "overview-project-success");
-        [["success",results.erfolg],["failed",results.fehlgeschlagen],["aborted",results.abgebrochen]].forEach(function (part) {
+        [["success",results.erfolg],["failed",results.fehlgeschlagen],
+          ["aborted",results.abgebrochen],["unverified",results.unverified]].forEach(function (part) {
           var seg = node("span", part[0]);
           seg.style.width = (Number(part[1] || 0) * 100 / resultTotal) + "%";
           bar.appendChild(seg);
