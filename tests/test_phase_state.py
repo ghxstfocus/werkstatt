@@ -53,18 +53,21 @@ def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
         "name": "Zwischenauftrag",
         "dependencies": ["t1"],
         "criterion_refs": ["AC2"],
+        "phase_id": "phase_fu",
     }]
 
     assert ps.append_followup_tasks(
         added,
         criteria=["Basis", "Folgekriterium"],
         tests=["pytest -q"],
+        phases=[{"id": "phase_fu", "titel": "Follow-up", "tasks": ["fu_task1"]}],
         followup_id="proposal-1",
     ) == ["fu_task1"]
     assert ps.append_followup_tasks(
         added,
         criteria=["Basis", "Folgekriterium"],
         tests=["pytest -q"],
+        phases=[{"id": "phase_fu", "titel": "Follow-up", "tasks": ["fu_task1"]}],
         followup_id="proposal-1",
     ) == ["fu_task1"]
 
@@ -74,6 +77,9 @@ def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
     assert resumed.data["tasks"][1]["source_followup_id"] == "proposal-1"
     assert resumed.data["akzeptanzkriterien"] == ["Basis", "Folgekriterium"]
     assert resumed.data["tests"] == ["pytest -q"]
+    assert resumed.data["phasen"] == [
+        {"id": "phase_fu", "titel": "Follow-up", "tasks": ["fu_task1"]},
+    ]
 
 
 def test_append_followup_tasks_rejects_unknown_dependency_without_mutation(tmp_path):
@@ -85,6 +91,7 @@ def test_append_followup_tasks_rejects_unknown_dependency_without_mutation(tmp_p
             [{"id": "fu_task1", "dependencies": ["missing"]}],
             criteria=[],
             tests=[],
+            phases=[],
             followup_id="proposal-1",
         )
 

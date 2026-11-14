@@ -70,7 +70,7 @@ def signal_open(
         "optionen": optionen,
         "typ": typ,
         "run_id": run_id,
-    }, _Path("."), project)
+    }, _Path("."), project, run_id=run_id)
     _flush_projection()
 
 

@@ -120,9 +120,13 @@ def test_reconcile_approved_followup_appends_once_and_reports_chat(tmp_path, mon
     assert state.akzeptanzkriterien == [
         "Hauptkriterium", "Dokumentationstest ist vorhanden",
     ]
+    assert phase.data["phasen"] == state.phasen
     assert dispositions == [("applied", ["fu_22e971ef18_t1"])]
 
     # A replay sees the durable applied status and does not invoke planning again.
+    state.tasks = [{"id": "t1", "name": "Haupttask"}]
+    state.akzeptanzkriterien = ["Hauptkriterium"]
+    state.phasen = []
     monkeypatch.setattr(
         planner, "run_planner",
         lambda _state: (_ for _ in ()).throw(AssertionError("replanned")),
@@ -131,6 +135,13 @@ def test_reconcile_approved_followup_appends_once_and_reports_chat(tmp_path, mon
         state, phase, store, "demo", "run-1",
     ) is False
     assert len(phase.data["tasks"]) == 2
+    assert [task["id"] for task in state.tasks] == [
+        "t1", "fu_22e971ef18_t1",
+    ]
+    assert state.akzeptanzkriterien == [
+        "Hauptkriterium", "Dokumentationstest ist vorhanden",
+    ]
+    assert state.phasen == phase.data["phasen"]
     assert dispositions[-1][0] == "applied"
 
 

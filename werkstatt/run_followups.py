@@ -65,7 +65,7 @@ def _extend_candidate(
     current: RunState,
     addition: RunState,
     proposal_id: str,
-) -> tuple[RunState, list[dict[str, Any]], list[str], list[Any]]:
+) -> tuple[RunState, list[dict[str, Any]], list[str], list[Any], list[dict[str, Any]]]:
     existing_criteria = list(current.akzeptanzkriterien or [])
     added_criteria = list(addition.akzeptanzkriterien or [])
     combined_criteria = existing_criteria + added_criteria
@@ -135,7 +135,13 @@ def _extend_candidate(
             getattr(addition, "architect_prosa", ""),
         ) if isinstance(part, str) and part.strip()
     )
-    return candidate, new_tasks, combined_criteria, list(addition.tests or [])
+    return (
+        candidate,
+        new_tasks,
+        combined_criteria,
+        list(addition.tests or []),
+        new_phases,
+    )
 
 
 def reconcile_chat_followups(
@@ -156,6 +162,21 @@ def reconcile_chat_followups(
     requests = record["checkpoint"].get("chat_followup_requests", [])
     if not isinstance(requests, list):
         raise FollowupReconciliationError("Follow-up-Ledger ist ungueltig")
+
+    # The durable phase file is authoritative on resume, including the crash
+    # window after PhaseState.save() but before the checkpoint is marked applied.
+    phase_data = phase_state.data
+    if isinstance(phase_data.get("tasks"), list):
+        state.tasks = [
+            dict(task) for task in phase_data["tasks"]
+            if isinstance(task, dict)
+        ]
+    if isinstance(phase_data.get("tests"), list):
+        state.tests = list(phase_data["tests"])
+    if isinstance(phase_data.get("akzeptanzkriterien"), list):
+        state.akzeptanzkriterien = list(phase_data["akzeptanzkriterien"])
+    if isinstance(phase_data.get("phasen"), list):
+        state.phasen = list(phase_data["phasen"])
 
     from werkstatt.audit import audit
     from werkstatt.gates import _human_gate_plan, _plan_gate
@@ -240,7 +261,7 @@ def reconcile_chat_followups(
                 f"Folgeauftrag {proposal_id} lieferte keinen gueltigen Task-Plan",
             )
 
-        candidate, new_tasks, criteria, tests = _extend_candidate(
+        candidate, new_tasks, criteria, tests, phases = _extend_candidate(
             state, addition, proposal_id,
         )
         if not new_tasks or not _plan_gate(candidate):
@@ -280,6 +301,7 @@ def reconcile_chat_followups(
             new_tasks,
             criteria=criteria,
             tests=tests,
+            phases=phases,
             followup_id=proposal_id,
         )
         state.tasks = candidate.tasks

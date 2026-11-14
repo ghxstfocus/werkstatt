@@ -10,7 +10,13 @@ from werkstatt.web import inspector
 
 
 class _GateStore:
-    def query(self, run_id: str, kind: str | None = None) -> list[dict[str, Any]]:
+    def query(
+        self,
+        run_id: str,
+        kind: str | None = None,
+        *,
+        project: str | None = None,
+    ) -> list[dict[str, Any]]:
         if kind == "gate_open":
             return [{
                 "payload": {
@@ -25,7 +31,7 @@ class _GateStore:
 def _prepare(monkeypatch, root: Path) -> list[str]:
     monkeypatch.setattr(inspector, "_PROJECTS_BASE", root)
     monkeypatch.setattr(inspector, "_frische_projektion", lambda: None)
-    monkeypatch.setattr(inspector, "_audit_events", lambda _run_id: [])
+    monkeypatch.setattr(inspector, "_audit_events", lambda _run_id, _project: [])
     monkeypatch.setattr(
         inspector, "_lese_phase_yaml_aufgabe", lambda _projekt: None,
     )

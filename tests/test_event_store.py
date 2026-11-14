@@ -728,7 +728,7 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from werkstatt import chat_session
-    from werkstatt.loop import _persist_run_result
+    from werkstatt.loop import RunInboxPendingError, _persist_run_result
     from werkstatt.phases import tasks
 
     store = EventStore(db_pfad=tmp_path / "events.db")
@@ -761,17 +761,19 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
     monkeypatch.setattr(store, "finish_run_checkpoint", enqueue_at_finish)
     run_state = SimpleNamespace(project_dir=tmp_path, run_lease_check=None)
     phase_state = SimpleNamespace(data={"tasks": []})
-    _persist_run_result(
-        store, "demo", "run-final-race", 0,
-        run_state=run_state, phase_state=phase_state,
-    )
+    with pytest.raises(RunInboxPendingError, match="Folgeauftraege warten"):
+        _persist_run_result(
+            store, "demo", "run-final-race", 0,
+            run_state=run_state, phase_state=phase_state,
+        )
 
     record = store.get_run_record("demo", "run-final-race")
     assert record is not None
-    assert record["status"] == "completed"
+    assert record["status"] == "running"
     assert record["checkpoint"]["chat_followup_requests"][0]["proposal_id"] == (
         "proposal-late"
     )
+    assert record["checkpoint"]["chat_followup_requests"][0]["status"] == "received"
     assert store.run_message_acknowledged(
         "demo", "run-final-race", "followup-late",
     )

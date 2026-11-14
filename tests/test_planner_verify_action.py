@@ -18,6 +18,7 @@ def test_ist_verify_task_klassifiziert_verifikation():
 
 
 def test_phase_tasks_verify_ruft_run_builder_nicht(monkeypatch):
+    import werkstatt.audit as audit_module
     import werkstatt.phases.tasks as tasks_mod
 
     state = mk_state()
@@ -60,6 +61,7 @@ def test_phase_tasks_verify_ruft_run_builder_nicht(monkeypatch):
     monkeypatch.setattr(tasks_mod, "task_started", lambda *a, **k: None)
     monkeypatch.setattr(tasks_mod, "task_ok", lambda *a, **k: None)
     monkeypatch.setattr(tasks_mod, "task_done", lambda *a, **k: None)
+    monkeypatch.setattr(audit_module, "get_run_id", lambda: "")
 
     tasks_mod._phase_tasks_loop(state, phase_state)
 
