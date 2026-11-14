@@ -6578,6 +6578,12 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Regression:** Neuer Tool-Test fuer `alpha|beta`; Prompt-Test fuer den Belegkonflikt-Grundsatz.
 - **Verifikation:** Windows: Prompt-Regression bestanden; ERE-Lauf wegen fehlendem GNU grep uebersprungen. Der groessere Chat-Testsatz hatte 6 bestehende Umgebungsausfaelle, weil Standardtests `/opt/werkstatt` erwarten; 70 Tests bestanden. Linux-Serverlauf vor diesem Fix: 2.259 bestanden, 5 uebersprungen (Commit `4c3c240`).
 
+## 2026-11-14 — Verify-Fallback projekt- und rungebunden
+
+- **Befund:** `aggregate_status()` filterte Verify-Ereignisse aus SQLite nach Projekt und Run. Falls dort kein Verify lag, las der JSONL-Fallback dagegen das neueste `verify_*` aus globalen Auditdateien ohne Projekt- oder Run-Abgleich. Ein fremdes Projekt oder ein aelterer Run konnte so als Verify des aktuellen Projekts erscheinen.
+- **Aenderung:** Der Fallback akzeptiert nur noch Events mit exakt passendem `project` und `run_id`. Historische Events ohne belastbare Zuordnung bleiben unbekannt und werden nicht als Erfolg dargestellt.
+- **Regression:** Test mit fremdem Projekt und veraltetem Run sowie positivem Event des aktuellen Runs.
+- **Verifikation:** Windows/Python 3.14: Projection-/Multi-Projekt-Aggregationstests 26 bestanden; Ruff, `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check` bestanden. Linux-CI Quality gate, einschliesslich Ruff, vollem pytest und Quality Gate, erfolgreich ([Workflow 43526043012](https://github.com/ghxstfocus/werkstatt/actions/runs/43526043012)).
 ## 2026-11-14 — Architect bekommt verifizierte Ziel-APIs trotz Scout-Kuerzung
 
 - **Befund:** Im Scout-Pfad ersetzt der kompakte Scout-Bericht die Explorer-Rohdaten. Der Architect sah dadurch nicht zwingend die aktuellen Signaturen der in STATUS/Scout genannten Zieldateien und konnte Plan-Schritte auf nicht vorhandene APIs stuetzen.
