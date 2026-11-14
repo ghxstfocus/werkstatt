@@ -132,7 +132,7 @@ def test_architect_api_preflight_rejects_write_api_in_read_aggregate() -> None:
     befund = _pruefe_architect_api_referenzen(prose, index)
 
     assert befund == [
-        "EventStore.transition_run_status "
+        "EventStore.transition_run_status in werkstatt/web/inspector.py "
         + "(Effekt write in Read-Aggregator nicht als read belegt)"
     ]
 
@@ -171,7 +171,114 @@ def test_ast_index_proves_event_store_read_and_write_effects() -> None:
     }
 
     assert methods["get_run_record"]["effects"] == "read"
+    assert methods["query"]["effects"] == "read"
     assert methods["transition_run_status"]["effects"] == "write"
+
+
+def test_api_index_covers_javascript_and_java_declarations(tmp_path: Path) -> None:
+    from werkstatt.scout import _baue_api_index, _finde_api
+
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "overview.js").write_text(
+        "function renderDonut(data) { return data; }\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "RunStats.java").write_text(
+        "class RunStats {\n"
+        " public int countRuns(String project) { return db.query(\"SELECT count(*)\"); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    index = _baue_api_index(tmp_path)
+
+    assert index["static/overview.js"]["language"] == "javascript"
+    assert _finde_api(index, "renderDonut")[0]["pfad"] == "static/overview.js"
+    assert index["src/RunStats.java"]["language"] == "java"
+    assert _finde_api(index, "RunStats.countRuns")[0]["pfad"] == "src/RunStats.java"
+    assert _finde_api(index, "RunStats.countRuns")[0]["effects"] == "read"
+
+
+def test_preflight_accepts_source_verified_java_read_api(tmp_path: Path) -> None:
+    from werkstatt.architect import _pruefe_architect_api_referenzen
+    from werkstatt.scout import _baue_api_index
+
+    java_path = tmp_path / "src" / "RunStats.java"
+    java_path.parent.mkdir()
+    java_path.write_text(
+        "class RunStats {\n"
+        " public int countRuns(String project) { return db.query(\"SELECT 1\"); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    prose = (
+        "## src/RunStats.java\n"
+        "aggregate_status reads `RunStats.countRuns(project)`."
+    )
+
+    assert _pruefe_architect_api_referenzen(prose, _baue_api_index(tmp_path)) == []
+
+
+def test_preflight_scopes_javascript_symbols_to_javascript_target() -> None:
+    from werkstatt.architect import _pruefe_architect_api_referenzen
+
+    index = {
+        "backend.py": {"functions": [{"name": "renderDonut", "effects": "read"}]},
+        "static/overview.js": {
+            "language": "javascript",
+            "functions": [{"name": "renderDonut", "effects": "unknown"}],
+        },
+    }
+    prose = "## static/overview.js\nRender the chart with `renderDonut(data)`."
+
+    assert _pruefe_architect_api_referenzen(prose, index) == []
+
+
+def test_preflight_does_not_borrow_api_from_other_language_without_heading() -> None:
+    from werkstatt.architect import _pruefe_architect_api_referenzen
+
+    index = {
+        "backend.py": {"functions": [{"name": "renderDonut", "effects": "read"}]},
+        "static/overview.js": {"language": "javascript", "functions": []},
+    }
+    prose = (
+        "Die UI-Datei static/overview.js soll `renderDonut(data)` aufrufen."
+    )
+
+    assert _pruefe_architect_api_referenzen(prose, index) == ["renderDonut"]
+
+
+def test_preflight_deduplicates_repeated_effect_findings_and_ignores_dict_get() -> None:
+    from werkstatt.architect import _pruefe_architect_api_referenzen
+
+    index = {
+        "store.py": {"functions": [], "classes": [{"name": "Store", "methods": [
+            {"name": "get", "effects": "unknown"},
+        ]}]},
+    }
+    prose = (
+        "## api.py\n"
+        "Die neue Funktion `aggregate_status()` liest `payload.get('kind')` "
+        "und `payload.get('status')`."
+    )
+
+    assert _pruefe_architect_api_referenzen(prose, index) == []
+
+
+def test_api_effect_recognizes_select_held_in_local_name(tmp_path: Path) -> None:
+    from werkstatt.scout import _baue_api_index
+
+    (tmp_path / "store.py").write_text(
+        "class Store:\n"
+        " def query(self):\n"
+        "  sql = 'SELECT id FROM events'\n"
+        "  return self.conn.execute(sql).fetchall()\n",
+        encoding="utf-8",
+    )
+    index = _baue_api_index(tmp_path)
+    query = index["store.py"]["classes"][0]["methods"][0]
+    assert query["effects"] == "read"
 
 
 def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_path) -> None:
@@ -182,9 +289,13 @@ def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_p
         LLMReply(True, "Nutze `EventStore.append(event)` fuer das vorhandene API. " * 4),
     ])
     prompts: list[str] = []
+    contents: list[str] = []
+    limits: list[int] = []
 
-    def ask_llm(_key, system, *_args, **_kwargs):
+    def ask_llm(_key, system, content, **kwargs):
         prompts.append(system)
+        contents.append(content)
+        limits.append(kwargs["max_tokens"])
         return next(replies)
 
     state = SimpleNamespace(
@@ -205,6 +316,28 @@ def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_p
     assert architect.run_architect(state, "Aufgabe", "Kontext", "key", None)
     assert len(prompts) == 2
     assert "EventStore.get_run_record" in prompts[1]
+    assert "GEZIELTE KORREKTUR" in prompts[1]
+    assert "im aktuellen AST" not in prompts[1]
+    assert "ABGELEHNTER ARCHITECT-ENTWURF" in contents[1]
+    assert "EventStore.get_run_record" in contents[1]
+    assert limits == [architect.ARCHITECT_MAX_TOKENS, 12000]
     assert state.architect_prosa == (
         "Nutze `EventStore.append(event)` fuer das vorhandene API. " * 4
     ).strip()
+
+
+def test_scout_prompt_does_not_treat_index_absence_as_proof() -> None:
+    from werkstatt.scout import SCOUT_SYSTEM
+
+    assert "fehlender Indexeintrag ist kein Negativbeweis" in SCOUT_SYSTEM
+    assert "JavaScript/Java" in SCOUT_SYSTEM
+    assert "Fehlender oder gekuerzter Dateiinhalt erlaubt keine Aussage" in SCOUT_SYSTEM
+    assert "nicht vollstaendigkeitsbeweisend" in SCOUT_SYSTEM
+
+
+def test_architect_prompt_does_not_claim_unavailable_source_verification() -> None:
+    from werkstatt.architect import ARCHITECT_SYSTEM
+
+    assert "benenne die Belegluecke" in ARCHITECT_SYSTEM
+    assert "Behaupte nicht, Dateien selbst gelesen" in ARCHITECT_SYSTEM
+    assert "Index-Treffer ist kein Beweis der Nichtexistenz" in ARCHITECT_SYSTEM

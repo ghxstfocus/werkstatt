@@ -109,7 +109,7 @@ def test_run_architect_nutzt_scout_nicht_doppelten_user_context(
             "api_widersprueche": [{
                 "datei": "auth.py",
                 "symbol": "verify_token",
-                "art": "fehlt",
+                "art": "nicht_im_index",
                 "gefunden_in": [],
             }],
             "bereits_erfuellt": False,
@@ -136,7 +136,8 @@ def test_run_architect_nutzt_scout_nicht_doppelten_user_context(
     )
     assert "<scout_auftrag>" in captured["system"]
     assert "Ersetze A durch B in auth.py." in captured["system"]
-    assert "Deterministischer API-Abgleich" in captured["system"]
+    assert "Deterministische API-Hinweise" in captured["system"]
+    assert "beweisen fuer sich allein aber weder Nichtexistenz" in captured["system"]
     assert '"symbol": "verify_token"' in captured["system"]
     assert captured["user"] == ""
     assert "Explorer-Rohdaten-Duplikat" not in captured["system"]

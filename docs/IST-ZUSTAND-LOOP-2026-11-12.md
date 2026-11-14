@@ -57,6 +57,31 @@ Pfad-Traversal und die Auszugslimits. Das macht den Scout nicht zum
 Pflichtschritt: der Planner darf ihn bei einem expliziten, belegten Einzel-
 Dateiziel weiterhin ueberspringen.
 
+### API-Preflight: Run OP-375 und Sprachzuordnung (2026-11-14)
+
+Run `werkstatt-20261114-171914-a32b1588` endete im Architect-Preflight, bevor
+ein Builder-Task startete: zwei Architect-Aufrufe, insgesamt 89.018 Modell-
+Tokens einschliesslich Scout, null Builder-Tasks. Der Preflight verwarf
+bekannte Listen-/Dict-Zugriffe wie `payload.get` und Methoden mit
+`effects=unknown`; ausserdem pruefte er JavaScript-UI-Funktionen gegen einen
+Python-only Index. Ein wiederholter Symbolbefund konnte mehrfach in derselben
+Ablehnung stehen. Der Scout-Befund zu `app = create_app()` war widerlegt:
+`werkstatt/web/app.py` enthaelt den Ausdruck.
+
+Der JSONL-Verify-Fallback in `aggregate_status()` wurde vollstaendig geprueft:
+er verlangt sowohl `project == projekt` als auch `run_id == run_id`; fremde
+Projekt-/Run-Ereignisse und Legacy-Zeilen ohne Herkunft werden uebersprungen.
+
+Der Preflight indexiert jetzt Python, JavaScript (`.js`, `.mjs`) und Java
+(`.java`) Deklarationen und bezieht den Dateiabschnitt in die Aufloesung ein.
+Gleichnamige Treffer aus fremden Sprachen werden nicht herangezogen;
+Container-`get()` wird nicht als Projekt-API behandelt; einfache lokale
+`SELECT`-Variablen werden als lesend erkannt; doppelte Befunde werden
+unterdrueckt. Java-Wirkungen, die der Quellscanner nicht belegen kann, bleiben
+`unknown` und fail-closed. Die Scanner sind keine Sprachcompiler. Der
+Architect hat weiterhin keine selbstgesteuerten Datei-Lese-/Suchwerkzeuge;
+bounded JIT-Retrieval bleibt als offener Teil von OP-405 dokumentiert.
+
 ### Chat-Kontext fuer grosse Lognachrichten
 
 Die Hintergrund-Chat-API lehnte Nutzernachrichten ab 20.001 Zeichen mit HTTP

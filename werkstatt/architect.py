@@ -129,10 +129,13 @@ def _format_scout_auftrag(auftrag: dict, max_prosa: int = 3000) -> str:
 
         teile.extend([
             "",
-            "## Deterministischer API-Abgleich (Code-Index ist massgeblich)",
+            "## Deterministische API-Hinweise (begrenzter Code-Index)",
             (
-                "Scout-API-Aussagen mit einem belegten Widerspruch; "
-                "nicht als bestehende Schnittstelle planen:"
+                "Diese Befunde zeigen Index-Treffer oder fehlende Treffer, "
+                "beweisen fuer sich allein aber weder Nichtexistenz noch "
+                "API-Identitaet. Pruefe beigegebene Pfad-/Quellbelege; wenn "
+                "sie fehlen, kennzeichne die API als ungeprueft und nicht "
+                "als fehlend oder verschoben:"
             ),
             json.dumps(api_widersprueche[:10], ensure_ascii=False),
         ])
@@ -146,7 +149,7 @@ def _format_scout_auftrag(auftrag: dict, max_prosa: int = 3000) -> str:
 
 
 def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
-    """Render current AST signatures for files named by this work item.
+    """Render current declaration evidence for named target files.
 
     The Scout excerpt is intentionally compact and can omit a relevant API.
     This deterministic block lets the Architect distinguish existing
@@ -170,7 +173,7 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
             or not re.fullmatch(r"[A-Za-z0-9_./-]+", normalized)
         ):
             return
-        if normalized.endswith(".py") and normalized not in candidates:
+        if normalized.endswith((".py", ".js", ".mjs", ".java")) and normalized not in candidates:
             candidates.append(normalized)
 
     fields = _extrahiere_op_felder(
@@ -179,7 +182,9 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
     )
     for field_name in ("betroffene_dateien", "tests"):
         field_text = str(fields.get(field_name) or "")
-        for match in re.findall(r"[A-Za-z0-9_./\\-]+\.py", field_text):
+        for match in re.findall(
+            r"[A-Za-z0-9_./\\-]+\.(?:py|js|mjs|java)\b", field_text,
+        ):
             add_path(match)
 
     scout_report = getattr(state, "scout_auftrag", None) or {}
@@ -202,6 +207,8 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
     # which Explorer may not list as a primary file.
     dependency_symbols: dict[str, set[str]] = {}
     for source_path in tuple(candidates):
+        if not source_path.endswith(".py"):
+            continue
         source_entry = api_index.get(source_path) or api_index.get(
             source_path.replace("/", "\\")
         )
@@ -229,11 +236,12 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
         return ""
 
     lines = [
-        "## Verifizierte aktuelle API-Signaturen (deterministischer AST-Index)",
-        "Nur diese bestehenden Signaturen sind im Quellcode belegt. Ein",
-        "nicht aufgefuehrtes API darf nicht als bestehend beschrieben werden.",
+        "## Verifizierte aktuelle API-Signaturen (sprachbezogener Quellindex)",
+        "Aufgefuehrte Signaturen sind positive Quellbelege. Der Index ist begrenzt;",
+        "fehlende Treffer sind kein Beweis, dass eine API nicht existiert.",
+        "Pruefe Zielpfad/Quelltext oder kennzeichne sie als ungeklaert.",
         "Neue APIs duerfen vorgeschlagen werden, muessen aber als neu markiert sein.",
-        "Vergleiche Scout-Symbole mit der Signatur hier; bei Abweichung gilt der AST.",
+        "Der Index belegt Deklarationen, nicht Laufzeitverhalten; pruefe den Zielquelltext.",
     ]
     signature_budget = 64
     for path in candidates[:8]:
@@ -242,7 +250,7 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
             entry = api_index.get(path.replace("/", "\\"))
         lines.append(f"### {path}")
         if not isinstance(entry, dict):
-            lines.append("(im aktuellen Python-AST-Index nicht vorhanden)")
+            lines.append("(im aktuellen sprachbezogenen Quellindex nicht vorhanden)")
             continue
         requested: object = next(
             (
@@ -330,9 +338,9 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
                 signature_budget -= 1
         if not symbols:
             if requested_names:
-                lines.append("(keines der vom Scout genannten Symbole im AST belegt)")
+                lines.append("(keines der Scout-Symbole im begrenzten Index gefunden)")
             else:
-                lines.append("(keine Top-Level-Funktionen oder Klassen im AST-Index)")
+                lines.append("(keine Top-Level-Deklarationen im begrenzten Index gefunden)")
         if signature_budget <= 0:
             lines.append("(Signaturauszug begrenzt; weitere APIs hier nicht aufgefuehrt)")
             break
@@ -342,10 +350,10 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
 def _pruefe_architect_api_referenzen(prosa: str, api_index: dict) -> list[str]:
     """Reject unproven existing API calls before the plan reaches the Builder.
 
-    The AST block in the prompt is helpful context, not an enforcement
-    boundary. This check treats code-shaped calls as existing interfaces only
-    when the current AST index contains the symbol. An absent symbol is
-    accepted only when the Architect explicitly labels it as a new API nearby.
+    The language-aware declaration index is helpful context, not a compiler.
+    This check accepts code-shaped calls only when a declaration is indexed,
+    except for explicitly new APIs. A missing index match is not proof of
+    absence; it remains a bounded preflight finding for targeted verification.
     """
     import re
 
@@ -373,10 +381,56 @@ def _pruefe_architect_api_referenzen(prosa: str, api_index: dict) -> list[str]:
             references.append(item)
 
     if references and (not isinstance(api_index, dict) or not api_index):
-        return ["Der aktuelle AST-API-Index fehlt; Architect-Plan nicht belegbar."]
+        return ["Der sprachbezogene API-Index fehlt; vorhandene APIs sind nicht pruefbar."]
 
     missing: list[str] = []
     seen: set[str] = set()
+    file_headings = list(re.finditer(
+        r"(?m)^#{1,4}\s+`?((?:[A-Za-z0-9_.-]+/)+"
+        r"[A-Za-z0-9_.-]+\.(?:py|js|mjs|java))`?\s*$",
+        prosa,
+    ))
+    file_mentions = list(re.finditer(
+        r"(?<![A-Za-z0-9_./-])((?:[A-Za-z0-9_.-]+/)*"
+        r"[A-Za-z0-9_.-]+\.(?:py|js|mjs|java))\b",
+        prosa,
+    ))
+
+    def target_for(offset: int) -> str | None:
+        heading = next(
+            (item for item in reversed(file_headings) if item.start() <= offset),
+            None,
+        )
+        if heading:
+            return heading.group(1)
+        mention = next(
+            (item for item in reversed(file_mentions)
+             if item.start() <= offset and offset - item.end() <= 600),
+            None,
+        )
+        return mention.group(1) if mention else None
+
+    def path_matches(target: str, matches: list[dict]) -> list[dict]:
+        """Resolve calls against the section's language and direct imports."""
+        normalized = target.replace("\\", "/")
+        entry = api_index.get(normalized) or api_index.get(normalized.replace("/", "\\"))
+        if not isinstance(entry, dict):
+            return matches
+        exact = [item for item in matches if item.get("pfad") == normalized]
+        if exact:
+            return exact
+        if normalized.endswith((".js", ".mjs", ".java")):
+            # Do not match a browser/Java call to a similarly named Python API.
+            return []
+        imported_paths = {
+            item["from"].replace(".", "/") + ".py"
+            for item in entry.get("imports", [])
+            if isinstance(item, dict)
+            and isinstance(item.get("from"), str)
+            and item["from"].startswith("werkstatt.")
+        }
+        related = [item for item in matches if item.get("pfad") in imported_paths]
+        return related
     new_marker = re.compile(
         r"\b(?:neu(?:e|en|er|es)?|hinzuf(?:ue|ü)gen|implementier(?:en|t|e))\b",
         re.IGNORECASE,
@@ -412,6 +466,11 @@ def _pruefe_architect_api_referenzen(prosa: str, api_index: dict) -> list[str]:
         matches = qualified_matches or (
             [] if qualifier_is_project_class else _finde_api(api_index, short_name)
         )
+        target = target_for(offset)
+        if target:
+            matches = path_matches(target, matches)
+        if qualifier and short_name in common_container_methods:
+            continue
         if matches:
             section_start = prosa.rfind("## ", 0, offset)
             next_section = prosa.find("\n## ", offset)
@@ -429,13 +488,18 @@ def _pruefe_architect_api_referenzen(prosa: str, api_index: dict) -> list[str]:
             unsafe_read_effects = sorted({
                 str(match.get("effects", "unknown"))
                 for match in matches
+                if match.get("language", "python") != "javascript"
                 if match.get("effects", "unknown") != "read"
             })
             if is_read_aggregate and unsafe_read_effects:
-                missing.append(
-                    f"{symbol} (Effekt {', '.join(unsafe_read_effects)} "
+                finding = (
+                    f"{symbol} in {target or 'nicht eindeutig zugeordneter Zieldatei'} "
+                    f"(Effekt {', '.join(unsafe_read_effects)} "
                     "in Read-Aggregator nicht als read belegt)"
                 )
+                if finding not in seen:
+                    missing.append(finding)
+                    seen.add(finding)
             continue
         if qualifier and short_name in common_container_methods:
             continue
@@ -548,15 +612,21 @@ Format (STRIKT einhalten):
          eine einzelne Zeile '- (keine)'.
 
 DEINE ROLLE IM LOOP (WICHTIG):
-  - Explorer hat bereits geliefert: WO (Dateien, Zeilennummern,
-    Ist-Zustand — siehe die Explorer-Bloecke im Kontext).
-  - Scout hat bereits geliefert: WAS (Auftrag, API-Widersprueche
-    — siehe den Scout-Block im Kontext).
-  - Deine Aufgabe ist NUR: WIE. Welche Signatur, welche Logik,
-    welche Integration.
-  - Du hast keine Tools. Du misst NICHT. Du beschreibst.
-  - Wenn Explorer+Scout leer sind, ist das ein Pipeline-Fehler
-    (Contract-Violation), KEIN Auftrag zum Selbermessen.
+  - Explorer und Scout liefern Suchhinweise, keine autoritative Wahrheit.
+  - Pruefe jede Behauptung zu vorhandenen APIs gegen den beigefuegten,
+      datei- und sprachbezogenen API-Beleg. Python-Eintraege stammen aus AST;
+      JavaScript/Java-Eintraege sind begrenzte Deklarations-/Quelltextscans.
+  - Ein Scout-Negativbefund beweist NICHT, dass ein Symbol fehlt. Gleiche
+      Treffer mit dem passenden Zielpfad und direkt importierten Modulen
+      ab, sofern deren Belege beigefuegt sind. Fehlen Quelltext/Importbelege,
+      behaupte keine Verifikation und benenne die Belegluecke.
+  - Deine Aufgabe ist: WIE. Beschreibe Signatur, Logik und Integration
+      ausschliesslich fuer verifizierte APIs oder klar als NEU markierte APIs.
+  - Du hast keine interaktiven Werkzeuge; nutze nur die beigefuegten Belege.
+      Behaupte nicht, Dateien selbst gelesen oder Befunde selbst verifiziert
+      zu haben, wenn sie nicht im Kontext stehen.
+  - Wenn Explorer oder Scout leer sind, benenne die konkrete Belegluecke
+      statt fehlende APIs zu erfinden.
 
 REGELN:
   - Du lieferst Prosa. Du rufst keine Tools. Du baust nichts.
@@ -680,31 +750,33 @@ Live-Beleg: 64 Zeilen toter Code, nur von Tests importiert.
 
 ## DETERMINISTISCHER API-VERTRAG (PFLICHT)
 
-- Verwende bestehende Projekt-APIs nur, wenn sie im aktuellen AST-Auszug
-  belegt sind. Schreibe jeden API-Aufruf in Backticks, zum Beispiel
+  - Verwende bestehende Projekt-APIs nur, wenn sie im aktuellen,
+    sprachbezogenen API-Auszug belegt sind. Schreibe jeden API-Aufruf in Backticks, zum Beispiel
   `EventStore.append(...)`.
 - Jede nicht vorhandene Funktion/Methode/Klasse muss im selben Abschnitt
   ausdruecklich als NEU markiert sein (z.B. "neue Methode
   `Projector.backfill(...)`"). Der Builder darf neue APIs nur bauen, wenn
   sie im Architect-Plan als neu markiert und einem betroffenen Datei-Block
   zugeordnet sind.
-- Der Loop prueft codeartige Aufrufe nach deiner Antwort gegen den aktuellen
-  AST-Index einschliesslich belegbarer Lese-/Schreibwirkung. Ein nicht
+  - Der Loop prueft codeartige Aufrufe nach deiner Antwort gegen den aktuellen
+    API-Index: Python per AST, JavaScript/Java per begrenztem Deklarationsscan.
+    Effekte sind nur konservative Hinweise, kein Compilerbeweis. Ein nicht
   belegter Aufruf ohne NEU-Markierung oder ein Schreib-API in einem
   Read-Aggregator verwirft den Plan vor Planner-Split, Plan-Gate und Builder.
   Der Architect erhaelt den Befund fuer eine gezielte Korrektur.
-- Behaupte niemals, ein im AST fehlendes API sei vorhanden. Wenn der AST-Auszug
-  fehlt oder eine Signatur nicht sicher zugeordnet werden kann, markiere die
-  Schnittstelle als offen und plane zuerst den tatsaechlichen Vertrag.
+- Behaupte niemals, ein API sei vorhanden, wenn es nicht positiv belegt ist.
+  Ein fehlender Index-Treffer ist kein Beweis der Nichtexistenz. Wenn
+  Zielpfad/Quelltext oder Signatur nicht sicher zugeordnet sind, markiere
+  die Schnittstelle als offen und fordere gezielte Quellbelege an.
 
 ## GOLD: SCOUT-KONTEXT
 Du bekommst im User-Content:
 - "SCOUT-AUFTRAG" (vorformuliert).
 - "VERFUEGBARE APIS (aus Code-Index)".
 
-Nutze die APIs aus "VERFUEGBARE APIS" -- NICHT die aus der Aufgabe.
-Wenn die Aufgabe eine API nennt, die nicht im API-Auszug steht:
-  Nenne sie NICHT. Nutze die aehnlichste echte API.
+Nutze positive Belege aus "VERFUEGBARE APIS"; der Index ist begrenzt.
+Wenn ein Symbol dort fehlt, behaupte nicht, dass es nicht existiert.
+Verifiziere es im genannten Quelltext oder markiere es als ungeklaert.
 Beispiel: Aufgabe sagt "read_events". API-Auszug hat
 "list_recent_assessments". Nutze list_recent_assessments.
 """
@@ -1147,10 +1219,15 @@ def run_architect(
         _sys_prompt = _arch_sys + _korrekturhinweis
         _arch_reply = _with_spinner(
             "Architect",
-            lambda _prompt=_sys_prompt: ask_llm(
-                api_key, _prompt, _arch_user_content,
+            lambda _prompt=_sys_prompt, _content=_arch_user_content,
+            _attempt=_versuch: ask_llm(
+                api_key, _prompt, _content,
                 model=_get_architect_model(),
-                temperature=0.2, max_tokens=ARCHITECT_MAX_TOKENS,
+                temperature=0.2,
+                max_tokens=(
+                    min(12000, ARCHITECT_MAX_TOKENS)
+                    if _attempt else ARCHITECT_MAX_TOKENS
+                ),
                 aufgabe="architect", heartbeat=False, state=state,
             ),
         )
@@ -1183,15 +1260,23 @@ def run_architect(
         }, pd, pn)
         if _versuch == 0:
             _korrekturhinweis = (
-                "\n\n## Deterministischer API-Preflight: PLAN KORRIGIEREN\n"
-                "Der vorherige Entwurf wurde vor dem Builder verworfen. "
-                "Diese codeartigen API-Aufrufe sind im aktuellen AST nicht "
-                "belegt:\n"
-                + "\n".join(f"- {item}" for item in _api_befunde[:20])
-                + "\nEntferne sie, ersetze sie durch belegte APIs oder markiere "
-                "die tatsaechlich neu zu implementierende API im passenden "
-                "Datei-Abschnitt ausdruecklich als NEU. Gib den vollstaendig "
-                "korrigierten Plan erneut aus.\n"
+                "\n\n## Deterministischer API-Preflight: GEZIELTE KORREKTUR\n"
+                "Der erste Entwurf und die folgenden konkreten Befunde stehen "
+                "im User-Content. Pruefe jeden Befund gegen den dort genannten "
+                "Zielpfad und Sprachraum. Ein fehlender Treffer im begrenzten "
+                "Index ist kein Beweis fuer Nichtexistenz. Nutze nur belegte "
+                "Schnittstellen oder markiere wirklich neue APIs explizit als "
+                "NEU; bei unzureichendem Beleg formuliere eine offene Frage "
+                "statt eine API zu erfinden. Gib den vollstaendigen Plan mit "
+                "denselben Datei-/Task-Schnitten korrigiert aus.\n"
+            )
+            _korrekturhinweis += "\nBefunde:\n" + "\n".join(
+                f"- {item}" for item in _api_befunde[:20]
+            ) + "\n"
+            _arch_user_content = (
+                f"{_arch_user_content}\n\n"
+                "## ABGELEHNTER ARCHITECT-ENTWURF (KORREKTURKONTEXT)\n"
+                f"{_arch_prosa[:24000]}\n"
             )
     return False
 
