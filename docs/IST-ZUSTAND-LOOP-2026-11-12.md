@@ -4,12 +4,12 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Aktueller Hauptlinienstand: `7413012` (PR #37, explizite Intent-Pruefung fuer
-Chat-Steueraktionen; Details und Grenzen stehen in den Nachtraegen am
+Aktueller Hauptlinienstand: `7496868` (PR #39, Chatjob-Status klar von
+Loop-Auftraegen getrennt; Details und Grenzen stehen in den Nachtraegen am
 Dokumentende).
-GitHub Actions Quality Gate fuer PR #37 war auf dem Head
-`0c1a839d8575f3c1c908f24f682725c74e31be8f` erfolgreich ([Run
-43609401260](https://github.com/ghxstfocus/werkstatt/actions/runs/43609401260));
+GitHub Actions Quality Gate fuer PR #39 war auf dem Head
+`a62f685c23f8efb30658a087af25e67c13dfec2d` erfolgreich ([Run
+43610698249](https://github.com/ghxstfocus/werkstatt/actions/runs/43610698249));
 ein separater Post-Merge-Lauf wurde nicht gefunden. Der Produktionsserver
 wurde bei dieser Nachpruefung nicht erreicht; sein laufender Commit ist
 unbekannt.
@@ -344,3 +344,12 @@ uebergebenen Auftrag aussehen lassen. Die Anzeige benennt diese Zustaende jetzt
 als Chat-Nachricht bzw. Chat-Antwort. Die Ursache eines konkreten
 `chat_job_cancelled` bleibt davon getrennt und muss anhand des Job-/Audit-Events
 untersucht werden; ein Screenshot belegt den Cancel-Ausloeser nicht.
+
+## Nachtrag — Cache-Busting fuer Chatstatus (2026-11-14)
+
+Nach PR #39 hatten `chat.js` und `live_feed.js` weiterhin unveraenderte
+Query-Versionen in `layout.html`. Ein Browser mit gecachtem Asset konnte daher
+weiterhin alte Statusformulierungen anzeigen, obwohl der Server den neuen
+HTML-Stand auslieferte. Beide URLs erhalten jetzt eine neue Versionskennung.
+Der Audit-Event enthaelt absichtlich keinen Nachrichtentext; `chat_job_queued`
+wird deshalb neutral als „Chat-Nachricht eingegangen“ dargestellt.

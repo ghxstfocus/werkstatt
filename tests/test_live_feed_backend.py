@@ -464,6 +464,6 @@ def test_chat_job_lifecycle_ist_als_chat_statt_loopauftrag_beschriftet():
     assert inspector._tl_label("chat_job_queued", {}) == "Chat-Antwort eingeplant"
     assert inspector._tl_detail(
         "chat_job_queued", {"message": "Das war nur eine Bemerkung"},
-    ) == "Chat-Nachricht erhalten: Das war nur eine Bemerkung"
+    ) == "Chat-Nachricht eingegangen"
     assert inspector._tl_label("chat_job_cancelled", {}) == "Chat-Antwort abgebrochen"
     assert inspector._tl_detail("chat_job_cancelled", {}) == "Chat-Antwort abgebrochen"
