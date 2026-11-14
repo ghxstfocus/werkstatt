@@ -6660,3 +6660,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Die Kopfzeile der Loop-Ist-Aufnahme nannte nach dem Log-Kontextfix weiterhin `554a692` als geprueften Hauptlinienstand, obwohl `main` bereits `9c9e14f` erreicht hatte.
 - **Korrektur:** Die Aufnahme weist jetzt `9c9e14f` als aktuellen Doku-Stand und `88dd5b0` als den durch CI verifizierten Code-Stand aus. Der CI-Beleg wird nicht dem reinen Doku-Commit zugeschrieben; Serverbetrieb bleibt separat unverifiziert.
 - **Verifikation:** Git-Remote bestaetigte `HEAD == origin/main == 9c9e14f`; `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check` bestanden.
+
+## 2026-11-14 — OP-398: ungetrackte Kriterien duerfen keinen Zielerfolg melden
+
+- **Befund:** `PhaseState.criteria_progress()` konnte `tracked=False` liefern, wenn ein Checkpoint explizite Akzeptanzkriterien, aber keine `criterion_refs` enthielt. Der Task-Checkpoint sagte dann korrekt „Ziel bleibt offen“, doch `phases/finalize.py` pruefte nur `tracked=True` und konnte danach trotzdem `loop_erfolg` auditieren.
+- **Aenderung:** Explizite Kriterien ohne gueltigen Tracking-Beleg blockieren jetzt den Zielabschluss mit `reason=criteria_untracked`; Kriterienstatus und Fehlergrund bleiben im Completion-Event sichtbar. Auftraege ohne explizite Akzeptanzkriterien bleiben kompatibel.
+- **Regression:** Der neue Test reproduzierte vor dem Fix `rc=0` und nach dem Fix verlangt er `rc=1`, einen unvollstaendigen Completion-Eintrag sowie kein `loop_erfolg`.
+- **Verifikation:** `tests/test_loop_phases.py`, `tests/test_phase_state.py` und `tests/test_planner_agent.py`: 93 bestanden, 3 uebersprungen. Ruff fuer Finalizer und Loop-Phasentests, `tools/doku_check.py --strict --limit 10 --worktree` sowie `git diff --check` bestanden.

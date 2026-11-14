@@ -211,6 +211,16 @@ aber weiterhin aus dem freigegebenen Plan in einer festen Task-Schleife,
 statt an Checkpoints gegen offene Kriterien neu zu waehlen; der zielorientierte
 Arbeitsgraph von OP-398 bleibt offen.
 
+Ein Abschlussfehler wurde nachgeprueft: `_task_ende()` markierte fehlende
+Kriterienzuordnung korrekt als `untracked` und liess das Ziel offen; der
+Finalizer blockierte den Erfolg aber nur bei `tracked=True` mit offenen
+Kriterien. Ein Checkpoint mit expliziten Akzeptanzkriterien ohne Zuordnung
+konnte daher trotzdem `loop_erfolg` ausgeben. Der Finalizer lehnt diesen Fall
+jetzt mit `criteria_untracked` ab. Auftraege ohne explizite Kriterien behalten
+ihren bisherigen Abschlussweg. Die Regression prueft einen zuvor gruenden
+Endlauf und verlangt nun `rc=1`, einen sichtbaren unvollstaendigen Abschluss
+und kein `loop_erfolg`.
+
 ### Nachpruefung: Rollenrouting und Spec-First-Runtime
 
 Der Planner waehlt den Scout bereits bedarfsgesteuert: ein enges, explizites

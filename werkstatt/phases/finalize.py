@@ -1163,6 +1163,20 @@ def _phase_finalize(
             and callable(getattr(phase_state, "criteria_progress", None))
             else {"tracked": False, "valid": True, "covered": [], "uncovered": []}
         )
+        _phase_data = getattr(phase_state, "data", {})
+        _explicit_criteria = (
+            _phase_data.get("akzeptanzkriterien")
+            if isinstance(_phase_data, dict)
+            else None
+        )
+        _has_explicit_criteria = bool(_explicit_criteria)
+        _criteria_untracked = bool(
+            _has_explicit_criteria
+            and (
+                not isinstance(_criterion_progress, dict)
+                or _criterion_progress.get("tracked") is not True
+            )
+        )
         _criteria_unresolved = bool(
             isinstance(_criterion_progress, dict)
             and _criterion_progress.get("tracked") is True
@@ -1171,12 +1185,17 @@ def _phase_finalize(
                 or _criterion_progress.get("uncovered")
             )
         )
-        if tasks_ok <= 0 or _unresolved or _criteria_unresolved:
+        if (
+            tasks_ok <= 0 or _unresolved or _criteria_unresolved
+            or _criteria_untracked
+        ):
             _reason = (
                 "no_successful_tasks"
                 if tasks_ok <= 0
                 else "tasks_unresolved"
                 if _unresolved
+                else "criteria_untracked"
+                if _criteria_untracked
                 else "criteria_unresolved"
             )
             _completion = {
@@ -1187,14 +1206,18 @@ def _phase_finalize(
                 "tasks_total": len(_records),
                 "unresolved": _unresolved[:50],
             }
-            if _criteria_unresolved:
+            if _criteria_unresolved or _criteria_untracked:
                 _completion["criteria_covered"] = _criterion_progress.get(
                     "covered", [],
-                )
+                ) if isinstance(_criterion_progress, dict) else []
                 _completion["criteria_uncovered"] = _criterion_progress.get(
                     "uncovered", [],
-                )
-                _completion["criteria_error"] = _criterion_progress.get("error")
+                ) if isinstance(_criterion_progress, dict) else []
+                _completion["criteria_error"] = (
+                    _criterion_progress.get("error")
+                    if isinstance(_criterion_progress, dict)
+                    else "invalid_criteria_progress"
+                ) or ("criteria_not_tracked" if _criteria_untracked else None)
             audit("loop_phase", _completion, pd, pn)
             rc = 1
         else:
