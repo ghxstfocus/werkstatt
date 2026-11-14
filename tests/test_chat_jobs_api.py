@@ -35,6 +35,14 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
             return {"run_id": "run-active", "state": "paused"}
 
     monkeypatch.setattr(app_modul, "_loop_registry", lambda: _Registry())
+    from werkstatt import event_store
+
+    class _EventStore:
+        def get_run_record(self, project: str, run_id: str) -> dict[str, str]:
+            assert (project, run_id) == ("demo", "run-active")
+            return {"status": "running"}
+
+    monkeypatch.setattr(event_store, "EventStore", _EventStore)
 
     def _accepted(*args: Any, **kwargs: Any) -> dict[str, Any]:
         assert kwargs["db_path"].name == "demo.db"
@@ -67,6 +75,54 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
         "job_id": "a" * 32, "state": "queued", "created": True,
         "run_id": "run-active",
     }
+
+
+def test_chat_job_does_not_bind_to_terminal_run_from_stale_registry(
+    client_and_base: tuple[Any, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _base = client_and_base
+    from werkstatt import chat_jobs, event_store
+    from werkstatt.web import app as app_modul
+
+    class _Registry:
+        def read(self, project: str) -> dict[str, str]:
+            assert project == "demo"
+            return {"run_id": "run-finished", "state": "running"}
+
+    class _EventStore:
+        def get_run_record(self, project: str, run_id: str) -> dict[str, str]:
+            assert (project, run_id) == ("demo", "run-finished")
+            return {"status": "failed"}
+
+    monkeypatch.setattr(app_modul, "_loop_registry", lambda: _Registry())
+    monkeypatch.setattr(event_store, "EventStore", _EventStore)
+    monkeypatch.setattr(
+        chat_jobs, "sync_completed_job_turns", lambda *_args, **_kwargs: None,
+    )
+    seen: dict[str, Any] = {}
+
+    def _accepted(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        seen["run_id"] = kwargs["run_id"]
+        return {
+            "job": {"job_id": "d" * 32, "state": "queued", "run_id": None},
+            "created": True,
+        }
+
+    monkeypatch.setattr(chat_jobs, "enqueue_chat_job", _accepted)
+    response = client.post(
+        "/api/projects/demo/chat/jobs",
+        json={
+            "session_id": "session-1",
+            "message": "Op 375 starten",
+            "mode": "read",
+            "idempotency_key": "request-stale-run-001",
+        },
+    )
+
+    assert response.status_code == 202
+    assert seen["run_id"] is None
+    assert response.json()["run_id"] is None
 
 
 def test_history_repairs_completed_job_turn_after_worker_crash(

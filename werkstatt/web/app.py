@@ -1716,12 +1716,24 @@ def create_app() -> FastAPI:
             sync_completed_job_turns(projekt, sid, db_path=db_path)
             context_seq = ChatSession(projekt, sid).max_seq()
             loop_record = _loop_registry().read(projekt)
-            run_id = (
-                str(loop_record["run_id"])
-                if loop_record is not None
+            run_id = None
+            if (
+                loop_record is not None
                 and loop_record["state"] in ("starting", "running", "paused")
-                else None
-            )
+            ):
+                candidate_run_id = str(loop_record["run_id"])
+                # The registry can briefly lag behind a terminal RunRecord.
+                # Only bind the chat job to the loop inbox when durable state
+                # still accepts messages; otherwise it remains a standalone
+                # chat job instead of being rejected during outbox replay.
+                from werkstatt.event_store import EventStore
+
+                run_record = EventStore().get_run_record(projekt, candidate_run_id)
+                if (
+                    run_record is not None
+                    and run_record.get("status") in {"starting", "running"}
+                ):
+                    run_id = candidate_run_id
             accepted = enqueue_chat_job(
                 projekt,
                 (_PROJECTS_BASE / projekt).resolve(),
