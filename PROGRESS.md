@@ -6732,3 +6732,11 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Die geaenderten Chat- und Live-Feed-Skripte hatten in `layout.html` noch dieselben Cache-Busting-Querywerte wie zuvor. Ein Browser konnte damit trotz neuem Servercode alte Statusmeldungen weiterverwenden.
 - **Aenderung:** Alle Asset-URLs in `layout.html` erhalten dieselbe neue Version. `chat_job_queued` zeigt keinen Inhalt an, weil der redigierte Audit-Payload die eigentliche Nachricht absichtlich nicht speichert.
 - **Verifikation:** Frontend-Regression fuer die Asset-URLs, Backend-Regression fuer redigierte Timeline-Angabe und JavaScript-Syntax; lokale Pytest/Ruff-Pruefung nicht verfuegbar, Linux-CI ausstehend.
+
+### Nachtrag — Worker-Fencing auf main und Snapshot-Retry-Race
+
+- **Worker-Fencing:** PR #42 ist als `1a93595` auf `main`. Linux-CI auf Merge-Head `8c04ecb`: 2319 bestanden, 5 uebersprungen; Ruff, Mypy, AST, Audit-Katalog und Quality Gate gruen. Der separate Produktionsserver-Stand ist nicht belegt.
+- **Neuer Befund:** Zwei zeitgleiche idempotente Chat-POSTs koennen denselben Standalone-Snapshot parallel unter derselben Job-ID publizieren. Der zweite `os.replace()`-Aufruf konnte bisher den gemeinsamen Chatjob als Snapshot-Fehler beenden, obwohl der erste Aufruf den Snapshot bereits erfolgreich erstellt hatte.
+- **Aenderung:** Ein Verlierer beim Snapshot-Publish validiert und verwendet jetzt den bereits publizierten Snapshot derselben Projekt-/Run-/Job-Identitaet; fremde, symbolische oder ungueltige Ziele bleiben Fehler.
+- **Regressionstest:** Zwei parallele Snapshot-Erstellungen werden bis zum Publish synchronisiert; beide muessen denselben validen Snapshot erhalten und temporaere Verzeichnisse bereinigen.
+- **Verifikation:** `tests/test_run_snapshot.py`, `tests/test_chat_jobs.py` und `tests/test_chat_jobs_api.py`: 52 bestanden, 2 uebersprungen; Ruff und `git diff --check` bestanden. Vollstaendige Linux-CI steht aus.
