@@ -183,7 +183,10 @@ def test_new_chat_job_survives_pending_result_for_terminal_run(
     )
     assert jobs.mark_run_inbox_enqueued(old_job["job_id"])
     assert jobs.claim(old_job["job_id"], "chat-worker")
-    assert jobs.finish(old_job["job_id"], answer="Fertiges Ergebnis")
+    assert jobs.finish(
+        old_job["job_id"], answer="Fertiges Ergebnis",
+        worker_id="chat-worker",
+    )
 
     class _Registry:
         def read(self, project: str) -> None:
@@ -226,7 +229,10 @@ def test_history_repairs_completed_job_turn_after_worker_crash(
         "session-1", "Frage nach Reconnect", "read", "request-key-repair-001",
     )
     assert store.claim(job["job_id"])
-    assert store.finish(job["job_id"], answer="Antwort nach Reconnect")
+    assert store.finish(
+        job["job_id"], answer="Antwort nach Reconnect",
+        worker_id="test-worker",
+    )
 
     response = client.get(
         "/api/projects/demo/chat/history?session_id=session-1",
@@ -329,7 +335,10 @@ def test_chat_job_reconnect_includes_persisted_failures(
         "session-1", "Pruefe den Loop", "read", "request-key-fail-001",
     )
     assert store.claim(job["job_id"], "worker-test")
-    assert store.finish(job["job_id"], error="RuntimeError: Provider offline")
+    assert store.finish(
+        job["job_id"], error="RuntimeError: Provider offline",
+        worker_id="worker-test",
+    )
 
     response = client.get(
         "/api/projects/demo/chat/jobs?session_id=session-1",

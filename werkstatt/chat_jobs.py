@@ -691,14 +691,15 @@ class ChatJobStore:
     def finish(
         self, job_id: str, *, answer: str | None = None,
         error: str | None = None, cancelled: bool = False,
+        worker_id: str,
     ) -> bool:
         now = _now()
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT cancel_requested FROM jobs "
-                "WHERE job_id=? AND state='running'",
-                (job_id,),
+                "WHERE job_id=? AND state='running' AND worker_id=?",
+                (job_id, worker_id),
             ).fetchone()
             if row is None:
                 conn.commit()
@@ -717,8 +718,9 @@ class ChatJobStore:
             )
             cur = conn.execute(
                 "UPDATE jobs SET state=?,answer=?,error=?,updated_at=?,"
-                "worker_id=NULL WHERE job_id=? AND state='running'",
-                (state, answer, error, now, job_id),
+                "worker_id=NULL WHERE job_id=? AND state='running' "
+                "AND worker_id=?",
+                (state, answer, error, now, job_id, worker_id),
             )
             if cur.rowcount:
                 conn.execute(
@@ -879,13 +881,14 @@ def _run_job(
             request_id=job_id,
             origin_session_id=str(job["session_id"]),
         )
-        if store.finish(job_id, answer=answer):
+        if store.finish(job_id, answer=answer, worker_id=_WORKER_ID):
             parent_session.append_job_turn(job_id, job["message"], answer)
     except ChatCancelled:
-        store.finish(job_id, cancelled=True)
+        store.finish(job_id, cancelled=True, worker_id=_WORKER_ID)
     except Exception as exc:
         store.finish(
             job_id, error=f"{type(exc).__name__}: {exc}",
+            worker_id=_WORKER_ID,
         )
     finally:
         if parent_session is not None and worker_session is not None:

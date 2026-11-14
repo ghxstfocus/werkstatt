@@ -6700,6 +6700,13 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation:** Die aktualisierte Linux-CI fuer PR-Head `fbbe939` ist erfolgreich: 2299 Tests bestanden, 5 uebersprungen; Ruff, Mypy, AST-/Audit-Katalog und Quality Gate gruen. PR #35 wurde mit Merge-Commit `938df74` auf `main` uebernommen. Ein separater Post-Merge-Lauf und der aktuelle Produktionsserver-Commit sind nicht belegt.
 - **Dokumentation:** `docs/IST-ZUSTAND-LOOP-2026-11-12.md` nennt nun `938df74` als aktuellen Hauptlinienstand, trennt den historischen CI-Beleg auf `026576f` ab und dokumentiert, dass OP-396/397 offen bleiben. Der Chatjob-Fix schliesst die Chat-zu-Loop-Trennung teilweise, nicht die gesamte OP-396-Akzeptanz.
 
+## 2026-11-14 — Chatjob-Abschluss an Worker-Lease binden
+
+- **Befund:** `ChatJobStore.finish()` pruefte nur `job_id` und `state='running'`. Ein Worker, dessen Lease inzwischen einem anderen Worker gehoert, konnte den uebernommenen Job trotzdem als abgebrochen/fehlgeschlagen/erfolgreich terminalisieren. Das passt zu den dokumentierten Lease- und Recovery-Anforderungen aus OP-397 und konnte einen Chatturn vorzeitig beenden.
+- **Aenderung:** Jeder Abschluss verlangt jetzt die Worker-ID und prueft sie sowohl beim Lesen als auch beim atomaren Update. Der `_run_job`-Pfad uebergibt seine Claim-ID fuer Erfolg, Fehler und kooperativen Abbruch; ein veralteter Worker kann den aktuellen Besitzer nicht mehr ueberschreiben.
+- **Regressionstest:** Simulierter Lease-Wechsel von `worker-old` auf `worker-new`; Abschlussversuch des alten Workers wird abgewiesen, der neue Worker kann den Job anschliessend erfolgreich abschliessen.
+- **Verifikation:** `tests/test_chat_jobs.py` und `tests/test_chat_jobs_api.py`: 47 bestanden; Ruff und `git diff --check` bestanden. `doku_check.py --strict --limit 10 --worktree` ist gruen. Der lokale Gesamt-Pytestlauf ist unter Windows wegen bestehender Linux-/POSIX-spezifischer Tests fehlgeschlagen und im Timeout-Capture abgebrochen; Linux-CI steht aus.
+
 ## 2026-11-14 — Chat-Intent muss Auftragssprache erkennen
 
 - **Befund:** Die erste Intent-Schranke suchte nur nach OP-ID plus Verb und akzeptierte so auch „kein Auftrag“, Negationen, hypothetische Aussagen und Fragen als OP-Umsetzungswunsch. Die allgemeine Loop-Aktionsschranke akzeptierte zudem jede Frage mit „bitte“, etwa „Bitte sag mir, ob ich den Loop starten soll?“.
