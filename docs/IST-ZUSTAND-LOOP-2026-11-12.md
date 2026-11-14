@@ -4,22 +4,19 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Hauptlinienstand: `d7f32e8` (Merge PR #25). GitHub Actions
-Quality Gate [43576037105](https://github.com/ghxstfocus/werkstatt/actions/runs/43576037105)
-bestand fuer den PR-Tree mit 2.262 Pytests und 5 uebersprungenen Tests,
-Ruff, Mypy, AST und Audit-Katalog. Der zuletzt vom Nutzer gemeldete
-Serverlauf aktualisierte `main` bis `3cbaf26` und bestand mit denselben
-2.262 Tests; er belegt nicht, dass der Server bereits `d7f32e8` ausfuehrt.
-Der zusaetzliche Recovery-Beleg aus PR #8 wurde auf Commit `2130019` mit
-Quality-Gate-Run
+Gepruefter Hauptlinienstand: `554a692` (Chat-Eingabe fuer grosse Logs).
+GitHub Actions Quality Gate
+[43595095042](https://github.com/ghxstfocus/werkstatt/actions/runs/43595095042)
+lief fuer exakt diesen `main`-Commit erfolgreich durch: JavaScript-Syntax,
+Ruff, pytest mit Diagnosen und das vollstaendige Quality Gate. Der Lauf
+enthaelt damit den Architect-API-Preflight aus Merge PR #32 (`683398a`) und
+die Log-Kontextkorrektur. Der aktuelle Serverstand ist damit nicht belegt;
+die letzte hier dokumentierte Serververifikation betrifft einen aelteren
+Commit und darf nicht auf `554a692` uebertragen werden. Der Recovery-Beleg
+aus PR #8 bleibt separat auf Commit `2130019` mit Quality-Gate-Run
 [43488902240](https://github.com/ghxstfocus/werkstatt/actions/runs/43488902240)
-erfolgreich verifiziert. Seit der letzten Bestandsaufnahme
-wurden unter anderem Akzeptanzkriterien explizit auf Tasks abgebildet und als
-Checkpoint-Daten erhalten, Verify-Reparaturen auf betroffene Stages begrenzt
-und danach die vollstaendige Phase-End-Pruefung erneut ausgefuehrt. Der
-Werkzeugdialog erkennt wiederholte und alternierende Werkzeugzyklen ohne
-pauschale Rundengrenze. Diese CI-Belege betreffen den Repository-Stand, nicht
-den aktuell laufenden Produktionsserver.
+verifiziert. Diese CI-Belege bestaetigen den jeweiligen Repository-Stand,
+nicht den aktuell laufenden Produktionsserver.
 
 ## Chat-Belegsuche: GNU-grep-Alternation
 
