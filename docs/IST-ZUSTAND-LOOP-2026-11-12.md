@@ -4,11 +4,15 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Aktueller Hauptlinienstand: `938df74` (PR #35, Chatbemerkungen von aktiven
-Loop-Runs getrennt; Details und Grenzen stehen im Nachtrag am Dokumentende).
-GitHub Actions Quality Gate war auf dem PR-Head `fbbe939` erfolgreich; ein
-separater Post-Merge-Lauf wurde nicht gefunden. Der Produktionsserver wurde
-bei dieser Nachpruefung nicht erreicht; sein laufender Commit ist unbekannt.
+Aktueller Hauptlinienstand: `7413012` (PR #37, explizite Intent-Pruefung fuer
+Chat-Steueraktionen; Details und Grenzen stehen in den Nachtraegen am
+Dokumentende).
+GitHub Actions Quality Gate fuer PR #37 war auf dem Head
+`0c1a839d8575f3c1c908f24f682725c74e31be8f` erfolgreich ([Run
+43609401260](https://github.com/ghxstfocus/werkstatt/actions/runs/43609401260));
+ein separater Post-Merge-Lauf wurde nicht gefunden. Der Produktionsserver
+wurde bei dieser Nachpruefung nicht erreicht; sein laufender Commit ist
+unbekannt.
 OP-375 ist laut STATUS weiterhin offen und nicht blockiert.
 
 Historischer Basisbeleg: `026576f` schloss unbelegte OP-398-Erfolge aus und
@@ -311,3 +315,20 @@ begrenzt; Gate-/Schreibauftrags-Disposition, Checkpoint-Integration,
 Kontext-Replay und UI-E2E bleiben gemaess STATUS offen. OP-397 bleibt ebenfalls
 offen; insbesondere ist automatischer Webserver-Neustart mit anschliessender
 Recovery nicht durch einen realen Betriebslauf belegt.
+
+## Nachtrag — Explizite Intent-Pruefung fuer Chatuebergaben (2026-11-14)
+
+`main` steht auf `7413012` (PR #37). Die vorherige Heuristik konnte weiterhin
+falsche Loop-Auftraege aus „OP-ID plus Verb“ oder aus beliebigen Fragen mit
+„bitte“ ableiten. Der neue Guard verlangt klare, an den Assistenten gerichtete
+Auftragssprache; Negationen, hypothetische Aussagen, reine Bemerkungen und
+unklare Fragen duerfen keinen Loop-Handoff ausloesen. Mehrere OP-IDs fuehren bei
+erkannter Ausfuehrungsabsicht zu einer Rueckfrage statt zu einer willkuerlichen
+Auswahl.
+
+Linux-CI fuer PR-Head `0c1a839d8575f3c1c908f24f682725c74e31be8f` war
+erfolgreich (Quality Gate, Run 43609401260). Die lokalen Syntax- und
+Intent-Gegenproben bestanden ebenfalls. Ein separater Post-Merge-Lauf und der
+aktuelle Produktionsserver-Commit sind nicht belegt. OP-396 und OP-397 bleiben
+offen; der Guard ist eine gezielte Fehlklassifikationsschranke, kein Ersatz
+fuer die noch fehlende gemeinsame Chat-/Loop-Disposition.
