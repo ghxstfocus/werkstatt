@@ -6753,6 +6753,14 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Offene Luecke:** Architect hat weiterhin keine interaktiven Quell-Lesewerkzeuge. Ein Deklarationsindex ist kein Ersatz fuer gezielte Quelltextauszuege mit Fundstellen; bounded JIT-Retrieval bleibt Teil von OP-405.
 - **Verifikation:** API-/Sprachzuordnung, Widerspruchs-Klassifikation, Architect-Korrekturpfad und Scout-Kette: 91 Tests bestanden; Ruff und `git diff --check` bestanden. Der komplette lokale Windows-Testlauf ist fuer Linux-Pfade/Unix-Modusannahmen nicht aussagekraeftig und wurde nicht als Produktions-/Serverbeleg gewertet.
 
+### Nachtrag — Gezielte Quellbelege beim Architect-Preflight-Retry
+
+- **Befund:** Bei einem abgelehnten API-Plan bekam der Architect den Entwurf und die Preflight-Befunde, aber keine Quellstellen zum Gegenpruefen. Dadurch konnte er denselben unbelegten API-Aufruf wiederholen.
+- **Aenderung:** Nur beim ersten Preflight-Fehler liest der Retry kleine Zeilenfenster aus den im betroffenen Planabschnitt genannten Quellpfaden. Pfade bleiben auf das Projektverzeichnis begrenzt; Umfang ist auf vier Dateien und 8.000 Zeichen beschraenkt. Audit speichert nur Pfad-/Zeilenmetadaten, keinen Quelltext. Prompt behandelt Auszuege als untrusted und fehlende Treffer nicht als Nichtexistenzbeweis.
+- **Grenze:** Das ist gezielte Korrekturhilfe, kein allgemeines interaktives Tool-Looping und kein Abschluss von OP-405.
+- **Tests:** Regression fuer Quellstellen im Korrekturprompt sowie Pfadbegrenzung und Zeichenlimit.
+- **Verifikation:** gezielte Architect-Tests: 17 bestanden; Ruff, Mypy fuer `werkstatt/architect.py`, Doku-Drift-Check und `git diff --check` bestanden. Der komplette Windows-Testlauf ist wegen bestehender Linux-/POSIX-Annahmen fehlgeschlagen und wurde abgebrochen; er ist kein Linux-Gesamtbeleg. Linux-CI steht aus.
+
 ### Nachtrag — Mypy-Regression aus Merge-CI behoben
 
 - **Befund:** Merge-CI auf `6f25272` bestand 2328 Tests, Ruff, AST und Audit-Katalog, scheiterte aber am Quality Gate mit fuenf Mypy-Fehlern im neuen Python/JavaScript/Java-API-Index in `werkstatt/scout.py`.
