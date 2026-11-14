@@ -204,6 +204,90 @@ def test_inactive_run_fails_uncheckpointed_jobs_but_preserves_safe_replay(
     assert active_job is not None and active_job["state"] == "queued"
 
 
+def test_standalone_snapshot_is_persisted_without_run_binding(tmp_path: Path) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _ = store.create(
+        "session-a", "Was hat sich geaendert?", "read", "snapshot-chat-001",
+        project="demo",
+    )
+    snapshot = tmp_path / "snapshots" / "snapshot-1"
+
+    assert store.set_standalone_snapshot(
+        job["job_id"], "chat-snapshot-1", tmp_path, snapshot,
+        "head-sha", "tree-fingerprint",
+    )
+    stored = store.get(job["job_id"])
+
+    assert stored is not None
+    assert stored["run_id"] is None
+    assert stored["snapshot_id"] == "chat-snapshot-1"
+    assert stored["run_snapshot_source"] == str(tmp_path.resolve())
+    assert stored["run_snapshot_path"] == str(snapshot.resolve())
+    assert stored["run_snapshot_head"] == "head-sha"
+    assert stored["run_snapshot_fingerprint"] == "tree-fingerprint"
+    assert stored["snapshot_required"] == 0
+
+
+def test_snapshot_required_fences_queued_standalone_job(tmp_path: Path) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _ = store.create(
+        "session-a", "Frage", "read", "snapshot-chat-required-01",
+        project="demo",
+    )
+
+    assert store.require_standalone_snapshot(job["job_id"])
+    stored = store.get(job["job_id"])
+    assert stored is not None and stored["snapshot_required"] == 1
+
+
+def test_standalone_snapshot_cannot_be_attached_to_run_bound_job(
+    tmp_path: Path,
+) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _ = store.create(
+        "session-a", "Frage", "read", "snapshot-chat-002",
+        run_id="run-1", project="demo",
+    )
+
+    assert not store.set_standalone_snapshot(
+        job["job_id"], "chat-snapshot-2", tmp_path, tmp_path / "snapshot",
+        "head-sha", "tree-fingerprint",
+    )
+
+
+def test_snapshot_failure_is_terminal_and_idempotent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, run_snapshot
+
+    db_path = tmp_path / "jobs.db"
+    monkeypatch.setattr(chat_jobs, "_db_path", lambda _project: db_path)
+
+    def fail_snapshot(*_args: Any) -> None:
+        raise RuntimeError("snapshot unstable")
+
+    monkeypatch.setattr(
+        run_snapshot, "create_project_snapshot", fail_snapshot,
+    )
+    monkeypatch.setattr(chat_jobs, "reconcile_run_inbox", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(chat_jobs, "_dispatch_pending", lambda *_args: None)
+
+    first = chat_jobs.enqueue_chat_job(
+        "demo", tmp_path, "session-a", "Was ist passiert?", "read",
+        "snapshot-chat-failure-01", snapshot_on_accept=True,
+    )
+    replay = chat_jobs.enqueue_chat_job(
+        "demo", tmp_path, "session-a", "Was ist passiert?", "read",
+        "snapshot-chat-failure-01", snapshot_on_accept=True,
+    )
+
+    assert first["created"] is True
+    assert first["job"]["state"] == "failed"
+    assert "snapshot unstable" in first["job"]["error"]
+    assert replay["created"] is False
+    assert replay["job"]["state"] == "failed"
+
+
 def test_claim_allows_independent_turns_within_one_session(tmp_path: Path) -> None:
     store = ChatJobStore(tmp_path / "jobs.db")
     first, _ = store.create("session-a", "Erste Frage", "read", "request-key-a001")

@@ -158,6 +158,70 @@ def test_chat_loop_can_handoff_explicit_op_implementation_request(
     assert proposal["payload"]["arguments"] == {"op_id": "OP-321"}
 
 
+def test_chat_remark_cannot_create_loop_action_even_if_model_requests_it(
+    session: ChatSession,
+    fake_llm,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_session
+
+    monkeypatch.setattr(
+        chat_session, "_db_pfad", lambda _project: session.db_pfad,
+    )
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "unrequested-start",
+                "type": "function",
+                "function": {
+                    "name": "request_loop_action",
+                    "arguments": json.dumps({
+                        "action": "start", "op_id": "OP-375",
+                    }),
+                },
+            }],
+        },
+        {"role": "assistant", "content": "Ich beobachte den Lauf weiter."},
+    )
+    tool_results: list[dict[str, Any]] = []
+
+    answer = chat_agent.chat_loop(
+        session,
+        "Dann schauen wir mal ob der Loop diese Aufgabe schafft",
+        on_tool_result=lambda _name, content: tool_results.append(
+            json.loads(content),
+        ),
+    )
+
+    assert "beobachte" in answer
+    assert tool_results[0]["zustand"] == "not_requested"
+    assert not any(
+        event["kind"] == "loop_action_proposed" for event in session.load()
+    )
+
+
+@pytest.mark.parametrize(
+    ("message", "action", "expected"),
+    [
+        ("Dann schauen wir mal ob der Loop das schafft", "start", False),
+        ("Das war nur eine Bemerkung, kein Auftrag", "start", False),
+        ("Was sagst du zum Plan?", "start", False),
+        ("Kann ich den Loop starten?", "start", False),
+        ("Starte den Loop nicht", "start", False),
+        ("Bitte OP-375 starten", "start", True),
+        ("Pausiere den Loop", "pause", True),
+        ("Der Loop soll weiterlaufen", "resume", True),
+        ("Stoppe den Loop", "stop", True),
+    ],
+)
+def test_loop_action_requires_current_turn_intent(
+    message: str, action: str, expected: bool,
+) -> None:
+    assert chat_agent._explicit_loop_action_intent(message, action) is expected
+
+
 def test_ambiguous_op_execution_request_asks_before_model_or_handoff(
     session: ChatSession,
     monkeypatch: pytest.MonkeyPatch,
