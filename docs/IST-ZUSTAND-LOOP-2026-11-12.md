@@ -4,18 +4,21 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Hauptlinienstand: `026576f` (OP-398-Abschluss verweigert
-ungetrackten Akzeptanzkriterien; alte Erfolgs-Fixtures ordnen ihre Kriterien
-jetzt explizit den Tasks zu). Der erste Linux-CI-Lauf und der Serverlauf auf
-`e35e2c1` meldeten 9 fehlgeschlagene, 2273 bestandene und 5 uebersprungene
-Tests; die Fehler stammten aus generischen Erfolgs-Fixtures ohne
-`criterion_refs`. Die Produktionsregel bleibt fail-closed. Der vollstaendige
-Linux-CI-Lauf fuer `026576f` ist gruen: 2282 Tests bestanden, 5 uebersprungen;
-JavaScript-Syntax, Ruff und Quality Gate ebenfalls erfolgreich
+Aktueller Hauptlinienstand: `938df74` (PR #35, Chatbemerkungen von aktiven
+Loop-Runs getrennt; Details und Grenzen stehen im Nachtrag am Dokumentende).
+GitHub Actions Quality Gate war auf dem PR-Head `fbbe939` erfolgreich; ein
+separater Post-Merge-Lauf wurde nicht gefunden. Der Produktionsserver wurde
+bei dieser Nachpruefung nicht erreicht; sein laufender Commit ist unbekannt.
+OP-375 ist laut STATUS weiterhin offen und nicht blockiert.
+
+Historischer Basisbeleg: `026576f` schloss unbelegte OP-398-Erfolge aus und
+ordnete alte Erfolgs-Fixtures explizit den Tasks zu. Der erste Linux-CI-Lauf
+und der Serverlauf auf `e35e2c1` meldeten 9 fehlgeschlagene, 2273 bestandene
+und 5 uebersprungene Tests; Ursache waren generische Erfolgs-Fixtures ohne
+`criterion_refs`. Der vollstaendige Linux-CI-Lauf fuer `026576f` bestand mit
+2282 Tests, 5 Ueberspringungen, JavaScript-Syntax, Ruff und Quality Gate
 ([Run 43598239222](https://github.com/ghxstfocus/werkstatt/actions/runs/43598239222)).
-OP-375 ist laut STATUS offen und nicht blockiert. Der Server muss `026576f`
-noch pullen und separat verifizieren; bis dahin ist der Serverlauf nicht als
-gruen belegt. GitHub Actions Quality Gate
+GitHub Actions Quality Gate
 [43595830085](https://github.com/ghxstfocus/werkstatt/actions/runs/43595830085)
 lief fuer den vorherigen Code-Commit `88dd5b0` erfolgreich durch: Ruff,
 vollstaendiges pytest, AST-/Audit-Katalog und Quality Gate. Der Recovery-Beleg
@@ -116,7 +119,7 @@ Arbeitsgraphen und Evidence Ledger.
 | Commit und Verify | Commit-Pruefungen pinnen Parent-HEAD und Index-Tree. Nach einem Commit laeuft die vollstaendige Phase-End-Verify erneut; Snapshot-Abweichungen verhindern Erfolg. |
 | Run-Ergebnis | Ein gruener Teilcheck genuegt nicht. Task-Akzeptanzkriterien werden vor dem Gate auf Abdeckung geprueft und Referenzen bleiben im Checkpoint erhalten. Offene/fehlgeschlagene Tasks, nicht abgedeckte Kriterien oder rotes Verify verhindern den Erfolg. |
 | Prozessstatus | Die Registry ueberlebt Webserver-Neustarts und kann lebende Worker wiederfinden. Sie und der RunRecord bleiben getrennte Speichervertraege. |
-| Run-Inbox | SQLite speichert Nachrichten idempotent mit Lease/Fencing. Run-gebundene Chatjobs fuehren zusaetzlich eine Outbox-Markierung: Inbox-Eintrag wird vor Worker-Dispatch geschrieben und bei Reconnect/Resume idempotent reconciliert. Der Task-Loop konsumiert Annahme- und terminale Ergebnis-Hinweise an Task-Grenzen und schreibt sie crash-sicher in getrennte Checkpoint-Cursor. Beide erscheinen mit stabiler Audit-ID und redigierten Metadaten in der Control-Timeline, bevor der Checkpoint geschrieben und die Inbox bestaetigt wird. Der Ergebnis-Hinweis enthaelt Status und Antwort-Hash, nicht den Antworttext; er bestaetigt die Rueckkehr des Paralleljobs, nimmt aber dessen Inhalt noch nicht als Ziel-/Scope-Aenderung in den Hauptlauf auf. Allgemeine Fragen, Steueraktionen, Gate-Antworten und Schreibauftraege bleiben noch keine vollstaendig integrierten Koordinator-Ereignisse. |
+| Run-Inbox | SQLite speichert Nachrichten idempotent mit Lease/Fencing. Run-gebundene Chatjobs fuehren zusaetzlich eine Outbox-Markierung: Inbox-Eintrag wird vor Worker-Dispatch geschrieben und bei Reconnect/Resume idempotent reconciliert. Der Task-Loop konsumiert Annahme- und terminale Ergebnis-Hinweise an Task-Grenzen und schreibt sie crash-sicher in getrennte Checkpoint-Cursor. Beide erscheinen mit stabiler Audit-ID und redigierten Metadaten in der Control-Timeline, bevor der Checkpoint geschrieben und die Inbox bestaetigt wird. Der Ergebnis-Hinweis enthaelt Status und Antwort-Hash, nicht den Antworttext; er bestaetigt die Rueckkehr des Paralleljobs, nimmt aber dessen Inhalt noch nicht als Ziel-/Scope-Aenderung in den Hauptlauf auf. Seit PR #35 laufen normale Chatfragen/-bemerkungen run-unabhaengig gegen einen unveraenderlichen Snapshot; sie werden nicht in die aktive Run-Inbox geschrieben. Steueraktionen werden nur nach einem deterministischen Intent-Guard als Vorschlag zugelassen. Gate-Antworten und Schreibauftraege sind weiterhin nicht vollstaendig in den gemeinsamen Koordinator-/Checkpoint-Vertrag integriert. |
 | Control-Timeline | Viele Rollen- und Verify-Schritte sind sichtbar. Lueckenloses Builder-/LLM-Eventing und eine einheitliche Run-Projektion bleiben offen. Chat-Werkzeuge haben keine pauschale Rundengrenze mehr; wiederholte Zyklen loesen Kurskorrektur und bei weiterem Stillstand eine belegte Abschlussantwort aus. |
 
 ## Nachgewiesene Start-Race und Korrektur
@@ -265,9 +268,10 @@ Zeilen mit leerer Run-ID abdecken, bevor der Pfad als erledigt gelten kann.
 ## Naechster Architektur-Schritt
 
 M1 aus ADR-0032 bleibt offen: die vorhandene Run-Inbox muss in einen
-einheitlichen Run-Vertrag ueberfuehrt werden, der Fragen, Steuerung,
+einheitlichen Run-Vertrag ueberfuehrt werden, der Steuerung,
 Gate-Antworten und Schreibauftraege idempotent dem selben Run zuordnet und
-deren Wirkung an sicheren Checkpoints definiert. Die vorhandenen SQLite-
+deren Wirkung an sicheren Checkpoints definiert. Read-only-Fragen bleiben
+parallel und run-unabhaengig, wie in ADR-0032 festgelegt. Die vorhandenen SQLite-
 Stores, Prozess-Registry und Phase-Checkpoints sind zu migrieren, nicht
 durch einen unverbundenen zweiten Statusspeicher zu verdoppeln.
 
@@ -284,3 +288,26 @@ ein dauerhafter Eingangsnachweis, aber noch keine Bearbeitungs- oder
 Abschlussbestaetigung fuer den Folgeauftrag. Diese Grenze muss bei OP-401/
 ADR-0032 erhalten bleiben, bis die Disposition und ihr Ergebnis-Gate umgesetzt
 und getestet sind.
+
+## Nachtrag — Chatbemerkungen vom Loop-Auftrag trennen (2026-11-14)
+
+`main` steht auf `938df74` (PR #35). Der Patch verhindert die im Screenshot
+belegte stale-Run-Zuordnung normaler Chatjobs: sie erhalten keine `run_id`,
+werden erst nach Bindung ihres unveraenderlichen Projekt-Snapshots dispatcht
+und reconciliieren alte terminale Run-Ergebnisse getrennt. Ein modellseitig
+angeforderter `request_loop_action` wird nur dann als Vorschlag zugelassen,
+wenn der aktuelle Nutzersatz eine passende explizite Aktionsabsicht enthaelt.
+Die Timeline nennt normale Chatjobs jetzt „Chat-Antwort eingeplant“.
+
+GitHub Actions Quality Gate war fuer den PR-Head `fbbe939` erfolgreich
+(2299 bestanden, 5 uebersprungen; Ruff, Mypy, AST/Audit-Katalog und Quality
+Gate gruen). Der Merge-Commit enthaelt denselben geprueften Code-Head plus
+Merge-Metadaten. Ein separater Post-Merge-Lauf wurde nicht gefunden. Der
+Produktionsserver wurde in dieser Pruefung nicht erreicht und ist daher nicht
+als aktualisiert belegt.
+
+Das schliesst OP-396 nicht: der Intent-Guard ist bewusst deterministisch und
+begrenzt; Gate-/Schreibauftrags-Disposition, Checkpoint-Integration,
+Kontext-Replay und UI-E2E bleiben gemaess STATUS offen. OP-397 bleibt ebenfalls
+offen; insbesondere ist automatischer Webserver-Neustart mit anschliessender
+Recovery nicht durch einen realen Betriebslauf belegt.

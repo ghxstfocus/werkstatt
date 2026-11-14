@@ -6694,3 +6694,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Regressionen hinzugefuegt:** Bemerkung/Frage darf auch bei modellseitigem Toolaufruf keinen Loopstart erzeugen; aktive Run-Registry wird fuer normale Chatfragen nicht gelesen; Snapshotbindung bleibt run-frei; Snapshotfehler bleiben terminal bei Idempotenz-Replay.
 - **Verifikation:** `git diff --check` und `py_compile` unter WSL Python 3.14 bestanden. Der erste Linux-CI-Lauf stoppte vor Pytest mit Ruff `SIM103` in der neuen Intent-Pruefung; der Rueckgabepfad wurde vereinfacht. Pytest und der vollstaendige Quality Gate stehen mit dem aktualisierten PR-Commit noch aus. Lokal fehlt eine pytest-Installation.
 - **CI-Nachbesserung:** Der naechste Linux-Lauf fand einen Regressionstest fuer ausstehende Ergebnisse eines bereits beendeten Runs. Die Chat-Job-Annahme gleicht diese alte Run-Outbox jetzt separat ab; der neue Chatjob bleibt weiterhin ohne Run-Bindung. Die erneute Linux-CI steht aus.
+
+### Nachtrag — PR #35 gemergt und Loop-Ist-Aufnahme aktualisiert
+
+- **Verifikation:** Die aktualisierte Linux-CI fuer PR-Head `fbbe939` ist erfolgreich: 2299 Tests bestanden, 5 uebersprungen; Ruff, Mypy, AST-/Audit-Katalog und Quality Gate gruen. PR #35 wurde mit Merge-Commit `938df74` auf `main` uebernommen. Ein separater Post-Merge-Lauf und der aktuelle Produktionsserver-Commit sind nicht belegt.
+- **Dokumentation:** `docs/IST-ZUSTAND-LOOP-2026-11-12.md` nennt nun `938df74` als aktuellen Hauptlinienstand, trennt den historischen CI-Beleg auf `026576f` ab und dokumentiert, dass OP-396/397 offen bleiben. Der Chatjob-Fix schliesst die Chat-zu-Loop-Trennung teilweise, nicht die gesamte OP-396-Akzeptanz.
