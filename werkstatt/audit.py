@@ -75,7 +75,11 @@ _AUDIT_KINDS_BEKANNT: frozenset[str] = frozenset({'adr_mini_created', 'adr_mini_
 
 
 _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
-    {"planner_architect_context_budget"}
+    {
+        "planner_architect_context_budget",
+        "loop_explorer_required",
+        "loop_explorer_skipped",
+    }
 )
 
 
