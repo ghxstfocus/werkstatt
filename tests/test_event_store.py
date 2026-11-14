@@ -104,6 +104,18 @@ def test_append_with_event_id_is_idempotent_and_project_scoped(
     assert store.query("run-a", project="other") == []
 
 
+def test_append_marks_missing_run_identity_unverified(tmp_path: Path) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.append("", "loop_ended", payload={}, project="demo")
+
+    with sqlite3.connect(str(store.db_pfad)) as conn:
+        row = conn.execute(
+            "SELECT origin_verified FROM events WHERE project='demo'"
+        ).fetchone()
+
+    assert row == (0,)
+
+
 
 def test_run_record_wrong_target_retry_does_not_mutate_base_commit(
     tmp_path: Path,

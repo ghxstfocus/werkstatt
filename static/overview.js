@@ -55,7 +55,8 @@
     var success = Number(n.erfolg || 0);
     var failed = Number(n.fehlgeschlagen || 0);
     var aborted = Number(n.abgebrochen || 0);
-    var total = Number(n.gesamt || success + failed + aborted);
+    var unverified = Number(n.unverified || 0);
+    var total = Number(n.gesamt || success + failed + aborted + unverified);
     if (!total) {
       target.appendChild(node("p", "overview-no-data", "Noch keine Run-Daten in den letzten 30 Tagen."));
       return;
@@ -69,7 +70,8 @@
     var values = [
       {value: success, cls: "overview-donut-success"},
       {value: failed, cls: "overview-donut-failed"},
-      {value: aborted, cls: "overview-donut-aborted"}
+      {value: aborted, cls: "overview-donut-aborted"},
+      {value: unverified, cls: "overview-donut-unverified"}
     ];
     var offset = 0;
     values.forEach(function (part) {
@@ -104,7 +106,8 @@
     [
       ["Erfolgreich", success, "var(--sem-ok)"],
       ["Fehlgeschlagen", failed, "var(--sem-error)"],
-      ["Abgebrochen", aborted, "var(--sem-warn)"]
+      ["Abgebrochen", aborted, "var(--sem-warn)"],
+      ["Herkunft ungeklärt", unverified, "var(--text-muted)"]
     ].forEach(function (entry) {
       var row = node("div", "overview-legend-row");
       var dot = node("span", "overview-legend-dot");
@@ -124,12 +127,14 @@
       var success = Number(r.erfolg || 0);
       var failed = Number(r.fehlgeschlagen || 0);
       var aborted = Number(r.abgebrochen || 0);
-      var total = Number(r.gesamt || success + failed + aborted);
+      var unverified = Number(r.unverified || 0);
+      var total = Number(r.gesamt || success + failed + aborted + unverified);
       if (!total) return;
       var row = node("div", "overview-project-bar-row");
       row.appendChild(node("span", "overview-project-bar-name", p.name));
       var bar = node("div", "overview-project-bar");
-      [["success", success], ["failed", failed], ["aborted", aborted]].forEach(function (x) {
+      [["success", success], ["failed", failed], ["aborted", aborted],
+        ["unverified", unverified]].forEach(function (x) {
         var segment = node("span", x[0]);
         segment.style.width = (x[1] * 100 / total) + "%";
         bar.appendChild(segment);
@@ -191,14 +196,21 @@
       card.appendChild(sparkline(p.runs_30d));
       var kpis = node("div", "overview-project-kpis");
       kpis.appendChild(node("span", "", fmt(p.runs_30d_total) + " Runs"));
-      kpis.appendChild(node("span", "", Math.round(Number(p.erfolgsquote_30d || 0) * 100) + "% Erfolg"));
+      var resultData = p.ergebnisse_30d || {};
+      var unknownRuns = Number(resultData.unverified || 0);
+      var quoteLabel = p.erfolgsquote_30d === null
+        ? (unknownRuns ? "Historie unvollständig" : "Noch keine Quote")
+        : Math.round(Number(p.erfolgsquote_30d) * 100) + "% Erfolg"
+          + (unknownRuns ? " · unvollständig" : "");
+      kpis.appendChild(node("span", "", quoteLabel));
       kpis.appendChild(node("span", "", fmt(p.ops_offen) + " offene OPs"));
       card.appendChild(kpis);
       var results = p.ergebnisse_30d || {};
       var resultTotal = Number(results.gesamt || 0);
       if (resultTotal) {
         var bar = node("span", "overview-project-success");
-        [["success",results.erfolg],["failed",results.fehlgeschlagen],["aborted",results.abgebrochen]].forEach(function (part) {
+        [["success",results.erfolg],["failed",results.fehlgeschlagen],
+          ["aborted",results.abgebrochen],["unverified",results.unverified]].forEach(function (part) {
           var seg = node("span", part[0]);
           seg.style.width = (Number(part[1] || 0) * 100 / resultTotal) + "%";
           bar.appendChild(seg);

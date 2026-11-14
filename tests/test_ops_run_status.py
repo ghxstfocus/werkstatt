@@ -21,8 +21,9 @@ def _event(db, run_id, kind, payload=None, ts=None):
         ts = datetime.now(UTC).isoformat()
     with sqlite3.connect(str(db)) as c:
         c.execute(
-            "INSERT INTO events (run_id, kind, phase, status, payload, ts) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO events "
+            "(run_id, kind, phase, status, payload, ts, origin_verified) "
+            "VALUES (?, ?, ?, ?, ?, ?, 1)",
             (run_id, kind, None, None,
              json.dumps(payload or {}, ensure_ascii=False), ts),
         )
@@ -36,7 +37,8 @@ def test_parse_ops_blockiert_von(tmp_path):
     doc.mkdir()
     (doc / "STATUS.md").write_text(
         "### OP-100: Test eins\n- **Status:** open\n- **Blockiert von:** OP-050, OP-051\n\n"
-        "### OP-101: Test zwei\n- **Status:** open\n- **Blockiert von:** —\n"
+        "### OP-101: Test zwei\n- **Status:** open\n- **Blockiert von:** —\n",
+        encoding="utf-8",
     )
     ops = parse_ops(tmp_path)
     ids = {o["id"]: o for o in ops}
@@ -63,6 +65,25 @@ def test_run_status_done(tmp_path, monkeypatch):
     assert "OP-303" in aus
     assert aus["OP-303"]["state"] == "done"
     assert aus["OP-303"]["run_id"] == "r1"
+
+
+def test_run_status_kennzeichnet_historischen_erfolg_unverifiziert(
+    tmp_path, monkeypatch,
+):
+    _s, db = _store(tmp_path, monkeypatch)
+    alt = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    _event(db, "r1", "loop_started", {"op_id": "OP-LEGACY"}, ts=alt)
+    _event(db, "r1", "loop_erfolg", {}, ts=alt)
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute(
+            "UPDATE events SET origin_verified=0 WHERE run_id='r1'"
+        )
+
+    from werkstatt.web.inspector import aggregate_ops_run_status
+
+    status = aggregate_ops_run_status("werkstatt")["OP-LEGACY"]
+    assert status["state"] == "unverified"
+    assert status["unverified"] is True
 
 
 def test_run_status_failed(tmp_path, monkeypatch):
@@ -109,13 +130,15 @@ def test_parse_ops_projekt_spezifisch(tmp_path):
     a = tmp_path / "projekt-a" / "docs"
     a.mkdir(parents=True)
     (a / "STATUS.md").write_text(
-        "### OP-100: A-Projekt-OP\n- **Status:** open\n- **Blockiert von:** —\n"
+        "### OP-100: A-Projekt-OP\n- **Status:** open\n- **Blockiert von:** —\n",
+        encoding="utf-8",
     )
     # Projekt B mit OP-200
     b = tmp_path / "projekt-b" / "docs"
     b.mkdir(parents=True)
     (b / "STATUS.md").write_text(
-        "### OP-200: B-Projekt-OP\n- **Status:** open\n- **Blockiert von:** —\n"
+        "### OP-200: B-Projekt-OP\n- **Status:** open\n- **Blockiert von:** —\n",
+        encoding="utf-8",
     )
 
     ops_a = parse_ops(tmp_path / "projekt-a")

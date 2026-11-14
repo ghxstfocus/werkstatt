@@ -60,7 +60,17 @@ werkstatt/projection.py::Projector:
     status()             {jsonl_events, sqlite_rows, diff, last_checkpoint}
 
 SQLite-Schema: events(event_id UNIQUE, ...) mit INSERT ... ON CONFLICT
-IGNORE. Checkpoint-Tabelle projection_state(key, value).
+IGNORE. `origin_verified` kennzeichnet, ob ein projiziertes Event in seiner
+JSONL-Quelle eine nichtleere `run_id` und eine explizite Projektzuordnung
+hatte. Bei Bestandszeilen ohne belegbare Herkunft bleibt das Feld falsch;
+Migrationen erfinden keine Herkunft. Checkpoint-Tabelle
+projection_state(key, value).
+
+`Projector.backfill(project)` replayt die JSONL-Quelle fuer genau ein Projekt
+idempotent und veraendert den globalen Tail-Checkpoint nicht. Events ohne
+Run-ID oder belastbare Projektzuordnung werden in Projektion und Uebersicht
+separat ausgewiesen und duerfen nicht als verifizierter Erfolg gezaehlt
+werden. Der Backfill schreibt weiterhin ausschliesslich ueber den Projektor.
 
 Der Health-Vergleich (OP-372) zaehlt nicht die gesamte historische SQLite-
 Tabelle gegen die aktive Quelle. Seine gemeinsame Basis sind die eindeutigen

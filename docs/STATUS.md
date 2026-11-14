@@ -108,7 +108,7 @@ Letzte Aktualisierung: 2026-11-14.
 ### OP-374: Backfill reproduzierbar und letzte Runs korrekt anzeigen
 - **Status:** open
 - **Typ:** data-integrity
-- **Betroffene Dateien:** werkstatt/projection.py, werkstatt/web/inspector.py und Tests
+  - **Betroffene Dateien:** werkstatt/projection.py, werkstatt/web/inspector.py, static/overview.js, static/layout.css und Tests
 - **Akzeptanzkriterien:** Letzte Runs ignorieren Events ohne Run-ID. Backfills sind als wiederholbarer, idempotenter Projektvorgang verfuegbar. Historische Events ohne belastbare Herkunft werden getrennt ausgewiesen und nicht als verifizierter Erfolg gezaehlt.
 - **Tests:** Leere Run-IDs, Backfill-Wiederholung und Projektisolation.
 - **Blockiert von:** —

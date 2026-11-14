@@ -68,7 +68,8 @@ class EventStore:
                 "payload TEXT NOT NULL, "
                 "ts TEXT NOT NULL, "
                 "event_id TEXT, "
-                "project TEXT NOT NULL DEFAULT 'werkstatt')"
+                "project TEXT NOT NULL DEFAULT 'werkstatt', "
+                "origin_verified INTEGER NOT NULL DEFAULT 0)"
             )
             columns = {
                 str(row[1]) for row in conn.execute("PRAGMA table_info(events)")
@@ -79,6 +80,11 @@ class EventStore:
                 conn.execute(
                     "ALTER TABLE events ADD COLUMN project TEXT NOT NULL "
                     "DEFAULT 'werkstatt'"
+                )
+            if "origin_verified" not in columns:
+                conn.execute(
+                    "ALTER TABLE events ADD COLUMN origin_verified "
+                    "INTEGER NOT NULL DEFAULT 0"
                 )
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_event_id "
@@ -670,23 +676,27 @@ class EventStore:
         """Fuegt ein Event an; optionale Event-ID macht Retries idempotent."""
         ts = datetime.now(UTC).isoformat()
         payload_json = json.dumps(payload or {}, ensure_ascii=False)
+        origin_verified = int(bool(run_id.strip()) and bool(project.strip()))
         with closing(self._connect()) as conn:
             if event_id is None:
                 cur = conn.execute(
                     "INSERT INTO events "
-                    "(run_id, kind, phase, status, payload, ts, project) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (run_id, kind, phase, status, payload_json, ts, project),
+                    "(run_id, kind, phase, status, payload, ts, project, "
+                    "origin_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        run_id, kind, phase, status, payload_json, ts, project,
+                        origin_verified,
+                    ),
                 )
                 seq = int(cur.lastrowid or 0)
             else:
                 conn.execute(
                     "INSERT OR IGNORE INTO events "
-                    "(run_id, kind, phase, status, payload, ts, event_id, project) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "(run_id, kind, phase, status, payload, ts, event_id, project, "
+                    "origin_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         run_id, kind, phase, status, payload_json, ts,
-                        event_id, project,
+                        event_id, project, origin_verified,
                     ),
                 )
                 row = (
