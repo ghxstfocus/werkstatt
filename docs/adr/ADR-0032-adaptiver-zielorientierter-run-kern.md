@@ -246,15 +246,25 @@ Unsicherheit, Beleglage und erwartbarem Nutzen:
 | Reviewer | Risiko, neue Schnittstelle, grosse/mehrdeutige Aenderung oder negatives Verify | Unabhaengig vom Builder; Befunde muessen auf Diff/Anforderung verweisen. |
 | Reflection/Debugger | Konkreter Fehler, Widerspruch oder Stagnation | Keine Reflexion ohne neuen Befund; Reparaturpfad statt eigenstaendiger, unverbundener Loop. |
 
-Architect-Plaene muessen ihre codeartigen API-Aufrufe gegen den aktuellen
-AST-Index belegen. Die Signaturuebergabe allein ist kein Guard: vor Planner-
-Split und Builder laeuft ein deterministischer Preflight auf vorhandene
-Symbole und erkennbare API-Wirkungen. In einem ausdruecklich lesenden
-Aggregator duerfen nur als `read` belegte Schnittstellen verwendet werden;
-`write` oder `unknown` wird mit konkretem Befund zur Korrektur an den Architect
-gegeben. Neue Schnittstellen muessen als neue APIs markiert und im betroffenen
-Dateiblock geplant sein. Diese AST-Klassifikation ist konservative Evidenz,
-kein Beweis fuer Seiteneffektfreiheit beliebiger Python-Aufrufe.
+Architect-Plaene muessen ihre codeartigen API-Aufrufe gegen den aktuellen,
+sprachbezogenen Quellindex belegen. Der Index fuehrt Python-AST-Deklarationen
+sowie JavaScript- und Java-Deklarationen; der Preflight ordnet Aufrufe zuerst
+dem jeweiligen Dateiabschnitt und dessen Sprache zu. Gleichnamige APIs aus
+anderen Sprachen oder unverbundenen Modulen duerfen keinen Treffer erzeugen.
+Einfache JSON-Containerzugriffe sind keine Projekt-APIs. Einfache lokale
+SQL-Variablen mit `SELECT` werden als lesend erkannt. Die Signaturuebergabe
+allein ist kein Guard: vor Planner-Split und Builder laeuft ein
+deterministischer Preflight auf vorhandene Symbole und erkennbare
+API-Wirkungen. In einem ausdruecklich lesenden Aggregator duerfen nur als
+`read` belegte Backend-Schnittstellen verwendet werden; `write` oder `unknown`
+wird mit konkretem Befund zur Korrektur an den Architect gegeben. Unbekannte
+Java-Wirkungen bleiben fail-closed. Die Quellscanner sind keine vollstaendigen
+Compiler und beweisen weder dynamische Aufloesung noch Seiteneffektfreiheit.
+Scout- und Explorer-Aussagen sind Suchhinweise, keine Wahrheitsquelle; der
+Architect muss erkannte Widersprueche anhand des aktuellen Quellindex und der
+Zieldatei klaeren. Begrenztes, selbstgesteuertes Nachladen von Quelldateien,
+Fundstellen und Ergebnissen bleibt Teil von OP-405. Neue Schnittstellen
+muessen als neue APIs markiert und im betroffenen Dateiblock geplant sein.
 
 Rollen werden nicht allein wegen theoretischer Tokenersparnis entfernt. Der
 Planner-Split wird erst ersetzt, wenn ein Eval-Satz nachweist, dass ein

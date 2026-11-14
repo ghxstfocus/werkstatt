@@ -156,24 +156,24 @@ def test_widerspruch_erwartet_kein_befund():
     assert planner._pruefe_api_widerspruch(report, _ci()) == []
 
 
-def test_widerspruch_symbol_fehlt():
+def test_widerspruch_symbol_im_begrenzten_index_nicht_gefunden():
     report = {"api_auszug": {
         "core/services/audit_reader.py": ["read_events"],
     }}
     befunde = planner._pruefe_api_widerspruch(report, _ci())
     assert len(befunde) == 1
-    assert befunde[0]["art"] == "fehlt"
+    assert befunde[0]["art"] == "nicht_im_index"
     assert befunde[0]["symbol"] == "read_events"
     assert befunde[0]["gefunden_in"] == []
 
 
-def test_widerspruch_symbol_verschoben():
+def test_widerspruch_gleichnamiger_treffer_in_anderem_pfad():
     report = {"api_auszug": {
         "core/services/audit_reader.py": ["run"],
     }}
     befunde = planner._pruefe_api_widerspruch(report, _ci())
     assert len(befunde) == 1
-    assert befunde[0]["art"] == "verschoben"
+    assert befunde[0]["art"] == "anderer_index_treffer"
     assert befunde[0]["symbol"] == "run"
     assert befunde[0]["gefunden_in"] == ["app/main.py"]
 
@@ -189,7 +189,10 @@ def test_widerspruch_mehrere_in_einer_datei():
     befunde = planner._pruefe_api_widerspruch(report, _ci())
     assert len(befunde) == 2
     arten = {b["symbol"]: b["art"] for b in befunde}
-    assert arten == {"read_events": "fehlt", "run": "verschoben"}
+    assert arten == {
+        "read_events": "nicht_im_index",
+        "run": "anderer_index_treffer",
+    }
 
 
 def test_widerspruch_mehrere_dateien():

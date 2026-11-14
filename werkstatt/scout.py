@@ -33,8 +33,8 @@ Du formulierst einen Auftrag fuer den Architect.
 
 ## DEIN INPUT
 - Die Aufgabe des Users (vage Idee).
-- Der Code-Index (deterministisch aus AST): alle Module, Klassen,
-  Funktionen, Signaturen, Imports.
+- Ein begrenzter Code-Index: Python-Deklarationen per AST, JavaScript/Java
+  per Deklarationsscan. Er kann Dateien oder Symbole auslassen.
 - Die vom Explorer gemessenen Dateien.
 
 ## DEIN OUTPUT (JSON + Prosa)
@@ -58,32 +58,43 @@ Du formulierst einen Auftrag fuer den Architect.
 
 ## WICHTIG: WIDERSPRUCH-CHECK (STRIKT)
 
-Der Auftrag nennt oft APIs, die es NICHT gibt (z.B. read_events()).
-Pruefe JEDE im Auftrag genannte API gegen den Code-Index:
+Der Auftrag kann API-Namen enthalten, die unvollstaendig oder falsch
+zugeordnet sind (z.B. read_events()). Pruefe jede genannte API sorgfaeltig:
 
-1. Ist die API im Code-Index? (Klasse, Methode, Signatur)
-2. Wenn NICHT: als Risiko nennen.
-3. Echte API suchen (aehnlicher Name, andere Klasse).
-4. Im auftrag_prosa NUR echte APIs aus dem Code-Index nennen.
+1. Ist die API im Code-Index fuer genau diesen Pfad und diese Sprache?
+2. Wenn ein Treffer fehlt: NICHT behaupten, die API existiere nicht. Der
+   Index ist begrenzt und fuer JavaScript/Java ein Deklarationsscan. Nenne
+   den Befund als "im Index nicht gefunden; Quelltextpruefung erforderlich".
+3. Suche im bereitgestellten Dateiinhalt und Explorer-Auszug nach einem
+   positiven Beleg. Ein negativer Suchtreffer ist nur dann belastbar, wenn
+   der vollstaendige relevante Quelltext im Input enthalten ist.
+4. Nur positiv belegte APIs als vorhanden ausgeben. Wenn unklar, als
+   Unsicherheit/Risiko kennzeichnen und Architect um gezielte Verifikation
+   bitten; keine Ersatz-API erfinden.
 
 ## BEISPIEL
 - Auftrag sagt: "Nutze read_events(limit=15) aus core.audit_reader."
 - Code-Index zeigt: "AuditReaderService.list_recent_assessments(actor, limit=100)"
-- Risiko: "read_events existiert nicht in core.audit_reader. Echte API: AuditReaderService.list_recent_assessments"
-- auftrag_prosa: "Nutze AuditReaderService.list_recent_assessments(principal, limit=15)"
+- Risiko: "read_events im Index nicht gefunden; Quelltextpruefung erforderlich."
+- auftrag_prosa nennt eine Alternative nur, wenn sie im Quelltext positiv belegt ist.
 
 ## IST-ZUSTAND-CHECK (STRIKT, HOECHSTE PRIORITAET)
 
-Der Code-Index zeigt nur Signaturen. Der "IST-ZUSTAND"-Block
-enthaelt den tatsaechlichen Datei-Inhalt.
+Der Code-Index zeigt nur Signaturen. Nur wenn ein "IST-ZUSTAND"-Block
+vorhanden ist, enthaelt er den tatsaechlich uebergebenen Datei-Auszug.
+Fehlender oder gekuerzter Dateiinhalt erlaubt keine Aussage ueber Abwesenheit.
 
 Pruefe JEDE Anforderung aus der Aufgabe gegen den IST-ZUSTAND:
 
-1. Enthaelt die Zieldatei schon, was die Aufgabe verlangt?
-2. Wenn JA (alle Anforderungen erfuellt): liefere
+1. Enthaelt der vollstaendige relevante Quelltext aller Zieldateien
+   nachweislich, was die Aufgabe verlangt?
+2. Wenn alle Anforderungen im vollstaendigen Beleg erfuellt sind: liefere
    "bereits_erfuellt": true, "begruendung_erfuellt": "...".
    Das ist der wichtigste Fall. Der Loop bricht dann ab.
-3. Wenn NEIN: normales Vorgehen (Auftrag formulieren).
+3. Wenn Inhalte fehlen oder gekuerzt sind: nicht "bereits_erfuellt"
+   behaupten; die Belegluecke nennen und normalen Auftrag formulieren.
+4. Wenn Anforderungen nach vollstaendigem Beleg fehlen: normalen Auftrag
+   formulieren.
 
 ## ENTFERNEN-AUFGABEN (FIX 2026-10-31, Bug L)
 
@@ -95,8 +106,8 @@ Wenn die Aufgabe sagt "entferne X", "loesche X", "X rausnehmen":
   docs/STATUS.md". IST-ZUSTAND enthaelt Abschnitt "Offene Punkte"
   mit Punkten 2-7, aber KEINEN Punkt 1 zur AuditReaderError:
   -> bereits_erfuellt: true.
-- Wenn der IST-ZUSTAND die Zieldatei NICHT enthaelt: kein Check
-  moeglich, bereits_erfuellt: false.
+  - Wenn der IST-ZUSTAND die Zieldatei nicht oder nur teilweise enthaelt:
+    kein vollstaendiger Check moeglich; bereits_erfuellt bleibt false.
 
 Beispiel:
 - Aufgabe: "Fuehre table-alerts in alerts.html ein."
@@ -116,10 +127,13 @@ Zusaetzlich zu den bisherigen Feldern:
 Wenn "bereits_erfuellt" fehlt: false (Default).
 
 ## REGEL
-- Nenne NUR APIs, die im Code-Index stehen.
-- Erfinde KEINE APIs.
-- Uebernimm KEINE APIs aus dem Auftrag, wenn sie nicht im Code-Index sind.
-- Nenne konkrete Zeilen und Datei-Pfade.
+- Nenne bestehende APIs nur mit positivem Beleg: Datei + Symbol/Signatur,
+  moeglichst mit Zeile aus dem Quelltext.
+- Der Code-Index ist ein Suchindex, nicht der vollstaendige Quelltext.
+- Ein fehlender Indexeintrag ist kein Negativbeweis. Verifiziere im
+  bereitgestellten Quelltext; wenn der Ausschnitt dafuer nicht reicht,
+  kennzeichne die API als ungeklaert und fordere gezielte Lesebelege an.
+- Erfinde KEINE APIs und uebernimm unbestaetigte API-Angaben nicht als Fakt.
 - IST-ZUSTAND-Check ist PFLICHT, wenn "IST-ZUSTAND" im Input steht.
 
 ## SUCH-AUFGABEN (NEU 2026-10-31)
@@ -128,8 +142,9 @@ Wenn die Aufgabe "aufraeumen", "bereinigen", "entfernen", "loeschen"
 oder "finde X" verlangt UND der Input einen "## GREP-TREFFER"-Block
 enthaelt:
 
-- Die GREP-TREFFER sind die WAHRHEIT. Sie listen alle Stellen mit
-  dem Suchbegriff (Datei + Zeile + Kontext).
+- GREP-TREFFER belegen positive Fundstellen (Datei + Zeile + Kontext).
+  Die Ausgabe ist begrenzt und nicht vollstaendigkeitsbeweisend; keine
+  Fundstelle bedeutet nicht, dass der Suchbegriff im Repo nicht vorkommt.
 - Der API-AUSZUG ist bei Such-Aufgaben IRRELEVANT -- er zeigt nur
   Symbole, keine Docstrings.
 - Liste JEDEN Treffer in "betroffene_stellen" mit:
@@ -138,9 +153,11 @@ enthaelt:
 - Setze "atomarer_plan": true NUR wenn alle Treffer in EINER Datei
   liegen UND die Ersetzung logisch gleich ist (z.B. "Ollama" ->
   "DeepSeek" in 4 Docstrings derselben Datei).
-- Bei Treffern in MEHREREN Dateien: "atomarer_plan": false, aber
-  "betroffene_stellen" MUSS trotzdem alle Treffer listen. Der
-  Architect bekommt sie dann als harte Vorgabe.
+- Bei Treffern in MEHREREN Dateien: "atomarer_plan": false. Liste alle
+  uebergebenen Treffer; wenn die Ausgabe begrenzt ist, markiere die Liste
+  als unvollstaendig und fordere vor einer Vollstaendigkeitsaussage weitere
+  gezielte Suche an. Der Architect darf Treffer nicht als vollstaendige
+  Inventur missverstehen.
 
 ## ATOMARER-PLAN (NEU 2026-10-31)
 
@@ -212,14 +229,18 @@ ignoriere OP-NNN, formuliere den Auftrag normal.
 
 ## DEIN NACHFOLGER
 
-Der Architect bekommt deinen Auftrag + die Datei-Inhalte und liefert Prosa.
+Der Architect bekommt deinen Auftrag, ausgewaehlte Datei-Auszuege sofern
+vorhanden und einen separaten API-Belegblock; er sieht nicht automatisch
+den vollstaendigen Repository-Quelltext und darf das nicht behaupten.
 Der Planner zerlegt in Tasks.
 Der Builder baut pro Datei einen Patch.
 """
 
 
 _SCOUT_NACHFOLGER_BLOCK = """## DEIN NACHFOLGER
-Der Architect bekommt deinen `auftrag_prosa` + `api_auszug`.
+Der Architect bekommt `auftrag_prosa`, `api_auszug` und einen separat
+erzeugten, begrenzten Ziel-API-Auszug. Datei-Inhalte koennen fehlen oder
+gekuerzt sein; er darf Abwesenheit daraus nicht ableiten.
 Der Planner zerlegt seine Prosa in Tasks.
 Der Builder baut pro Datei einen Patch.
 
@@ -247,7 +268,7 @@ def _scout_system_with_nachfolger(state=None) -> str:
     return "\n\n".join(parts)
 
 
-def _api_side_effect(node) -> str:
+def _api_side_effect(node, safe_calls: set[str] | None = None) -> str:
     """Classify obvious database/file mutation at the callable boundary.
 
     This is intentionally conservative: a database write or filesystem
@@ -259,7 +280,6 @@ def _api_side_effect(node) -> str:
     import re as _re
 
     write = False
-    read_sql = False
     unknown_sql = False
     dml = _re.compile(r"^\s*(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)\b", _re.IGNORECASE)
     read = _re.compile(r"^\s*(?:SELECT|WITH|PRAGMA|EXPLAIN)\b", _re.IGNORECASE)
@@ -267,6 +287,51 @@ def _api_side_effect(node) -> str:
         "commit", "write_text", "write_bytes", "unlink", "replace",
         "mkdir", "rmdir", "rename", "remove", "add", "delete", "flush",
     }
+    pure_names = {
+        "all", "any", "bool", "chr", "dict", "enumerate", "filter",
+        "float", "getattr", "hasattr", "int", "isinstance", "iter",
+        "len", "list", "map", "max", "min", "next", "range", "repr",
+        "reversed", "round", "set", "sorted", "str", "sum", "tuple",
+        "type", "zip",
+    }
+    read_methods = {
+        "close", "connect", "fetchone", "fetchall", "lower", "upper",
+        "casefold", "startswith", "endswith", "join", "split", "strip", "get",
+        "loads", "_connect",
+    }
+
+    # Resolve simple local SQL variables (``sql = "SELECT ..."`` followed by
+    # ``execute(sql)``). Without this, ordinary read queries become unknown
+    # merely because the SQL is passed through a local name.
+    sql_names: dict[str, str] = {}
+    local_containers: set[str] = set()
+    for child in _ast.walk(node):
+        if isinstance(child, _ast.Assign):
+            targets = child.targets
+            value = child.value
+        elif isinstance(child, _ast.AnnAssign):
+            targets = [child.target]
+            value = child.value
+        else:
+            continue
+        if isinstance(value, (_ast.List, _ast.Dict, _ast.Set)):
+            local_containers.update(
+                target.id for target in targets if isinstance(target, _ast.Name)
+            )
+        try:
+            literal = _ast.literal_eval(value)
+        except (ValueError, TypeError):
+            literal = ""
+            if isinstance(value, _ast.JoinedStr):
+                literal = "".join(
+                    part.value for part in value.values
+                    if isinstance(part, _ast.Constant)
+                    and isinstance(part.value, str)
+                )
+        if isinstance(literal, str):
+            for target in targets:
+                if isinstance(target, _ast.Name):
+                    sql_names[target.id] = literal
 
     for child in _ast.walk(node):
         if not isinstance(child, _ast.Call):
@@ -275,13 +340,22 @@ def _api_side_effect(node) -> str:
         method = func.attr if isinstance(func, _ast.Attribute) else ""
         if method in mutators:
             write = True
+        if method in {"append", "extend"} and isinstance(func, _ast.Attribute):
+            receiver = func.value
+            if isinstance(receiver, _ast.Name) and receiver.id in local_containers:
+                continue
         if method != "execute":
+            call_name = func.id if isinstance(func, _ast.Name) else method
+            if call_name not in pure_names | read_methods | {"closing"} | (safe_calls or set()):
+                unknown_sql = True
             continue
         sql = ""
         if child.args:
             try:
                 sql = _ast.literal_eval(child.args[0])
             except (ValueError, TypeError):
+                if isinstance(child.args[0], _ast.Name):
+                    sql = sql_names.get(child.args[0].id, "")
                 if isinstance(child.args[0], _ast.JoinedStr):
                     sql = "".join(
                         part.value for part in child.args[0].values
@@ -292,20 +366,22 @@ def _api_side_effect(node) -> str:
         elif dml.search(sql):
             write = True
         elif read.search(sql):
-            read_sql = True
+            continue
         else:
             unknown_sql = True
     if write:
         return "write"
-    if read_sql and not unknown_sql:
+    if not unknown_sql:
+        # Includes pure helpers that perform no I/O and read-only SQL methods.
         return "read"
     return "unknown"
 
 
 def _baue_api_index(project_dir) -> dict:
-    """GOLD: Deterministischer API-Index (AST).
+    """Build a deterministic source API index for Python, JavaScript and Java.
 
-    Liefert fuer jede .py-Datei:
+    Liefert fuer Python-Dateien AST-Belege und fuer JavaScript-/Java-Dateien
+    syntaktische Deklarationsbelege:
     - __all__ (falls vorhanden)
     - Klassen (mit Methoden + Signaturen)
     - Top-Level-Funktionen (mit Signaturen + Rueckgabetypen)
@@ -356,22 +432,31 @@ def _baue_api_index(project_dir) -> dict:
                 if isinstance(_node.target, _ast.Name):
                     _entry["constants"].append(_node.target.id)
             elif isinstance(_node, _ast.ClassDef):
+                _method_nodes = [
+                    m for m in _node.body
+                    if isinstance(m, (_ast.FunctionDef, _ast.AsyncFunctionDef))
+                ]
+                # Pure/read helpers called by sibling methods can be proven
+                # from their own bodies and then used as local evidence.
+                _safe_calls = {
+                    m.name for m in _method_nodes
+                    if _api_side_effect(m) == "read"
+                }
                 _methods = []
-                for _m in _node.body:
-                    if isinstance(_m, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
-                        _args = [a.arg for a in _m.args.args]
-                        _ret = ""
-                        if _m.returns:
-                            try:
-                                _ret = _ast.unparse(_m.returns)
-                            except (AttributeError, ValueError):
-                                pass
-                        _methods.append({
-                            "name": _m.name,
-                            "args": _args,
-                            "return": _ret,
-                            "effects": _api_side_effect(_m),
-                        })
+                for _m in _method_nodes:
+                    _args = [a.arg for a in _m.args.args]
+                    _ret = ""
+                    if _m.returns:
+                        try:
+                            _ret = _ast.unparse(_m.returns)
+                        except (AttributeError, ValueError):
+                            pass
+                    _methods.append({
+                        "name": _m.name,
+                        "args": _args,
+                        "return": _ret,
+                        "effects": _api_side_effect(_m, _safe_calls),
+                    })
                 _entry["classes"].append({
                     "name": _node.name,
                     "methods": _methods,
@@ -401,6 +486,72 @@ def _baue_api_index(project_dir) -> dict:
                 for _a in _node.names:
                     _entry["imports"].append({"import": _a.name})
         index[_rel] = _entry
+    # The Architect's plans can span Python backends and JavaScript/Java
+    # clients. Keep those declarations in the same path-keyed index so the
+    # preflight never compares a JS/Java call against Python-only symbols.
+    # This is a declaration index, not a compiler or proof of runtime effects.
+    import re as _re
+
+    for _f in (*_pd.rglob("*.js"), *_pd.rglob("*.mjs"), *_pd.rglob("*.java")):
+        if any(p in _ignore for p in _f.parts):
+            continue
+        try:
+            _src = _f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        _rel = _f.relative_to(_pd).as_posix()
+        _entry = {
+            "all": [], "classes": [], "constants": [],
+            "functions": [], "imports": [],
+            "language": "java" if _f.suffix == ".java" else "javascript",
+        }
+        if _entry["language"] == "javascript":
+            _decls = _re.finditer(
+                r"(?m)^\s*(?:export\s+)?(?:async\s+)?function\s+"
+                r"([A-Za-z_$][\w$]*)\s*\(([^)]*)\)", _src,
+            )
+            _arrow = _re.finditer(
+                r"(?m)^\s*(?:export\s+)?(?:const|let|var)\s+"
+                r"([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?"
+                r"(?:\(([^)]*)\)|([A-Za-z_$][\w$]*))\s*=>", _src,
+            )
+            for _match in (*_decls, *_arrow):
+                _args = _match.group(2) or ""
+                if _match.lastindex and _match.lastindex >= 3:
+                    _args = _args or _match.group(3) or ""
+                _entry["functions"].append({
+                    "name": _match.group(1),
+                    "args": [part.strip().split("=", 1)[0].strip()
+                             for part in _args.split(",") if part.strip()],
+                    "return": "", "effects": "unknown",
+                })
+            for _class in _re.finditer(r"\bclass\s+([A-Za-z_$][\w$]*)", _src):
+                _entry["classes"].append({"name": _class.group(1), "methods": []})
+        else:
+            _class_names = [m.group(1) for m in _re.finditer(
+                r"\bclass\s+([A-Za-z_$][\w$]*)", _src,
+            )]
+            if _class_names:
+                _methods = []
+                for _match in _re.finditer(
+                    r"(?m)^\s*(?:public|protected|private)\s+"
+                    r"(?:static\s+)?(?:final\s+)?[\w.$<>?,\[\] ]+\s+"
+                    r"([A-Za-z_$][\w$]*)\s*\(([^)]*)\)", _src,
+                ):
+                    _params = [part.strip() for part in _match.group(2).split(",") if part.strip()]
+                    _body_start = _src.find("{", _match.end())
+                    _body_end = _src.find("}", _body_start + 1) if _body_start >= 0 else -1
+                    _body = _src[_body_start:_body_end + 1] if _body_end >= 0 else ""
+                    _methods.append({
+                        "name": _match.group(1),
+                        "args": _params,
+                        "return": "", "effects": _source_effect(_body),
+                    })
+                _entry["classes"].extend(
+                    {"name": name, "methods": _methods if i == 0 else []}
+                    for i, name in enumerate(_class_names)
+                )
+        index[_rel] = _entry
     return index
 
 
@@ -429,6 +580,35 @@ def _count_symbol_references(index: dict) -> dict:
                     if src_file != f:
                         counts[src_file] = counts.get(src_file, 0) + 1
     return counts
+
+
+def _api_language(path: str) -> str:
+    suffix = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    return {
+        "py": "python", "js": "javascript", "mjs": "javascript",
+        "java": "java",
+    }.get(suffix, "unknown")
+
+
+def _source_effect(source: str) -> str:
+    """Conservative effect hint for Java declarations in the source index."""
+    import re
+
+    if re.search(
+        r"\b(?:executeUpdate|executeBatch|save|persist|insert|update|delete|"
+        r"commit|write|writeObject|create|drop|alter)\s*\(|"
+        r"\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)\b",
+        source,
+        re.IGNORECASE,
+    ):
+        return "write"
+    if re.search(
+        r"\bSELECT\b|\b(?:query|find|fetch|count|list|read)\w*\s*\(",
+        source,
+        re.IGNORECASE,
+    ):
+        return "read"
+    return "unknown"
 
 
 def _format_api_index_for_prompt(index: dict, max_files: int = 40) -> str:
@@ -502,6 +682,7 @@ def _finde_api(index: dict, name: str) -> list:
                 if _fn["name"] == _clean:
                     _matches.append({
                         "pfad": _pfad,
+                        "language": _api_language(_pfad),
                         "kind": "function",
                         "name": _fn["name"],
                         "args": _fn.get("args", []),
@@ -522,6 +703,7 @@ def _finde_api(index: dict, name: str) -> list:
             if not _class_hint and _c["name"] == _clean:
                 _matches.append({
                     "pfad": _pfad,
+                    "language": _api_language(_pfad),
                     "kind": "class",
                     "name": _c["name"],
                     "methods": [m["name"] for m in _c["methods"]],
@@ -534,6 +716,7 @@ def _finde_api(index: dict, name: str) -> list:
                     continue
                 _matches.append({
                     "pfad": _pfad,
+                    "language": _api_language(_pfad),
                     "kind": "method",
                     "class": _c["name"],
                     "name": _m["name"],
@@ -555,8 +738,10 @@ def _pruefe_api_widerspruch(
     gegen _finde_api(code_index, symbol).
 
     Befund-Arten:
-    - "fehlt":     symbol nicht im Code-Index.
-    - "verschoben": symbol existiert, aber NICHT in datei.
+    - "nicht_im_index": kein Treffer im begrenzten Index; Nichtexistenz
+      ist damit nicht belegt.
+    - "anderer_index_treffer": gleicher Name in anderem Pfad; Identitaet/
+      Importbeziehung muss anhand von Quellbelegen geprueft werden.
 
     Rueckgabe: list[dict] mit {"datei", "symbol", "art",
     "gefunden_in"}. Leer, wenn kein Widerspruch.
@@ -586,7 +771,7 @@ def _pruefe_api_widerspruch(
                 befunde.append({
                     "datei": _datei,
                     "symbol": _sym,
-                    "art": "fehlt",
+                    "art": "nicht_im_index",
                     "gefunden_in": [],
                 })
                 continue
@@ -596,7 +781,7 @@ def _pruefe_api_widerspruch(
             befunde.append({
                 "datei": _datei,
                 "symbol": _sym,
-                "art": "verschoben",
+                "art": "anderer_index_treffer",
                 "gefunden_in": _pfade,
             })
     return befunde
@@ -739,8 +924,12 @@ def _run_scout(
             _pf = _k.get("file", "")
             _pv = _k.get("preview", "")
             if _pf and _pv:
+                _preview_text = _pv[:8000]
+                if len(_pv) > 8000:
+                    _preview_text += "\n[QUELLTEXTAUSZUG GEKUERZT: 8000 Zeichen]"
                 _previews_parts.append(
-                    f'<datei_inhalt datei="{_pf}">\n{_pv[:8000]}\n</datei_inhalt>'
+                    f'<datei_inhalt datei="{_pf}">\n'
+                    f'{_preview_text}\n</datei_inhalt>'
                 )
     _previews_str = "\n\n".join(_previews_parts)
 
@@ -791,8 +980,8 @@ def _run_scout(
                         f"{_t['text'][:120]}"
                     )
                 user_content += (
-                    "\n\n## GREP-TREFFER (Volltext-Suche, "
-                    "Wahrheit fuer Such-Aufgaben)\n"
+                    "\n\n## GREP-TREFFER (positive Fundstellen; begrenzt, "
+                    "keine Vollstaendigkeitsgarantie)\n"
                     + "\n".join(_grep_lines)
                     + "\n"
                 )
