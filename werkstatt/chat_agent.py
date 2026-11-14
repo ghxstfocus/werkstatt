@@ -158,14 +158,8 @@ def _explicit_loop_action_intent(message: str, action: str) -> bool:
     ) is None:
         return False
     return re.search(
-        r"\b(?:nicht|kein(?:e|en|er|es)?)\b.{0,40}\b"
-        r"(?:starte|starten|beginne|beginnen|bearbeite|bearbeiten|"
-        r"umsetzen|implementiere|implementieren|fixe|fixen|stoppe|"
-        r"stoppen|pausiere|pausieren|fortsetzen)\b|"
-        r"\b(?:starte|starten|beginne|beginnen|bearbeite|bearbeiten|"
-        r"umsetzen|implementiere|implementieren|fixe|fixen|stoppe|"
-        r"stoppen|pausiere|pausieren|fortsetzen)\b.{0,40}\b"
-        r"(?:nicht|kein(?:e|en|er|es)?)\b",
+        rf"\b(?:nicht|kein(?:e|en|er|es)?)\b.{{0,40}}{verb}|"
+        rf"{verb}.{{0,40}}\b(?:nicht|kein(?:e|en|er|es)?)\b",
         message,
         re.IGNORECASE,
     ) is None

@@ -224,6 +224,7 @@ def test_chat_remark_cannot_create_loop_action_even_if_model_requests_it(
         ("Kannst du bitte den Loop starten?", "start", True),
         ("Ich möchte, dass du den Loop startest.", "start", True),
         ("Ich habe keinen Auftrag erteilt, der Loop soll starten.", "start", False),
+        ("Ich möchte, dass du den Loop nicht startest.", "start", False),
         ("Starte den Loop nicht", "start", False),
         ("Bitte OP-375 starten", "start", True),
         ("Pausiere den Loop", "pause", True),
