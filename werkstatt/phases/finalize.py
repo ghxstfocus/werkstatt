@@ -1,6 +1,81 @@
 """Phase: _phase_finalize (OP-139 Phase 2b)."""
 from __future__ import annotations
 
+
+def _criterion_evidence_rows(
+    criteria: object,
+    tasks: object,
+    phase_state: object,
+    verify_results: object,
+) -> tuple[list[dict[str, object]], list[str]]:
+    """Bind each criterion to completed tasks and successful verify stages.
+
+    Task completion alone is coverage, not proof. The final evidence record
+    therefore includes the exact task IDs and executed, successful stage IDs.
+    Any missing link is returned as an explicit gap instead of being guessed.
+    """
+    if not isinstance(criteria, list) or not criteria:
+        return [], ["acceptance_criteria_missing"]
+    if not isinstance(tasks, list):
+        return [], ["task_graph_missing"]
+    passed_stages = sorted({
+        str(item.get("stage_id") or "").strip()
+        for item in verify_results
+        if isinstance(item, dict)
+        and item.get("ok") is True
+        and str(item.get("stage_id") or "").strip()
+    }) if isinstance(verify_results, list) else []
+
+    rows: list[dict[str, object]] = []
+    gaps: list[str] = []
+    for index, criterion in enumerate(criteria, 1):
+        criterion_id = f"AC{index}"
+        if not isinstance(criterion, str) or not criterion.strip():
+            gaps.append(f"{criterion_id}:invalid_text")
+            continue
+        assigned: list[str] = []
+        incomplete: list[str] = []
+        for task in tasks:
+            refs = task.get("criterion_refs") if isinstance(task, dict) else None
+            if not isinstance(refs, list) or criterion_id not in refs:
+                continue
+            task_id = str(task.get("id") or "").strip()
+            if not task_id:
+                incomplete.append("task_id_missing")
+                continue
+            assigned.append(task_id)
+            get_task = getattr(phase_state, "get_task", None)
+            try:
+                status_record = get_task(task_id) if callable(get_task) else task
+            except Exception:
+                status_record = None
+                incomplete.append(f"{task_id}:state_read_failed")
+            if (
+                task_id not in incomplete
+                and (
+                    not isinstance(status_record, dict)
+                    or status_record.get("status") != "done"
+                )
+            ):
+                incomplete.append(task_id)
+        if not assigned:
+            gaps.append(f"{criterion_id}:task_mapping_missing")
+        elif incomplete:
+            gaps.append(f"{criterion_id}:tasks_not_done")
+        if not passed_stages:
+            gaps.append(f"{criterion_id}:successful_verify_stage_missing")
+        rows.append({
+            "criterion_id": criterion_id,
+            "criterion": criterion.strip(),
+            "task_ids": sorted(set(assigned)),
+            "task_status": (
+                "done" if assigned and not incomplete else "incomplete"
+            ),
+            "verify_stage_ids": passed_stages,
+            "verification_status": "passed" if passed_stages else "missing",
+        })
+    return rows, gaps
+
 import json
 import subprocess
 from pathlib import Path
@@ -1228,22 +1303,51 @@ def _phase_finalize(
                 and _criterion_progress.get("valid") is True
                 and not _criterion_progress.get("uncovered")
             ):
+                _criteria_evidence, _criteria_evidence_gaps = (
+                    _criterion_evidence_rows(
+                        _phase_data.get("akzeptanzkriterien")
+                        if isinstance(_phase_data, dict) else None,
+                        _records,
+                        phase_state,
+                        getattr(state, "last_verify_results", None),
+                    )
+                )
+                _criteria_verified = not _criteria_evidence_gaps
                 audit(
                     "loop_criteria_progress",
                     {
-                        "status": "verified",
+                        "status": (
+                            "verified"
+                            if _criteria_verified
+                            else "checks_passed_unverified"
+                        ),
                         "tracked": True,
-                        "coverage_basis": "phase_end_review_and_verify",
+                        "coverage_basis": (
+                            "criterion_task_mapping_and_verify_stages"
+                            if _criteria_verified
+                            else "task_graph_and_phase_checks_only"
+                        ),
                         "covered": _criterion_progress.get("covered", []),
                         "remaining": [],
                         "verification": "phase_end",
+                        "criteria_evidence": _criteria_evidence,
+                        "evidence_gaps": _criteria_evidence_gaps,
                         "decision_summary": (
-                            "Der Task-Graph ist abgeschlossen und die "
-                            "Abschlusspruefung hat das Gesamtziel bestaetigt."
+                            "Jedes Akzeptanzkriterium ist auf erledigte Tasks "
+                            "und erfolgreiche Verify-Stages zurueckgefuehrt."
+                            if _criteria_verified else
+                            "Tasks und Abschlusspruefung sind gruen, aber die "
+                            "kriterienspezifische Belegkette ist unvollstaendig."
                         ),
                         "evidence": [
                             "Alle zugeordneten Tasks sind erledigt.",
                             "Phase-End-Review, Human Gate und Abschluss-Verify bestanden.",
+                            *(
+                                ["Kriterienspezifische Task- und Verify-Belege sind verknuepft."]
+                                if _criteria_verified else
+                                ["Kein Zielnachweis: Belegluecken "
+                                 + ", ".join(_criteria_evidence_gaps[:8])]
+                            ),
                         ],
                     },
                     pd,

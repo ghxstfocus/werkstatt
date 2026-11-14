@@ -433,6 +433,23 @@ def test_nicht_getrackte_kriterien_verursachen_keinen_falschen_nullfortschritt()
     )
 
 
+def test_pruefungen_ohne_kriterienspezifischen_beleg_bleiben_unverifiziert():
+    detail = inspector._tl_detail(
+        "loop_criteria_progress",
+        {
+            "status": "checks_passed_unverified",
+            "evidence_gaps": [
+                "AC1:successful_verify_stage_missing",
+            ],
+        },
+    )
+
+    assert detail == (
+        "Pruefungen gruen, Zielbeleg unvollstaendig: "
+        "AC1:successful_verify_stage_missing"
+    )
+
+
 def test_paralleler_chat_job_ist_in_timeline_menschlich_beschriftet():
     label = inspector._tl_label("loop_chat_job_observed", {})
     detail = inspector._tl_detail(

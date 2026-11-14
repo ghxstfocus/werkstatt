@@ -785,6 +785,9 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
 
     def verify(_state, *, phase=None):
         order.append(("verify_post_commit" if any(step[0] == "commit" for step in order) else "verify", phase))
+        _state.last_verify_results = [
+            {"stage_id": "pytest_regression", "ok": True},
+        ]
         return True
 
     def append_progress(_project_dir, **_kwargs):
@@ -829,19 +832,47 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
     assert verified == [{
         "status": "verified",
         "tracked": True,
-        "coverage_basis": "phase_end_review_and_verify",
+        "coverage_basis": "criterion_task_mapping_and_verify_stages",
         "covered": ["AC1"],
         "remaining": [],
         "verification": "phase_end",
+        "criteria_evidence": [{
+            "criterion_id": "AC1",
+            "criterion": "Gesamtziel ist erfuellt",
+            "task_ids": ["t1"],
+            "task_status": "done",
+            "verify_stage_ids": ["pytest_regression"],
+            "verification_status": "passed",
+        }],
+        "evidence_gaps": [],
         "decision_summary": (
-            "Der Task-Graph ist abgeschlossen und die "
-            "Abschlusspruefung hat das Gesamtziel bestaetigt."
+            "Jedes Akzeptanzkriterium ist auf erledigte Tasks "
+            "und erfolgreiche Verify-Stages zurueckgefuehrt."
         ),
         "evidence": [
             "Alle zugeordneten Tasks sind erledigt.",
             "Phase-End-Review, Human Gate und Abschluss-Verify bestanden.",
+            "Kriterienspezifische Task- und Verify-Belege sind verknuepft.",
         ],
     }]
+
+
+def test_criterion_evidence_reports_gaps_instead_of_guessing(tmp_path):
+    from werkstatt.phases.finalize import _criterion_evidence_rows
+
+    phase_state = MagicMock()
+    phase_state.get_task.return_value = {"status": "done"}
+    rows, gaps = _criterion_evidence_rows(
+        ["Kriterium wird verifiziert"],
+        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        phase_state,
+        [],
+    )
+
+    assert rows[0]["task_ids"] == ["t1"]
+    assert rows[0]["task_status"] == "done"
+    assert rows[0]["verify_stage_ids"] == []
+    assert gaps == ["AC1:successful_verify_stage_missing"]
 
 def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
     tmp_path, monkeypatch,

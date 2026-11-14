@@ -928,7 +928,19 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         task = str(payload.get("task_id") or "").strip()
         suffix = f" nach {task}" if task else ""
         if status == "verified":
-            summary = f"Zielkriterien durch Abschlusspruefung bestaetigt{suffix}"
+            criteria = payload.get("criteria_evidence")
+            count = len(criteria) if isinstance(criteria, list) else covered_count
+            summary = (
+                f"{count} Zielkriterium/-kriterien mit Task- und Verify-"
+                f"Belegen bestaetigt{suffix}"
+            )
+        elif status == "checks_passed_unverified":
+            gaps = payload.get("evidence_gaps")
+            gap_text = (
+                ", ".join(str(item)[:48] for item in gaps[:2])
+                if isinstance(gaps, list) else "Belegzuordnung fehlt"
+            )
+            summary = f"Pruefungen gruen, Zielbeleg unvollstaendig: {gap_text}"
         elif payload.get("tracked") is False:
             summary = f"Zielabgleich ohne explizite Kriterienzuordnung{suffix}"
         else:
