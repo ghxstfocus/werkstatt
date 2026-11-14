@@ -563,9 +563,10 @@ class PhaseState:
     def criteria_progress(self) -> dict[str, Any]:
         """Projektfortschritt ueber explizit zugeordnete Akzeptanzkriterien.
 
-        Ein Kriterium gilt erst als abgedeckt, wenn mindestens ein Task mit
-        diesem AC-Verweis den gespeicherten Status done hat. Legacy-Plaene
-        ohne Referenzen werden als ungetrackt ausgewiesen.
+        Ein Kriterium gilt erst als abgedeckt, wenn alle Tasks mit diesem
+        AC-Verweis den gespeicherten Status done haben. Das verhindert, dass
+        ein erledigter Teil eines gesplitteten Tasks das Gesamtkriterium
+        vorzeitig abdeckt. Legacy-Plaene ohne Referenzen bleiben ungetrackt.
         """
         criteria = self.data.get("akzeptanzkriterien")
         tasks = self.data.get("tasks")
@@ -603,6 +604,7 @@ class PhaseState:
 
         expected = {f"AC{index}" for index in range(1, len(criteria) + 1)}
         assigned: set[str] = set()
+        assigned_tasks: dict[str, list[dict[str, Any]]] = {}
         covered: set[str] = set()
         for task in tasks:
             if not isinstance(task, dict):
@@ -629,8 +631,18 @@ class PhaseState:
                     "error": f"invalid_criterion_refs:{task.get('id', '?')}",
                 }
             assigned.update(refs)
-            if task.get("status") == "done":
-                covered.update(refs)
+            for ref in refs:
+                assigned_tasks.setdefault(ref, []).append(task)
+
+        # A criterion may be shared by several tasks after ADaPT splits a
+        # larger task. It is covered only when every active task assigned to
+        # it is done; one successful child cannot stand in for its siblings.
+        covered = {
+            ref
+            for ref, criterion_tasks in assigned_tasks.items()
+            if criterion_tasks
+            and all(task.get("status") == "done" for task in criterion_tasks)
+        }
 
         return {
             "tracked": True,
