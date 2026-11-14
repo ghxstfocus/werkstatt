@@ -99,6 +99,15 @@ entscheidet er deterministisch:
    pro Projekt serialisieren.
 4. Frage oder Diagnose: parallel auf einem Snapshot beantworten.
 
+Grosse, vom Nutzer eingefuegte Run-Logs muessen als Chatnachricht annehmbar
+sein, ohne den vollstaendigen Rohtext unkontrolliert in jeden Modellaufruf zu
+kopieren. Der persistierte Nutzerturn bleibt unveraendert; oberhalb des
+Promptbudgets erhaelt das Modell eine klar markierte, begrenzte Auswahl mit
+Anfang, Ende und priorisierten Fehler-/Gate-Ereignissen. Diese Auswahl ist
+keine Vollstaendigkeitsgarantie. Run-ID, Sequenznummern und Dateibelege dienen
+als Schluessel fuer gezielte Folgeabfragen. Transportgrenze und
+Promptkompaktierung sind getrennte Kontrollen.
+
 Eine interne Planrevision ist keine Nutzeraufgabe. Der Chat erklaert nur,
 was sich am Ziel, Risiko oder Diff aendert und warum eine Freigabe erforderlich
 ist. Die bestehende Plan- und Ergebnisfreigabe wird nie durch Modellurteil,

@@ -69,6 +69,52 @@ def test_chat_job_create_acknowledges_without_waiting_for_worker(
     }
 
 
+def test_chat_job_accepts_large_pasted_log_and_preserves_it(
+    client_and_base: tuple[Any, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _base = client_and_base
+    from werkstatt import chat_agent, chat_jobs
+
+    original = "log-start\n" + "event details " * 2_000 + "\nlog-end"
+    assert 20_000 < len(original) < chat_agent.MAX_CHAT_MESSAGE_CHARS
+    captured: list[str] = []
+
+    def accept(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        captured.append(args[3])
+        return {"job": {"job_id": "c" * 32, "state": "queued", "run_id": None}, "created": True}
+
+    monkeypatch.setattr(chat_jobs, "enqueue_chat_job", accept)
+    response = client.post(
+        "/api/projects/demo/chat/jobs",
+        json={
+            "session_id": "session-large-log", "message": original,
+            "mode": "read", "idempotency_key": "request-large-log-001",
+        },
+    )
+
+    assert response.status_code == 202
+    assert captured == [original]
+
+
+def test_chat_job_rejects_message_over_hard_limit(
+    client_and_base: tuple[Any, Path],
+) -> None:
+    client, _base = client_and_base
+    from werkstatt.chat_agent import MAX_CHAT_MESSAGE_CHARS
+
+    response = client.post(
+        "/api/projects/demo/chat/jobs",
+        json={
+            "session_id": "session-too-large",
+            "message": "x" * (MAX_CHAT_MESSAGE_CHARS + 1),
+            "mode": "read", "idempotency_key": "request-too-large-001",
+        },
+    )
+
+    assert response.status_code == 413
+    assert str(MAX_CHAT_MESSAGE_CHARS) in response.json()["detail"]
+
+
 def test_history_repairs_completed_job_turn_after_worker_crash(
     client_and_base: tuple[Any, Path],
     monkeypatch: pytest.MonkeyPatch,

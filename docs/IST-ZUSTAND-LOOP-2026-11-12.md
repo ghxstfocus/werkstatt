@@ -47,6 +47,18 @@ Pfad-Traversal und die Auszugslimits. Das macht den Scout nicht zum
 Pflichtschritt: der Planner darf ihn bei einem expliziten, belegten Einzel-
 Dateiziel weiterhin ueberspringen.
 
+### Chat-Kontext fuer grosse Lognachrichten
+
+Die Hintergrund-Chat-API lehnte Nutzernachrichten ab 20.001 Zeichen mit HTTP
+413 ab; dadurch konnte der Werkstatt-Chat grosse Run-Logs nicht einmal
+annehmen. Der harte Transportdeckel liegt jetzt bei 200.000 Zeichen. Bei
+Nachrichten ueber 24.000 Zeichen bleibt der Originaltext unveraendert im
+Sessionverlauf, waehrend der Modellkontext eine explizit markierte Auswahl aus
+Anfang, Ende und relevanten JSONL-Fehler-/Gate-Ereignissen erhaelt. Das ist
+kein Vollstaendigkeitsbeleg; die Systemanweisung verlangt gezielte Folgefragen
+an Repo-/Audit-Tools anhand sichtbarer Run- und Sequenz-IDs. REST, Job-API und
+WebSocket teilen dieselbe Groessengrenze.
+
 ### Nachpruefung: API-Wirkungen und Verify-Interpreter
 
 Der vorherige Signaturauszug war nur Prompt-Kontext: er belegte Namen und
