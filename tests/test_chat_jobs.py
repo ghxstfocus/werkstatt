@@ -5,6 +5,7 @@ import hashlib
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -708,6 +709,42 @@ def test_run_inbox_reconciles_terminal_chat_job_result_idempotently(
     assert "Belegte Antwort" not in str(result["payload"])
     assert events.acknowledge_run_message(
         result["seq"], "loop-worker", result["fencing_token"],
+    )
+
+
+def test_result_handoff_race_with_run_termination_is_resolved(
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_jobs
+    from werkstatt.event_store import RunNotActiveError
+
+    class _RunFinishesDuringHandoff:
+        def get_run_record(self, project: str, run_id: str) -> dict[str, str]:
+            assert (project, run_id) == ("demo", "run-race")
+            return {"status": "running"}
+
+        def enqueue_run_message(self, *_args: Any, **_kwargs: Any) -> int:
+            raise RunNotActiveError("Run ist nicht mehr aktiv")
+
+    jobs_db = tmp_path / "chat-jobs.db"
+    store = ChatJobStore(jobs_db)
+    job, _ = store.create(
+        "session-a", "Frage", "read", "request-key-result-race-001",
+        run_id="run-race", project="demo",
+    )
+    assert store.mark_run_inbox_enqueued(job["job_id"])
+    assert store.claim(job["job_id"], "chat-worker")
+    assert store.finish(job["job_id"], answer="Antwort")
+
+    assert chat_jobs.reconcile_run_inbox(
+        "demo", db_path=jobs_db, event_store=_RunFinishesDuringHandoff(),
+    ) == 1
+    finished = store.get(job["job_id"])
+    assert finished is not None
+    assert finished["run_result_enqueued"] == 1
+    assert finished["events"][-1]["kind"] == "run_result_handoff_skipped"
+    assert finished["events"][-1]["payload"]["reason"] == (
+        "run_ended_before_result_handoff"
     )
 
 

@@ -6600,6 +6600,13 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation:** Architect-Evidence und Scout-Kette: 8 bestanden; Ruff und `git diff --check` bestanden. Mypy ist im lokalen Windows-Umfeld nicht repo-weit belastbar (POSIX-Prozess-APIs und fehlendes `uvicorn`); GitHub Actions Quality Gate [43575805265](https://github.com/ghxstfocus/werkstatt/actions/runs/43575805265) fuer Commit `7739026`: erfolgreich, einschliesslich Ruff, 2.262 Pytests, Mypy, AST und Audit-Katalog.
 # 2026-11-14 — OP-398: geteilte Kriterien erst nach allen Teilaufgaben abdecken
 
+## 2026-11-14 — Terminale Chat-Ergebnis-Outbox blockiert keine neuen Anfragen
+
+- **Befund:** Nach dem Reconcile der neuen Run-Inbox verarbeitete `reconcile_run_inbox()` noch ausstehende Ergebnis-Outbox-Eintraege aelterer Jobs. Fuer einen bereits beendeten Run warf `enqueue_run_message()` `RunNotActiveError`, der Ergebniszweig fing ihn nicht ab und liess dadurch den neuen Chatjob-POST mit HTTP 500 scheitern. Das erklaert die Wiederholung nach dem Webserver-Neustart.
+- **Aenderung:** Ergebnis-Handoffs werden bei fehlendem oder terminalem RunRecord als nicht mehr zustellbar protokolliert und idempotent aufgeloest. Der Race-Fall, in dem der Run zwischen Statuspruefung und Inbox-Insert endet, wird ebenfalls abgefangen; der gespeicherte Chatjob bleibt fuer die Session replaybar.
+- **Regression:** API-Test mit einer ausstehenden Ergebnis-Outbox eines terminalen Vorgaenger-Runs; der neue Chatjob muss trotzdem mit HTTP 202 angenommen werden.
+- **Verifikation:** `tests/test_chat_jobs_api.py` und `tests/test_chat_jobs.py`: 42 bestanden, 1 bestehende Starlette-Deprecation-Warnung; Ruff, `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check` bestanden. Linux-CI steht noch aus.
+
 ## 2026-11-14 — Chatauftrag nicht an terminalen Registry-Run binden
 
 - **Befund:** Der Chat-Job-Endpunkt vertraute beim Anhängen eines Auftrags allein dem Prozess-Registry-Status. Ein veralteter Registry-Eintrag konnte so eine beendete Run-ID übernehmen; beim Inbox-Handoff wurde die Chatnachricht dann mit `Run ist nicht mehr aktiv` abgewiesen.
