@@ -71,7 +71,7 @@ Arbeitsgraphen und Evidence Ledger.
 | Commit und Verify | Commit-Pruefungen pinnen Parent-HEAD und Index-Tree. Nach einem Commit laeuft die vollstaendige Phase-End-Verify erneut; Snapshot-Abweichungen verhindern Erfolg. |
 | Run-Ergebnis | Ein gruener Teilcheck genuegt nicht. Task-Akzeptanzkriterien werden vor dem Gate auf Abdeckung geprueft und Referenzen bleiben im Checkpoint erhalten. Offene/fehlgeschlagene Tasks, nicht abgedeckte Kriterien oder rotes Verify verhindern den Erfolg. |
 | Prozessstatus | Die Registry ueberlebt Webserver-Neustarts und kann lebende Worker wiederfinden. Sie und der RunRecord bleiben getrennte Speichervertraege. |
-| Run-Inbox | SQLite speichert Nachrichten idempotent mit Lease/Fencing. Run-gebundene Chatjobs fuehren zusaetzlich eine Outbox-Markierung: Inbox-Eintrag wird vor Worker-Dispatch geschrieben und bei Reconnect/Resume idempotent reconciliert. Der Task-Loop konsumiert Annahme- und terminale Ergebnis-Hinweise an Task-Grenzen und schreibt sie crash-sicher in getrennte Checkpoint-Cursor. Beide erscheinen mit stabiler Audit-ID und redigierten Metadaten in der Control-Timeline, bevor der Checkpoint geschrieben und die Inbox bestaetigt wird. Der Ergebnis-Hinweis enthaelt Status und Antwort-Hash, nicht den Antworttext; er bestaetigt die Rueckkehr des Paralleljobs, nimmt aber dessen Inhalt noch nicht als Ziel-/Scope-Aenderung in den Hauptlauf auf. Allgemeine Fragen, Steueraktionen, Gate-Antworten und Schreibauftraege bleiben noch keine vollstaendig integrierten Koordinator-Ereignisse. |
+| Run-Inbox | SQLite speichert Nachrichten idempotent mit Lease/Fencing. Run-gebundene Chatjobs nutzen eine Outbox und replaybare Annahme-/Ergebnis-Hinweise. Bestaetigte Chat-Folgeauftraege werden an Task- und Abschluss-Checkpoints mit frischem Repo-Kontext geplant, gegen den kombinierten Task-Graphen geprueft und erst nach dem Chat-Plan-Gate aufgenommen; ein Abschluss-Race kehrt zum sicheren Checkpoint zurueck. Bei Planungsfehler oder Gate-Timeout bleibt der Auftrag erhalten und der Run wird wiederaufnehmbar fehlgeschlagen. Nicht integriert sind weiterhin allgemeine Fragen, Steueraktionen, Gate-Antworten als Run-Ereignisse sowie unabhaengige Schreibauftraege. |
 | Control-Timeline | Viele Rollen- und Verify-Schritte sind sichtbar. Lueckenloses Builder-/LLM-Eventing und eine einheitliche Run-Projektion bleiben offen. Chat-Werkzeuge haben keine pauschale Rundengrenze mehr; wiederholte Zyklen loesen Kurskorrektur und bei weiterem Stillstand eine belegte Abschlussantwort aus. |
 
 ## Nachgewiesene Start-Race und Korrektur
@@ -112,14 +112,14 @@ den Spawn-Fehlerpfad.
    einen atomar abgeglichenen Run-Vertrag migriert.
 2. **Inbox ist nur teilweise integriert:** `job_notice` wird persistiert
    und checkpoint-sicher konsumiert. Bestaetigte Chat-Folgeauftraege werden
-   ebenfalls dauerhaft der aktiven Run-Inbox zugeordnet. Explizite OPs
-   transportieren dabei ihren gespeicherten Vorschautext; fehlt der Inhalt,
-   wird die Annahme fail-closed abgelehnt. Die Aufgaben werden am Checkpoint
-   aber noch nicht fachlich disponiert oder in den Arbeitsgraphen uebernommen.
-   Der Checkpoint-Consumer weist leere/whitespace-only Inbox-Texte jetzt
-   ebenfalls fail-closed ab, bevor sie persistiert oder quittiert werden.
-   Fragen, Control und Gate-Antworten veraendern den Arbeitsgraphen ebenfalls
-   noch nicht.
+   dauerhaft der aktiven Run-Inbox zugeordnet; explizite OPs transportieren
+   ihren gespeicherten Vorschautext, und fehlender oder leerer Inhalt wird
+   fail-closed abgelehnt. Die Folgeauftraege werden an Task- und terminalen
+   Checkpoints mit frischem Kontext geplant, gegen den kombinierten Graphen
+   geprueft und am Chat-Plan-Gate freigegeben. Ein Planungsfehler oder Timeout
+   behaelt den Auftrag zur Recovery und laesst keinen toten Worker als
+   `running` zurueck. Fragen, Control und Gate-Antworten sind weiterhin keine
+   vollstaendig integrierten Run-Inbox-Ereignisse.
 3. **Zielorientierter Arbeitsgraph fehlt weiterhin:** Der Planner verwirft
    jetzt strukturell ungueltige Task-DAGs vor dem Plan-Gate und sortiert
    gueltige Abhaengigkeiten stabil. Der Run disponiert Tasks aber weiterhin
@@ -175,12 +175,14 @@ Arbeitsgraph von OP-398 bleibt offen.
 
 ## Naechster Architektur-Schritt
 
-M1 aus ADR-0032 bleibt offen: die vorhandene Run-Inbox muss in einen
-einheitlichen Run-Vertrag ueberfuehrt werden, der Fragen, Steuerung,
-Gate-Antworten und Schreibauftraege idempotent dem selben Run zuordnet und
-deren Wirkung an sicheren Checkpoints definiert. Die vorhandenen SQLite-
-Stores, Prozess-Registry und Phase-Checkpoints sind zu migrieren, nicht
-durch einen unverbundenen zweiten Statusspeicher zu verdoppeln.
+M1 aus ADR-0032 bleibt offen: die vorhandene Run-Inbox muss zu einem
+einheitlichen Run-Vertrag erweitert werden, der allgemeine Fragen,
+Steueraktionen, Gate-Antworten und unabhaengige Schreibauftraege idempotent
+demselben Projekt und Run zuordnet und deren Wirkung an sicheren Checkpoints
+definiert. Bestaetigte Folgeauftraege haben bereits eine Checkpoint-Disposition;
+die vorhandenen SQLite-Stores, Prozess-Registry und Phase-Checkpoints sind
+weiter zusammenzufuehren, nicht durch einen unverbundenen zweiten
+Statusspeicher zu verdoppeln.
 
 ### Aktuelle Inbox-Grenze
 
