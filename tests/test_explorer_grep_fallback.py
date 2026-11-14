@@ -103,3 +103,57 @@ def test_eindeutige_literalersetzung_ueberspringt_explorer_llm(tmp_path):
     assert rc == 0
     files = [item.get("file") for item in state.explorer_context["key_files"]]
     assert "werkstatt/sample.py" in files
+
+
+def test_eng_einzeldatei_aenderung_ueberspringt_explorer_llm(tmp_path):
+    """Ein enges, explizites Ziel braucht keinen zusaetzlichen Explorer-LLM-Call."""
+    target = tmp_path / "werkstatt" / "sample.py"
+    target.parent.mkdir()
+    target.write_text("value = 1\n", encoding="utf-8")
+    from werkstatt.phases import explorer as exp
+
+    aufgabe = "Aendere den Wert in werkstatt/sample.py"
+    state = _state(tmp_path, aufgabe)
+
+    with (
+        patch.object(
+            exp, "run_explorer",
+            side_effect=AssertionError("Explorer-LLM ist fuer das enge Ziel redundant"),
+        ),
+        patch.object(exp, "group_start"),
+        patch.object(exp, "group_end"),
+        patch.object(exp, "step"),
+        patch.object(exp, "audit"),
+    ):
+        rc, _phase_state = exp._phase_explorer_and_setup(
+            state, aufgabe, "test", None,
+        )
+
+    assert rc == 0
+    files = [item.get("file") for item in state.explorer_context["key_files"]]
+    assert "werkstatt/sample.py" in files
+
+
+def test_diagnostische_einzeldatei_laesst_explorer_llm_aktiv(tmp_path):
+    """Diagnoseauftraege bleiben trotz explizitem Pfad im Explorationspfad."""
+    target = tmp_path / "werkstatt" / "sample.py"
+    target.parent.mkdir()
+    target.write_text("value = 1\n", encoding="utf-8")
+    from werkstatt.phases import explorer as exp
+
+    aufgabe = "Pruefe die Ursache in werkstatt/sample.py"
+    state = _state(tmp_path, aufgabe)
+
+    with (
+        patch.object(exp, "run_explorer", return_value={}) as run_explorer,
+        patch.object(exp, "group_start"),
+        patch.object(exp, "group_end"),
+        patch.object(exp, "step"),
+        patch.object(exp, "audit"),
+    ):
+        rc, _phase_state = exp._phase_explorer_and_setup(
+            state, aufgabe, "test", None,
+        )
+
+    assert rc == 0
+    run_explorer.assert_called_once_with(state, aufgabe)

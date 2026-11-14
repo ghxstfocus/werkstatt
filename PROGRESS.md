@@ -6788,3 +6788,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Korrektur aus CI:** Der erste Linux-Lauf fand die beiden neuen Audit-Kinds nicht im zentralen Katalog. Beide sind jetzt registriert; die Katalog- und Explorer-Regressionen bestehen lokal.
 - **Mypy-Nachtrag:** Der Serverlauf mit Mypy 2.4.1 deckte eine bisher implizite Typinferenz am Explorer-Ergebnis-Dict auf. Das Dict ist jetzt als `dict[str, Any]` typisiert; Mypy fuer das Modul besteht.
 - **Verifikation:** Explorer-/Audit-Tests: 8 bestanden; Ruff, Doku-Drift-Check und `git diff --check` bestanden. Das lokale Gesamt-Quality-Gate wurde bei seinem eingebetteten vollen Pytest-Lauf unter Windows unterbrochen; aktualisierte Linux-CI steht noch aus. OP-398 bleibt offen.
+
+### Nachtrag — Explorer-Aufruf bei engem Einzeldatei-Ziel einsparen
+
+- **Befund:** Auch ein klarer, enger Änderungsauftrag mit genau einer vorhandenen Zieldatei rief noch den Explorer-LLM auf, obwohl das Scout-Routing denselben Fall bereits deterministisch als eng und explizit einstufen kann. Diagnose- und breite Aufträge duerfen diesen Pfad nicht nehmen.
+- **Aenderung:** Der Explorer-LLM wird uebersprungen, wenn `_scout_route_decision()` das einzelne explizite Ziel fail-closed bestaetigt. Deterministische Datei-/Verwandtschaftsbelege werden weiterhin aufgebaut und der Skip auditiert. Unsichere, mehrdeutige, diagnostische und breite Auftraege bleiben im normalen Explorer-Pfad.
+- **Tests:** Enge Einzeldatei-Aenderung ueberspringt den Modellaufruf; diagnostische Aufgabe mit explizitem Pfad ruft ihn weiterhin auf.
+- **Verifikation:** Explorer-/Scout-/Planner-Tests: 33 bestanden, 3 uebersprungen; Ruff und Mypy fuer `werkstatt/phases/explorer.py` bestanden. Der Server hat den vorherigen Stand `0c7e15e` unabhaengig mit 2346 Tests, Ruff, Mypy, AST und Audit-Katalog gruen verifiziert. Vollstaendiges Gate fuer diese neue Aenderung steht noch aus.
