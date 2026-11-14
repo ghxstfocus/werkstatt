@@ -47,6 +47,32 @@ Pfad-Traversal und die Auszugslimits. Das macht den Scout nicht zum
 Pflichtschritt: der Planner darf ihn bei einem expliziten, belegten Einzel-
 Dateiziel weiterhin ueberspringen.
 
+### Nachpruefung: API-Wirkungen und Verify-Interpreter
+
+Der vorherige Signaturauszug war nur Prompt-Kontext: er belegte Namen und
+Signaturen, setzte aber weder eine verbindliche API-Pruefung vor dem Builder
+noch eine Lese-/Schreibwirkung durch. Das zeigte OP-375: `get_run_record()`
+und `transition_run_status()` existieren tatsaechlich in
+`werkstatt/event_store.py`; der Architect hatte also keine fehlenden Methoden
+erfunden. Der Plan setzte aber die schreibende Statusmutation
+`transition_run_status()` in einen Lese-Aggregator. Der Reviewer bemerkte den
+Seiteneffekt erst nach dem Builder-Aufruf. Der AST-Index kennzeichnet jetzt
+erkennbare Effekte; der Architect-Preflight verwirft unbelegte APIs und
+Schreib- oder unbekannte Effekte in einem als read-only beschriebenen
+Aggregator vor Planner-Split und Builder und gibt einen Korrekturversuch.
+Das ist ein deterministischer Guard fuer codeartig referenzierte APIs, kein
+allgemeiner Beweis beliebiger Python-Purity.
+
+Der OP-375-Run protokollierte ausserdem Ruff-, Mypy- und Import-Linter-Ausfaelle,
+weil `projects/werkstatt.yaml` nur `venv_python: python3` vorgab und die
+Verify-Stages dadurch System-Python bzw. System-Tools verwendeten. Verify loest
+eine solche generische Angabe jetzt auf die Projekt-`.venv` auf, sofern sie
+existiert; explizite Interpreterpfade bleiben vorrangig. Die Regression wird
+lokal unter Windows gezielt getestet; der komplette Loop-Testlauf ist dort
+nicht als Linux-Nachweis verwendbar, weil Projektkonfiguration und POSIX-
+Annahmen einen grossen Teil der Tests fail-closed abbrechen lassen. CI muss
+den Linux-Qualitaetslauf fuer den Branch bestaetigen.
+
 ## Kurzbefund
 
 Die Werkstatt hat operative Bausteine fuer Projekt-Runs, spezialisierte
