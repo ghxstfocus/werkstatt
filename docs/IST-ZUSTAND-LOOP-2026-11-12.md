@@ -332,3 +332,15 @@ Intent-Gegenproben bestanden ebenfalls. Ein separater Post-Merge-Lauf und der
 aktuelle Produktionsserver-Commit sind nicht belegt. OP-396 und OP-397 bleiben
 offen; der Guard ist eine gezielte Fehlklassifikationsschranke, kein Ersatz
 fuer die noch fehlende gemeinsame Chat-/Loop-Disposition.
+
+## Nachtrag — Chat-Job-Bezeichnungen von Loop-Auftraegen trennen (2026-11-14)
+
+Der Chatjob-Endpunkt speichert normale Chatnachrichten mit `run_id=None` und
+isoliertem Snapshot; die Intent-Pruefung fuer „Dann schauen wir mal, ob der
+Loop diese Aufgabe schafft“ liefert keinen Loop-Start. Die Timeline zeigte
+dennoch bei `chat_job_queued` nur „Angenommen“ und im Chatstatus „Auftrag
+angenommen“. Das konnte eine normale Chat-Antwort wie einen an den Loop
+uebergebenen Auftrag aussehen lassen. Die Anzeige benennt diese Zustaende jetzt
+als Chat-Nachricht bzw. Chat-Antwort. Die Ursache eines konkreten
+`chat_job_cancelled` bleibt davon getrennt und muss anhand des Job-/Audit-Events
+untersucht werden; ein Screenshot belegt den Cancel-Ausloeser nicht.

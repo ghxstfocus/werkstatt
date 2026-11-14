@@ -746,8 +746,8 @@ _TL_LABELS: dict[str, str] = {
     "chat_job_tool_call": "Chat-Tool gestartet",
     "chat_job_tool_result": "Chat-Tool abgeschlossen",
     "chat_job_succeeded": "Chat-Antwort fertig",
-    "chat_job_failed": "Chat-Auftrag fehlgeschlagen",
-    "chat_job_cancelled": "Chat-Auftrag abgebrochen",
+    "chat_job_failed": "Chat-Antwort fehlgeschlagen",
+    "chat_job_cancelled": "Chat-Antwort abgebrochen",
     "chat_job_cancel_requested": "Chat-Abbruch angefordert",
     "chat_job_branch_cleanup_failed": "Chat-Arbeitszweig konnte nicht bereinigt werden",
     "explorer_messung": "Explorer: Messung",
@@ -885,7 +885,7 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
     if kind.startswith("chat_job_"):
         event_kind = kind.removeprefix("chat_job_")
         if event_kind == "queued":
-            return f"Angenommen: {str(payload.get('message') or '')[:120]}"
+            return f"Chat-Nachricht erhalten: {str(payload.get('message') or '')[:120]}"
         if event_kind == "started":
             return "Projekt wird geprueft"
         if event_kind == "chunk":
@@ -899,9 +899,12 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         if event_kind == "succeeded":
             return str(payload.get("answer") or "Antwort fertig")[:160]
         if event_kind == "failed":
-            return str(payload.get("error") or "Chat-Auftrag fehlgeschlagen")[:160]
+            return str(payload.get("error") or "Chat-Antwort fehlgeschlagen")[:160]
         if event_kind in ("cancel_requested", "cancelled"):
-            return "Abbruch angefordert" if event_kind == "cancel_requested" else "Abgebrochen"
+            return (
+                "Chat-Abbruch angefordert" if event_kind == "cancel_requested"
+                else "Chat-Antwort abgebrochen"
+            )
         return str(payload.get("text") or event_kind)[:160]
     if kind == "loop_chat_job_observed":
         mode = str(payload.get("mode") or "Chat")

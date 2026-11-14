@@ -6712,3 +6712,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation:** Linux-CI fuer PR-Head `0c1a839d8575f3c1c908f24f682725c74e31be8f` erfolgreich (Quality Gate, [Run 43609401260](https://github.com/ghxstfocus/werkstatt/actions/runs/43609401260)); PR #37 wurde als `7413012` auf `main` uebernommen. Lokale `py_compile`- und Intent-Gegenproben bestanden.
 - **Korrektur zur vorherigen Zeile:** Die inzwischen erweiterte Regressionstestsammlung deckt 17 Loop-Aktions- und 14 OP-Intentfaelle ab. Das vorherige „CI steht aus“ war zum Zeitpunkt des Eintrags richtig, ist durch den spaeteren CI-Lauf ueberholt.
 - **Grenze:** Kein separater Post-Merge-Lauf und kein aktueller Produktionsserver-Commit belegt. OP-396/397 bleiben offen.
+
+## 2026-11-14 — Chatjob-Status sprachlich vom Loop trennen
+
+- **Befund:** Normale Chatnachrichten werden run-unabhaengig mit `run_id=None` angenommen. Die Control-Timeline zeigte fuer `chat_job_queued` jedoch nur „Angenommen“, der Chatstatus „Auftrag angenommen“ und ein terminaler Cancel „Auftrag abgebrochen“. Das verwischte Chat-Antwort und Loop-Uebergabe.
+- **Aenderung:** Timeline, Chatstatus und Fehlertexte benennen den Chatjob jetzt ausdruecklich als Chat-Nachricht bzw. Chat-Antwort. Das ist eine UI-Klarstellung; sie behauptet nicht, die Ursache eines konkreten Cancels behoben zu haben.
+- **Regressionen:** Backend-Label-/Detailtest und Frontend-Statusvertrag hinzugefuegt.
+- **Verifikation:** `git diff --check` und `node --check` fuer `static/chat.js`/`static/live_feed.js` bestanden. Lokales Pytest/Ruff nicht verfuegbar (kein Windows-Python); Linux-CI steht aus.
