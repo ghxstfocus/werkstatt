@@ -6795,3 +6795,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Der Explorer-LLM wird uebersprungen, wenn `_scout_route_decision()` das einzelne explizite Ziel fail-closed bestaetigt. Deterministische Datei-/Verwandtschaftsbelege werden weiterhin aufgebaut und der Skip auditiert. Unsichere, mehrdeutige, diagnostische und breite Auftraege bleiben im normalen Explorer-Pfad.
 - **Tests:** Enge Einzeldatei-Aenderung ueberspringt den Modellaufruf; diagnostische Aufgabe mit explizitem Pfad ruft ihn weiterhin auf.
 - **Verifikation:** Explorer-/Scout-/Planner-Tests: 33 bestanden, 3 uebersprungen; Ruff und Mypy fuer `werkstatt/phases/explorer.py` bestanden. Der Server hat den vorherigen Stand `0c7e15e` unabhaengig mit 2346 Tests, Ruff, Mypy, AST und Audit-Katalog gruen verifiziert. Vollstaendiges Gate fuer diese neue Aenderung steht noch aus.
+
+### Nachtrag — Linux-CI und Server-Gate fuer Explorer-Routing
+
+- **Beleg:** Der Explorer-Routing-Commit `30601d1` wurde als PR #53 in `1d360ac` gemergt. GitHub-Quality-CI lief erfolgreich; anschliessend verifizierte der Linux-Server denselben Main-Stand mit 2348 Tests bestanden, 5 uebersprungen, Ruff/Mypy/AST/Audit-Katalog ohne Fehler und `regression: false`.
+- **Einordnung:** Damit ist der Explorer-Routing-Teilschritt auf Main verifiziert. OP-398 bleibt offen; insbesondere ist der in `docs/IST-ZUSTAND-LOOP-2026-11-12.md` beschriebene feste Task-Graph mit Abbruch bei offenen Kriterien noch nicht in einen dynamischen, zielgebundenen Checkpoint-/Replan-Pfad ueberfuehrt.
