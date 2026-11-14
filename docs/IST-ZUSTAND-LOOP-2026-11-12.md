@@ -1,11 +1,15 @@
-# Ist-Zustand des Werkstatt-Loops — GitHub main 2026-11-13
+# Ist-Zustand des Werkstatt-Loops — GitHub main 2026-11-14
 
 Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Hauptlinienstand: `ebb3b73`. Der zusaetzliche Recovery-Beleg aus
-PR #8 wurde auf Commit `2130019` mit Quality-Gate-Run
+Gepruefter Hauptlinienstand: `1bb2e19` (Merge PR #20). Das Quality Gate
+fuer den Merge-Commit lief erfolgreich; der Server meldete auf diesem Stand
+2.260 bestandene Tests und 5 uebersprungene Tests. Nach dem anschliessenden
+Webserver-Neustart bestand der konkrete GNU-grep-Alternationstest mit 1 Test;
+Ruff fuer Chat-Agent und Tool-Dateien war ebenfalls sauber. Der zusaetzliche
+Recovery-Beleg aus PR #8 wurde auf Commit `2130019` mit Quality-Gate-Run
 [43488902240](https://github.com/ghxstfocus/werkstatt/actions/runs/43488902240)
 erfolgreich verifiziert. Seit der letzten Bestandsaufnahme
 wurden unter anderem Akzeptanzkriterien explizit auf Tasks abgebildet und als
@@ -14,6 +18,19 @@ und danach die vollstaendige Phase-End-Pruefung erneut ausgefuehrt. Der
 Werkzeugdialog erkennt wiederholte und alternierende Werkzeugzyklen ohne
 pauschale Rundengrenze. Diese CI-Belege betreffen den Repository-Stand, nicht
 den aktuell laufenden Produktionsserver.
+
+## Chat-Belegsuche: GNU-grep-Alternation
+
+Der gespeicherte Chat-Verlauf zur OP-374-Pruefung zeigte eine widerspruechliche
+Recherche: `grep` fand `_letzter_run_id` zunaechst korrekt, meldete bei
+spaeteren Suchmustern wie `run_id|project` aber faelschlich keinen Treffer.
+Ursache war GNU grep im Basic-Regular-Expression-Modus, in dem `|` keine
+Alternation ist. PR #20 aktiviert ERE mit `-E`; der Chat-Prompt verlangt bei
+widerspruechlichen Suchbelegen nun erneutes Lesen der Quelle und priorisiert
+bestaetigte positive Treffer. Die Regression ist in
+`tests/test_chat_tools.py::test_grep_unterstuetzt_ere_alternation` abgesichert.
+Der laufende Webprozess wurde nach dem Merge neu gestartet; der Regressionstest
+lief danach direkt auf dem Server erfolgreich.
 
 ## Kurzbefund
 
@@ -149,3 +166,17 @@ Gate-Antworten und Schreibauftraege idempotent dem selben Run zuordnet und
 deren Wirkung an sicheren Checkpoints definiert. Die vorhandenen SQLite-
 Stores, Prozess-Registry und Phase-Checkpoints sind zu migrieren, nicht
 durch einen unverbundenen zweiten Statusspeicher zu verdoppeln.
+
+### Aktuelle Inbox-Grenze
+
+Der Codepfad bestaetigt die dokumentierte OP-401-Luecke: `chat_followup_request`
+wird in `werkstatt/phases/tasks.py::_persist_run_checkpoint` validiert,
+auditiert und als `received` im RunCheckpoint abgelegt. Die Web-UI bekommt
+eine `loop_followup_checkpointed`-Rueckmeldung. Im Repository gibt es danach
+keinen Consumer, der diese Nachricht als Frage/Diagnose, Steuerung, innerhalb
+des freigegebenen Scopes liegenden Folgeauftrag oder Scope-Aenderung disponiert
+und gegebenenfalls den Task-Graph aktualisiert. Deshalb ist der Checkpoint
+ein dauerhafter Eingangsnachweis, aber noch keine Bearbeitungs- oder
+Abschlussbestaetigung fuer den Folgeauftrag. Diese Grenze muss bei OP-401/
+ADR-0032 erhalten bleiben, bis die Disposition und ihr Ergebnis-Gate umgesetzt
+und getestet sind.
