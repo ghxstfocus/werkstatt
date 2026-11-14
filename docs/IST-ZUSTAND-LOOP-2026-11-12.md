@@ -4,12 +4,14 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Hauptlinienstand: `1bb2e19` (Merge PR #20). Das Quality Gate
-fuer den Merge-Commit lief erfolgreich; der Server meldete auf diesem Stand
-2.260 bestandene Tests und 5 uebersprungene Tests. Nach dem anschliessenden
-Webserver-Neustart bestand der konkrete GNU-grep-Alternationstest mit 1 Test;
-Ruff fuer Chat-Agent und Tool-Dateien war ebenfalls sauber. Der zusaetzliche
-Recovery-Beleg aus PR #8 wurde auf Commit `2130019` mit Quality-Gate-Run
+Gepruefter Hauptlinienstand: `d7f32e8` (Merge PR #25). GitHub Actions
+Quality Gate [43576037105](https://github.com/ghxstfocus/werkstatt/actions/runs/43576037105)
+bestand fuer den PR-Tree mit 2.262 Pytests und 5 uebersprungenen Tests,
+Ruff, Mypy, AST und Audit-Katalog. Der zuletzt vom Nutzer gemeldete
+Serverlauf aktualisierte `main` bis `3cbaf26` und bestand mit denselben
+2.262 Tests; er belegt nicht, dass der Server bereits `d7f32e8` ausfuehrt.
+Der zusaetzliche Recovery-Beleg aus PR #8 wurde auf Commit `2130019` mit
+Quality-Gate-Run
 [43488902240](https://github.com/ghxstfocus/werkstatt/actions/runs/43488902240)
 erfolgreich verifiziert. Seit der letzten Bestandsaufnahme
 wurden unter anderem Akzeptanzkriterien explizit auf Tasks abgebildet und als
@@ -31,6 +33,19 @@ bestaetigte positive Treffer. Die Regression ist in
 `tests/test_chat_tools.py::test_grep_unterstuetzt_ere_alternation` abgesichert.
 Der laufende Webprozess wurde nach dem Merge neu gestartet; der Regressionstest
 lief danach direkt auf dem Server erfolgreich.
+
+## Scout-/Architect-Beleguebergabe
+
+Im Scout-Pfad ersetzt der kompakte Scout-Bericht die Explorer-Rohdaten.
+Der Architect erhaelt deshalb jetzt fuer OP-, Scout- und Explorer-Zieldateien
+einen begrenzten Auszug aus dem aktuellen AST-Index. Angeforderte Scout-Symbole
+werden gegen aktuelle Signaturen abgeglichen; deterministisch erkannte
+API-Widersprueche bleiben im Architect-Kontext erhalten. Scout-Pfade mit
+Windows-Backslashes werden vor dem Symbolabgleich normalisiert. Regressionen
+pruefen konkrete Projector-/Inspector-Signaturen, ausgeschlossene Dateien,
+Pfad-Traversal und die Auszugslimits. Das macht den Scout nicht zum
+Pflichtschritt: der Planner darf ihn bei einem expliziten, belegten Einzel-
+Dateiziel weiterhin ueberspringen.
 
 ## Kurzbefund
 
