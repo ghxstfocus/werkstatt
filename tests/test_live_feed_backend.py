@@ -410,7 +410,8 @@ def test_kriterienfortschritt_ist_in_timeline_menschlich_beschriftet():
 
     assert label == "Akzeptanzkriterien: Fortschritt"
     assert detail == (
-        "1 erledigt, 2 offen nach t2; danach: Weiter mit t3: Tests ergaenzen"
+        "Task-Abdeckung: 1 erledigt, 2 offen nach t2; danach: "
+        "Weiter mit t3: Tests ergaenzen"
     )
 
 

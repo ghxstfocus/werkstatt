@@ -183,10 +183,13 @@ def _task_ende(
                             _all_tasks_done = False
                         if _all_tasks_done:
                             _next_step_type = "phase_end_verify"
-                            _next_step = "Phase-End-Verify ausfuehren"
+                            _next_step = (
+                                "Phase-End-Review, Freigabe und Gesamt-Verify ausfuehren"
+                            )
                             _decision = (
-                                "Der Task-Graph ist abgeschlossen; jetzt wird "
-                                "das Gesamtziel mit der Abschlusspruefung belegt."
+                                "Alle zugeordneten Tasks sind erledigt; das ist noch "
+                                "kein Zielnachweis. Review, Freigabe und Phase-End-Verify "
+                                "pruefen jetzt den Gesamtstand."
                             )
                         else:
                             _next_step_type = "resolve_open_tasks"
@@ -226,7 +229,7 @@ def _task_ende(
                             str(_criterion_id), "",
                         )
                         _checkpoint_evidence.append(
-                            f"Erfuellt: {_criterion_id}"
+                            f"Task-Abdeckung erledigt: {_criterion_id}"
                             + (f" — {_criterion_text[:120]}" if _criterion_text else "")
                         )
                     for _criterion_id in _criterion_progress.get("uncovered", []):
@@ -262,12 +265,13 @@ def _task_ende(
                             "status": (
                                 "untracked"
                                 if not _criteria_tracked
-                                else "complete"
+                                else "task_graph_complete"
                                 if _criterion_progress.get("valid") is True
                                 and not _criterion_progress.get("uncovered")
                                 else "in_progress"
                             ),
                             "tracked": _criteria_tracked,
+                            "coverage_basis": "assigned_tasks_done",
                             "covered": _criterion_progress.get("covered", []),
                             "remaining": _criterion_progress.get("uncovered", []),
                             "error": _criterion_progress.get("error"),

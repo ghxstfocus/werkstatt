@@ -1222,6 +1222,33 @@ def _phase_finalize(
             audit("loop_phase", _completion, pd, pn)
             rc = 1
         else:
+            if (
+                isinstance(_criterion_progress, dict)
+                and _criterion_progress.get("tracked") is True
+                and _criterion_progress.get("valid") is True
+                and not _criterion_progress.get("uncovered")
+            ):
+                audit(
+                    "loop_criteria_progress",
+                    {
+                        "status": "verified",
+                        "tracked": True,
+                        "coverage_basis": "phase_end_review_and_verify",
+                        "covered": _criterion_progress.get("covered", []),
+                        "remaining": [],
+                        "verification": "phase_end",
+                        "decision_summary": (
+                            "Der Task-Graph ist abgeschlossen und die "
+                            "Abschlusspruefung hat das Gesamtziel bestaetigt."
+                        ),
+                        "evidence": [
+                            "Alle zugeordneten Tasks sind erledigt.",
+                            "Phase-End-Review, Human Gate und Abschluss-Verify bestanden.",
+                        ],
+                    },
+                    pd,
+                    pn,
+                )
             audit("loop_erfolg", {"project_name": project_name}, pd, pn)
 
     # M-307b: Phasen-Ende in PROGRESS.md
