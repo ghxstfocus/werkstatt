@@ -6761,6 +6761,14 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Tests:** Regression fuer Quellstellen im Korrekturprompt sowie Pfadbegrenzung und Zeichenlimit.
 - **Verifikation:** gezielte Architect-Tests: 17 bestanden; Ruff, Mypy fuer `werkstatt/architect.py`, Doku-Drift-Check und `git diff --check` bestanden. Der komplette Windows-Testlauf ist wegen bestehender Linux-/POSIX-Annahmen fehlgeschlagen und wurde abgebrochen; er ist kein Linux-Gesamtbeleg. Linux-CI steht aus.
 
+### Nachtrag — Architect-Laufkontext nicht mehr still abschneiden
+
+- **Befund:** Der aus Fortschritt, abgeschlossenen Punkten, Fehlern und Gate-Kontext zusammengesetzte Architect-Laufkontext wurde beim Zusammenbau und nochmals beim Handoff still auf 12.000 Zeichen begrenzt. Der Architect konnte dadurch nicht erkennen, dass spaetere Abschnitte fehlten.
+- **Aenderung:** Der Kontext wird jetzt in dokumentierter Prioritaetsreihenfolge innerhalb des Limits gebaut. Gekuerzte und ausgelassene Abschnitte werden mit Namen und Zeichenumfang im Modellkontext markiert; dieselben Metadaten werden als `planner_architect_context_budget` auditiert. Eine defensive Uebergabegrenze markiert und auditiert ebenfalls jede Kuerzung.
+- **Grenze:** Dies deckt den Architect-Ausfuehrungskontext ab. Es erfuellt noch nicht das rollenweite OP-405-Budget, allgemeines JIT-Datei-/Symbol-Nachladen oder den Token-/Qualitaetsvergleich auf einem repräsentativen Eval-Satz.
+- **Tests:** Reihenfolge-/Trunkierungsanzeige, exaktes Zeichenlimit, defensive Architect-Grenze und Audit-Kind.
+- **Verifikation:** 31 gezielte Architect-/Scout-/Audit-Katalog-Tests bestanden; Ruff, Mypy fuer Planner/Architect/Audit, Doku-Drift-Check und `git diff --check` bestanden. Vollstaendige Windows-Suite nicht als Linux-Gesamtbeleg verwendet; Linux-CI steht aus.
+
 ### Nachtrag — Mypy-Regression aus Merge-CI behoben
 
 - **Befund:** Merge-CI auf `6f25272` bestand 2328 Tests, Ruff, AST und Audit-Katalog, scheiterte aber am Quality Gate mit fuenf Mypy-Fehlern im neuen Python/JavaScript/Java-API-Index in `werkstatt/scout.py`.

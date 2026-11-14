@@ -59,6 +59,92 @@ class TaskGraphError(ValueError):
     """A generated task graph is structurally unsafe to execute."""
 
 
+ARCHITECT_EXECUTION_CONTEXT_MAX_CHARS = 12000
+
+
+def _budget_architect_execution_context(
+    sections: list[tuple[str, str]],
+    *,
+    max_chars: int = ARCHITECT_EXECUTION_CONTEXT_MAX_CHARS,
+) -> tuple[str, dict[str, object]]:
+    """Keep ordered context evidence and explicitly label any omission."""
+    normalized = [
+        (title, content)
+        for title, content in sections
+        if isinstance(title, str) and isinstance(content, str) and content
+    ]
+    full = "\n\n".join(f"## {title}\n{content}" for title, content in normalized)
+    if len(full) <= max_chars:
+        return full, {
+            "max_chars": max_chars,
+            "chars": len(full),
+            "included": [title for title, _ in normalized],
+            "truncated": [],
+            "omitted": [],
+        }
+
+    # Reserve room for a visible truncation report; preserve the section order
+    # supplied by the caller as its deterministic priority order.
+    report_reserve = min(700, max(160, max_chars // 12))
+    content_budget = max(0, max_chars - report_reserve)
+    output: list[str] = []
+    included: list[str] = []
+    truncated: list[dict[str, object]] = []
+    omitted: list[str] = []
+    used = 0
+    for index, (title, content) in enumerate(normalized):
+        heading = f"## {title}\n"
+        separator = 2 if output else 0
+        available = content_budget - used - separator - len(heading)
+        if available <= 0:
+            omitted.extend(name for name, _ in normalized[index:])
+            break
+        if len(content) > available:
+            marker = "\n[ABSCHNITT GEKUERZT — Volltext bleibt im Run-Artefakt]"
+            kept = max(0, available - len(marker))
+            output.append(heading + content[:kept] + marker[:available - kept])
+            used += separator + len(output[-1])
+            truncated.append({
+                "section": title,
+                "original_chars": len(content),
+                "included_chars": kept,
+            })
+            included.append(title)
+            omitted.extend(name for name, _ in normalized[index + 1:])
+            break
+        output.append(heading + content)
+        included.append(title)
+        used += separator + len(output[-1])
+
+    report = (
+        "## KONTEXTBUDGET — AUSLASSUNGEN SICHTBAR\n"
+        f"Limit: {max_chars} Zeichen. Gekuerzt: "
+        + (", ".join(
+            f"{item['section']} ({item['included_chars']}/"
+            f"{item['original_chars']} Zeichen)" for item in truncated
+        ) or "keine")
+        + ". Ausgelassen: "
+        + (", ".join(omitted) if omitted else "keine")
+        + ". Nicht enthaltene Angaben sind keine Negativbelege; vor einer davon abhaengigen Entscheidung muss die Quelle erneut gelesen oder die Belegluecke benannt werden."
+    )
+    used_text = "\n\n".join(output)
+    report_room = max(0, max_chars - len(used_text) - (2 if output else 0))
+    if len(report) > report_room:
+        marker = " [BERICHT GEKUERZT]"
+        report = (
+            report[:max(0, report_room - len(marker))] + marker
+        )[:report_room]
+    text = "\n\n".join(output + [report])
+    metadata: dict[str, object] = {
+        "max_chars": max_chars,
+        "chars": len(text),
+        "included": included,
+        "truncated": truncated,
+        "omitted": omitted,
+    }
+    return text, metadata
+
+
 def _validate_criteria_coverage(
     tasks: list[dict], criteria: list[str], *, infer_single_task: bool = True,
 ) -> None:
@@ -2437,46 +2523,49 @@ def run_planner(state: RunState) -> bool:
     # OP-396: Expliziter, kompakter Laufkontext fuer den Architect.
     # Scout liefert Code-/Explorer-Fakten; diese Liste erhaelt nur
     # Projektfortschritt, verifizierte Historie und Kontrollfeedback.
-    _architect_execution_parts: list[str] = []
+    _architect_execution_sections: list[tuple[str, str]] = []
     if _erledigt:
-        _architect_execution_parts.append(
-            "## BEREITS ERLEDIGT (nicht erneut planen)\n" + _erledigt[:3000]
+        _architect_execution_sections.append(
+            ("BEREITS ERLEDIGT (nicht erneut planen)", _erledigt)
         )
     if _fails_af:
-        _architect_execution_parts.append(
-            "## VORHERIGE FEHLSCHLAEGE\n"
-            + json.dumps(_fails_af[:10], ensure_ascii=False)[:3000]
+        _architect_execution_sections.append(
+            ("VORHERIGE FEHLSCHLAEGE", json.dumps(_fails_af, ensure_ascii=False))
         )
     if progress_text:
-        _architect_execution_parts.append(
-            "## PROJEKT-FORTSCHRITT (letzte 10 Eintraege)\n"
-            + progress_text[:5000]
+        _architect_execution_sections.append(
+            ("PROJEKT-FORTSCHRITT (letzte 10 Eintraege)", progress_text)
         )
     if _tasks_status:
-        _architect_execution_parts.append(
-            "## PHASE-STATE\n"
-            + json.dumps(_tasks_status, ensure_ascii=False)[:2000]
+        _architect_execution_sections.append(
+            ("PHASE-STATE", json.dumps(_tasks_status, ensure_ascii=False))
         )
     if preflight:
-        _architect_execution_parts.append(
-            "## PREFLIGHT-FEHLER\n"
-            + json.dumps(preflight[:10], ensure_ascii=False)[:2000]
+        _architect_execution_sections.append(
+            ("PREFLIGHT-FEHLER", json.dumps(preflight, ensure_ascii=False))
         )
     if follow_up_prev:
-        _architect_execution_parts.append(
-            "## FOLLOW-UP AUS VORHERIGER PHASE\n"
-            + json.dumps(follow_up_prev[:10], ensure_ascii=False)[:2000]
+        _architect_execution_sections.append(
+            ("FOLLOW-UP AUS VORHERIGER PHASE", json.dumps(follow_up_prev, ensure_ascii=False))
         )
     if _mig_stand:
-        _architect_execution_parts.append(_mig_stand[:2000])
+        _architect_execution_sections.append(("MIGRATIONSSTAND", _mig_stand))
     if _planner_info:
-        _architect_execution_parts.append(
-            "## ABGELEHNTER PLAN\n"
-            + json.dumps(_planner_info, ensure_ascii=False)[:2000]
+        _architect_execution_sections.append(
+            ("ABGELEHNTER PLAN", json.dumps(_planner_info, ensure_ascii=False))
         )
-    state.architect_execution_context = "\n\n".join(
-        _architect_execution_parts
-    )[:12000]
+    (
+        state.architect_execution_context,
+        _architect_context_metadata,
+    ) = _budget_architect_execution_context(
+        _architect_execution_sections,
+    )
+    audit(
+        "planner_architect_context_budget",
+        _architect_context_metadata,
+        pd,
+        pn,
+    )
 
     # M-398: Tool-Use-Loop (max 3 Runden).
     # GOLD: Tool-Use nur 1 Runde. Architect soll PLANEN, nicht

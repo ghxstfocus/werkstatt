@@ -364,6 +364,60 @@ def test_api_preflight_source_context_is_project_confined_and_bounded(tmp_path) 
     assert metadata["chars"] <= 1200
 
 
+def test_execution_context_budget_marks_truncated_and_omitted_sections() -> None:
+    from werkstatt.planner import _budget_architect_execution_context
+
+    context, metadata = _budget_architect_execution_context(
+        [("PRIORITAET", "p" * 11000), ("NACHRANGIG", "n" * 2000)],
+    )
+
+    assert len(context) <= 12000
+    assert "KONTEXTBUDGET — AUSLASSUNGEN SICHTBAR" in context
+    assert "ABSCHNITT GEKUERZT" in context
+    assert metadata["truncated"][0]["section"] == "NACHRANGIG"
+    assert metadata["omitted"] == []
+
+    tiny, tiny_metadata = _budget_architect_execution_context(
+        [("PRIORITAET", "x" * 100)], max_chars=80,
+    )
+    assert len(tiny) <= 80
+    assert tiny_metadata["chars"] == len(tiny)
+
+
+def test_architect_defensive_context_limit_is_audited(monkeypatch, tmp_path) -> None:
+    from types import SimpleNamespace
+
+    from werkstatt import architect
+
+    captured: dict[str, str] = {}
+    audits: list[tuple[str, dict]] = []
+
+    class Reply:
+        ok = True
+        content = "Architect-Plan. " * 8
+
+    def ask_llm(_key, _system, content, **_kwargs):
+        captured["content"] = content
+        return Reply()
+
+    monkeypatch.setattr(architect, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(architect, "ask_llm", ask_llm)
+    monkeypatch.setattr(architect, "audit", lambda kind, payload, *_a, **_k: audits.append((kind, payload)))
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        api_index_cache={"already_built": True},
+        docs={},
+        scout_auftrag={"auftrag_prosa": "Plan pruefen", "api_auszug": {}},
+        architect_execution_context="x" * 13000,
+    )
+
+    assert architect.run_architect(state, "Aufgabe", "nicht verwendet", "key", None)
+    assert len(captured["content"]) <= 12000
+    assert "KONTEXT GEKUERZT" in captured["content"]
+    assert any(kind == "planner_architect_context_budget" for kind, _ in audits)
+
+
 def test_scout_prompt_does_not_treat_index_absence_as_proof() -> None:
     from werkstatt.scout import SCOUT_SYSTEM
 
