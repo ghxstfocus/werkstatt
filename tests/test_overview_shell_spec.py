@@ -65,12 +65,16 @@ def test_karte_zeigt_runquote_ops_sparkline_und_last_run():
 
 def test_projektstatus_und_run_outcomes_sind_semantisch_ausgezeichnet():
     css = _read("static/layout.css")
+    js = _read("static/overview.js")
     for state in ('data-state="running"', 'data-state="done"',
                   'data-state="failed"'):
         assert state in css
     assert ".overview-donut-success" in css
     assert ".overview-donut-failed" in css
     assert ".overview-donut-aborted" in css
+    assert ".overview-donut-unverified" in css
+    assert ".overview-project-bar .unverified" in css
+    assert '"Herkunft ungeklärt"' in js
 
 
 def test_starting_state_blockiert_doppelte_startbuttons():

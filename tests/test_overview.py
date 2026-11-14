@@ -13,16 +13,18 @@ def _events_db(path: Path, rows=()) -> SimpleNamespace:
         conn.execute(
             "CREATE TABLE events (seq INTEGER PRIMARY KEY AUTOINCREMENT, "
             "run_id TEXT NOT NULL, kind TEXT NOT NULL, ts TEXT NOT NULL, "
-            "project TEXT NOT NULL, payload TEXT NOT NULL)"
+            "project TEXT NOT NULL, payload TEXT NOT NULL, "
+            "origin_verified INTEGER NOT NULL DEFAULT 0)"
         )
         now = datetime.now(UTC)
         for row in rows:
-            run_id, kind, project, payload, age_days = row
+            run_id, kind, project, payload, age_days, *verification = row
+            origin_verified = verification[0] if verification else 1
             ts = (now - timedelta(days=age_days)).isoformat()
             conn.execute(
-                "INSERT INTO events(run_id, kind, ts, project, payload) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (run_id, kind, ts, project, json.dumps(payload)),
+                "INSERT INTO events(run_id, kind, ts, project, payload, "
+                "origin_verified) VALUES (?, ?, ?, ?, ?, ?)",
+                (run_id, kind, ts, project, json.dumps(payload), origin_verified),
             )
     return SimpleNamespace(db_pfad=path)
 
@@ -38,7 +40,8 @@ def test_run_verteilung_dedupliziert_terminalevents_und_stopps(tmp_path: Path):
     ])
     summary = inspector._run_verteilung_30d(es, "demo")
     assert summary == {
-        "erfolg": 1, "fehlgeschlagen": 0, "abgebrochen": 1, "gesamt": 2,
+        "erfolg": 1, "fehlgeschlagen": 0, "abgebrochen": 1,
+        "unverified": 0, "gesamt": 2,
     }
 
 
@@ -50,7 +53,8 @@ def test_neuester_terminalstatus_entscheidet_je_run(tmp_path: Path):
         ("retry-failed", "loop_failed", "demo", {}, 0),
     ])
     assert inspector._run_verteilung_30d(es, "demo") == {
-        "erfolg": 1, "fehlgeschlagen": 1, "abgebrochen": 0, "gesamt": 2,
+        "erfolg": 1, "fehlgeschlagen": 1, "abgebrochen": 0,
+        "unverified": 0, "gesamt": 2,
     }
 
 
@@ -60,7 +64,8 @@ def test_aeltere_runs_fliessen_nicht_in_30_tage_quote(tmp_path: Path):
         ("new", "loop_failed", "demo", {}, 0),
     ])
     assert inspector._run_verteilung_30d(es, "demo") == {
-        "erfolg": 0, "fehlgeschlagen": 1, "abgebrochen": 0, "gesamt": 1,
+        "erfolg": 0, "fehlgeschlagen": 1, "abgebrochen": 0,
+        "unverified": 0, "gesamt": 1,
     }
 
 
@@ -103,10 +108,22 @@ def test_sparkline_ignoriert_events_ohne_run_id(tmp_path: Path):
     assert inspector._run_verteilung_30d(es, "demo")["gesamt"] == 1
 
 
+def test_unverifizierter_run_zaehlt_nicht_als_erfolg(tmp_path: Path):
+    es = _events_db(tmp_path / "events.db", [
+        ("legacy", "loop_ended", "demo", {}, 0, 0),
+        ("known", "loop_erfolg", "demo", {}, 0, 1),
+    ])
+    assert inspector._run_verteilung_30d(es, "demo") == {
+        "erfolg": 1, "fehlgeschlagen": 0, "abgebrochen": 0,
+        "unverified": 1, "gesamt": 2,
+    }
+
+
 def test_leere_eventdaten_liefern_nullsummen(tmp_path: Path):
     es = _events_db(tmp_path / "events.db")
     assert inspector._run_verteilung_30d(es, "demo") == {
-        "erfolg": 0, "fehlgeschlagen": 0, "abgebrochen": 0, "gesamt": 0,
+        "erfolg": 0, "fehlgeschlagen": 0, "abgebrochen": 0,
+        "unverified": 0, "gesamt": 0,
     }
     assert inspector._runs_7d(es, "demo") == 0
     assert sum(inspector._sparkline_30d(es, "demo")) == 0
@@ -155,5 +172,6 @@ def test_overview_ohne_projekte_hat_leere_metriken(
     assert result["projekte"] == []
     assert result["top_3"] == []
     assert result["ergebnisse_30d"] == {
-        "erfolg": 0, "fehlgeschlagen": 0, "abgebrochen": 0, "gesamt": 0,
+        "erfolg": 0, "fehlgeschlagen": 0, "abgebrochen": 0,
+        "unverified": 0, "gesamt": 0,
     }

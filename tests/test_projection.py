@@ -61,6 +61,65 @@ def test_tail_idempotent(tmp_path, monkeypatch):
     assert r2["eingefuegt"] == 0
 
 
+def test_project_backfill_ist_idempotent_isoliert_und_checkpoint_sicher(
+    tmp_path, monkeypatch,
+):
+    from werkstatt import projection
+
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    _write(tmp_path, "semantic-2026-11-14.jsonl", [
+        {"audit_id": "a1", "event_id": "demo-1", "run_id": "r-demo",
+         "project": "demo", "kind": "loop_started", "timestamp": "t1"},
+        {"audit_id": "a2", "event_id": "demo-2", "run_id": "",
+         "project": "demo", "kind": "loop_ended", "timestamp": "t2"},
+        {"audit_id": "a3", "event_id": "other-1", "run_id": "r-other",
+         "project": "other", "kind": "loop_erfolg", "timestamp": "t3"},
+    ])
+    proj = _pj(tmp_path)
+    with sqlite3.connect(str(proj.db_pfad)) as conn:
+        proj._set_checkpoint(conn, "last_audit_id", "a1")
+    before = proj._get_checkpoint("last_audit_id")
+
+    first = proj.backfill("demo")
+    second = proj.backfill("demo")
+
+    assert first == {
+        "eingefuegt": 2, "uebersprungen": 0,
+        "events_ohne_run_id": 1, "events_ohne_herkunft": 1,
+    }
+    assert second == {
+        "eingefuegt": 0, "uebersprungen": 2,
+        "events_ohne_run_id": 1, "events_ohne_herkunft": 1,
+    }
+    assert proj._get_checkpoint("last_audit_id") == before
+    with sqlite3.connect(str(proj.db_pfad)) as conn:
+        rows = conn.execute(
+            "SELECT project, origin_verified FROM events ORDER BY event_id"
+        ).fetchall()
+    assert rows == [("demo", 1), ("demo", 0)]
+
+
+def test_status_zaehlt_events_mit_unsicherer_herkunft(tmp_path, monkeypatch):
+    from werkstatt import projection
+
+    monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)
+    _write(tmp_path, "semantic-2026-11-14.jsonl", [
+        {"event_id": "verified", "run_id": "r1", "project": "demo",
+         "kind": "loop_started", "timestamp": "t1"},
+        {"event_id": "missing-run", "run_id": "", "project": "demo",
+         "kind": "loop_ended", "timestamp": "t2"},
+        {"event_id": "missing-project", "run_id": "r2",
+         "kind": "loop_ended", "timestamp": "t3"},
+    ])
+    proj = _pj(tmp_path)
+
+    proj.rebuild()
+    status = proj.status()
+
+    assert status["events_ohne_run_id"] == 1
+    assert status["events_ohne_herkunft"] == 2
+
+
 def test_tail_inkrementell(tmp_path, monkeypatch):
     from werkstatt import projection
     monkeypatch.setattr(projection, "_werkstatt_home", lambda: tmp_path)

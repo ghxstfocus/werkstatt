@@ -34,8 +34,8 @@ def _event(db, run_id, kind, payload=None, ts=None, project="werkstatt"):
     with sqlite3.connect(str(db)) as c:
         c.execute(
             "INSERT INTO events "
-            "(run_id, kind, phase, status, payload, ts, project) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(run_id, kind, phase, status, payload, ts, project, origin_verified) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
             (run_id, kind, None, None,
              json.dumps(payload or {}, ensure_ascii=False), ts, project),
         )
@@ -63,6 +63,23 @@ def test_aggregate_status_filtert_projekt(tmp_path, monkeypatch):
     assert a["tasks"] == {"started": 1, "done": 1}
     assert b["run_id"] == "run-b"
     assert b["tasks"] == {"started": 1, "done": 0}
+
+
+def test_aggregate_status_markiert_unsichere_herkunft_projektisoliert(
+    tmp_path, monkeypatch,
+):
+    _s, db = _store(tmp_path, monkeypatch)
+    _event(db, "shared-run", "loop_ended", project="a")
+    _event(db, "shared-run", "task_started", project="b")
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute(
+            "UPDATE events SET origin_verified=0 WHERE project='a'"
+        )
+
+    from werkstatt.web.inspector import aggregate_status
+
+    assert aggregate_status("a")["unverified"] is True
+    assert aggregate_status("b")["unverified"] is False
 
 
 def test_aggregate_tokens_filtert_projekt(tmp_path, monkeypatch):
