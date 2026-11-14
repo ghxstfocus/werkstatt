@@ -103,11 +103,57 @@ def _phase_explorer_and_setup(
             _alle_genannten.append(_ord_f)
     _alle_genannten = _alle_genannten[:10]
 
-    # M-396-Fix: Explorer laeuft IMMER, auch bei expliziten Dateien.
-    # Genannte Dateien behalten Prioritaet, Explorer ergaenzt verwandte.
+    # Adaptive role routing (OP-398 / ADR-0032): einen Explorer-LLM-Aufruf
+    # nur dann einsparen, wenn Planner-Routing UND Literal-Plan bereits
+    # deterministisch belegt sind. Der normale Explorer-/Scout-/Architect-
+    # Pfad bleibt fuer alle breiteren oder mehrdeutigen Auftraege erhalten.
     group_start("Phase 1: Explorer")
     _t_exp = time.monotonic()
-    _explorer_ergaenzung = run_explorer(state, aufgabe) or {}
+    _literal_plan = None
+    _skip_reason = "kein_deterministischer_literalplan"
+    if len(_explizite_dateien) == 1:
+        try:
+            from werkstatt.planner import (
+                _deterministic_literal_replace_plan,
+                _scout_route_decision,
+            )
+
+            _candidate = _explizite_dateien[0]
+            _scout_target, _skip_reason = _scout_route_decision(
+                aufgabe,
+                {"key_files": [{"file": _candidate}]},
+                pd,
+            )
+            if _scout_target:
+                _literal_plan, _skip_reason = _deterministic_literal_replace_plan(
+                    aufgabe, _scout_target, pd,
+                )
+        except (ImportError, AttributeError, TypeError, ValueError):
+            # Routing-Ausfall darf niemals einen Rollenaufruf unterdruecken.
+            _literal_plan = None
+            _skip_reason = "routing_pruefung_nicht_verfuegbar"
+
+    if _literal_plan is not None:
+        _preview = _literal_plan["betroffene_stellen"][0]
+        _explorer_ergaenzung = {
+            "findings": "Deterministischer Datei-/Literalbeleg; kein Explorer-LLM-Aufruf.",
+            "key_files": [{
+                "file": _preview["datei"],
+                "why": "eindeutiger Literalplan aus aktuellem Dateiinhalt",
+                "confidence": "high",
+            }],
+            "next_reads": [],
+        }
+        audit("loop_explorer_skipped", {
+            "grund": "deterministischer_literalplan",
+            "datei": _preview["datei"],
+            "zeile": _preview["zeile"],
+        }, pd, pn)
+    else:
+        _explorer_ergaenzung = run_explorer(state, aufgabe) or {}
+        audit("loop_explorer_required", {
+            "grund": _skip_reason,
+        }, pd, pn)
     _explorer_key = _explorer_ergaenzung.get("key_files") or []
 
     # Verwandte Dateien fuer explizit genannte ergaenzen.
@@ -180,7 +226,7 @@ def _phase_explorer_and_setup(
             _hit_b = next((b for b in _b_lower_cache if b in _content_lower), None)
             if _hit_b is None:
                 continue
-            _rel = str(_py_file.relative_to(_pd_path))
+            _rel = _py_file.relative_to(_pd_path).as_posix()
             if _rel in _seen:
                 continue
             _seen.add(_rel)
