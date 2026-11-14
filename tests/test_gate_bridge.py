@@ -84,6 +84,21 @@ def test_signal_open_schreibt_event(tmp_path, monkeypatch):
     assert payload["gate_id"] == "plan-abc"
 
 
+def test_signal_open_schreibt_korrektes_projekt(store):
+    gate_bridge.signal_open(
+        "run-shared", "plan-project", "Approve?", project="projekt-a",
+    )
+
+    events = store.query(
+        "run-shared", kind="gate_open", project="projekt-a",
+    )
+    assert len(events) == 1
+    assert events[0]["payload"]["gate_id"] == "plan-project"
+    assert store.query(
+        "run-shared", kind="gate_open", project="werkstatt",
+    ) == []
+
+
 def test_make_gate_id_eindeutig():
     a = gate_bridge.make_gate_id("plan")
     b = gate_bridge.make_gate_id("plan")
@@ -249,8 +264,8 @@ def test_frage_gate_plan_reason_setzt_typ_freitext(store, monkeypatch):
     """
     aufrufe: list[dict] = []
 
-    def _fake_signal(run_id, gate_id, prompt, optionen="jna", typ="jna"):
-        aufrufe.append({"typ": typ})
+    def _fake_signal(run_id, gate_id, prompt, optionen="jna", typ="jna", project="werkstatt"):
+        aufrufe.append({"typ": typ, "project": project})
         # sofort antworten, damit wait() nicht blockiert
         store.append(
             run_id=run_id, kind="gate_answered",
@@ -271,3 +286,98 @@ def test_frage_gate_plan_reason_setzt_typ_freitext(store, monkeypatch):
         f"AK m: plan_reason MUSS typ='freitext' bekommen, "
         f"war {aufrufe[0]['typ']!r}"
     )
+    assert aufrufe[0]["project"] == "werkstatt"
+
+
+def test_frage_gate_bindet_open_und_answer_an_projekt(store, monkeypatch):
+    run_id = "shared-gate-run"
+    monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: run_id)
+    monkeypatch.setattr(gates, "_HEADLESS", True)
+    projects = []
+
+    def signal(run, gate, _prompt, _options="jna", typ="jna", project="werkstatt"):
+        projects.append(project)
+        store.append(
+            run_id=run, kind="gate_answered",
+            payload={"gate_id": gate, "answer": "j"}, project=project,
+        )
+
+    monkeypatch.setattr(gate_bridge, "signal_open", signal)
+    try:
+        assert gates._frage_gate(
+            "plan", "Approve?", project_name="projekt-a",
+        ) == "j"
+    finally:
+        monkeypatch.setattr(gates, "_HEADLESS", False)
+
+    assert projects == ["projekt-a"]
+
+
+def test_gate_bridge_wait_isoliert_antworten_nach_projekt(store):
+    store.append(
+        run_id="shared-run", kind="gate_answered",
+        payload={"gate_id": "plan-1", "answer": "n"}, project="projekt-a",
+    )
+    store.append(
+        run_id="shared-run", kind="gate_answered",
+        payload={"gate_id": "plan-1", "answer": "j"}, project="projekt-b",
+    )
+
+    assert gate_bridge._finde_antwort(
+        store, "shared-run", "plan-1", "projekt-a",
+    ) == "n"
+    assert gate_bridge._finde_antwort(
+        store, "shared-run", "plan-1", "projekt-b",
+    ) == "j"
+
+
+def test_frage_gate_timeout_bleibt_dem_projekt_zugeordnet(store, monkeypatch):
+    from werkstatt import event_store
+    from werkstatt.state import RunState
+
+    run_id = "demo-timeout-run"
+    set_run_id(run_id)
+    monkeypatch.setattr(gates, "_HEADLESS", True)
+    monkeypatch.setattr(gate_bridge, "signal_open", lambda *_a, **_kw: None)
+    monkeypatch.setattr(gate_bridge, "_flush_projection", lambda: None)
+    monkeypatch.setattr(
+        gate_bridge, "wait",
+        lambda *_a, **_kw: (_ for _ in ()).throw(gate_bridge.GateTimeout()),
+    )
+    monkeypatch.setattr(event_store, "EventStore", lambda: store)
+    state = RunState(project_name="demo")
+    try:
+        assert gates._frage_gate(
+            "plan", "Approve?", project_name="demo", state=state,
+        ) == "n"
+    finally:
+        set_run_id("")
+
+    assert state.gate_timed_out is True
+    events = store.query(run_id, kind="loop_gate_timeout", project="demo")
+    assert len(events) == 1
+
+
+def test_expire_for_run_ist_auf_projekt_begrenzt(store, monkeypatch):
+    from werkstatt import audit
+
+    store.append(
+        run_id="shared-run", kind="gate_open",
+        payload={"gate_id": "plan-1"}, project="projekt-a",
+    )
+    store.append(
+        run_id="shared-run", kind="gate_open",
+        payload={"gate_id": "plan-1"}, project="projekt-b",
+    )
+    expired_projects = []
+    monkeypatch.setattr(
+        audit, "audit",
+        lambda _kind, payload, _path, project: expired_projects.append(
+            (project, payload["gate_id"]),
+        ),
+    )
+
+    assert gate_bridge.expire_for_run(
+        "shared-run", project="projekt-a",
+    ) == 1
+    assert expired_projects == [("projekt-a", "plan-1")]

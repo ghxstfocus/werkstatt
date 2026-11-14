@@ -638,14 +638,39 @@ def _phase_tasks_loop(
         if _enforce_run_budget(state):
             phase_state.save()
             return 1, tasks_ok, tasks
-        next_task = phase_state.get_next_task()
         from werkstatt.audit import get_run_id
         run_id = get_run_id()
         if run_id:
+            store = EventStore()
+            next_task = phase_state.get_next_task()
             _persist_run_checkpoint(
-                EventStore(), pn, run_id, phase_state, next_task,
+                store, pn, run_id, phase_state, next_task,
                 run_state=state,
             )
+            from werkstatt.run_followups import (
+                FollowupReconciliationError,
+                reconcile_chat_followups,
+            )
+            try:
+                if reconcile_chat_followups(
+                    state, phase_state, store, pn, run_id,
+                ):
+                    tasks = state.tasks
+            except FollowupReconciliationError as exc:
+                audit(
+                    "loop_failed",
+                    {
+                        "reason": "chat_followup_reconciliation",
+                        "error": str(exc)[:500],
+                    },
+                    pd,
+                    pn,
+                )
+                phase_state.save()
+                return 1, tasks_ok, tasks
+            next_task = phase_state.get_next_task()
+        else:
+            next_task = phase_state.get_next_task()
         if next_task is None:
             # OP-163: unerfuellte Deps -> als blocked markieren.
             _pending_after = [

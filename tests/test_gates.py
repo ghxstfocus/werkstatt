@@ -81,7 +81,7 @@ def test_plan_gate_ui_options_match_editability(monkeypatch, tmp_path) -> None:
 
     captured = []
 
-    def fake_gate(_kind, _prompt, optionen="jna", timeout=None):
+    def fake_gate(_kind, _prompt, optionen="jna", timeout=None, project_name="werkstatt"):
         captured.append(optionen)
         return "j"
 
@@ -132,7 +132,7 @@ def test_plan_edit_wait_uses_gate_bridge_in_headless(monkeypatch, tmp_path) -> N
     answers = iter(("a", "j", "j"))
     calls = []
 
-    def fake_gate(kind, _prompt, optionen="jna", timeout=None):
+    def fake_gate(kind, _prompt, optionen="jna", timeout=None, project_name="werkstatt"):
         calls.append((kind, optionen))
         return next(answers)
 
@@ -161,7 +161,7 @@ def test_adr_mini_prompt_uses_gate_bridge_in_headless(monkeypatch, tmp_path) -> 
     adr_dir.mkdir(parents=True)
     calls = []
 
-    def fake_gate(kind, _prompt, optionen="jna", timeout=None):
+    def fake_gate(kind, _prompt, optionen="jna", timeout=None, project_name="werkstatt"):
         calls.append((kind, optionen))
         return "n"
 

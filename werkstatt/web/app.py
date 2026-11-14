@@ -311,7 +311,13 @@ def _registriere_event_routen(app: FastAPI) -> None:
             session_id = _pruefe_session_id(session_id)
 
         store = EventStore()
-        gate_events = store.query(geprueft, kind="gate_open")
+        project_value = body.get("project", "werkstatt")
+        if not isinstance(project_value, str) or not project_value:
+            raise HTTPException(status_code=400, detail="project ungueltig")
+        gate_project = _pruefe_projektname(project_value)
+        gate_events = store.query(
+            geprueft, kind="gate_open", project=gate_project,
+        )
         gate_event = next(
             (
                 ev for ev in gate_events
@@ -323,11 +329,15 @@ def _registriere_event_routen(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="gate nicht offen")
         beantwortet = {
             (ev.get("payload") or {}).get("gate_id")
-            for ev in store.query(geprueft, kind="gate_answered")
+            for ev in store.query(
+                geprueft, kind="gate_answered", project=gate_project,
+            )
         }
         abgelaufen = {
             (ev.get("payload") or {}).get("gate_id")
-            for ev in store.query(geprueft, kind="gate_expired")
+            for ev in store.query(
+                geprueft, kind="gate_expired", project=gate_project,
+            )
         }
         if gate_id in abgelaufen:
             raise HTTPException(status_code=410,
@@ -365,7 +375,7 @@ def _registriere_event_routen(app: FastAPI) -> None:
         }
         if session_id:
             audit_payload["session_id"] = session_id
-        audit("gate_answered", audit_payload, _Path("."), "werkstatt")
+        audit("gate_answered", audit_payload, _Path("."), gate_project)
         try:
             _Projector().tail()
         except Exception:
@@ -405,17 +415,21 @@ def _registriere_event_routen(app: FastAPI) -> None:
             for g in context.get("offene_gates", [])
             if isinstance(g, dict) and g.get("gate_id")
         }
-        opens = store.query(geprueft, kind="gate_open")
+        opens = store.query(geprueft, kind="gate_open", project=projekt)
         answered = {
             str((ev.get("payload") or {}).get("gate_id")):
                 (ev.get("payload") or {})
-            for ev in store.query(geprueft, kind="gate_answered")
+            for ev in store.query(
+                geprueft, kind="gate_answered", project=projekt,
+            )
             if (ev.get("payload") or {}).get("gate_id")
         }
         expired = {
             str((ev.get("payload") or {}).get("gate_id")):
                 (ev.get("payload") or {})
-            for ev in store.query(geprueft, kind="gate_expired")
+            for ev in store.query(
+                geprueft, kind="gate_expired", project=projekt,
+            )
             if (ev.get("payload") or {}).get("gate_id")
         }
         for event in opens:
@@ -499,7 +513,12 @@ def _registriere_event_routen(app: FastAPI) -> None:
         geprueft = _chat_gate_run(projekt, run_id)
         result = run_gate_answer(
             geprueft,
-            {"gate_id": gate_id, "answer": answer, "session_id": sid},
+            {
+                "gate_id": gate_id,
+                "answer": answer,
+                "session_id": sid,
+                "project": projekt,
+            },
         )
         ChatSession(projekt, sid).append_once(
             f"gate-decision:{geprueft}:{gate_id}",

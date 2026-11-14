@@ -55,6 +55,8 @@ def _frage_gate(
     prompt: str,
     optionen: str = "jna",
     timeout: float | None = None,
+    project_name: str = "werkstatt",
+    state: RunState | None = None,
 ) -> str:
     """Fragt interaktiv (input) oder per Event-Store (gate_bridge).
 
@@ -75,10 +77,14 @@ def _frage_gate(
         )
     gate_id = gate_bridge.make_gate_id(kind)
     _typ = "freitext" if kind == "plan_reason" else "jna"
-    gate_bridge.signal_open(run_id, gate_id, prompt, optionen, typ=_typ)
+    gate_bridge.signal_open(
+        run_id, gate_id, prompt, optionen, typ=_typ, project=project_name,
+    )
     try:
         _kw = {} if timeout is None else {"timeout": timeout}
-        return gate_bridge.wait(run_id, gate_id, **_kw)
+        return gate_bridge.wait(
+            run_id, gate_id, project=project_name, **_kw,
+        )
     except gate_bridge.GateTimeout as exc:
         # Fail-closed: Loop-Antwort 'n' (= reject), Reflection kann greifen.
         # _frage_gate hat keinen RunState -> EventStore direkt.
@@ -89,9 +95,12 @@ def _frage_gate(
                 kind="loop_gate_timeout",
                 payload={"gate_id": gate_id, "kind": kind,
                          "error": str(exc)[:200]},
+                project=project_name,
             )
         except Exception:  # noqa: BLE001
             pass
+        if state is not None:
+            state.gate_timed_out = True
         return "n"
 
 
@@ -367,6 +376,7 @@ def _human_gate_plan(state, kontext=""):
     # OP-093: auch ungueltige-Antworten-Zaehler (Fail-closed nach 3 Versuchen).
     _leer_count = 0
     _ungueltig_count = 0
+    state.gate_timed_out = False
     # Nachbesserung OP-089: nach Reflection klar sagen dass es ein
     # revidierter Plan ist. Kein "a" (Plan anpassen) — sonst
     # Endlos-Zyklus moeglich.
@@ -407,10 +417,15 @@ def _human_gate_plan(state, kontext=""):
             _antwort = _frage_gate(
                 "plan", _prompt,
                 optionen=("jn" if _ist_revidierter or _is_noop_scout else "jna"),
+                project_name=pn,
+                **({"state": state} if kontext == "chat_followup" else {}),
             ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             audit("loop_plan_gate_eof", {}, pd, pn)
             return 1
+
+        if state.gate_timed_out and kontext == "chat_followup":
+            return 2
 
         # K20c: Leere Antwort -- script/su-Wrapper liefert '' statt EOFError.
         # Nach 3 leeren Versuchen abbrechen, sonst endlos-Schleife.
@@ -429,8 +444,10 @@ def _human_gate_plan(state, kontext=""):
         if _antwort == "n":
             # Welle H (2026-11-02): Reject-Grund erfassen fuer Reflection
             try:
-                _reason = _frage_gate("plan_reason", 
-                    "Reject-Grund (optional, Enter=leer): "
+                _reason = _frage_gate(
+                    "plan_reason",
+                    "Reject-Grund (optional, Enter=leer): ",
+                    project_name=pn,
                 ).strip()
             except (EOFError, KeyboardInterrupt):
                 _reason = ""
@@ -465,6 +482,7 @@ def _human_gate_plan(state, kontext=""):
                     "plan_edit_continue",
                     "Plan-Datei bearbeiten, dann fortfahren? [j]: ",
                     "j",
+                    project_name=pn,
                 ).strip().lower()
             except (EOFError, KeyboardInterrupt):
                 audit(
@@ -594,6 +612,7 @@ def _adr_mini_phase(state: RunState) -> bool:
     try:
         antwort = _frage_gate(
             "adr_mini", "ADR dokumentieren? [j/n]: ", "jn",
+            project_name=pn,
         ).strip().lower()
     except (EOFError, KeyboardInterrupt):
         return True
@@ -847,6 +866,7 @@ def _human_gate(state: RunState, *, defer_commit: bool = False) -> int:
             "  e = edit (Aenderungen pruefen, dann neu fragen)\n"
             "Deine Wahl: ",
             "jne",
+            project_name=pn,
         ).strip().lower()
     except (EOFError, KeyboardInterrupt):
         audit("loop_human_gate_eof", {"reason": "EOFError/KeyboardInterrupt"}, pd, pn)
@@ -878,6 +898,7 @@ def _human_gate(state: RunState, *, defer_commit: bool = False) -> int:
                 "commit_edit_continue",
                 "Aenderungen geprueft? Fortfahren? [j]: ",
                 "j",
+                project_name=pn,
             ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             audit(
