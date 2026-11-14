@@ -253,14 +253,13 @@ Arbeitsgraph von OP-398 bleibt offen.
 Der Task-Checkpoint unterscheidet jetzt seine Evidenzebene ausdruecklich:
 `loop_criteria_progress` mit `coverage_basis=assigned_tasks_done` bedeutet,
 dass die zugeordneten Tasks abgeschlossen sind; es bestaetigt noch nicht das
-Gesamtziel. Erst nach erfolgreichem Phase-End-Review, Human Gate und
-Abschluss-Verify wird ein separates Ereignis mit `status=verified` und
-`coverage_basis=phase_end_review_and_verify` geschrieben. Damit zeigt die
-Timeline keine Task-Abdeckung mehr als bereits verifiziertes Ziel an. Das
-behebt keine adaptive Neuplanung: der aktuelle Criteria-Fortschritt leitet
-weiterhin seine Abdeckung aus Task-Status ab. Ein Replan nach einem echten,
-belegten Verify-/Review-Befund erfordert noch einen getrennten
-Kriterien-Evidence-Vertrag und bleibt Teil der offenen OP-398-Arbeit.
+Gesamtziel. Ein separates `status=verified`-Ereignis wird nur geschrieben,
+wenn jedes Kriterium auf erledigte Task-IDs und erfolgreich ausgefuehrte
+Verify-Stage-IDs zurueckgefuehrt ist. Fehlende Verknuepfungen erscheinen als
+`checks_passed_unverified` mit konkreten Belegluecken. Das ist eine
+nachvollziehbare Zuordnung, noch kein semantischer Testnachweis pro Kriterium.
+Adaptive Neuplanung nach offenen/negativen Kriterien bleibt Teil der offenen
+OP-398-Arbeit.
 
 Ein Abschlussfehler wurde nachgeprueft: `_task_ende()` markierte fehlende
 Kriterienzuordnung korrekt als `untracked` und liess das Ziel offen; der

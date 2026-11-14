@@ -6808,3 +6808,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Grenze:** Das macht die Evidenzsemantik ehrlich, fuehrt aber noch keine adaptive Neuplanung nach einem negativen Ziel-/Verify-Befund ein. Dafuer muss OP-398 einen eigenstaendigen, beleggebundenen Kriteriumsstatus erhalten; Taskstatus allein reicht dafuer nicht.
 - **Tests:** `tests/test_loop_phases.py` und `tests/test_live_feed_backend.py` pruefen Task-Abdeckung gegen Abschlussnachweis. 52 gezielte Tests bestanden.
 - **Verifikation:** `py -m pytest -q tests/test_loop_phases.py tests/test_live_feed_backend.py` bestanden. Ruff, Mypy, Doku-Drift und Linux-CI fuer diesen Stand stehen noch aus.
+
+### Nachtrag — Kriteriumsbeleg bis zu Verify-Stages zurueckfuehren
+
+- **Befund:** Der Finalizer setzte `status=verified`, sobald Kriterien Task-seitig abgedeckt waren und die globale Abschlusskette gruen war. Das Ereignis enthielt weder die zugeordneten Task-IDs noch die tatsaechlich erfolgreichen Verify-Stages; ein Kriterium ohne Verify-Ausfuehrung konnte so als bestaetigt erscheinen.
+- **Aenderung:** Der Abschlussbeleg bindet jetzt jedes Kriterium an die erledigten Task-IDs und erfolgreichen Verify-Stage-IDs. Fehlt eine Zuordnung oder ausgefuehrte erfolgreiche Stage, wird `checks_passed_unverified` samt konkreter Belegluecke protokolliert und in der Timeline als unvollstaendiger Zielbeleg benannt.
+- **Grenze:** Das schafft Rueckverfolgbarkeit, aber noch keinen Test-zu-Kriterium-Vertrag und keine adaptive Neuplanung. OP-398 bleibt offen.
+- **Verifikation:** `tests/test_loop_phases.py` und `tests/test_live_feed_backend.py`: 54 bestanden; Ruff, Mypy fuer Finalizer/Inspector, Doku-Drift und `git diff --check` bestanden. Das vollstaendige `py -m tools.quality_gate --json` wurde waehrend seines eingebetteten Pytest-Laufs lokal mit `KeyboardInterrupt` beendet; es liegt kein lokales Voll-Gate-Ergebnis vor. Linux-CI fuer den PR steht aus.
