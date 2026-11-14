@@ -9,6 +9,8 @@ werkstatt.planner aufgeloest werden, damit Test-Patches wirken.
 """
 from __future__ import annotations
 
+from typing import Any
+
 
 def audit(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.planner.audit."""
@@ -310,6 +312,8 @@ def _api_side_effect(node, safe_calls: set[str] | None = None) -> str:
             targets = child.targets
             value = child.value
         elif isinstance(child, _ast.AnnAssign):
+            if child.value is None:
+                continue
             targets = [child.target]
             value = child.value
         else:
@@ -500,12 +504,12 @@ def _baue_api_index(project_dir) -> dict:
         except OSError:
             continue
         _rel = _f.relative_to(_pd).as_posix()
-        _entry = {
+        _source_entry: dict[str, Any] = {
             "all": [], "classes": [], "constants": [],
             "functions": [], "imports": [],
             "language": "java" if _f.suffix == ".java" else "javascript",
         }
-        if _entry["language"] == "javascript":
+        if _source_entry["language"] == "javascript":
             _decls = _re.finditer(
                 r"(?m)^\s*(?:export\s+)?(?:async\s+)?function\s+"
                 r"([A-Za-z_$][\w$]*)\s*\(([^)]*)\)", _src,
@@ -516,17 +520,17 @@ def _baue_api_index(project_dir) -> dict:
                 r"(?:\(([^)]*)\)|([A-Za-z_$][\w$]*))\s*=>", _src,
             )
             for _match in (*_decls, *_arrow):
-                _args = _match.group(2) or ""
+                _params_text = _match.group(2) or ""
                 if _match.lastindex and _match.lastindex >= 3:
-                    _args = _args or _match.group(3) or ""
-                _entry["functions"].append({
+                    _params_text = _params_text or _match.group(3) or ""
+                _source_entry["functions"].append({
                     "name": _match.group(1),
                     "args": [part.strip().split("=", 1)[0].strip()
-                             for part in _args.split(",") if part.strip()],
+                             for part in _params_text.split(",") if part.strip()],
                     "return": "", "effects": "unknown",
                 })
             for _class in _re.finditer(r"\bclass\s+([A-Za-z_$][\w$]*)", _src):
-                _entry["classes"].append({"name": _class.group(1), "methods": []})
+                _source_entry["classes"].append({"name": _class.group(1), "methods": []})
         else:
             _class_names = [m.group(1) for m in _re.finditer(
                 r"\bclass\s+([A-Za-z_$][\w$]*)", _src,
@@ -547,11 +551,11 @@ def _baue_api_index(project_dir) -> dict:
                         "args": _params,
                         "return": "", "effects": _source_effect(_body),
                     })
-                _entry["classes"].extend(
+                _source_entry["classes"].extend(
                     {"name": name, "methods": _methods if i == 0 else []}
                     for i, name in enumerate(_class_names)
                 )
-        index[_rel] = _entry
+        index[_rel] = _source_entry
     return index
 
 

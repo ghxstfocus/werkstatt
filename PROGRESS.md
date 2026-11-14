@@ -6752,3 +6752,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Bestaetigter Zustand:** `_klassifiziere_fehler` ist im aktuellen Python-Index in `werkstatt/planner.py` und `werkstatt/reflection.py` als `read` klassifiziert. `aggregate_outcomes` ist in diesem Checkout nicht vorhanden; ein Plan darf es daher nur als neue API auffuehren. Der JSONL-Fallback in `aggregate_status()` filtert nach Projekt und Run-ID.
 - **Offene Luecke:** Architect hat weiterhin keine interaktiven Quell-Lesewerkzeuge. Ein Deklarationsindex ist kein Ersatz fuer gezielte Quelltextauszuege mit Fundstellen; bounded JIT-Retrieval bleibt Teil von OP-405.
 - **Verifikation:** API-/Sprachzuordnung, Widerspruchs-Klassifikation, Architect-Korrekturpfad und Scout-Kette: 91 Tests bestanden; Ruff und `git diff --check` bestanden. Der komplette lokale Windows-Testlauf ist fuer Linux-Pfade/Unix-Modusannahmen nicht aussagekraeftig und wurde nicht als Produktions-/Serverbeleg gewertet.
+
+### Nachtrag — Mypy-Regression aus Merge-CI behoben
+
+- **Befund:** Merge-CI auf `6f25272` bestand 2328 Tests, Ruff, AST und Audit-Katalog, scheiterte aber am Quality Gate mit fuenf Mypy-Fehlern im neuen Python/JavaScript/Java-API-Index in `werkstatt/scout.py`.
+- **Korrektur:** Optionale Annotationen ohne Wert werden vor AST-Literalverarbeitung uebersprungen. Der quellsprachige Indexeintrag ist explizit als `dict[str, Any]` typisiert; der JavaScript-Parametertext nutzt einen eigenen Variablennamen statt den zuvor fuer Python-Argumentlisten verwendeten `_args`.
+- **Lokale Verifikation:** Mypy fuer `werkstatt/scout.py`, Ruff und 22 gezielte Scout-/Architect-Tests bestanden. Vollstaendiges Windows-Quality-Gate wurde durch einen lokalen `KeyboardInterrupt` nicht abgeschlossen; Linux-CI fuer den Korrekturcommit steht aus.
