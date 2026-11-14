@@ -1317,10 +1317,29 @@ def run_architect(
         _execution_context = getattr(
             state, "architect_execution_context", "",
         )
-        _arch_user_content = (
-            str(_execution_context)[:12000]
-            if isinstance(_execution_context, str) else ""
-        )
+        _arch_user_content = str(_execution_context) if isinstance(
+            _execution_context, str,
+        ) else ""
+        if len(_arch_user_content) > 12000:
+            _original_chars = len(_arch_user_content)
+            _context_marker = (
+                "\n\n[KONTEXT GEKUERZT: Architect-Limit 12000 Zeichen; "
+                "fehlende Angaben erneut lesen oder Belegluecke benennen]"
+            )
+            _arch_user_content = (
+                _arch_user_content[:12000 - len(_context_marker)]
+                + _context_marker
+            )
+            audit("planner_architect_context_budget", {
+                "max_chars": 12000,
+                "chars": len(_arch_user_content),
+                "truncated": [{
+                    "section": "architect_execution_context",
+                    "original_chars": _original_chars,
+                }],
+                "omitted": [],
+                "defensive_limit": True,
+            }, pd, pn)
 
     _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
     _arch_skills_block = state.architect_skills_block or ""
