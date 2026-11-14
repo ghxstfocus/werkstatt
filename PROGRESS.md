@@ -6578,6 +6578,12 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Regression:** Neuer Tool-Test fuer `alpha|beta`; Prompt-Test fuer den Belegkonflikt-Grundsatz.
 - **Verifikation:** Windows: Prompt-Regression bestanden; ERE-Lauf wegen fehlendem GNU grep uebersprungen. Der groessere Chat-Testsatz hatte 6 bestehende Umgebungsausfaelle, weil Standardtests `/opt/werkstatt` erwarten; 70 Tests bestanden. Linux-Serverlauf vor diesem Fix: 2.259 bestanden, 5 uebersprungen (Commit `4c3c240`).
 
+## 2026-11-14 — Verify-Fallback projekt- und rungebunden
+
+- **Befund:** `aggregate_status()` filterte Verify-Ereignisse aus SQLite nach Projekt und Run. Falls dort kein Verify lag, las der JSONL-Fallback dagegen das neueste `verify_*` aus globalen Auditdateien ohne Projekt- oder Run-Abgleich. Ein fremdes Projekt oder ein aelterer Run konnte so als Verify des aktuellen Projekts erscheinen.
+- **Aenderung:** Der Fallback akzeptiert nur noch Events mit exakt passendem `project` und `run_id`. Historische Events ohne belastbare Zuordnung bleiben unbekannt und werden nicht als Erfolg dargestellt.
+- **Regression:** Test mit fremdem Projekt und veraltetem Run sowie positivem Event des aktuellen Runs.
+- **Verifikation:** Windows/Python 3.14: Projection-/Multi-Projekt-Aggregationstests 26 bestanden; Ruff, `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check` bestanden. Linux-CI Quality gate, einschliesslich Ruff, vollem pytest und Quality Gate, erfolgreich ([Workflow 43526043012](https://github.com/ghxstfocus/werkstatt/actions/runs/43526043012)).
 ## 2026-11-14 — Architect bekommt verifizierte Ziel-APIs trotz Scout-Kuerzung
 
 - **Befund:** Im Scout-Pfad ersetzt der kompakte Scout-Bericht die Explorer-Rohdaten. Der Architect sah dadurch nicht zwingend die aktuellen Signaturen der in STATUS/Scout genannten Zieldateien und konnte Plan-Schritte auf nicht vorhandene APIs stuetzen.
@@ -6592,6 +6598,7 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Der Windows-Pfadabgleich waehlt die angeforderten Scout-Symbole jetzt korrekt aus. Das Linux-Quality-Gate auf PR #25 bestand mit 2.262 Tests und Ruff, scheiterte aber an Mypy: `werkstatt/architect.py` brauchte eine explizite Typannotation fuer `requested`.
 - **Aenderung:** Der Wert ist als `object` annotiert und wird vor der Symbolverarbeitung weiterhin auf `list`/`tuple` eingegrenzt. Damit bleibt die Laufzeitvalidierung erhalten.
 - **Verifikation:** Architect-Evidence und Scout-Kette: 8 bestanden; Ruff und `git diff --check` bestanden. Mypy ist im lokalen Windows-Umfeld nicht repo-weit belastbar (POSIX-Prozess-APIs und fehlendes `uvicorn`); GitHub Actions Quality Gate [43575805265](https://github.com/ghxstfocus/werkstatt/actions/runs/43575805265) fuer Commit `7739026`: erfolgreich, einschliesslich Ruff, 2.262 Pytests, Mypy, AST und Audit-Katalog.
+# 2026-11-14 — OP-398: geteilte Kriterien erst nach allen Teilaufgaben abdecken
 
 ## 2026-11-14 — OP-374: projektisolierter Backfill und Herkunftsstatus
 
@@ -6604,6 +6611,16 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Die Workspace-Gesamtverteilung enthielt ein Segment fuer nicht verifizierte Runs; Projektkarten liessen diesen Anteil aus und berechneten die Erfolgsquote trotzdem ueber alle Runs. Die Karte konnte eine unvollstaendige Historie dadurch wie eine vollstaendige Erfolgsquote darstellen.
 - **Aenderung:** Erfolgsquoten verwenden nur verifizierte Endergebnisse. Projektkarten zeigen unbekannte Runs als eigenes neutrales Segment und markieren die Quote als unvollstaendig; ohne verifizierte Endergebnisse erscheint „Historie unvollstaendig“ statt `0%`.
 - **Verifikation:** Gezielte Projektion-, Multi-Projekt-, Run-Status-, Event-Store- und Overview-Tests: 92 bestanden. Ruff, gezieltes Mypy, strikter Doku-Drift-Check und `git diff --check`: bestanden. Linux-Quality-Gate fuer Commit `523d98c` erfolgreich ([Run 43581219574](https://github.com/ghxstfocus/werkstatt/actions/runs/43581219574)), einschliesslich JavaScript-Syntax, vollstaendigem pytest und Quality Gate.
+- **Befund:** `PhaseState.criteria_progress()` markierte ein Akzeptanzkriterium als abgedeckt, sobald irgendein Task mit diesem `criterion_refs`-Eintrag `done` war. Nach einem ADaPT-Split erben mehrere Teilaufgaben dieselbe Referenz; dadurch konnte ein einzelner erledigter Teil den Gesamtfortschritt faelschlich als erfuellt anzeigen.
+- **Aenderung:** Gemeinsame Kriterien gelten jetzt erst als abgedeckt, wenn alle ihnen zugeordneten Tasks `done` sind. Der Planner, Taskgraph und Abschlussvertrag bleiben unveraendert.
+- **Regression:** Neuer Phase-State-Test prueft den Zwischenstand nach dem ersten erledigten Split-Task und den Abschluss nach dem letzten.
+- **Verifikation:** `tests/test_phase_state.py`: 36 bestanden; Ruff fuer `phase_state.py` und den Test bestanden; Mypy fuer `phase_state.py` ohne Befund; `doku_check.py --strict --limit 10 --worktree` ohne Drift; `git diff --check` bestanden. `tools.quality_gate --json` wurde waehrend des eingebetteten Pytest-Laufs mit `KeyboardInterrupt` beendet. Ein separater Gesamtlauf endete ebenfalls per `KeyboardInterrupt` nach 194 bestanden, 10 fehlgeschlagen und 3 uebersprungen; die sichtbaren Fehler umfassen Windows-Pfadseparator- und projektspezifische Konfigurationsannahmen. Kein vollstaendiger lokaler Gate-Nachweis.
+
+## 2026-11-14 — OP-398/OP-374 Architekturabgleich
+
+- **Befund:** Scout und Architect werden im Planner bereits teilweise adaptiv geroutet. Der Spec-First-Pfad aus ADR-0032 ist dagegen nur als altes Spec-Modul/Validator vorhanden und wird aus der Produktionssteuerung nicht aufgerufen; Freeze-Hash und Blind-Builder-Grenze sind nicht implementiert oder belegt. Beim OP-374-Plan waere ein Herkunftsvergleich mit festem Projektwert `werkstatt` falsch: die Projektion ist global und unterstuetzt mehrere Projekte. `_letzter_run_id()` ignoriert leere IDs bereits.
+- **Dokumentation:** Ist-Aufnahme um die konkreten Produktionsluecken und die notwendigen Projektisolations-Invarianten fuer OP-374 ergaenzt. Die OP bleibt offen; dies ist kein Erfuellungsnachweis.
+- **Verifikation:** Quelltextabgleich in `planner.py`, `test_spec.py`, `test_spec_validator.py`, `projection.py` und `web/inspector.py`; gezielte Suche nach `validate_test_spec()`-Aufrufen in `werkstatt/` ergab keinen Produktionsaufruf. `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check` bestanden; Code unveraendert, deshalb keine Tests ausgefuehrt.
 ## 2026-11-14 — Verifizierten Hauptlinienstand und OP-Abhaengigkeiten nachgezogen
 
 - **Belegstand:** PR #25 ist auf `main` als Merge `d7f32e8` angekommen. GitHub Actions Quality Gate [43576037105](https://github.com/ghxstfocus/werkstatt/actions/runs/43576037105) bestand fuer den PR-Tree mit 2.262 Tests, 5 Skips sowie Ruff, Mypy, AST und Audit-Katalog. Der zuletzt gemeldete Serverlauf auf `3cbaf26` ist separat ausgewiesen und wird nicht als Nachweis fuer den neueren Merge ausgegeben.

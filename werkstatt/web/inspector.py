@@ -215,6 +215,11 @@ def aggregate_status(projekt: str) -> dict[str, Any]:
                             obj = json.loads(z)
                         except json.JSONDecodeError:
                             continue
+                        # JSONL is a global stream. A fallback result is only
+                        # trustworthy when both project and current run match;
+                        # legacy events without provenance remain unknown.
+                        if obj.get("project") != projekt or obj.get("run_id") != run_id:
+                            continue
                         k = str(obj.get("kind", ""))
                         if k.startswith("verify_"):
                             ok_val = k.endswith(("_ok", "_passed"))

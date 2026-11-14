@@ -35,8 +35,15 @@ Danach entscheidet der Planner anhand Auftrag, Scope und Beleglage:
   Mehrdatei-Entscheidungen. Er kann entfallen, wenn eine einzelne,
   wortwoertliche Ersetzung im aktuellen Dateiinhalt eindeutig belegt ist
   oder ein gepruefter atomarer Scout-Plan die Aenderung vollstaendig nennt.
-- Planner-Split nur als Fallback, wenn ein Plan nicht deterministisch in
-  Tasks ueberfuehrt werden kann.
+- Der aktuelle Planner-Split ist nach dem Architect-Prosa-Plan der normale
+  Schritt zur Erzeugung des Task-JSON; er ist kein Fallback. Deterministische
+  Taskgraph-Pruefungen validieren anschliessend IDs, Kriterien und
+  Abhaengigkeiten. Ihn erst nach einer nachgewiesen gleichwertigen
+  Architect-Plan-/Compiler-Evaluation zu ersetzen entspricht ADR-0032.
+- Spec-First mit unabhaengigem Spec-Builder, eingefrorenem Test-Hash und
+  abgeschirmtem Blind-Builder ist in der Produktionssteuerung noch nicht
+  verdrahtet (OP-398); vorhandene `test_spec`-Module nicht als aktiven Pfad
+  behandeln.
 - Builder bleibt der einzige schreibende Worker je Projekt-Working-Tree.
   Verify bleibt deterministisch; Reviewer und Reflection laufen nach
   Befund und Risiko gemaess Loop-Vertrag.
