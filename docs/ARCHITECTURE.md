@@ -8,7 +8,7 @@
 > Statusqueue: docs/STATUS.md · Abschlussverlauf: PROGRESS.md
 
 
-Stand: 2026-11-12.
+Stand: 2026-11-14.
 
 
 ## 1. Produktarchitektur
@@ -153,6 +153,14 @@ deterministischer Architect-Bypass ist auf belegte, eindeutige
 Einzeldatei-Ersetzungen mit vollstaendigen Feldern begrenzt; veraltete,
 mehrdeutige oder unvollstaendige Treffer fallen in den Reasoning-Pfad
 zurueck. Diese Entscheidungen werden auditiert.
+
+Wenn der Scout-Pfad aktiv ist, bekommt der Architect einen begrenzten
+AST-Signaturauszug fuer die benannten Zieldateien. Angeforderte Scout-Symbole
+werden mit dem aktuellen Code-Index verglichen; bei Widerspruch gilt die
+verifizierte Code-Signatur und der Befund wird dem Architect gezeigt.
+Windows- und POSIX-Pfade werden fuer diesen Abgleich normalisiert. Dieser
+Belegpfad verbessert die Scout-zu-Architect-Uebergabe, aendert aber nicht die
+adaptive Scout-Auswahl.
 
 Im normalen Reasoning-Pfad strukturiert der Architect den Auftrag; der
 Planner-Split ueberfuehrt den Plan in Tasks und Abhaengigkeiten, die
