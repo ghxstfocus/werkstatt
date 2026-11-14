@@ -6654,3 +6654,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Die kompakte Ansicht behaelt bis zu acht relevante JSONL-Ereignisse und acht relevante normale Fehler-/Gate-Zeilen gemeinsam. Der persistierte Chatturn bleibt unveraendert.
 - **Regression:** Der grosse Log-Test enthaelt gleichzeitig Audit-Events und einen markierten Pytest-Assertion-Fehler und verlangt beide im Modellkontext.
 - **Verifikation:** Chat-Agent, Job-API und Frontend: 74 bestanden, 1 bekannte StarletteDeprecationWarning. Ruff, strikter Doku-Drift-Check und `git diff --check`: bestanden. GitHub Actions Quality Gate fuer Code-Commit `88dd5b0` bestand mit vollem Pytest-Lauf, Ruff, AST-/Audit-Checks und Quality Gate: [Run 43595830085](https://github.com/ghxstfocus/werkstatt/actions/runs/43595830085).
+
+### Nachtrag — Hauptlinienstand der Loop-Ist-Aufnahme berichtigt
+
+- **Befund:** Die Kopfzeile der Loop-Ist-Aufnahme nannte nach dem Log-Kontextfix weiterhin `554a692` als geprueften Hauptlinienstand, obwohl `main` bereits `9c9e14f` erreicht hatte.
+- **Korrektur:** Die Aufnahme weist jetzt `9c9e14f` als aktuellen Doku-Stand und `88dd5b0` als den durch CI verifizierten Code-Stand aus. Der CI-Beleg wird nicht dem reinen Doku-Commit zugeschrieben; Serverbetrieb bleibt separat unverifiziert.
+- **Verifikation:** Git-Remote bestaetigte `HEAD == origin/main == 9c9e14f`; `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check` bestanden.

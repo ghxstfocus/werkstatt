@@ -4,15 +4,14 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Hauptlinienstand: `554a692` (Chat-Eingabe fuer grosse Logs).
-GitHub Actions Quality Gate
-[43595095042](https://github.com/ghxstfocus/werkstatt/actions/runs/43595095042)
-lief fuer exakt diesen `main`-Commit erfolgreich durch: JavaScript-Syntax,
-Ruff, pytest mit Diagnosen und das vollstaendige Quality Gate. Der Lauf
-enthaelt damit den Architect-API-Preflight aus Merge PR #32 (`683398a`) und
-die Log-Kontextkorrektur. Der aktuelle Serverstand ist damit nicht belegt;
-die letzte hier dokumentierte Serververifikation betrifft einen aelteren
-Commit und darf nicht auf `554a692` uebertragen werden. Der Recovery-Beleg
+Gepruefter Hauptlinienstand: `9c9e14f` (Dokumentationsnachzug zur
+Log-Kontextkorrektur). GitHub Actions Quality Gate
+[43595830085](https://github.com/ghxstfocus/werkstatt/actions/runs/43595830085)
+lief fuer den enthaltenen Code-Commit `88dd5b0` erfolgreich durch: Ruff,
+vollstaendiges pytest, AST-/Audit-Katalog und Quality Gate. `9c9e14f` selbst
+enthaelt nur den Doku-Nachzug. Der aktuelle Serverstand ist damit nicht
+belegt; die letzte hier dokumentierte Serververifikation betrifft einen
+aelteren Commit und darf nicht auf `9c9e14f` uebertragen werden. Der Recovery-Beleg
 aus PR #8 bleibt separat auf Commit `2130019` mit Quality-Gate-Run
 [43488902240](https://github.com/ghxstfocus/werkstatt/actions/runs/43488902240)
 verifiziert. Diese CI-Belege bestaetigen den jeweiligen Repository-Stand,
