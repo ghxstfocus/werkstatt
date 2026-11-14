@@ -6740,3 +6740,7 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Ein Verlierer beim Snapshot-Publish validiert und verwendet jetzt den bereits publizierten Snapshot derselben Projekt-/Run-/Job-Identitaet; fremde, symbolische oder ungueltige Ziele bleiben Fehler.
 - **Regressionstest:** Zwei parallele Snapshot-Erstellungen werden bis zum Publish synchronisiert; beide muessen denselben validen Snapshot erhalten und temporaere Verzeichnisse bereinigen.
 - **Verifikation:** `tests/test_run_snapshot.py`, `tests/test_chat_jobs.py` und `tests/test_chat_jobs_api.py`: 52 bestanden, 2 uebersprungen; Ruff und `git diff --check` bestanden. Vollstaendige Linux-CI steht aus.
+
+### Nachtrag — PR #43 gemergt und Linux-Gates abgeschlossen
+
+- **Verifikation:** PR #43 wurde nach erfolgreicher Linux-CI auf Merge-Head `8c04ecb` mit Merge-Commit `8d95f7b` auf `main` uebernommen. CI: 2320 Tests bestanden, 5 uebersprungen; Ruff, Mypy, AST-Pruefung, Audit-Katalog und Quality Gate bestanden. Der Server hat danach noch `1a93595` getestet; ein Produktionslauf auf `8d95f7b` ist nicht belegt.
