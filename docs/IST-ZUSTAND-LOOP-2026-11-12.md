@@ -173,6 +173,40 @@ aber weiterhin aus dem freigegebenen Plan in einer festen Task-Schleife,
 statt an Checkpoints gegen offene Kriterien neu zu waehlen; der zielorientierte
 Arbeitsgraph von OP-398 bleibt offen.
 
+### Nachpruefung: Rollenrouting und Spec-First-Runtime
+
+Der Planner waehlt den Scout bereits bedarfsgesteuert: ein enges, explizites
+Einzeldateiziel kann den Scout-LLM-Aufruf ueberspringen; der Architect bleibt
+im normalen Pfad fuer den unabhaengigen Plan aktiv. Ein deterministisch
+belegbarer atomarer Plan kann auch den Architect ueberspringen. Diese Wege
+sind in `tests/test_planner_agent.py` und `tests/test_scout_kette.py` abgedeckt.
+
+Der in ADR-0032 vorgesehene Spec-First-Pfad ist dagegen noch nicht in die
+Produktionssteuerung verdrahtet. `werkstatt/test_spec.py` und
+`werkstatt/test_spec_validator.py` enthalten Datentypen und einen Validator,
+aber in `werkstatt/` gibt es keinen Aufruf von `validate_test_spec()`.
+`run_planner()` ruft weiterhin Architect und anschliessend den separaten
+Planner-Split auf; ein Routingentscheid fuer Spec-First, ein eingefrorener
+Spec-/Test-Hash und ein technisch abgeschirmter Blind-Builder sind nicht
+belegt. Die vorhandenen Module allein erfuellen ADR-0032 daher nicht.
+
+### Nachpruefung: OP-374 und Projekt-Herkunft
+
+Der aktuelle `_letzter_run_id()` in `werkstatt/web/inspector.py` schliesst
+bereits `NULL` und leere Run-IDs aus. In `werkstatt/projection.py` ist
+`events.run_id` als `NOT NULL` angelegt; `_insert()` normalisiert eine fehlende
+ID zu `''`. Bei alten Schemas wird eine fehlende `project`-Spalte mit
+`DEFAULT 'werkstatt'` migriert. `Projector.status()` beschreibt den Vergleich
+ausdruecklich als global.
+
+Folgerung fuer die Umsetzung von OP-374: Herkunft darf nicht pauschal gegen
+das Literal `'werkstatt'` geprueft werden. Das wuerde gueltige Events anderer
+Projekte fehlklassifizieren. Ein Projekt-Backfill braucht einen eigenen,
+projektisolierten Replay-Vertrag und darf weder den globalen Tail-Checkpoint
+verschieben noch fremde Projektzeilen als wiederverifizierten Erfolg
+ausweisen. Akzeptanztests muessen mindestens zwei Projekte und historische
+Zeilen mit leerer Run-ID abdecken, bevor der Pfad als erledigt gelten kann.
+
 ## Naechster Architektur-Schritt
 
 M1 aus ADR-0032 bleibt offen: die vorhandene Run-Inbox muss in einen
