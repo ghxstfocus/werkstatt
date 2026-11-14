@@ -6592,6 +6592,15 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Der Windows-Pfadabgleich waehlt die angeforderten Scout-Symbole jetzt korrekt aus. Das Linux-Quality-Gate auf PR #25 bestand mit 2.262 Tests und Ruff, scheiterte aber an Mypy: `werkstatt/architect.py` brauchte eine explizite Typannotation fuer `requested`.
 - **Aenderung:** Der Wert ist als `object` annotiert und wird vor der Symbolverarbeitung weiterhin auf `list`/`tuple` eingegrenzt. Damit bleibt die Laufzeitvalidierung erhalten.
 - **Verifikation:** Architect-Evidence und Scout-Kette: 8 bestanden; Ruff und `git diff --check` bestanden. Mypy ist im lokalen Windows-Umfeld nicht repo-weit belastbar (POSIX-Prozess-APIs und fehlendes `uvicorn`); GitHub Actions Quality Gate [43575805265](https://github.com/ghxstfocus/werkstatt/actions/runs/43575805265) fuer Commit `7739026`: erfolgreich, einschliesslich Ruff, 2.262 Pytests, Mypy, AST und Audit-Katalog.
+
+## 2026-11-14 — Verifizierten Hauptlinienstand und OP-Abhaengigkeiten nachgezogen
+
+- **Belegstand:** PR #25 ist auf `main` als Merge `d7f32e8` angekommen. GitHub Actions Quality Gate [43576037105](https://github.com/ghxstfocus/werkstatt/actions/runs/43576037105) bestand fuer den PR-Tree mit 2.262 Tests, 5 Skips sowie Ruff, Mypy, AST und Audit-Katalog. Der zuletzt gemeldete Serverlauf auf `3cbaf26` ist separat ausgewiesen und wird nicht als Nachweis fuer den neueren Merge ausgegeben.
+- **Doku:** Die Loop-Ist-Aufnahme nennt jetzt den aktuellen Merge, den belegten CI-Lauf und die Scout-/Architect-Signaturuebergabe. Roadmap und Architektur tragen den aktuellen Stand 2026-11-14.
+- **OP-Graph-Audit:** Die kanonische Queue enthaelt 17 offene OPs und 12 eingetragene Blocker-Kanten. Es gibt keine Referenzen auf fehlende OP-Abschnitte und keine Zyklen. Neun OPs haben keinen direkten Blocker-Eintrag; das allein belegt noch keine Startfaehigkeit, da Selector und Akzeptanzkriterien separat gelten.
+- **Verbleibende Kernluecke zum Auditstand `d7f32e8`:** OP-398s zielorientierter Arbeitsgraph war noch offen; bestaetigte Folgeauftraege wurden zwar gespeichert, aber noch nicht in den Arbeitsgraphen uebernommen. Die danach folgenden OP-397-Eintraege dokumentieren die schrittweise Umsetzung dieser Disposition. Vollstaendige Inbox-Klassifikation, Scope-Einordnung und unabhängige Writer-Worktrees bleiben weiterhin offen.
+- **Verifikation:** Strikter Doku-Drift-Check und `git diff --check` bestanden; keine Codeaenderung in diesem Eintrag.
+
 ## 2026-11-14 — Bestaetigte Chat-Folgeauftraege am Task-Checkpoint einordnen
 
 - **Befund:** Der Checkpoint speicherte bestaetigte Schreibauftraege und quittierte sie, liess ihre Einordnung in den aktiven Arbeitsgraphen aber ausstehen. Der Builder konnte deshalb das Hauptziel abschliessen, ohne die akzeptierte Folgearbeit auszufuehren.

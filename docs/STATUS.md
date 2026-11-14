@@ -4,7 +4,7 @@ Format gemaess `DOC_CONVENTIONS.md` §5. Diese Queue enthaelt nur offene, konkre
 
 `—` bedeutet: vor dem Start konkretisieren. Der Arbeitsfokus steht in `docs/ROADMAP.md`; abgeschlossene oder verworfene Arbeit steht in `PROGRESS.md`.
 
-Letzte Aktualisierung: 2026-11-13.
+Letzte Aktualisierung: 2026-11-14.
 
 ## Offene Punkte
 ### OP-404: Codeguardian als unabhaengige Schutz- und Evidenzschicht
