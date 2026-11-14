@@ -105,19 +105,17 @@ def _phase_explorer_and_setup(
     _alle_genannten = _alle_genannten[:10]
 
     # Adaptive role routing (OP-398 / ADR-0032): einen Explorer-LLM-Aufruf
-    # nur dann einsparen, wenn Planner-Routing UND Literal-Plan bereits
-    # deterministisch belegt sind. Der normale Explorer-/Scout-/Architect-
-    # Pfad bleibt fuer alle breiteren oder mehrdeutigen Auftraege erhalten.
+    # einsparen, wenn der gleiche fail-closed Scout-Router ein enges,
+    # explizites Einzeldatei-Aenderungsziel bestaetigt. Deterministische
+    # Datei-/Verwandtschaftsbelege werden unten trotzdem aufgebaut. Breite,
+    # diagnostische und mehrdeutige Auftraege bleiben im Explorer-Pfad.
     group_start("Phase 1: Explorer")
     _t_exp = time.monotonic()
-    _literal_plan = None
     _skip_reason = "kein_deterministischer_literalplan"
+    _skip_explorer = False
     if len(_explizite_dateien) == 1:
         try:
-            from werkstatt.planner import (
-                _deterministic_literal_replace_plan,
-                _scout_route_decision,
-            )
+            from werkstatt.planner import _scout_route_decision
 
             _candidate = _explizite_dateien[0]
             _scout_target, _skip_reason = _scout_route_decision(
@@ -125,30 +123,30 @@ def _phase_explorer_and_setup(
                 {"key_files": [{"file": _candidate}]},
                 pd,
             )
-            if _scout_target:
-                _literal_plan, _skip_reason = _deterministic_literal_replace_plan(
-                    aufgabe, _scout_target, pd,
-                )
+            _skip_explorer = _scout_target is not None
         except (ImportError, AttributeError, TypeError, ValueError):
             # Routing-Ausfall darf niemals einen Rollenaufruf unterdruecken.
-            _literal_plan = None
+            _skip_explorer = False
             _skip_reason = "routing_pruefung_nicht_verfuegbar"
 
-    if _literal_plan is not None:
-        _preview = _literal_plan["betroffene_stellen"][0]
+    if _skip_explorer:
+        _skip_file = _explizite_dateien[0]
         _explorer_ergaenzung = {
-            "findings": "Deterministischer Datei-/Literalbeleg; kein Explorer-LLM-Aufruf.",
+            "findings": (
+                "Explizites Einzeldatei-Ziel ist durch den deterministischen "
+                "Planner-Router bestaetigt; kein Explorer-LLM-Aufruf."
+            ),
             "key_files": [{
-                "file": _preview["datei"],
-                "why": "eindeutiger Literalplan aus aktuellem Dateiinhalt",
+                "file": _skip_file,
+                "why": "explizites Ziel vom Scout-Router als eng bestaetigt",
                 "confidence": "high",
             }],
             "next_reads": [],
         }
         audit("loop_explorer_skipped", {
-            "grund": "deterministischer_literalplan",
-            "datei": _preview["datei"],
-            "zeile": _preview["zeile"],
+            "grund": _skip_reason,
+            "datei": _skip_file,
+            "beleg": "expliziter_pfad_und_narrow_edit_router",
         }, pd, pn)
     else:
         _explorer_ergaenzung = run_explorer(state, aufgabe) or {}
