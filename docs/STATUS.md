@@ -105,21 +105,13 @@ Letzte Aktualisierung: 2026-11-14.
 - **Tests:** Patch-Hash, Projekt-/Run-Isolation, Einmaligkeit und Ablehnung.
 - **Blockiert von:** OP-396
 
-### OP-374: Backfill reproduzierbar und letzte Runs korrekt anzeigen
-- **Status:** open
-- **Typ:** data-integrity
-  - **Betroffene Dateien:** werkstatt/projection.py, werkstatt/web/inspector.py, static/overview.js, static/layout.css und Tests
-- **Akzeptanzkriterien:** Letzte Runs ignorieren Events ohne Run-ID. Backfills sind als wiederholbarer, idempotenter Projektvorgang verfuegbar. Historische Events ohne belastbare Herkunft werden getrennt ausgewiesen und nicht als verifizierter Erfolg gezaehlt.
-- **Tests:** Leere Run-IDs, Backfill-Wiederholung und Projektisolation.
-- **Blockiert von:** —
-
 ### OP-375: Erfolgsquote und Fehlerklassen in der Uebersicht
 - **Status:** open
 - **Typ:** ui-analytics
 - **Betroffene Dateien:** werkstatt/web/inspector.py, static/overview.js und Tests
 - **Akzeptanzkriterien:** Projekt- und Gesamtwerte zeigen erfolgreiche, fehlgeschlagene und abgebrochene Runs getrennt. Fehlerklassen sind normalisiert und auf belegte Events zurueckfuehrbar. Leere Daten oder partielle Historie werden ehrlich als unvollstaendig dargestellt.
 - **Tests:** Aggregation, Fehlerklassen, Nullwerte und UI-Rendering.
-- **Blockiert von:** OP-374
+- **Blockiert von:** —
 
 ### OP-394: Live-Feed semantisch und stabil sortieren
 - **Status:** open
