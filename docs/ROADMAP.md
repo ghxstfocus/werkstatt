@@ -1,7 +1,7 @@
 # Roadmap — Werkstatt
 
 
-Stand: 2026-11-12. Diese Roadmap beschreibt nur den aktuellen Produktfokus
+Stand: 2026-11-14. Diese Roadmap beschreibt nur den aktuellen Produktfokus
 und die Abfolge grober Meilensteine. Konkrete startbare Auftraege stehen in
 docs/STATUS.md; abgeschlossene Arbeit in PROGRESS.md. Alte Phasenberichte
 liegen im Archiv und sind keine aktuelle Betriebs- oder Architekturvorgabe.
