@@ -169,14 +169,21 @@ durch einen unverbundenen zweiten Statusspeicher zu verdoppeln.
 
 ### Aktuelle Inbox-Grenze
 
-Der Codepfad bestaetigt die dokumentierte OP-401-Luecke: `chat_followup_request`
-wird in `werkstatt/phases/tasks.py::_persist_run_checkpoint` validiert,
-auditiert und als `received` im RunCheckpoint abgelegt. Die Web-UI bekommt
-eine `loop_followup_checkpointed`-Rueckmeldung. Im Repository gibt es danach
-keinen Consumer, der diese Nachricht als Frage/Diagnose, Steuerung, innerhalb
-des freigegebenen Scopes liegenden Folgeauftrag oder Scope-Aenderung disponiert
-und gegebenenfalls den Task-Graph aktualisiert. Deshalb ist der Checkpoint
-ein dauerhafter Eingangsnachweis, aber noch keine Bearbeitungs- oder
-Abschlussbestaetigung fuer den Folgeauftrag. Diese Grenze muss bei OP-401/
-ADR-0032 erhalten bleiben, bis die Disposition und ihr Ergebnis-Gate umgesetzt
-und getestet sind.
+Der Codepfad konsumiert bestaetigte `chat_followup_request`-Eintraege inzwischen
+an Task-Checkpoints: `werkstatt/run_followups.py` plant sie mit frischem
+Repo-Kontext, validiert den kombinierten Task-Graphen und verlangt das
+Chat-Plan-Gate, bevor Tasks in den Phase-State aufgenommen werden. Die
+Disposition wird im RunCheckpoint und in der Ursprungssession idempotent
+festgehalten. Fragen, Diagnosen, Steuerung und unabhängige Schreibauftraege
+haben weiterhin keine einheitliche Run-Inbox-Disposition; unabhaengige
+Schreibauftraege und eigene Worktrees bleiben OP-401/OP-402.
+
+Der terminale Abschluss fuehrt den Checkpoint-Drain ebenfalls aus. Trifft ein
+bestaetigter Folgeauftrag genau waehrend des terminalen Compare-and-Swap ein,
+kehrt der Koordinator an diesen sicheren Abschluss-Checkpoint zurueck, plant
+und genehmigt den Auftrag, fuehrt die neuen Tasks aus und startet Review,
+Verify und Abschluss erneut. Kann Planung oder Freigabe nicht abgeschlossen
+werden, bleibt der Follow-up-Eintrag erhalten und der Run wird als
+wiederaufnehmbar fehlgeschlagen gespeichert; der Worker hinterlaesst keinen
+toten Run mit Status `running`. Das ersetzt noch keinen eigenen `waiting`-
+Status und schliesst OP-397 nicht ab.

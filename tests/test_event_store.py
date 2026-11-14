@@ -727,8 +727,7 @@ def test_terminal_run_transition_refuses_unacknowledged_inbox(
 def test_run_result_drains_message_arriving_during_terminal_cas(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt import chat_session
-    from werkstatt.loop import RunInboxPendingError, _persist_run_result
+    from werkstatt import chat_session, loop, run_followups
     from werkstatt.phases import tasks
 
     store = EventStore(db_pfad=tmp_path / "events.db")
@@ -759,21 +758,41 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
         return original_finish(*args, **kwargs)
 
     monkeypatch.setattr(store, "finish_run_checkpoint", enqueue_at_finish)
+    monkeypatch.setattr(loop, "EventStore", lambda: store)
+    monkeypatch.setattr(loop, "get_run_id", lambda: "run-final-race")
+    monkeypatch.setattr(loop, "_phase_tasks_loop", lambda *_args: (0, 1, []))
+    monkeypatch.setattr(loop, "_phase_finalize", lambda *_args: 0)
+    monkeypatch.setattr(loop, "check_run_lease", lambda _state: None)
+    monkeypatch.setattr(loop, "audit", lambda *_args, **_kwargs: True)
+
+    def reconcile(_state, _phase, active_store, project, run_id):
+        active = active_store.get_run_record(project, run_id)
+        assert active is not None
+        checkpoint = dict(active["checkpoint"])
+        checkpoint["chat_followup_requests"] = [
+            {**item, "status": "applied"}
+            for item in checkpoint["chat_followup_requests"]
+        ]
+        active_store.update_run_checkpoint(
+            project, run_id, checkpoint,
+            expected_version=active["checkpoint_version"],
+        )
+        return True
+
+    monkeypatch.setattr(run_followups, "reconcile_chat_followups", reconcile)
     run_state = SimpleNamespace(project_dir=tmp_path, run_lease_check=None)
     phase_state = SimpleNamespace(data={"tasks": []})
-    with pytest.raises(RunInboxPendingError, match="Folgeauftraege warten"):
-        _persist_run_result(
-            store, "demo", "run-final-race", 0,
-            run_state=run_state, phase_state=phase_state,
-        )
+    assert loop._finish_run_after_followups(
+        "demo", run_state, phase_state, 0,
+    ) == 0
 
     record = store.get_run_record("demo", "run-final-race")
     assert record is not None
-    assert record["status"] == "running"
+    assert record["status"] == "completed"
     assert record["checkpoint"]["chat_followup_requests"][0]["proposal_id"] == (
         "proposal-late"
     )
-    assert record["checkpoint"]["chat_followup_requests"][0]["status"] == "received"
+    assert record["checkpoint"]["chat_followup_requests"][0]["status"] == "applied"
     assert store.run_message_acknowledged(
         "demo", "run-final-race", "followup-late",
     )
@@ -783,6 +802,92 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
         and event["payload"]["proposal_id"] == "proposal-late"
         for event in session.load()
     )
+
+
+def test_final_followup_failure_persists_recoverable_run_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import loop, run_followups
+    from werkstatt.phases import tasks
+
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-final-blocked", "Finish safely")
+    record = store.get_run_record("demo", "run-final-blocked")
+    assert record is not None
+    checkpoint = dict(record["checkpoint"])
+    checkpoint["chat_followup_requests"] = [{
+        "proposal_id": "proposal-blocked",
+        "session_id": "session-final",
+        "request": "Review another condition",
+        "status": "received",
+    }]
+    store.update_run_checkpoint(
+        "demo", "run-final-blocked", checkpoint,
+        expected_version=record["checkpoint_version"],
+    )
+    monkeypatch.setattr(loop, "EventStore", lambda: store)
+    monkeypatch.setattr(loop, "get_run_id", lambda: "run-final-blocked")
+    monkeypatch.setattr(loop, "check_run_lease", lambda _state: None)
+    monkeypatch.setattr(loop, "audit", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
+
+    def reconciliation_failed(*_args, **_kwargs):
+        raise run_followups.FollowupReconciliationError("Plan-Gate nicht verfuegbar")
+
+    monkeypatch.setattr(
+        run_followups, "reconcile_chat_followups", reconciliation_failed,
+    )
+    run_state = SimpleNamespace(project_dir=tmp_path, run_lease_check=None)
+    phase_state = SimpleNamespace(data={"tasks": []})
+
+    assert loop._finish_run_after_followups(
+        "demo", run_state, phase_state, 0,
+    ) == 1
+    finished = store.get_run_record("demo", "run-final-blocked")
+    assert finished is not None
+    assert finished["status"] == "failed"
+    assert finished["checkpoint"]["chat_followup_requests"][0]["status"] == "received"
+
+
+def test_final_followup_gate_timeout_does_not_leave_run_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import loop, run_followups
+    from werkstatt.phases import tasks
+
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    store.create_run_record("demo", "run-final-timeout", "Finish safely")
+    record = store.get_run_record("demo", "run-final-timeout")
+    assert record is not None
+    checkpoint = dict(record["checkpoint"])
+    checkpoint["chat_followup_requests"] = [{
+        "proposal_id": "proposal-timeout",
+        "session_id": "session-final",
+        "request": "Review another condition",
+        "status": "received",
+    }]
+    store.update_run_checkpoint(
+        "demo", "run-final-timeout", checkpoint,
+        expected_version=record["checkpoint_version"],
+    )
+    monkeypatch.setattr(loop, "EventStore", lambda: store)
+    monkeypatch.setattr(loop, "get_run_id", lambda: "run-final-timeout")
+    monkeypatch.setattr(loop, "check_run_lease", lambda _state: None)
+    monkeypatch.setattr(loop, "audit", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        run_followups, "reconcile_chat_followups", lambda *_args: False,
+    )
+    run_state = SimpleNamespace(project_dir=tmp_path, run_lease_check=None)
+    phase_state = SimpleNamespace(data={"tasks": []})
+
+    assert loop._finish_run_after_followups(
+        "demo", run_state, phase_state, 0,
+    ) == 1
+    finished = store.get_run_record("demo", "run-final-timeout")
+    assert finished is not None
+    assert finished["status"] == "failed"
+    assert finished["checkpoint"]["chat_followup_requests"][0]["status"] == "received"
 
 
 def test_run_lease_excludes_other_workers_and_fences_takeover(tmp_path: Path) -> None:
