@@ -90,7 +90,7 @@ def _explicit_loop_action_intent(message: str, action: str) -> bool:
         re.IGNORECASE,
     ):
         return False
-    if re.search(
+    return re.search(
         r"\b(?:nicht|kein(?:e|en|er|es)?)\b.{0,40}\b"
         r"(?:starte|starten|beginne|beginnen|bearbeite|bearbeiten|"
         r"umsetzen|implementiere|implementieren|fixe|fixen|stoppe|"
@@ -101,9 +101,7 @@ def _explicit_loop_action_intent(message: str, action: str) -> bool:
         r"(?:nicht|kein(?:e|en|er|es)?)\b",
         message,
         re.IGNORECASE,
-    ):
-        return False
-    return True
+    ) is None
 
 
 def _explicit_op_ids(message: str) -> tuple[str, ...]:
