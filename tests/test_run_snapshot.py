@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -79,6 +81,39 @@ def test_snapshot_rejects_source_mutation_during_copy(
         run_snapshot.create_project_snapshot(source, "demo", "run-2", "job-2")
 
     assert not list((tmp_path / "state").rglob("job-2"))
+
+
+def test_concurrent_idempotent_snapshot_publish_reuses_winner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _repo(tmp_path / "project")
+    monkeypatch.setattr(run_snapshot, "werkstatt_home", lambda: tmp_path / "state")
+    final_path = run_snapshot._managed_root(source, "demo", "chat-job-1") / "job-1"
+    original_replace = run_snapshot.os.replace
+    publish_barrier = threading.Barrier(2)
+
+    def race_publish(source_path: Path, destination: Path) -> None:
+        if Path(destination) == final_path:
+            publish_barrier.wait(timeout=10)
+        original_replace(source_path, destination)
+
+    monkeypatch.setattr(run_snapshot.os, "replace", race_publish)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(
+                run_snapshot.create_project_snapshot,
+                source, "demo", "chat-job-1", "job-1",
+            )
+            for _ in range(2)
+        ]
+        snapshots = [future.result(timeout=30) for future in futures]
+
+    assert snapshots[0] == snapshots[1]
+    assert snapshots[0] == run_snapshot.validate_project_snapshot(
+        final_path, source, "demo", "chat-job-1", "job-1",
+    )
+    assert not list(final_path.parent.glob(".job-1.*.tmp"))
 
 
 def test_snapshot_rejects_symlink_escape_and_cleanup_outside_root(

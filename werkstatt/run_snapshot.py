@@ -239,7 +239,17 @@ def create_project_snapshot(
             json.dumps(manifest, ensure_ascii=False, sort_keys=True),
             encoding="utf-8",
         )
-        os.replace(temporary, final_path)
+        try:
+            os.replace(temporary, final_path)
+        except OSError:
+            # Idempotent chat-job retries can build the same snapshot at the
+            # same time. If another request published that exact job snapshot
+            # first, validate and reuse it instead of failing the shared job.
+            if final_path.is_symlink() or not final_path.is_dir():
+                raise
+            return validate_project_snapshot(
+                final_path, source, project, run_id, job_id,
+            )
         return ProjectSnapshot(final_path, head, source_fingerprint)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise SnapshotError(f"Snapshot fehlgeschlagen: {exc}") from exc
