@@ -106,6 +106,12 @@ def test_run_architect_nutzt_scout_nicht_doppelten_user_context(
             "auftrag_prosa": "Ersetze A durch B in auth.py.",
             "api_auszug": {"auth.py": ["verify_token"]},
             "risiken": ["Cookie-Fallback bleibt kompatibel"],
+            "api_widersprueche": [{
+                "datei": "auth.py",
+                "symbol": "verify_token",
+                "art": "fehlt",
+                "gefunden_in": [],
+            }],
             "bereits_erfuellt": False,
         },
         scout_api_auszug={},
@@ -130,6 +136,8 @@ def test_run_architect_nutzt_scout_nicht_doppelten_user_context(
     )
     assert "<scout_auftrag>" in captured["system"]
     assert "Ersetze A durch B in auth.py." in captured["system"]
+    assert "Deterministischer API-Abgleich" in captured["system"]
+    assert '"symbol": "verify_token"' in captured["system"]
     assert captured["user"] == ""
     assert "Explorer-Rohdaten-Duplikat" not in captured["system"]
 

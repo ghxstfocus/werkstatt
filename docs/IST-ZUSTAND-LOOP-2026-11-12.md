@@ -1,11 +1,17 @@
-# Ist-Zustand des Werkstatt-Loops — GitHub main 2026-11-13
+# Ist-Zustand des Werkstatt-Loops — GitHub main 2026-11-14
 
 Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Hauptlinienstand: `ebb3b73`. Der zusaetzliche Recovery-Beleg aus
-PR #8 wurde auf Commit `2130019` mit Quality-Gate-Run
+Gepruefter Hauptlinienstand: `d7f32e8` (Merge PR #25). GitHub Actions
+Quality Gate [43576037105](https://github.com/ghxstfocus/werkstatt/actions/runs/43576037105)
+bestand fuer den PR-Tree mit 2.262 Pytests und 5 uebersprungenen Tests,
+Ruff, Mypy, AST und Audit-Katalog. Der zuletzt vom Nutzer gemeldete
+Serverlauf aktualisierte `main` bis `3cbaf26` und bestand mit denselben
+2.262 Tests; er belegt nicht, dass der Server bereits `d7f32e8` ausfuehrt.
+Der zusaetzliche Recovery-Beleg aus PR #8 wurde auf Commit `2130019` mit
+Quality-Gate-Run
 [43488902240](https://github.com/ghxstfocus/werkstatt/actions/runs/43488902240)
 erfolgreich verifiziert. Seit der letzten Bestandsaufnahme
 wurden unter anderem Akzeptanzkriterien explizit auf Tasks abgebildet und als
@@ -14,6 +20,32 @@ und danach die vollstaendige Phase-End-Pruefung erneut ausgefuehrt. Der
 Werkzeugdialog erkennt wiederholte und alternierende Werkzeugzyklen ohne
 pauschale Rundengrenze. Diese CI-Belege betreffen den Repository-Stand, nicht
 den aktuell laufenden Produktionsserver.
+
+## Chat-Belegsuche: GNU-grep-Alternation
+
+Der gespeicherte Chat-Verlauf zur OP-374-Pruefung zeigte eine widerspruechliche
+Recherche: `grep` fand `_letzter_run_id` zunaechst korrekt, meldete bei
+spaeteren Suchmustern wie `run_id|project` aber faelschlich keinen Treffer.
+Ursache war GNU grep im Basic-Regular-Expression-Modus, in dem `|` keine
+Alternation ist. PR #20 aktiviert ERE mit `-E`; der Chat-Prompt verlangt bei
+widerspruechlichen Suchbelegen nun erneutes Lesen der Quelle und priorisiert
+bestaetigte positive Treffer. Die Regression ist in
+`tests/test_chat_tools.py::test_grep_unterstuetzt_ere_alternation` abgesichert.
+Der laufende Webprozess wurde nach dem Merge neu gestartet; der Regressionstest
+lief danach direkt auf dem Server erfolgreich.
+
+## Scout-/Architect-Beleguebergabe
+
+Im Scout-Pfad ersetzt der kompakte Scout-Bericht die Explorer-Rohdaten.
+Der Architect erhaelt deshalb jetzt fuer OP-, Scout- und Explorer-Zieldateien
+einen begrenzten Auszug aus dem aktuellen AST-Index. Angeforderte Scout-Symbole
+werden gegen aktuelle Signaturen abgeglichen; deterministisch erkannte
+API-Widersprueche bleiben im Architect-Kontext erhalten. Scout-Pfade mit
+Windows-Backslashes werden vor dem Symbolabgleich normalisiert. Regressionen
+pruefen konkrete Projector-/Inspector-Signaturen, ausgeschlossene Dateien,
+Pfad-Traversal und die Auszugslimits. Das macht den Scout nicht zum
+Pflichtschritt: der Planner darf ihn bei einem expliziten, belegten Einzel-
+Dateiziel weiterhin ueberspringen.
 
 ## Kurzbefund
 
@@ -149,3 +181,17 @@ Gate-Antworten und Schreibauftraege idempotent dem selben Run zuordnet und
 deren Wirkung an sicheren Checkpoints definiert. Die vorhandenen SQLite-
 Stores, Prozess-Registry und Phase-Checkpoints sind zu migrieren, nicht
 durch einen unverbundenen zweiten Statusspeicher zu verdoppeln.
+
+### Aktuelle Inbox-Grenze
+
+Der Codepfad bestaetigt die dokumentierte OP-401-Luecke: `chat_followup_request`
+wird in `werkstatt/phases/tasks.py::_persist_run_checkpoint` validiert,
+auditiert und als `received` im RunCheckpoint abgelegt. Die Web-UI bekommt
+eine `loop_followup_checkpointed`-Rueckmeldung. Im Repository gibt es danach
+keinen Consumer, der diese Nachricht als Frage/Diagnose, Steuerung, innerhalb
+des freigegebenen Scopes liegenden Folgeauftrag oder Scope-Aenderung disponiert
+und gegebenenfalls den Task-Graph aktualisiert. Deshalb ist der Checkpoint
+ein dauerhafter Eingangsnachweis, aber noch keine Bearbeitungs- oder
+Abschlussbestaetigung fuer den Folgeauftrag. Diese Grenze muss bei OP-401/
+ADR-0032 erhalten bleiben, bis die Disposition und ihr Ergebnis-Gate umgesetzt
+und getestet sind.
