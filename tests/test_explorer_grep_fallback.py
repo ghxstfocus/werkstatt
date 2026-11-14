@@ -74,3 +74,32 @@ def test_grep_fallback_findet_dateien_bei_backtick_suchbegriff(tmp_path):
     assert "werkstatt/irrelevant.py" not in files, (
         f"irrelevant.py darf NICHT in key_files sein. Gefunden: {files}"
     )
+
+
+def test_eindeutige_literalersetzung_ueberspringt_explorer_llm(tmp_path):
+    """Belegte Ein-Datei-Ersetzung braucht keine explorative LLM-Suche."""
+    target = tmp_path / "werkstatt" / "sample.py"
+    target.parent.mkdir()
+    target.write_text("value = 'old_value'\n", encoding="utf-8")
+    from werkstatt.phases import explorer as exp
+
+    aufgabe = "Ersetze `old_value` durch `new_value` in werkstatt/sample.py"
+    state = _state(tmp_path, aufgabe)
+
+    with (
+        patch.object(
+            exp, "run_explorer",
+            side_effect=AssertionError("Explorer-LLM waere hier redundant"),
+        ),
+        patch.object(exp, "group_start"),
+        patch.object(exp, "group_end"),
+        patch.object(exp, "step"),
+        patch.object(exp, "audit"),
+    ):
+        rc, _phase_state = exp._phase_explorer_and_setup(
+            state, aufgabe, "test", None,
+        )
+
+    assert rc == 0
+    files = [item.get("file") for item in state.explorer_context["key_files"]]
+    assert "werkstatt/sample.py" in files
