@@ -284,8 +284,20 @@ def test_api_effect_recognizes_select_held_in_local_name(tmp_path: Path) -> None
 def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_path) -> None:
     from werkstatt import architect
 
+    target = tmp_path / "werkstatt" / "event_store.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "class EventStore:\n"
+        "    def get_run_record(self, run_id):\n"
+        "        return self.connection.execute(run_id)\n",
+        encoding="utf-8",
+    )
     replies = iter([
-        LLMReply(True, "Nutze `EventStore.get_run_record()` fuer den Lauf. " * 4),
+        LLMReply(
+            True,
+            "## werkstatt/event_store.py\n"
+            + "Nutze `EventStore.get_run_record()` fuer den Lauf. " * 4,
+        ),
         LLMReply(True, "Nutze `EventStore.append(event)` fuer das vorhandene API. " * 4),
     ])
     prompts: list[str] = []
@@ -320,10 +332,36 @@ def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_p
     assert "im aktuellen AST" not in prompts[1]
     assert "ABGELEHNTER ARCHITECT-ENTWURF" in contents[1]
     assert "EventStore.get_run_record" in contents[1]
+    assert "BEGRENZTE QUELLBELEGE" in contents[1]
+    assert "def get_run_record(self, run_id)" in contents[1]
+    assert "Zeilen 1-3" in contents[1]
     assert limits == [architect.ARCHITECT_MAX_TOKENS, 12000]
     assert state.architect_prosa == (
         "Nutze `EventStore.append(event)` fuer das vorhandene API. " * 4
     ).strip()
+
+
+def test_api_preflight_source_context_is_project_confined_and_bounded(tmp_path) -> None:
+    from werkstatt.architect import _api_preflight_source_context
+
+    root = tmp_path / "project"
+    root.mkdir()
+    safe = root / "werkstatt" / "safe.py"
+    safe.parent.mkdir()
+    safe.write_text(
+        "class Store:\n    def load(self):\n        return 1\n",
+        encoding="utf-8",
+    )
+    outside = tmp_path / "outside.py"
+    outside.write_text("def load(): return 'outside'\n", encoding="utf-8")
+    plan = "## werkstatt/safe.py\nUse `Store.load()`\n## ../outside.py\nUse `load()`"
+
+    excerpt, metadata = _api_preflight_source_context(root, plan, [], max_chars=1200)
+
+    assert "def load(self)" in excerpt
+    assert "outside'" not in excerpt
+    assert metadata["files"] == ["werkstatt/safe.py"]
+    assert metadata["chars"] <= 1200
 
 
 def test_scout_prompt_does_not_treat_index_absence_as_proof() -> None:
