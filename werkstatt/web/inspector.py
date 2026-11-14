@@ -138,6 +138,7 @@ def aggregate_status(projekt: str) -> dict[str, Any]:
         "verify": None,
         "drift": None,
         "phase": None,
+        "unverified": False,
     }
     if run_id is None:
         return aus
@@ -165,7 +166,13 @@ def aggregate_status(projekt: str) -> dict[str, Any]:
                 "ORDER BY seq DESC LIMIT 1",
                 (run_id, projekt),
             ).fetchone()
+            unverified = c.execute(
+                "SELECT 1 FROM events WHERE run_id=? AND project=? "
+                "AND origin_verified=0 LIMIT 1",
+                (run_id, projekt),
+            ).fetchone()
         aus["tasks"] = {"started": int(started), "done": int(done)}
+        aus["unverified"] = unverified is not None
         if v:
             try:
                 aus["verify"] = json.loads(v[0])
@@ -355,7 +362,7 @@ def aggregate_ops_run_status(projekt: str) -> dict[str, dict[str, Any]]:
             for _kind in ("loop_started", "pipeline_start"):
                 for run_id, payload in c.execute(
                     "SELECT run_id, payload FROM events "
-                    "WHERE kind=? AND project=?",
+                    "WHERE kind=? AND project=? AND run_id!=''",
                     (_kind, projekt),
                 ):
                     try:
@@ -375,15 +382,17 @@ def aggregate_ops_run_status(projekt: str) -> dict[str, dict[str, Any]]:
             for op_id, run_id in op_to_run.items():
                 # Terminal-Event?
                 term = c.execute(
-                    "SELECT kind, ts FROM events WHERE run_id=? AND kind IN "
+                    "SELECT kind, ts FROM events WHERE run_id=? AND project=? "
+                    "AND kind IN "
                     "('loop_erfolg','loop_failed') ORDER BY seq DESC LIMIT 1",
-                    (run_id,)
+                    (run_id, projekt)
                 ).fetchone()
                 # Heartbeat?
                 hb = c.execute(
-                    "SELECT ts FROM events WHERE run_id=? AND kind='heartbeat' "
+                    "SELECT ts FROM events WHERE run_id=? AND project=? "
+                    "AND kind='heartbeat' "
                     "ORDER BY seq DESC LIMIT 1",
-                    (run_id,)
+                    (run_id, projekt)
                 ).fetchone()
 
                 state = "idle"
@@ -399,10 +408,18 @@ def aggregate_ops_run_status(projekt: str) -> dict[str, dict[str, Any]]:
                             ts = hb[0]
                     except (ValueError, TypeError):
                         pass
+                unverified = c.execute(
+                    "SELECT 1 FROM events WHERE run_id=? AND project=? "
+                    "AND origin_verified=0 LIMIT 1",
+                    (run_id, projekt),
+                ).fetchone() is not None
+                if unverified and state == "done":
+                    state = "unverified"
                 aus[op_id] = {
                     "state": state,
                     "run_id": run_id,
                     "ts": ts,
+                    "unverified": unverified,
                 }
     except sqlite3.Error:
         pass
@@ -2146,9 +2163,21 @@ def _runs_7d(es: EventStore, projekt: str) -> int:
 
 def _run_verteilung_30d(es: EventStore, projekt: str) -> dict[str, int]:
     """Deduplicated 30-day run outcomes; an explicit web stop wins."""
-    ergebnis = {"erfolg": 0, "fehlgeschlagen": 0, "abgebrochen": 0, "gesamt": 0}
+    ergebnis = {
+        "erfolg": 0, "fehlgeschlagen": 0, "abgebrochen": 0,
+        "unverified": 0, "gesamt": 0,
+    }
     try:
         with sqlite3.connect(es.db_pfad) as c:
+            verification_rows = c.execute(
+                "SELECT run_id, MIN(origin_verified) FROM events WHERE "
+                + _projekt_filter_sql() + " AND run_id!='' GROUP BY run_id",
+                (projekt,),
+            ).fetchall()
+            verifiziert = {
+                str(run_id): bool(value)
+                for run_id, value in verification_rows
+            }
             rows = c.execute(
                 "SELECT run_id, "
                 "MAX(CASE WHEN kind='web_loop_stopped' THEN seq ELSE 0 END), "
@@ -2162,7 +2191,10 @@ def _run_verteilung_30d(es: EventStore, projekt: str) -> dict[str, int]:
                 "GROUP BY run_id",
                 (projekt,),
             ).fetchall()
-        for _, stopped_seq, failed_seq, success_seq in rows:
+        for run_id, stopped_seq, failed_seq, success_seq in rows:
+            if not verifiziert.get(str(run_id), False):
+                ergebnis["unverified"] += 1
+                continue
             if stopped_seq:
                 ergebnis["abgebrochen"] += 1
             elif failed_seq > success_seq:
@@ -2170,7 +2202,8 @@ def _run_verteilung_30d(es: EventStore, projekt: str) -> dict[str, int]:
             elif success_seq:
                 ergebnis["erfolg"] += 1
         ergebnis["gesamt"] = sum(
-            ergebnis[k] for k in ("erfolg", "fehlgeschlagen", "abgebrochen")
+            ergebnis[k]
+            for k in ("erfolg", "fehlgeschlagen", "abgebrochen", "unverified")
         )
     except sqlite3.Error:
         pass
@@ -2202,9 +2235,12 @@ def aggregate_overview() -> dict[str, Any]:
         verteilung = _run_verteilung_30d(es, name)
         spark = _sparkline_30d(es, name)
         runs_7d_total = _runs_7d(es, name)
+        bekannte_runs = sum(
+            verteilung[k] for k in ("erfolg", "fehlgeschlagen", "abgebrochen")
+        )
         quote = (
-            round(verteilung["erfolg"] / verteilung["gesamt"], 2)
-            if verteilung["gesamt"] else None
+            round(verteilung["erfolg"] / bekannte_runs, 2)
+            if bekannte_runs else None
         )
 
         status_md = p / "docs" / "STATUS.md"
@@ -2237,8 +2273,10 @@ def aggregate_overview() -> dict[str, Any]:
     top_3_namen = [x["name"] for x in top_3 if x["runs_7d_total"] > 0]
 
     gesamt = {
-        key: sum(p["ergebnisse_30d"][key] for p in projekte)
-        for key in ("erfolg", "fehlgeschlagen", "abgebrochen", "gesamt")
+            key: sum(p["ergebnisse_30d"][key] for p in projekte)
+        for key in (
+            "erfolg", "fehlgeschlagen", "abgebrochen", "unverified", "gesamt",
+        )
     }
     return {
         "projekte": projekte,

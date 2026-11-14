@@ -38,7 +38,8 @@ class Projector:
                 "status TEXT, "
                 "payload TEXT NOT NULL, "
                 "ts TEXT NOT NULL, "
-                "project TEXT NOT NULL DEFAULT 'werkstatt')"
+                "project TEXT NOT NULL DEFAULT 'werkstatt', "
+                "origin_verified INTEGER NOT NULL DEFAULT 0)"
             )
             # OP-323c + OP-306c: Schema-Migration. Aeltere EventStore-Init
             # erzeugt events ohne event_id und ohne project. Beide Spalten
@@ -52,6 +53,11 @@ class Projector:
                 conn.execute(
                     "ALTER TABLE events ADD COLUMN project TEXT NOT NULL "
                     "DEFAULT 'werkstatt'"
+                )
+            if "origin_verified" not in cols:
+                conn.execute(
+                    "ALTER TABLE events ADD COLUMN origin_verified "
+                    "INTEGER NOT NULL DEFAULT 0"
                 )
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_event_id "
@@ -222,6 +228,16 @@ class Projector:
         line_num: int = 0,
     ) -> bool:
         run_id = ev.get("run_id") or ""
+        raw_project = ev.get("project")
+        project = (
+            raw_project
+            if isinstance(raw_project, str) and raw_project.strip()
+            else "werkstatt"
+        )
+        origin_verified = int(
+            isinstance(run_id, str) and bool(run_id.strip())
+            and isinstance(raw_project, str) and bool(raw_project.strip())
+        )
         kind = ev.get("kind") or "?"
         event_id = self._event_id(ev, file_name, line_num)
         # OP-306c: project bekommt eigene Spalte (single source of
@@ -237,8 +253,8 @@ class Projector:
         }
         cur = conn.execute(
             "INSERT OR IGNORE INTO events "
-            "(event_id, run_id, kind, phase, status, payload, ts, project) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "(event_id, run_id, kind, phase, status, payload, ts, project, "
+            "origin_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event_id,
                 run_id,
@@ -247,8 +263,14 @@ class Projector:
                 ev.get("status"),
                 json.dumps(payload, ensure_ascii=False),
                 ev.get("timestamp") or ev.get("ts") or "",
-                ev.get("project") or "werkstatt",
+                project,
+                origin_verified,
             ),
+        )
+        conn.execute(
+            "UPDATE events SET origin_verified=? WHERE event_id=? "
+            "AND run_id=? AND project=?",
+            (origin_verified, event_id, run_id, project),
         )
         return cur.rowcount > 0
 
@@ -293,6 +315,41 @@ class Projector:
             conn.commit()
         return {"eingefuegt": eingefuegt, "uebersprungen": uebersprungen}
 
+    def backfill(self, project: str) -> dict[str, int]:
+        """Replayt nur das angegebene Projekt, ohne den globalen Checkpoint."""
+        if not isinstance(project, str) or not project.strip():
+            raise ValueError("project muss ein nichtleerer String sein")
+        selected = [
+            (event, filename, line_num)
+            for event, filename, line_num in self._read_events()
+            if (event.get("project") or "werkstatt") == project
+        ]
+        eingefuegt = 0
+        uebersprungen = 0
+        events_ohne_run_id = 0
+        events_ohne_herkunft = 0
+        with closing(self._connect()) as conn:
+            for event, filename, line_num in selected:
+                run_id = event.get("run_id")
+                raw_project = event.get("project")
+                has_run_id = isinstance(run_id, str) and bool(run_id.strip())
+                has_project = (
+                    isinstance(raw_project, str) and bool(raw_project.strip())
+                )
+                events_ohne_run_id += int(not has_run_id)
+                events_ohne_herkunft += int(not (has_run_id and has_project))
+                if self._insert(conn, event, filename, line_num):
+                    eingefuegt += 1
+                else:
+                    uebersprungen += 1
+            conn.commit()
+        return {
+            "eingefuegt": eingefuegt,
+            "uebersprungen": uebersprungen,
+            "events_ohne_run_id": events_ohne_run_id,
+            "events_ohne_herkunft": events_ohne_herkunft,
+        }
+
     def status(self) -> dict[str, Any]:
         inventory = self._jsonl_inventory()
         source_ids: set[str] = inventory["event_ids"]
@@ -300,6 +357,12 @@ class Projector:
             sqlite_rows_total = int(
                 conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
             )
+            events_ohne_run_id = int(conn.execute(
+                "SELECT COUNT(*) FROM events WHERE run_id IS NULL OR run_id=''"
+            ).fetchone()[0])
+            events_ohne_herkunft = int(conn.execute(
+                "SELECT COUNT(*) FROM events WHERE origin_verified=0"
+            ).fetchone()[0])
             sqlite_ids = {
                 str(row[0])
                 for row in conn.execute(
@@ -314,6 +377,8 @@ class Projector:
             "sqlite_rows": sqlite_rows,
             "sqlite_rows_total": sqlite_rows_total,
             "sqlite_rows_outside_basis": sqlite_rows_total - sqlite_rows,
+            "events_ohne_run_id": events_ohne_run_id,
+            "events_ohne_herkunft": events_ohne_herkunft,
             "diff": diff,
             "last_checkpoint": self._get_checkpoint("last_audit_id"),
             "scope": "global",
