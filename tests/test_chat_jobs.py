@@ -38,8 +38,12 @@ def test_claim_is_single_winner_and_completion_is_persisted(tmp_path: Path) -> N
 
     assert store.claim(job["job_id"]) is True
     assert store.claim(job["job_id"]) is False
-    assert store.finish(job["job_id"], answer="Erledigt") is True
-    assert store.finish(job["job_id"], answer="Doppelt") is False
+    assert store.finish(
+        job["job_id"], answer="Erledigt", worker_id="test-worker",
+    ) is True
+    assert store.finish(
+        job["job_id"], answer="Doppelt", worker_id="test-worker",
+    ) is False
 
     current = store.get(job["job_id"])
     assert current is not None
@@ -128,7 +132,9 @@ def test_sync_completed_job_turns_repairs_missing_parent_projection(
         "session-a", "Frage", "read", "request-key-reconcile-001",
     )
     assert store.claim(job["job_id"])
-    assert store.finish(job["job_id"], answer="Antwort")
+    assert store.finish(
+        job["job_id"], answer="Antwort", worker_id="test-worker",
+    )
 
     assert chat_jobs.sync_completed_job_turns(
         "demo", "session-a", db_path=store.db_path,
@@ -147,7 +153,10 @@ def test_job_failure_is_visible_and_terminal(tmp_path: Path) -> None:
     job, _ = store.create("session-a", "Frage", "read", "request-key-0004")
     store.claim(job["job_id"])
 
-    assert store.finish(job["job_id"], error="RuntimeError: LLM nicht verfuegbar")
+    assert store.finish(
+        job["job_id"], error="RuntimeError: LLM nicht verfuegbar",
+        worker_id="test-worker",
+    )
     failed = store.get(job["job_id"])
 
     assert failed is not None
@@ -369,7 +378,9 @@ def test_dispatch_retries_when_a_claim_race_future_finishes(
     lost_claim: Future[bool] = Future()
     futures[second_key] = lost_claim
 
-    assert store.finish(first["job_id"], answer="Erste Antwort")
+    assert store.finish(
+        first["job_id"], answer="Erste Antwort", worker_id="worker-a",
+    )
     chat_jobs._dispatch_pending(db_path, "demo", project_dir)
     assert executor.submitted == []
 
@@ -477,6 +488,38 @@ def test_only_claiming_worker_can_renew_lease(tmp_path: Path) -> None:
     assert store.cancellation_requested(job["job_id"], "worker-a") is False
     assert store.heartbeat(job["job_id"], "worker-a") is True
 
+
+def test_stale_worker_cannot_finish_job_after_lease_moves(
+    tmp_path: Path,
+) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _created = store.create(
+        "session-a", "Frage", "read", "request-key-lease-004",
+    )
+    assert store.claim(job["job_id"], "worker-old")
+    with sqlite3.connect(store.db_path) as connection:
+        connection.execute(
+            "UPDATE jobs SET worker_id='worker-new' WHERE job_id=?",
+            (job["job_id"],),
+        )
+        connection.commit()
+
+    assert store.finish(
+        job["job_id"], cancelled=True, worker_id="worker-old",
+    ) is False
+    current = store.get(job["job_id"])
+    assert current is not None
+    assert current["state"] == "running"
+    assert current["worker_id"] == "worker-new"
+    assert current["events"][-1]["kind"] == "started"
+
+    assert store.finish(
+        job["job_id"], answer="Neue Worker-Antwort", worker_id="worker-new",
+    )
+    completed = store.get(job["job_id"])
+    assert completed is not None
+    assert completed["state"] == "succeeded"
+
 def test_store_migrates_existing_jobs_table_for_worker_leases(
     tmp_path: Path,
 ) -> None:
@@ -550,7 +593,9 @@ def test_running_job_cancellation_is_cooperative_and_terminal(
 
     assert result == {"job_id": job["job_id"], "state": "cancelling"}
     assert store.cancellation_requested(job["job_id"], "worker-a")
-    assert store.finish(job["job_id"], cancelled=True)
+    assert store.finish(
+        job["job_id"], cancelled=True, worker_id="worker-a",
+    )
     cancelled = store.get(job["job_id"])
     assert cancelled is not None
     assert cancelled["state"] == "cancelled"
@@ -571,7 +616,9 @@ def test_sync_cleans_branch_for_failed_terminal_job(
     )
     parent.snapshot_to(job["job_id"])
     assert store.claim(job["job_id"])
-    assert store.finish(job["job_id"], error="worker crashed")
+    assert store.finish(
+        job["job_id"], error="worker crashed", worker_id="test-worker",
+    )
 
     assert chat_jobs.sync_completed_job_turns(
         "demo", "session-a", db_path=store.db_path,
@@ -772,7 +819,9 @@ def test_run_inbox_reconciles_terminal_chat_job_result_idempotently(
         "demo", db_path=jobs_db, event_store=events,
     ) == 1
     assert store.claim(job["job_id"], "chat-worker")
-    assert store.finish(job["job_id"], answer="Belegte Antwort")
+    assert store.finish(
+        job["job_id"], answer="Belegte Antwort", worker_id="chat-worker",
+    )
     assert chat_jobs.reconcile_run_inbox(
         "demo", db_path=jobs_db, event_store=events,
     ) == 1
@@ -818,7 +867,9 @@ def test_result_handoff_race_with_run_termination_is_resolved(
     )
     assert store.mark_run_inbox_enqueued(job["job_id"])
     assert store.claim(job["job_id"], "chat-worker")
-    assert store.finish(job["job_id"], answer="Antwort")
+    assert store.finish(
+        job["job_id"], answer="Antwort", worker_id="chat-worker",
+    )
 
     assert chat_jobs.reconcile_run_inbox(
         "demo", db_path=jobs_db, event_store=_RunFinishesDuringHandoff(),
