@@ -543,6 +543,7 @@ def test_task_ende_auditiert_kriterienfortschritt_nach_gruenem_task(tmp_path):
         "task_id": "t1",
         "status": "in_progress",
         "tracked": True,
+        "coverage_basis": "assigned_tasks_done",
         "covered": ["AC1"],
         "remaining": ["AC2"],
         "error": None,
@@ -556,7 +557,7 @@ def test_task_ende_auditiert_kriterienfortschritt_nach_gruenem_task(tmp_path):
         "evidence": [
             "Task t1 als done gespeichert",
             "Ziel: Kriterienfortschritt",
-            "Erfuellt: AC1 — Erstes Ziel",
+            "Task-Abdeckung erledigt: AC1 — Erstes Ziel",
             "Offen: AC2 — Zweites Ziel",
             "Restlicher Graph: t2: pending",
         ],
@@ -582,12 +583,14 @@ def test_task_ende_zeigt_phase_end_verify_als_naechsten_schritt(tmp_path):
 
     event = next(item for item in events if item[0] == "loop_criteria_progress")
     assert event[1]["next_step_type"] == "phase_end_verify"
-    assert event[1]["next_step"] == "Phase-End-Verify ausfuehren"
-    assert event[1]["decision_summary"].startswith(
-        "Der Task-Graph ist abgeschlossen;"
+    assert event[1]["next_step"] == (
+        "Phase-End-Review, Freigabe und Gesamt-Verify ausfuehren"
     )
+    assert event[1]["status"] == "task_graph_complete"
+    assert event[1]["coverage_basis"] == "assigned_tasks_done"
+    assert "noch kein Zielnachweis" in event[1]["decision_summary"]
     assert "Ziel: Einzelnes Ziel" in event[1]["evidence"]
-    assert "Erfuellt: AC1 — Ziel ist belegt" in event[1]["evidence"]
+    assert "Task-Abdeckung erledigt: AC1 — Ziel ist belegt" in event[1]["evidence"]
 
 
 def test_task_ende_macht_fehlende_kriterienzuordnung_sichtbar(tmp_path):
@@ -733,10 +736,18 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
     from werkstatt.phase_state import PhaseState
     from werkstatt.phases import finalize, tasks
 
-    planned = [{"id": "t1", "name": "Implementierung"}]
+    planned = [{
+        "id": "t1",
+        "name": "Implementierung",
+        "criterion_refs": ["AC1"],
+    }]
     checkpoint_dir = tmp_path / ".werkstatt"
     phase_state = PhaseState("testproj", base_dir=checkpoint_dir)
-    phase_state.init_new("Resume Abschlusspruefung", planned)
+    phase_state.init_new(
+        "Resume Abschlusspruefung",
+        planned,
+        akzeptanzkriterien=["Gesamtziel ist erfuellt"],
+    )
     phase_state.mark_done("t1")
     phase_state.run_id = "testproj-resume-run"
     phase_state.save()
@@ -810,6 +821,27 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
         ("verify_post_commit", "phase_end"),
     ]
     assert any(event[0] == "loop_erfolg" for event in audit_events)
+    verified = [
+        event[1] for event in audit_events
+        if event[0] == "loop_criteria_progress"
+        and event[1].get("status") == "verified"
+    ]
+    assert verified == [{
+        "status": "verified",
+        "tracked": True,
+        "coverage_basis": "phase_end_review_and_verify",
+        "covered": ["AC1"],
+        "remaining": [],
+        "verification": "phase_end",
+        "decision_summary": (
+            "Der Task-Graph ist abgeschlossen und die "
+            "Abschlusspruefung hat das Gesamtziel bestaetigt."
+        ),
+        "evidence": [
+            "Alle zugeordneten Tasks sind erledigt.",
+            "Phase-End-Review, Human Gate und Abschluss-Verify bestanden.",
+        ],
+    }]
 
 def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
     tmp_path, monkeypatch,

@@ -6800,3 +6800,11 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 
 - **Beleg:** Der Explorer-Routing-Commit `30601d1` wurde als PR #53 in `1d360ac` gemergt. GitHub-Quality-CI lief erfolgreich; anschliessend verifizierte der Linux-Server denselben Main-Stand mit 2348 Tests bestanden, 5 uebersprungen, Ruff/Mypy/AST/Audit-Katalog ohne Fehler und `regression: false`.
 - **Einordnung:** Damit ist der Explorer-Routing-Teilschritt auf Main verifiziert. OP-398 bleibt offen; insbesondere ist der in `docs/IST-ZUSTAND-LOOP-2026-11-12.md` beschriebene feste Task-Graph mit Abbruch bei offenen Kriterien noch nicht in einen dynamischen, zielgebundenen Checkpoint-/Replan-Pfad ueberfuehrt.
+
+### Nachtrag — Task-Abdeckung von verifiziertem Ziel trennen
+
+- **Befund:** `criteria_progress()` leitet seine Abdeckung aus `done`-Tasks ab. Die Control-Timeline zeigte dies als „Erfuellt“ bzw. `complete`, obwohl Phase-End-Review, Human Gate und Gesamt-Verify zu diesem Zeitpunkt noch ausstanden.
+- **Aenderung:** Task-Checkpoint-Ereignisse nennen ihre Basis `assigned_tasks_done` und zeigen abgeschlossene Kriterienzuordnungen als Task-Abdeckung. Der naechste Schritt benennt Review, Freigabe und Gesamt-Verify. Erst nach erfolgreicher Abschlusskette schreibt der Finalizer `status=verified` mit `phase_end_review_and_verify`.
+- **Grenze:** Das macht die Evidenzsemantik ehrlich, fuehrt aber noch keine adaptive Neuplanung nach einem negativen Ziel-/Verify-Befund ein. Dafuer muss OP-398 einen eigenstaendigen, beleggebundenen Kriteriumsstatus erhalten; Taskstatus allein reicht dafuer nicht.
+- **Tests:** `tests/test_loop_phases.py` und `tests/test_live_feed_backend.py` pruefen Task-Abdeckung gegen Abschlussnachweis. 52 gezielte Tests bestanden.
+- **Verifikation:** `py -m pytest -q tests/test_loop_phases.py tests/test_live_feed_backend.py` bestanden. Ruff, Mypy, Doku-Drift und Linux-CI fuer diesen Stand stehen noch aus.

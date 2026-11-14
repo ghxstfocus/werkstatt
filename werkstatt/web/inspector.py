@@ -920,16 +920,22 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
             suffix += f" · Ergebnisbeleg {str(answer_hash)[:12]}"
         return f"Paralleler Chat-Job {state}{suffix}"
     if kind == "loop_criteria_progress":
+        status = str(payload.get("status") or "")
         covered = payload.get("covered")
         remaining = payload.get("remaining")
         covered_count = len(covered) if isinstance(covered, list) else 0
         remaining_count = len(remaining) if isinstance(remaining, list) else 0
         task = str(payload.get("task_id") or "").strip()
         suffix = f" nach {task}" if task else ""
-        if payload.get("tracked") is False:
+        if status == "verified":
+            summary = f"Zielkriterien durch Abschlusspruefung bestaetigt{suffix}"
+        elif payload.get("tracked") is False:
             summary = f"Zielabgleich ohne explizite Kriterienzuordnung{suffix}"
         else:
-            summary = f"{covered_count} erledigt, {remaining_count} offen{suffix}"
+            summary = (
+                f"Task-Abdeckung: {covered_count} erledigt, "
+                f"{remaining_count} offen{suffix}"
+            )
         next_step = str(payload.get("next_step") or "").strip()
         if next_step:
             summary += f"; danach: {next_step[:120]}"
