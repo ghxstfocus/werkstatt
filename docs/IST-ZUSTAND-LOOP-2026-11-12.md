@@ -4,17 +4,18 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Hauptlinienstand: `e35e2c1` (OP-398-Abschluss verweigert
-ungetrackten Akzeptanzkriterien). Der erste Linux-CI-Lauf fuer diesen Guard
-meldete 9 fehlgeschlagene, 2273 bestandene und 5 uebersprungene Tests; der
-Serverlauf auf demselben Commit bestaetigte dieselben neun Failures. Die
-Fehler zeigen, dass mehrere generische Erfolgs-Fixtures explizite Kriterien
-ohne `criterion_refs` enthielten. Die Produktionsregel bleibt fail-closed;
-die Fixtures werden jetzt mit echten AC-Zuordnungen korrigiert. Bis ein neuer
-vollstaendiger Linux-CI-Lauf gruen ist, ist OP-375 nicht zum erneuten Start
-empfohlen. Der aktuelle Serverstand entspricht `e35e2c1`; die Korrektur wird
-erst nach neuem Pull und erneutem Servertest dort belegt sein. GitHub Actions
-Quality Gate
+Gepruefter Hauptlinienstand: `026576f` (OP-398-Abschluss verweigert
+ungetrackten Akzeptanzkriterien; alte Erfolgs-Fixtures ordnen ihre Kriterien
+jetzt explizit den Tasks zu). Der erste Linux-CI-Lauf und der Serverlauf auf
+`e35e2c1` meldeten 9 fehlgeschlagene, 2273 bestandene und 5 uebersprungene
+Tests; die Fehler stammten aus generischen Erfolgs-Fixtures ohne
+`criterion_refs`. Die Produktionsregel bleibt fail-closed. Der vollstaendige
+Linux-CI-Lauf fuer `026576f` ist gruen: 2282 Tests bestanden, 5 uebersprungen;
+JavaScript-Syntax, Ruff und Quality Gate ebenfalls erfolgreich
+([Run 43598239222](https://github.com/ghxstfocus/werkstatt/actions/runs/43598239222)).
+OP-375 ist laut STATUS offen und nicht blockiert. Der Server muss `026576f`
+noch pullen und separat verifizieren; bis dahin ist der Serverlauf nicht als
+gruen belegt. GitHub Actions Quality Gate
 [43595830085](https://github.com/ghxstfocus/werkstatt/actions/runs/43595830085)
 lief fuer den vorherigen Code-Commit `88dd5b0` erfolgreich durch: Ruff,
 vollstaendiges pytest, AST-/Audit-Katalog und Quality Gate. Der Recovery-Beleg
