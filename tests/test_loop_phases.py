@@ -687,6 +687,44 @@ def test_finalize_blockiert_erfolg_wenn_akzeptanzkriterium_offen_ist(
     }]
 
 
+def test_finalize_blockiert_zielerfolg_bei_ungetrackten_akzeptanzkriterien(
+    tmp_path, monkeypatch,
+):
+    from werkstatt.phase_state import PhaseState
+
+    phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Ziel mit nicht zugeordneten Kriterien",
+        [{"id": "t1", "name": "Implementierung"}],
+        akzeptanzkriterien=["Belegbares Ziel"],
+    )
+    phase_state.mark_done("t1")
+    assert phase_state.criteria_progress()["tracked"] is False
+
+    rc, _order, events, _progress = _run_finalize_commit_order(
+        tmp_path, monkeypatch, True, phase_state=phase_state,
+    )
+
+    assert rc == 1
+    assert "loop_erfolg" not in [event[0] for event in events]
+    completion = [
+        event[1] for event in events
+        if event[0] == "loop_phase"
+        and event[1].get("phase") == "completion"
+    ]
+    assert completion == [{
+        "phase": "completion",
+        "status": "incomplete",
+        "reason": "criteria_untracked",
+        "tasks_ok": 1,
+        "tasks_total": 1,
+        "unresolved": [],
+        "criteria_covered": [],
+        "criteria_uncovered": [],
+        "criteria_error": "criteria_not_tracked",
+    }]
+
+
 
 def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
     tmp_path, monkeypatch,

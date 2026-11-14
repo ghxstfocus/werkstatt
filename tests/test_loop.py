@@ -179,6 +179,7 @@ def test_loop_stoppt_bei_verify_fail(tmp_path):
 
 def test_loop_happy_path(tmp_path):
     st = _state(tmp_path)
+    st.tasks = [{"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]}]
     # _verify_patches mocken (verhindert subprocess.run(pytest))
     with patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.loop.run_planner", return_value=True), \
@@ -227,7 +228,7 @@ def test_loop_cli_dry_run_uses_renderer():
 def test_loop_uses_phase_state(tmp_path):
     """Loop persistiert Task-Fortschritt in PhaseState."""
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1"}]
+    st.tasks = [{"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]}]
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=st.akzeptanzkriterien)
     with patch("werkstatt.loop._verify_patches", return_value=True), \
@@ -245,7 +246,10 @@ def test_loop_uses_phase_state(tmp_path):
 def test_loop_resume_nach_unterbrechung(tmp_path):
     """Resume: bereits erledigte Tasks werden uebersprungen."""
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1"}, {"id": "t2", "name": "Task 2"}]
+    st.tasks = [
+        {"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]},
+        {"id": "t2", "name": "Task 2", "criterion_refs": ["AC1"]},
+    ]
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=st.akzeptanzkriterien)
     ps.mark_done("t1")
@@ -372,7 +376,7 @@ def test_loop_preflight_vor_planner(tmp_path):
 def test_pre_build_uebersprungen_bei_follow_up(tmp_path):
     """M-299g: Pre-Build rot, aber Planner FOLLOW_UP -> Loop laeuft weiter."""
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1"}]
+    st.tasks = [{"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]}]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]
     st.blocker_fehler = []
@@ -450,7 +454,10 @@ def test_extract_files_from_tasks():
 def test_pre_build_deterministische_klassifikation(tmp_path):
     """M-299i: Baseline-Fehler ausserhalb Task-Dateien -> Loop laeuft weiter."""
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Update README.md", "description": "Add line"}]
+    st.tasks = [{
+        "id": "t1", "name": "Update README.md", "description": "Add line",
+        "criterion_refs": ["AC1"],
+    }]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]
     # Preflight-Fehler in NICHT-Task-Datei
@@ -561,13 +568,51 @@ def test_verify_patches_nutzt_venv_python(tmp_path):
     assert "python3" not in captured_cmds[0]
 
 
+def test_verify_resolves_bare_python3_to_project_venv(tmp_path):
+    """A generic config must not route module checks to the system Python."""
+    import json
+    from subprocess import CompletedProcess
+    from unittest.mock import patch
+
+    from werkstatt.verify import _verify_patches
+
+    st = _state(tmp_path)
+    st.project_name = "test-bare-python"
+    venv_python = tmp_path / ".venv" / "bin" / "python3"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("", encoding="utf-8")
+    venv_python.chmod(0o755)
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (contract_dir / "verify.json").write_text(json.dumps({
+        "stages": [{
+            "id": "ruff_changed",
+            "command": ["python3", "-m", "ruff", "check", "changed.py"],
+        }],
+    }), encoding="utf-8")
+    captured = []
+
+    def mock_run(cmd, **kwargs):
+        captured.append(list(cmd))
+        return CompletedProcess(cmd, 0, "", "")
+
+    with patch("werkstatt.orchestrator.load_project_config", return_value={
+        "venv_python": "python3", "project_dir": str(tmp_path),
+    }), patch("subprocess.run", side_effect=mock_run):
+        assert _verify_patches(st, phase="post_build") is True
+
+    assert captured[0][0] == str(venv_python)
+    assert captured[0][1:4] == ["-m", "ruff", "check"]
+
+
 def test_loop_task_read_only(tmp_path):
     """M-306d: read-only Task erzeugt keinen Patch."""
     st = _state(tmp_path)
     st.tasks = [
-        {"id": "t1", "name": "Lesen", "action": "read"},
+        {"id": "t1", "name": "Lesen", "action": "read",
+         "criterion_refs": ["AC1"]},
         {"id": "t2", "name": "Schreiben", "action": "update",
-         "task_files": ["app/foo.py"]},
+         "task_files": ["app/foo.py"], "criterion_refs": ["AC1"]},
     ]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]

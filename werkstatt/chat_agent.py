@@ -92,6 +92,11 @@ Dateiende-Auszug, Gesamtumfang und Zeichenbereich: wenn der angefragte Zeitraum
 nicht vollstaendig enthalten ist, lies den davorliegenden Bereich gezielt nach.
 Eine gekuerzte oder partielle Ausgabe belegt niemals, dass der Rest fehlt.
 Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich. Erfinde keine Zeilenangaben. Wenn ein Beleg fehlt, sage das offen.
+Lange eingefuegte Logs koennen im Modellkontext als gekennzeichnete
+Ereignis-/Fehlerauswahl erscheinen; das ist kein vollstaendiger Logbeleg.
+Nutze Run-ID, Sequenznummern und sichtbare Fehlerstellen daraus fuer gezielte
+audit_query-/Repo-Abfragen und frage nicht nach erneutem Einfuegen derselben
+Nachricht, wenn die relevanten Belege bereits im Chatturn stehen.
 Du bearbeitest Produktionsdateien nicht selbst und commitest nicht. Das ist
 eine klare Rollengrenze, aber kein Grund, einen Umsetzungsauftrag abzulehnen:
 der schreibende Projektloop ist deine Ausfuehrungsfaehigkeit. Wenn der Nutzer
@@ -153,6 +158,8 @@ statt zu raten. Wenn Belege fehlen, sage, was noch geprueft werden muss."""
 
 
 _CHAT_HISTORY_CHAR_BUDGET = 24_000
+MAX_CHAT_MESSAGE_CHARS = 200_000
+_CHAT_USER_MESSAGE_PROMPT_BUDGET = 24_000
 _CHAT_HISTORY_COMPACT_NOTE = (
     "Aeltere Dialogturns oder Werkzeugdetails wurden fuer das Kontextbudget "
     "gekuerzt. Der vollstaendige Verlauf bleibt gespeichert. Behandle die "
@@ -161,11 +168,101 @@ _CHAT_HISTORY_COMPACT_NOTE = (
 )
 
 
+def _verdichte_grosse_nutzernachricht(text: str) -> str:
+    """Keep large pasted logs usable without copying them wholesale to LLMs.
+
+    The original user event remains unchanged in the session store. This prompt
+    view keeps the request's opening/ending, structured failure/gate events,
+    and important plain-text lines within a hard character budget.
+    """
+    if len(text) <= _CHAT_USER_MESSAGE_PROMPT_BUDGET:
+        return text
+
+    import re
+
+    budget = _CHAT_USER_MESSAGE_PROMPT_BUDGET
+    boundary_budget = 5_000
+    first = text[:boundary_budget]
+    last = text[-boundary_budget:]
+    event_lines: list[str] = []
+    other_lines: list[str] = []
+    important = re.compile(
+        r"fail|error|exception|traceback|verify|review|gate|plan|architect|"
+        r"builder|stagnat|abbruch|abgelehnt|blockier|nicht bestanden|"
+        r"loop_(?:ended|failed|verify_failed)|llm_call_(?:start|end)",
+        re.IGNORECASE,
+    )
+    event_kinds = {
+        "loop_verify_failed", "reviewer_phase_rejected", "gate_open",
+        "loop_failed", "loop_ended", "planner_plan_abgelehnt",
+        "planner_architect_ok", "llm_call_start", "llm_call_end",
+        "loop_task_start", "loop_task_failed", "loop_reflection_runde",
+    }
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            record = None
+        if isinstance(record, dict) and isinstance(record.get("kind"), str):
+            kind = record["kind"]
+            if kind not in event_kinds:
+                continue
+            payload = record.get("payload")
+            compact: dict[str, Any] = {
+                key: record[key]
+                for key in ("seq", "ts", "run_id", "kind", "phase", "status")
+                if key in record
+            }
+            if isinstance(payload, dict):
+                fields = (
+                    "errors", "stages", "bugs", "severity", "file", "description",
+                    "result_summary", "decision_summary", "next_step", "task_id",
+                    "task_name", "files", "reason", "runde", "attempt", "prompt",
+                )
+                selected = {key: payload[key] for key in fields if key in payload}
+                encoded = json.dumps(selected, ensure_ascii=False, default=str)
+                if len(encoded) > 600:
+                    encoded = encoded[:350] + " … [gekürzt] … " + encoded[-200:]
+                compact["payload"] = encoded
+            event_lines.append(json.dumps(compact, ensure_ascii=False, default=str))
+        elif important.search(line):
+            other_lines.append(line[:700])
+
+    # Behalte in gemischten Logs Audit-Events und normale Traceback-Zeilen.
+    # Ein einzelnes JSONL-Event darf den eigentlichen Pytest-Fehler nicht
+    # aus dem Modellkontext verdraengen.
+    selected_lines = event_lines[-8:] + other_lines[-8:]
+    sections = [
+        (
+            "[Lange Nutzernachricht fuer den Modellkontext verdichtet. "
+            "Der vollstaendige Originaltext bleibt unveraendert im Sessionverlauf. "
+            "Unten stehen Anfang, wichtige Fehler-/Gate-Ereignisse und Ende; "
+            "dieser Auszug belegt keine Vollstaendigkeit.]"
+        ),
+        "--- Anfang der Nachricht ---\n" + first,
+        "--- Erkannte Ereignisse / Fehlerzeilen ---\n" + "\n".join(selected_lines),
+        "--- Ende der Nachricht ---\n" + last,
+    ]
+    result = "\n\n".join(sections)
+    if len(result) > budget:
+        result = result[:budget - 40] + "\n[… Kontextgrenze erreicht …]"
+    return result
+
+
 def _ereignis_messages(ev: dict[str, Any]) -> list[dict[str, Any]]:
     kind = ev.get("kind")
     p = ev.get("payload") or {}
     if kind == "user":
-        return [{"role": "user", "content": str(p.get("text", ""))}]
+        return [{
+            "role": "user",
+            "content": _verdichte_grosse_nutzernachricht(
+                str(p.get("text", "")),
+            ),
+        }]
     if kind == "assistant":
         return [{"role": "assistant", "content": str(p.get("text", ""))}]
     if kind == "job_turn":

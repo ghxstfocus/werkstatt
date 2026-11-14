@@ -1683,6 +1683,7 @@ def create_app() -> FastAPI:
     @app.post("/api/projects/{name}/chat/jobs", status_code=202)
     def chat_job_create(name: str, body: dict[str, Any]) -> dict[str, Any]:
         """Persistiert Chat-Arbeit und kehrt sofort mit einer Job-ID zurueck."""
+        from werkstatt.chat_agent import MAX_CHAT_MESSAGE_CHARS
         from werkstatt.chat_jobs import (
             IdempotencyConflict,
             enqueue_chat_job,
@@ -1700,8 +1701,11 @@ def create_app() -> FastAPI:
         sid = _pruefe_session_id(session_id)
         if not isinstance(message, str) or not message.strip():
             raise HTTPException(status_code=400, detail="message fehlt")
-        if len(message) > 20000:
-            raise HTTPException(status_code=413, detail="message zu lang")
+        if len(message) > MAX_CHAT_MESSAGE_CHARS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"message zu lang (Maximum {MAX_CHAT_MESSAGE_CHARS} Zeichen)",
+            )
         if mode not in ("read", "debugger"):
             raise HTTPException(
                 status_code=400,
@@ -2107,6 +2111,11 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="session_id fehlt")
         if not isinstance(message, str) or not message:
             raise HTTPException(status_code=400, detail="message fehlt")
+        if len(message) > _ca.MAX_CHAT_MESSAGE_CHARS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"message zu lang (Maximum {_ca.MAX_CHAT_MESSAGE_CHARS} Zeichen)",
+            )
         if mode not in ("read", "write", "debugger"):
             raise HTTPException(status_code=400, detail="mode ungueltig")
         sid = _pruefe_session_id(session_id)
@@ -2182,6 +2191,12 @@ def create_app() -> FastAPI:
                     message = roh.get("message")
                     if not isinstance(message, str) or not message:
                         raise HTTPException(status_code=400, detail="message fehlt")
+                    if len(message) > _ca.MAX_CHAT_MESSAGE_CHARS:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=("message zu lang "
+                                    f"(Maximum {_ca.MAX_CHAT_MESSAGE_CHARS} Zeichen)"),
+                        )
                     mode = str(roh.get("mode", "read"))
                     if mode not in ("read", "write"):
                         raise HTTPException(status_code=400, detail="mode ungueltig")

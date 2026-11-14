@@ -4,22 +4,25 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Hauptlinienstand: `d7f32e8` (Merge PR #25). GitHub Actions
-Quality Gate [43576037105](https://github.com/ghxstfocus/werkstatt/actions/runs/43576037105)
-bestand fuer den PR-Tree mit 2.262 Pytests und 5 uebersprungenen Tests,
-Ruff, Mypy, AST und Audit-Katalog. Der zuletzt vom Nutzer gemeldete
-Serverlauf aktualisierte `main` bis `3cbaf26` und bestand mit denselben
-2.262 Tests; er belegt nicht, dass der Server bereits `d7f32e8` ausfuehrt.
-Der zusaetzliche Recovery-Beleg aus PR #8 wurde auf Commit `2130019` mit
-Quality-Gate-Run
+Gepruefter Hauptlinienstand: `026576f` (OP-398-Abschluss verweigert
+ungetrackten Akzeptanzkriterien; alte Erfolgs-Fixtures ordnen ihre Kriterien
+jetzt explizit den Tasks zu). Der erste Linux-CI-Lauf und der Serverlauf auf
+`e35e2c1` meldeten 9 fehlgeschlagene, 2273 bestandene und 5 uebersprungene
+Tests; die Fehler stammten aus generischen Erfolgs-Fixtures ohne
+`criterion_refs`. Die Produktionsregel bleibt fail-closed. Der vollstaendige
+Linux-CI-Lauf fuer `026576f` ist gruen: 2282 Tests bestanden, 5 uebersprungen;
+JavaScript-Syntax, Ruff und Quality Gate ebenfalls erfolgreich
+([Run 43598239222](https://github.com/ghxstfocus/werkstatt/actions/runs/43598239222)).
+OP-375 ist laut STATUS offen und nicht blockiert. Der Server muss `026576f`
+noch pullen und separat verifizieren; bis dahin ist der Serverlauf nicht als
+gruen belegt. GitHub Actions Quality Gate
+[43595830085](https://github.com/ghxstfocus/werkstatt/actions/runs/43595830085)
+lief fuer den vorherigen Code-Commit `88dd5b0` erfolgreich durch: Ruff,
+vollstaendiges pytest, AST-/Audit-Katalog und Quality Gate. Der Recovery-Beleg
+aus PR #8 bleibt separat auf Commit `2130019` mit Quality-Gate-Run
 [43488902240](https://github.com/ghxstfocus/werkstatt/actions/runs/43488902240)
-erfolgreich verifiziert. Seit der letzten Bestandsaufnahme
-wurden unter anderem Akzeptanzkriterien explizit auf Tasks abgebildet und als
-Checkpoint-Daten erhalten, Verify-Reparaturen auf betroffene Stages begrenzt
-und danach die vollstaendige Phase-End-Pruefung erneut ausgefuehrt. Der
-Werkzeugdialog erkennt wiederholte und alternierende Werkzeugzyklen ohne
-pauschale Rundengrenze. Diese CI-Belege betreffen den Repository-Stand, nicht
-den aktuell laufenden Produktionsserver.
+verifiziert. Diese CI-Belege bestaetigen den jeweiligen Repository-Stand,
+nicht den aktuell laufenden Produktionsserver.
 
 ## Chat-Belegsuche: GNU-grep-Alternation
 
@@ -46,6 +49,48 @@ pruefen konkrete Projector-/Inspector-Signaturen, ausgeschlossene Dateien,
 Pfad-Traversal und die Auszugslimits. Das macht den Scout nicht zum
 Pflichtschritt: der Planner darf ihn bei einem expliziten, belegten Einzel-
 Dateiziel weiterhin ueberspringen.
+
+### Chat-Kontext fuer grosse Lognachrichten
+
+Die Hintergrund-Chat-API lehnte Nutzernachrichten ab 20.001 Zeichen mit HTTP
+413 ab; dadurch konnte der Werkstatt-Chat grosse Run-Logs nicht einmal
+annehmen. Der harte Transportdeckel liegt jetzt bei 200.000 Zeichen. Bei
+Nachrichten ueber 24.000 Zeichen bleibt der Originaltext unveraendert im
+Sessionverlauf, waehrend der Modellkontext eine explizit markierte Auswahl aus
+Anfang, Ende und relevanten JSONL-Fehler-/Gate-Ereignissen erhaelt. Das ist
+kein Vollstaendigkeitsbeleg; die Systemanweisung verlangt gezielte Folgefragen
+an Repo-/Audit-Tools anhand sichtbarer Run- und Sequenz-IDs. REST, Job-API und
+WebSocket teilen dieselbe Groessengrenze.
+
+Bei gemischten Logs mit JSONL-Audit-Eintraegen und normalem Text-Traceback
+muessen beide Evidenzarten in der Modellansicht erhalten bleiben; ein
+vorhandenes Audit-Event darf die Pytest-Fehlerzeilen nicht verdraengen.
+
+### Nachpruefung: API-Wirkungen und Verify-Interpreter
+
+Der vorherige Signaturauszug war nur Prompt-Kontext: er belegte Namen und
+Signaturen, setzte aber weder eine verbindliche API-Pruefung vor dem Builder
+noch eine Lese-/Schreibwirkung durch. Das zeigte OP-375: `get_run_record()`
+und `transition_run_status()` existieren tatsaechlich in
+`werkstatt/event_store.py`; der Architect hatte also keine fehlenden Methoden
+erfunden. Der Plan setzte aber die schreibende Statusmutation
+`transition_run_status()` in einen Lese-Aggregator. Der Reviewer bemerkte den
+Seiteneffekt erst nach dem Builder-Aufruf. Der AST-Index kennzeichnet jetzt
+erkennbare Effekte; der Architect-Preflight verwirft unbelegte APIs und
+Schreib- oder unbekannte Effekte in einem als read-only beschriebenen
+Aggregator vor Planner-Split und Builder und gibt einen Korrekturversuch.
+Das ist ein deterministischer Guard fuer codeartig referenzierte APIs, kein
+allgemeiner Beweis beliebiger Python-Purity.
+
+Der OP-375-Run protokollierte ausserdem Ruff-, Mypy- und Import-Linter-Ausfaelle,
+weil `projects/werkstatt.yaml` nur `venv_python: python3` vorgab und die
+Verify-Stages dadurch System-Python bzw. System-Tools verwendeten. Verify loest
+eine solche generische Angabe jetzt auf die Projekt-`.venv` auf, sofern sie
+existiert; explizite Interpreterpfade bleiben vorrangig. Die Regression wird
+lokal unter Windows gezielt getestet; der komplette Loop-Testlauf ist dort
+nicht als Linux-Nachweis verwendbar, weil Projektkonfiguration und POSIX-
+Annahmen einen grossen Teil der Tests fail-closed abbrechen lassen. CI muss
+den Linux-Qualitaetslauf fuer den Branch bestaetigen.
 
 ## Kurzbefund
 
@@ -172,6 +217,16 @@ Struktur- und Abdeckungsfehler vor der Ausfuehrung. Der Run disponiert Tasks
 aber weiterhin aus dem freigegebenen Plan in einer festen Task-Schleife,
 statt an Checkpoints gegen offene Kriterien neu zu waehlen; der zielorientierte
 Arbeitsgraph von OP-398 bleibt offen.
+
+Ein Abschlussfehler wurde nachgeprueft: `_task_ende()` markierte fehlende
+Kriterienzuordnung korrekt als `untracked` und liess das Ziel offen; der
+Finalizer blockierte den Erfolg aber nur bei `tracked=True` mit offenen
+Kriterien. Ein Checkpoint mit expliziten Akzeptanzkriterien ohne Zuordnung
+konnte daher trotzdem `loop_erfolg` ausgeben. Der Finalizer lehnt diesen Fall
+jetzt mit `criteria_untracked` ab. Auftraege ohne explizite Kriterien behalten
+ihren bisherigen Abschlussweg. Die Regression prueft einen zuvor gruenden
+Endlauf und verlangt nun `rc=1`, einen sichtbaren unvollstaendigen Abschluss
+und kein `loop_erfolg`.
 
 ### Nachpruefung: Rollenrouting und Spec-First-Runtime
 

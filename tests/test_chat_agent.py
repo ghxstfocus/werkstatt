@@ -39,6 +39,39 @@ def test_prompt_directs_recent_append_only_reads_to_tail_evidence():
     assert "Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich" in chat_agent._SYSTEM_PROMPT
 
 
+def test_large_pasted_jsonl_is_compacted_but_session_event_stays_unchanged():
+    records = [
+        {"seq": i, "ts": f"2026-11-14T10:{i:02}:00Z", "kind": "loop_step", "payload": {}}
+        for i in range(30)
+    ]
+    records.extend([
+        {
+            "seq": 31, "run_id": "run-important", "kind": "loop_verify_failed",
+            "payload": {"errors": ["ruff missing", "mypy missing"], "stages": ["ruff", "mypy"]},
+        },
+        {
+            "seq": 32, "run_id": "run-important", "kind": "reviewer_phase_rejected",
+            "payload": {"bugs": [{"severity": "high", "file": "inspector.py", "description": "side effect"}]},
+        },
+    ])
+    original = "PLEASE ANALYZE THIS RUN\n" + "\n".join(
+        json.dumps(record) for record in records
+    ) + "\nAssertionError: mixed-log-regression-marker\n" + "padding " * 20_000 + "\nEND OF ATTACHED LOG"
+    events = [{"kind": "user", "payload": {"text": original}}]
+
+    messages = chat_agent._baue_messages(events)
+    prompt_text = messages[-1]["content"]
+
+    assert len(prompt_text) <= chat_agent._CHAT_USER_MESSAGE_PROMPT_BUDGET
+    assert "PLEASE ANALYZE THIS RUN" in prompt_text
+    assert "END OF ATTACHED LOG" in prompt_text
+    assert "loop_verify_failed" in prompt_text
+    assert "reviewer_phase_rejected" in prompt_text
+    assert "run-important" in prompt_text
+    assert "mixed-log-regression-marker" in prompt_text
+    assert events[0]["payload"]["text"] == original
+
+
 def test_prompt_hands_implementation_requests_to_the_loop():
     prompt = chat_agent._SYSTEM_PROMPT
     assert "OP oder einen konkreten Projektauftrag bearbeiten" in prompt

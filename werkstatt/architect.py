@@ -197,6 +197,34 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
             if isinstance(item, dict):
                 add_path(item.get("file"))
 
+    # Include direct in-repository imports of the task targets. This exposes
+    # the interface and side-effect class of dependencies such as EventStore,
+    # which Explorer may not list as a primary file.
+    dependency_symbols: dict[str, set[str]] = {}
+    for source_path in tuple(candidates):
+        source_entry = api_index.get(source_path) or api_index.get(
+            source_path.replace("/", "\\")
+        )
+        if not isinstance(source_entry, dict):
+            continue
+        for imported in source_entry.get("imports", []):
+            if not isinstance(imported, dict):
+                continue
+            module = imported.get("from")
+            if not isinstance(module, str) or not module.startswith("werkstatt."):
+                plain_module = imported.get("import")
+                module = plain_module if isinstance(plain_module, str) else ""
+            if not isinstance(module, str) or not module.startswith("werkstatt."):
+                continue
+            dependency = module.replace(".", "/") + ".py"
+            if dependency not in api_index and dependency.replace("/", "\\") not in api_index:
+                continue
+            add_path(dependency)
+            names = imported.get("names") or []
+            dependency_symbols.setdefault(dependency, set()).update(
+                name for name in names if isinstance(name, str)
+            )
+
     if not candidates:
         return ""
 
@@ -228,16 +256,20 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
             [],
         )
         requested_names: set[str] = set()
+        explicitly_requested_names: set[str] = set()
         if isinstance(requested, (list, tuple)):
             for symbol in requested:
                 if isinstance(symbol, str):
                     display_symbol = symbol.replace("\r", " ").replace("\n", " ")[:160]
                     qualified = display_symbol.split("(", 1)[0]
-                    requested_names.update(
+                    names = {
                         part for part in qualified.split(".")
                         if part and part.isidentifier()
-                    )
+                    }
+                    requested_names.update(names)
+                    explicitly_requested_names.update(names)
                     lines.append(f"Scout nennt: {display_symbol}")
+        requested_names.update(dependency_symbols.get(path, set()))
         symbols = 0
         for function in entry.get("functions", []):
             if signature_budget <= 0:
@@ -248,7 +280,9 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
                 continue
             args = ", ".join(function.get("args", []))
             result = f" -> {function['return']}" if function.get("return") else ""
-            lines.append(f"def {function.get('name', '?')}({args}){result}")
+            effect = function.get("effects")
+            effect_text = f" [effect: {effect}]" if effect else ""
+            lines.append(f"def {function.get('name', '?')}({args}){result}{effect_text}")
             symbols += 1
             signature_budget -= 1
         for class_info in entry.get("classes", []):
@@ -272,12 +306,25 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
                     break
                 if not isinstance(method, dict):
                     continue
-                if requested_names and method.get("name") not in requested_names:
+                # Imported classes are expanded to their public interface;
+                # private helpers are implementation details and crowd out
+                # the APIs the Architect must choose between.
+                if (
+                    str(method.get("name", "")).startswith("_")
+                    and method.get("name") not in explicitly_requested_names
+                ):
+                    continue
+                if (
+                    requested_names
+                    and class_name not in requested_names
+                    and method.get("name") not in requested_names
+                ):
                     continue
                 args = ", ".join(method.get("args", []))
                 result = f" -> {method['return']}" if method.get("return") else ""
                 lines.append(
                     f"  def {method.get('name', '?')}({args}){result}"
+                    f" [effect: {method.get('effects', 'unknown')}]"
                 )
                 symbols += 1
                 signature_budget -= 1
@@ -290,6 +337,115 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
             lines.append("(Signaturauszug begrenzt; weitere APIs hier nicht aufgefuehrt)")
             break
     return "<verified_target_apis>\n" + "\n".join(lines) + "\n</verified_target_apis>"
+
+
+def _pruefe_architect_api_referenzen(prosa: str, api_index: dict) -> list[str]:
+    """Reject unproven existing API calls before the plan reaches the Builder.
+
+    The AST block in the prompt is helpful context, not an enforcement
+    boundary. This check treats code-shaped calls as existing interfaces only
+    when the current AST index contains the symbol. An absent symbol is
+    accepted only when the Architect explicitly labels it as a new API nearby.
+    """
+    import re
+
+    from werkstatt.scout import _finde_api
+
+    if not isinstance(prosa, str):
+        return ["Architect-Antwort ist kein Text."]
+
+    # Backticked identifiers are the Architect's explicit code/API references.
+    # Also inspect dotted calls outside code spans so formatting cannot evade
+    # the check. The system prompt requires new APIs to be marked explicitly.
+    code_spans = list(re.finditer(r"`([^`]+)`", prosa))
+    references: list[tuple[str, int, str]] = []
+    call_pattern = re.compile(
+        r"(?<![\w.])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\("
+    )
+    for span in code_spans:
+        for match in call_pattern.finditer(span.group(1)):
+            references.append((match.group(1), span.start(1) + match.start(), span.group(1)))
+    for match in re.finditer(
+        r"(?<![\w.])([A-Z][A-Za-z0-9_]*\.[A-Za-z_]\w*)\s*\(", prosa
+    ):
+        item = (match.group(1), match.start(), prosa[max(0, match.start()-80):match.end()+80])
+        if not any(symbol == item[0] and offset == item[1] for symbol, offset, _ in references):
+            references.append(item)
+
+    if references and (not isinstance(api_index, dict) or not api_index):
+        return ["Der aktuelle AST-API-Index fehlt; Architect-Plan nicht belegbar."]
+
+    missing: list[str] = []
+    seen: set[str] = set()
+    new_marker = re.compile(
+        r"\b(?:neu(?:e|en|er|es)?|hinzuf(?:ue|ü)gen|implementier(?:en|t|e))\b",
+        re.IGNORECASE,
+    )
+    builtin_calls = {
+        "all", "any", "bool", "dict", "enumerate", "filter", "float",
+        "getattr", "hasattr", "int", "isinstance", "iter", "len", "list",
+        "map", "max", "min", "next", "open", "print", "range", "repr",
+        "reversed", "round", "set", "sorted", "str", "sum", "tuple", "type",
+        "zip",
+    }
+    common_container_methods = {
+        "append", "clear", "copy", "count", "extend", "get", "index",
+        "insert", "items", "keys", "pop", "remove", "setdefault", "sort",
+        "update", "values",
+    }
+    for symbol, offset, context in references:
+        short_name = symbol.rsplit(".", 1)[-1]
+        if short_name in builtin_calls | {"if", "for", "while", "with", "except", "assert"}:
+            continue
+        parts = symbol.split(".")
+        qualifier = parts[-2] if len(parts) > 1 else ""
+        qualified_matches = [
+            *_finde_api(api_index, symbol),
+            *(_finde_api(api_index, ".".join(parts[-2:])) if len(parts) > 1 else []),
+        ]
+        qualifier_is_project_class = bool(
+            qualifier and any(
+                match.get("kind") == "class"
+                for match in _finde_api(api_index, qualifier)
+            )
+        )
+        matches = qualified_matches or (
+            [] if qualifier_is_project_class else _finde_api(api_index, short_name)
+        )
+        if matches:
+            section_start = prosa.rfind("## ", 0, offset)
+            next_section = prosa.find("\n## ", offset)
+            if section_start >= 0:
+                section_end = next_section if next_section >= 0 else len(prosa)
+                section = prosa[section_start:section_end]
+            else:
+                section = ""
+            is_read_aggregate = bool(re.search(
+                r"\baggregate_[a-z0-9_]+\b|\b(?:read.only|read-only|"
+                r"read aggregator|leseaggregator|GET-handler)\b",
+                section,
+                re.IGNORECASE,
+            ))
+            unsafe_read_effects = sorted({
+                str(match.get("effects", "unknown"))
+                for match in matches
+                if match.get("effects", "unknown") != "read"
+            })
+            if is_read_aggregate and unsafe_read_effects:
+                missing.append(
+                    f"{symbol} (Effekt {', '.join(unsafe_read_effects)} "
+                    "in Read-Aggregator nicht als read belegt)"
+                )
+            continue
+        if qualifier and short_name in common_container_methods:
+            continue
+        neighborhood = prosa[max(0, offset - 100):offset + len(context) + 100]
+        if new_marker.search(neighborhood):
+            continue
+        if symbol not in seen:
+            missing.append(symbol)
+            seen.add(symbol)
+    return missing
 
 
 def _format_explorer_findings(f: dict) -> str:
@@ -521,6 +677,25 @@ Live-Beleg: 64 Zeilen toter Code, nur von Tests importiert.
 - Bei "neuer Helper in bestehender Datei" immer dazuschreiben, WER
   den Helper aufruft (nicht nur "wird von Test Y getestet").
 - Wenn nur Tests rufen: das ist Dead-Code im Produktivpfad.
+
+## DETERMINISTISCHER API-VERTRAG (PFLICHT)
+
+- Verwende bestehende Projekt-APIs nur, wenn sie im aktuellen AST-Auszug
+  belegt sind. Schreibe jeden API-Aufruf in Backticks, zum Beispiel
+  `EventStore.append(...)`.
+- Jede nicht vorhandene Funktion/Methode/Klasse muss im selben Abschnitt
+  ausdruecklich als NEU markiert sein (z.B. "neue Methode
+  `Projector.backfill(...)`"). Der Builder darf neue APIs nur bauen, wenn
+  sie im Architect-Plan als neu markiert und einem betroffenen Datei-Block
+  zugeordnet sind.
+- Der Loop prueft codeartige Aufrufe nach deiner Antwort gegen den aktuellen
+  AST-Index einschliesslich belegbarer Lese-/Schreibwirkung. Ein nicht
+  belegter Aufruf ohne NEU-Markierung oder ein Schreib-API in einem
+  Read-Aggregator verwirft den Plan vor Planner-Split, Plan-Gate und Builder.
+  Der Architect erhaelt den Befund fuer eine gezielte Korrektur.
+- Behaupte niemals, ein im AST fehlendes API sei vorhanden. Wenn der AST-Auszug
+  fehlt oder eine Signatur nicht sicher zugeordnet werden kann, markiere die
+  Schnittstelle als offen und plane zuerst den tatsaechlichen Vertrag.
 
 ## GOLD: SCOUT-KONTEXT
 Du bekommst im User-Content:
@@ -967,29 +1142,58 @@ def run_architect(
         (_arch_skills_block + "\n\n" if _arch_skills_block else "")
         + _arch_sys_base + "\n\n" + _BUILDER_SCHNITTSTELLE
     )
-    _arch_reply = _with_spinner(
-        "Architect",
-        lambda: ask_llm(
-            api_key, _arch_sys, _arch_user_content,
-            model=_get_architect_model(),
-            temperature=0.2, max_tokens=ARCHITECT_MAX_TOKENS,
-            aufgabe="architect", heartbeat=False, state=state,
-        ),
-    )
-    if not _arch_reply.ok:
-        audit("planner_architect_llm_fehler",
-              {"fehler": _arch_reply.error}, pd, pn)
-        return False
-    _arch_prosa = _strip_xml_tags(_arch_reply.content.strip())
-    if len(_arch_prosa.strip()) < 50:
-        audit("planner_architect_prosa_zu_kurz",
-              {"len": len(_arch_prosa),
-               "raw_prefix": _arch_reply.content[:200]}, pd, pn)
-        return False
-    audit("planner_architect_ok",
-          {"prosa_len": len(_arch_prosa)}, pd, pn)
-    state.architect_prosa = _arch_prosa
-    return True
+    _korrekturhinweis = ""
+    for _versuch in range(2):
+        _sys_prompt = _arch_sys + _korrekturhinweis
+        _arch_reply = _with_spinner(
+            "Architect",
+            lambda _prompt=_sys_prompt: ask_llm(
+                api_key, _prompt, _arch_user_content,
+                model=_get_architect_model(),
+                temperature=0.2, max_tokens=ARCHITECT_MAX_TOKENS,
+                aufgabe="architect", heartbeat=False, state=state,
+            ),
+        )
+        if not _arch_reply.ok:
+            audit("planner_architect_llm_fehler",
+                  {"fehler": _arch_reply.error, "versuch": _versuch + 1}, pd, pn)
+            return False
+        _arch_prosa = _strip_xml_tags(_arch_reply.content.strip())
+        if len(_arch_prosa.strip()) < 50:
+            audit("planner_architect_prosa_zu_kurz",
+                  {"len": len(_arch_prosa),
+                   "raw_prefix": _arch_reply.content[:200]}, pd, pn)
+            return False
+
+        _api_befunde = _pruefe_architect_api_referenzen(
+            _arch_prosa, getattr(state, "api_index_cache", {}) or {},
+        )
+        if not _api_befunde:
+            audit("planner_architect_ok",
+                  {"prosa_len": len(_arch_prosa),
+                   "api_preflight": "bestanden",
+                   "korrekturversuche": _versuch}, pd, pn)
+            state.architect_prosa = _arch_prosa
+            return True
+
+        audit("planner_plan_abgelehnt", {
+            "quelle": "architect_api_preflight",
+            "versuch": _versuch + 1,
+            "befunde": _api_befunde[:20],
+        }, pd, pn)
+        if _versuch == 0:
+            _korrekturhinweis = (
+                "\n\n## Deterministischer API-Preflight: PLAN KORRIGIEREN\n"
+                "Der vorherige Entwurf wurde vor dem Builder verworfen. "
+                "Diese codeartigen API-Aufrufe sind im aktuellen AST nicht "
+                "belegt:\n"
+                + "\n".join(f"- {item}" for item in _api_befunde[:20])
+                + "\nEntferne sie, ersetze sie durch belegte APIs oder markiere "
+                "die tatsaechlich neu zu implementierende API im passenden "
+                "Datei-Abschnitt ausdruecklich als NEU. Gib den vollstaendig "
+                "korrigierten Plan erneut aus.\n"
+            )
+    return False
 
 
 __all__ = [

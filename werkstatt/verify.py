@@ -407,6 +407,32 @@ def _resolve_venv_cmd(
     return cmd
 
 
+def _projekt_venv_python(project_dir: Path, configured: str | None) -> str:
+    """Resolve generic `python3` config to the target project's own venv.
+
+    A bare `python3` is PATH-dependent and may select the system interpreter,
+    which makes installed project verification tools appear missing. Honor an
+    explicit interpreter path, but prefer the project's venv for generic or
+    absent configuration.
+    """
+    import os as _os
+
+    configured = str(configured or "").strip()
+    is_bare_python = configured in {"python", "python3"}
+    candidates = (
+        [
+            project_dir / ".venv" / "bin" / "python3",
+            project_dir / ".venv" / "bin" / "python",
+            project_dir / ".venv" / "Scripts" / "python.exe",
+        ]
+        if not configured or is_bare_python else []
+    )
+    for candidate in candidates:
+        if candidate.is_file() and _os.access(candidate, _os.X_OK):
+            return str(candidate)
+    return configured or "python3"
+
+
 def _ruff_fix_changed(state: RunState) -> None:
     """GOLD 2026-10-30: ruff --fix auf geaenderte Dateien.
 
@@ -470,16 +496,17 @@ def _verify_patches(
     # M-306c: venv_python aus projects/<name>.yaml (verhindert,
     # dass Verify im Zielprojekt mit System-Python laeuft und
     # Dependencies nicht findet).
-    _venv_python = "python3"  # Fallback
+    _configured_python = ""
     _project_name = state.project_name
     if _project_name:
         try:
             from werkstatt.orchestrator import load_project_config
             _cfg = load_project_config(_project_name)
             if _cfg.get("venv_python"):
-                _venv_python = _cfg["venv_python"]
+                _configured_python = str(_cfg["venv_python"])
         except (SystemExit, Exception):
-            pass  # Fallback auf python3
+            pass  # Projekt-venv wird unten direkt ermittelt.
+    _venv_python = _projekt_venv_python(project_dir, _configured_python)
 
     # 1. Projekt-Contract lesen
     contract_file = project_dir / ".werkstatt" / "verify.json"

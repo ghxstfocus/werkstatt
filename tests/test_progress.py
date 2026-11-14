@@ -81,7 +81,7 @@ def test_loop_schreibt_progress(tmp_path):
         agent_docs={}, project_dir=tmp_path, project_name="p"
     )
     st.tasks = [{"id": "t1", "name": "Test-Task", "action": "update",
-                 "task_files": ["app/foo.py"]}]
+                 "task_files": ["app/foo.py"], "criterion_refs": ["AC1"]}]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]
 

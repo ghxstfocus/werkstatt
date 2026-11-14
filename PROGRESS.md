@@ -6635,3 +6635,48 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **OP-Graph-Audit:** Die kanonische Queue enthaelt 17 offene OPs und 12 eingetragene Blocker-Kanten. Es gibt keine Referenzen auf fehlende OP-Abschnitte und keine Zyklen. Neun OPs haben keinen direkten Blocker-Eintrag; das allein belegt noch keine Startfaehigkeit, da Selector und Akzeptanzkriterien separat gelten.
 - **Verbleibende Kernluecke:** OP-398s zielorientierter Arbeitsgraph und OP-401s fachliche Disposition bestaetigter Folgeauftraege sind weiterhin offen. Die Inbox speichert und quittiert den Eingang, uebernimmt den Auftrag aber noch nicht in den Arbeitsgraphen.
 - **Verifikation:** Strikter Doku-Drift-Check und `git diff --check` bestanden; keine Codeaenderung in diesem Eintrag.
+
+## 2026-11-14 — OP-374 abgeschlossen und OP-375 entblockt
+
+- **Abschlussbeleg:** OP-374 wurde mit PR #29 auf `main` gemergt (`955711c`). Die Umsetzung liefert projektbezogenes, idempotentes `Projector.backfill(project)`, filtert Runs ohne belastbare Run-ID und weist Events ohne verifizierte Herkunft getrennt aus; solche Runs zaehlen nicht als verifizierter Erfolg.
+- **Verifikation:** Der OP-374-PR-Quality-Run [43590302361](https://github.com/ghxstfocus/werkstatt/actions/runs/43590302361) fuer `12c5c4d` bestand; der Server meldet auf Merge `955711c` 2.271 Tests bestanden und 5 uebersprungen. Tests decken Backfill-Wiederholung, Projektisolation, leere Run-IDs und unverifizierte Herkunft ab.
+- **Queue:** OP-374 aus den offenen Punkten entfernt. OP-375 bleibt offen, ist aber nicht mehr durch die abgeschlossene OP blockiert.
+
+## 2026-11-14 — Verify waehlt Projekt-Interpreter; Architect prueft API-Wirkung vor Builder
+
+- **Befund:** OP-375 belegt, dass `EventStore.get_run_record()` und `transition_run_status()` beide existieren. Der Fehler war semantisch: der zweite Aufruf mutiert den gespeicherten Run-Status und stand trotzdem im Lese-Aggregator-Plan. Der bisherige AST-Auszug war Prompt-Kontext, kein deterministischer Plan-Guard. Derselbe Run liess Verify-Stages mit der generischen Konfiguration `venv_python: python3` unter System-Python laufen; Ruff, Mypy und Import-Linter fehlten dort.
+- **Aenderung:** AST-Symbole tragen jetzt konservative `read`/`write`/`unknown`-Wirkungsbelege. Architect bekommt die relevanten direkten internen Abhaengigkeiten samt oeffentlicher API; vor Planner-Split/Builder verwirft ein Preflight unbelegte API-Aufrufe und nicht als `read` belegte Aufrufe in Read-Aggregatoren. Ein gezielter Architect-Korrekturversuch ist moeglich. Verify bevorzugt fuer generisches `python3` die vorhandene Projekt-`.venv`; explizite Interpreterpfade bleiben erhalten. AST-Indexpfade werden plattformunabhaengig mit `/` ausgegeben.
+- **Gezielte Verifikation:** `tests/test_architect_target_api_evidence.py`, `tests/test_loop_planner_architect.py` und `tests/test_scout_kette.py`: 51 bestanden. Verify-Interpreter-Regression und Architect-Evidence: 10 bestanden. Ruff fuer geaenderte Dateien und `git diff --check`: bestanden. Der vollstaendige `tests/test_loop.py`-Lauf unter Windows ist nicht gruen (19 umgebungs-/POSIX-bedingte Fehler, darunter fehlende Linux-Projektkonfiguration); er ist kein Linux-Qualitaetsnachweis. Linux-CI muss noch laufen.
+
+
+## 2026-11-14 — Grosse Chat-Lognachrichten annehmen und kompakt analysieren
+
+- **Befund:** `/api/projects/{name}/chat/jobs` lehnte Nachrichten ueber 20.000 Zeichen mit HTTP 413 ab. Chat turns ueber 24.000 Zeichen wurden ausserdem ungekürzt in den Modellprompt kopiert.
+- **Aenderung:** Der gemeinsame harte Eingabedeckel betraegt 200.000 Zeichen fuer Job-REST, direkten Chat und WebSocket. Modellnachrichten ueber 24.000 Zeichen werden deterministisch auf markierten Anfang, Ende und priorisierte JSONL-Fehler-/Gate-Ereignisse verdichtet; der persistierte Sessionturn bleibt vollstaendig. ADR-0032 und die Loop-Ist-Aufnahme nennen die Vollstaendigkeitsgrenze.
+- **Verifikation:** Chat-Agent, Job-API und Frontend: 74 bestanden. Ruff und `git diff --check`: bestanden. `tools/doku_check.py --strict --limit 10 --worktree`: vor Doku-Nachzug meldete es erwartungsgemaess den uncommitteten Code-Drift; nach Doku-Nachzug erneut ausfuehren.
+
+### Nachpruefung: gemischte Audit- und Pytest-Logs
+
+- **Befund:** Die Verdichtung waehlt in gemischten langen Logs bisher entweder JSONL-Ereignisse oder normale Fehlerzeilen. Sobald ein passendes Audit-Event vorkommt, kann der Text-Traceback aus dem Modellkontext fallen.
+- **Aenderung:** Die kompakte Ansicht behaelt bis zu acht relevante JSONL-Ereignisse und acht relevante normale Fehler-/Gate-Zeilen gemeinsam. Der persistierte Chatturn bleibt unveraendert.
+- **Regression:** Der grosse Log-Test enthaelt gleichzeitig Audit-Events und einen markierten Pytest-Assertion-Fehler und verlangt beide im Modellkontext.
+- **Verifikation:** Chat-Agent, Job-API und Frontend: 74 bestanden, 1 bekannte StarletteDeprecationWarning. Ruff, strikter Doku-Drift-Check und `git diff --check`: bestanden. GitHub Actions Quality Gate fuer Code-Commit `88dd5b0` bestand mit vollem Pytest-Lauf, Ruff, AST-/Audit-Checks und Quality Gate: [Run 43595830085](https://github.com/ghxstfocus/werkstatt/actions/runs/43595830085).
+
+### Nachtrag — Hauptlinienstand der Loop-Ist-Aufnahme berichtigt
+
+- **Befund:** Die Kopfzeile der Loop-Ist-Aufnahme nannte nach dem Log-Kontextfix weiterhin `554a692` als geprueften Hauptlinienstand, obwohl `main` bereits `9c9e14f` erreicht hatte.
+- **Korrektur:** Die Aufnahme wurde erst auf den Doku-Stand `9c9e14f` und danach auf den aktuellen Code-Stand `bbe078c` nachgezogen. Der CI-Beleg fuer `88dd5b0` wird nicht den spaeteren Commits zugeschrieben; fuer `bbe078c` ist Linux-CI noch offen. Serverbetrieb bleibt separat unverifiziert.
+- **Verifikation:** Git-Remote bestaetigte `HEAD == origin/main == 9c9e14f` vor dem Loop-Fix; `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check` bestanden.
+
+## 2026-11-14 — OP-398: ungetrackte Kriterien duerfen keinen Zielerfolg melden
+
+- **Befund:** `PhaseState.criteria_progress()` konnte `tracked=False` liefern, wenn ein Checkpoint explizite Akzeptanzkriterien, aber keine `criterion_refs` enthielt. Der Task-Checkpoint sagte dann korrekt „Ziel bleibt offen“, doch `phases/finalize.py` pruefte nur `tracked=True` und konnte danach trotzdem `loop_erfolg` auditieren.
+- **Aenderung:** Explizite Kriterien ohne gueltigen Tracking-Beleg blockieren jetzt den Zielabschluss mit `reason=criteria_untracked`; Kriterienstatus und Fehlergrund bleiben im Completion-Event sichtbar. Auftraege ohne explizite Akzeptanzkriterien bleiben kompatibel.
+- **Regression:** Der neue Test reproduzierte vor dem Fix `rc=0` und nach dem Fix verlangt er `rc=1`, einen unvollstaendigen Completion-Eintrag sowie kein `loop_erfolg`.
+- **Verifikation:** `tests/test_loop_phases.py`, `tests/test_phase_state.py` und `tests/test_planner_agent.py`: 93 bestanden, 3 uebersprungen. Ruff fuer Finalizer und Loop-Phasentests, `tools/doku_check.py --strict --limit 10 --worktree` sowie `git diff --check` bestanden.
+
+### Nachbesserung nach Linux-CI — AC-Zuordnungen in Loop-Fixtures
+
+- **Befund:** Der erste CI-Lauf fuer den Finalizer-Guard und der anschliessende Serverlauf meldeten dieselben neun Regressionen: generische Loop-/Resume-Fixtures erwarteten `rc=0`, obwohl ihre expliziten Akzeptanzkriterien keiner Aufgabe zugeordnet waren. Das ist jetzt kein gueltiger Erfolgsfall mehr; der Guard verhindert damit korrekt ein unbelegtes `loop_erfolg`.
+- **Korrektur:** Die betroffenen Happy-Path-, Resume-, Progress- und Recovery-Fixtures geben ihre Testkriterien explizit ueber `criterion_refs: ["AC1"]` in den Aufgaben an. Die Produktionsregel bleibt fail-closed. Damit pruefen diese Tests weiterhin erfolgreichen Abschluss, aber nur mit vollstaendiger Zielzuordnung.
+- **Verifikation:** Vor der Korrektur meldeten Linux-CI und Serverlauf 9 fehlgeschlagene, 2273 bestandene und 5 uebersprungene Tests. Nach der Fixture-Korrektur besteht der vollstaendige Linux-Lauf auf `026576f`: 2282 bestanden, 5 uebersprungen; Ruff, JavaScript-Syntax und Quality Gate bestanden ([Run 43598239222](https://github.com/ghxstfocus/werkstatt/actions/runs/43598239222)). Der Server muss diesen Stand noch pullen und separat verifizieren.
