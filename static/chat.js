@@ -938,7 +938,7 @@
     var sichtbar = _jobAktiv(job.project, job.sessionId, job.request);
     if (sichtbar) {
       var finalText = state === "succeeded" ? (answer || job.buffer) :
-        state === "cancelled" ? "Auftrag abgebrochen." :
+        state === "cancelled" ? "Chat-Antwort abgebrochen." :
           "Fehler: " + (error || "Unbekannter Hintergrundfehler");
       if (job.assistantCard) {
         if (finalText) _renderMarkdown(job.assistantCard, finalText);
@@ -957,7 +957,7 @@
       });
       var statusText = weitereAktiv ? "Weitere Antworten laufen · " + job.project :
         state === "succeeded" ? "Antwort fertig · " + job.project :
-          state === "cancelled" ? "Auftrag abgebrochen." : "Aktion fehlgeschlagen.";
+          state === "cancelled" ? "Chat-Antwort abgebrochen." : "Chat-Antwort fehlgeschlagen.";
       var statusArt = state === "failed" ? "error" :
         state === "cancelled" ? "idle" : "ready";
       if (weitereAktiv) statusArt = "working";
@@ -986,7 +986,7 @@
         _setzeChatStatus("Abbruch wird ausgeführt …", "cancelling");
       }
     } else if (ev.kind === "cancelled") {
-      _jobFertig(job, "cancelled", "", p.error || "Auftrag abgebrochen.");
+      _jobFertig(job, "cancelled", "", p.error || "Chat-Antwort abgebrochen.");
     } else if (ev.kind === "failed") {
       _jobFertig(job, "failed", "", p.error || "Unbekannter Fehler");
     }
@@ -1016,7 +1016,7 @@
       } else if (data.state === "failed") {
         _jobFertig(job, data.state, "", data.error || "Unbekannter Fehler");
       } else if (data.state === "cancelled") {
-        _jobFertig(job, data.state, "", "Auftrag abgebrochen.");
+        _jobFertig(job, data.state, "", "Chat-Antwort abgebrochen.");
       } else {
         window.setTimeout(function () { _pollChatJob(job, pollToken); }, 500);
       }
@@ -1119,7 +1119,7 @@
       );
       _pollChatJob(job, job.pollToken);
       if (_jobAktiv(projekt, sid, request)) {
-        _setzeChatStatus("Auftrag angenommen · läuft im Hintergrund.", "working");
+        _setzeChatStatus("Chat-Antwort wird erstellt · läuft im Hintergrund.", "working");
       }
     }).catch(function (error) {
       if (error.status === 404 && error.detail === "Not Found") {
@@ -1130,7 +1130,7 @@
       if (projekt !== zustand.projekt || sid !== zustand.sessionId) return;
       var fehlermeldung = error.status === 404 && error.detail === "Not Found"
         ? "Der Chat-Endpunkt ist auf diesem Server nicht verfügbar. Bitte Werkstatt aktualisieren und den Webserver neu starten."
-        : "Chat-Auftrag konnte nicht angenommen werden: " + error.message;
+        : "Chat-Anfrage konnte nicht angenommen werden: " + error.message;
       if (assistantCard) _renderMarkdown(assistantCard, fehlermeldung);
       else _karte("assistant", fehlermeldung);
       _setzeChatStatus("Aktion konnte nicht gestartet werden.", "error");
@@ -1159,7 +1159,7 @@
           _jobFertig(
             job, item.state, "",
             item.error || (item.state === "cancelled"
-              ? "Auftrag abgebrochen." : "Auftrag wurde unterbrochen."),
+              ? "Chat-Antwort abgebrochen." : "Chat-Antwort wurde unterbrochen."),
           );
           return;
         }
@@ -1200,7 +1200,7 @@
         }).then(function (data) {
           if (job.done) return;
           if (data.state === "cancelled") {
-            _jobFertig(job, "cancelled", "", "Auftrag abgebrochen.");
+            _jobFertig(job, "cancelled", "", "Chat-Antwort abgebrochen.");
           } else {
             _setzeChatStatus("Abbruch wird ausgeführt …", "cancelling");
           }

@@ -72,6 +72,13 @@ def test_job_polling_is_scoped_to_chat_session() -> None:
     assert '"?session_id=" + encodeURIComponent(job.sessionId)' in js
 
 
+def test_chat_job_status_unterscheidet_chatantwort_vom_loopauftrag() -> None:
+    js = _chat_js()
+    assert '"Chat-Antwort wird erstellt · läuft im Hintergrund."' in js
+    assert '"Chat-Antwort abgebrochen."' in js
+    assert '"Chat-Anfrage konnte nicht angenommen werden: "' in js
+
+
 def test_chat_can_cancel_background_jobs_without_blocking_composer() -> None:
     js = _chat_js()
     html = Path("static/layout.html").read_text(encoding="utf-8")

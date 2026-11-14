@@ -458,3 +458,12 @@ def test_chat_job_ergebnis_ist_in_timeline_mit_beleg_sichtbar():
     assert detail == (
         "Paralleler Chat-Job succeeded (0123456789ab) · Ergebnisbeleg aaaaaaaaaaaa"
     )
+
+
+def test_chat_job_lifecycle_ist_als_chat_statt_loopauftrag_beschriftet():
+    assert inspector._tl_label("chat_job_queued", {}) == "Chat-Antwort eingeplant"
+    assert inspector._tl_detail(
+        "chat_job_queued", {"message": "Das war nur eine Bemerkung"},
+    ) == "Chat-Nachricht erhalten: Das war nur eine Bemerkung"
+    assert inspector._tl_label("chat_job_cancelled", {}) == "Chat-Antwort abgebrochen"
+    assert inspector._tl_detail("chat_job_cancelled", {}) == "Chat-Antwort abgebrochen"
