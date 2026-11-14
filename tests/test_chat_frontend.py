@@ -83,8 +83,8 @@ def test_chat_asset_urls_haben_einen_cache_bust() -> None:
     html = Path("static/layout.html").read_text(encoding="utf-8")
     assert re.search(r'/static/chat\.js\?v=[0-9]+', html)
     assert re.search(r'/static/live_feed\.js\?v=[0-9]+', html)
-    assert "/static/chat.js?v=202611121845" not in html
-    assert "/static/live_feed.js?v=202611121845" not in html
+    assert re.search(r'\?v=202611141537', html)
+    assert "?v=202611121845" not in html
 
 
 def test_chat_can_cancel_background_jobs_without_blocking_composer() -> None:

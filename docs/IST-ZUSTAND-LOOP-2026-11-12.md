@@ -350,6 +350,7 @@ untersucht werden; ein Screenshot belegt den Cancel-Ausloeser nicht.
 Nach PR #39 hatten `chat.js` und `live_feed.js` weiterhin unveraenderte
 Query-Versionen in `layout.html`. Ein Browser mit gecachtem Asset konnte daher
 weiterhin alte Statusformulierungen anzeigen, obwohl der Server den neuen
-HTML-Stand auslieferte. Beide URLs erhalten jetzt eine neue Versionskennung.
+HTML-Stand auslieferte. Die Versionskennung aller Layout-Assets wird synchron
+erneuert, wie es der bestehende Layout-Vertrag verlangt.
 Der Audit-Event enthaelt absichtlich keinen Nachrichtentext; `chat_job_queued`
 wird deshalb neutral als „Chat-Nachricht eingegangen“ dargestellt.
