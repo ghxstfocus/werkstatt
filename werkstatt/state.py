@@ -152,6 +152,8 @@ class RunState:
     # last_reject_reason: freier Text vom User (beim n-Reject abgefragt)
     last_reject_kind: str = ""
     last_reject_reason: str = ""
+    # Distinguishes an unanswered headless plan gate from an explicit reject.
+    gate_timed_out: bool = False
 
 
     # M-WelleB (2026-11-02): Content-Check-Bestätigung.

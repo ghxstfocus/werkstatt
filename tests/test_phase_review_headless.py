@@ -30,7 +30,7 @@ def test_headless_nutzt_frage_gate_und_liefert_j(monkeypatch):
 
     aufrufe: list[tuple] = []
 
-    def _fake_frage(kind, prompt, optionen="jna"):
+    def _fake_frage(kind, prompt, optionen="jna", **_kwargs):
         aufrufe.append((kind, optionen))
         return "j"
 
@@ -48,7 +48,7 @@ def test_headless_n_liefert_1(monkeypatch):
     from werkstatt.phases.review import _phase_review_gate
 
     monkeypatch.setattr(gates_mod, "_HEADLESS", True)
-    monkeypatch.setattr(gates_mod, "_frage_gate", lambda k, p, o="jna": "n")
+    monkeypatch.setattr(gates_mod, "_frage_gate", lambda k, p, o="jna", **_kwargs: "n")
 
     assert _phase_review_gate(_mk_state()) == 1
 
@@ -63,7 +63,7 @@ def test_headless_a_erteilt_keine_freigabe(monkeypatch):
     aufrufe: list[tuple] = []
     audit_events: list[tuple] = []
 
-    def _frage(kind, prompt, optionen="jna"):
+    def _frage(kind, prompt, optionen="jna", **_kwargs):
         aufrufe.append((kind, optionen))
         return next(antworten)
 
@@ -100,8 +100,8 @@ def test_headless_phase_review_opens_and_waits_on_bridge(monkeypatch):
     opened = []
     waited = []
 
-    def signal_open(run_id, gate_id, prompt, optionen, typ="jna"):
-        opened.append((run_id, gate_id, prompt, optionen, typ))
+    def signal_open(run_id, gate_id, prompt, optionen, typ="jna", project="werkstatt"):
+        opened.append((run_id, gate_id, prompt, optionen, typ, project))
 
     def wait(run_id, gate_id, **_kwargs):
         waited.append((run_id, gate_id))
@@ -112,9 +112,10 @@ def test_headless_phase_review_opens_and_waits_on_bridge(monkeypatch):
 
     assert review_mod._phase_review_gate(_mk_state()) == 0
     assert len(opened) == 1
-    run_id, gate_id, _prompt, optionen, typ = opened[0]
+    run_id, gate_id, _prompt, optionen, typ, project = opened[0]
     assert run_id == "run-review"
     assert gate_id.startswith("phase_review-")
     assert optionen == "jne"
     assert typ == "jna"
+    assert project == "test"
     assert waited == [(run_id, gate_id)]

@@ -53,6 +53,7 @@ def signal_open(
     prompt: str,
     optionen: str = "jna",
     typ: str = "jna",
+    project: str = "werkstatt",
 ) -> None:
     """Schreibt ein gate_open-Event, damit die UI das Gate anzeigen kann.
 
@@ -69,15 +70,16 @@ def signal_open(
         "optionen": optionen,
         "typ": typ,
         "run_id": run_id,
-    }, _Path("."), "werkstatt")
+    }, _Path("."), project)
     _flush_projection()
 
 
 def _finde_antwort(
-    store: EventStore, run_id: str, gate_id: str
+    store: EventStore, run_id: str, gate_id: str,
+    project: str | None = None,
 ) -> str | None:
     """Erste gate_answered-Antwort fuer gate_id, oder None."""
-    for ev in store.query(run_id, kind=KIND_ANSWERED):
+    for ev in store.query(run_id, kind=KIND_ANSWERED, project=project):
         payload = ev.get("payload") or {}
         if payload.get("gate_id") == gate_id:
             antwort = payload.get("answer")
@@ -91,6 +93,7 @@ def wait(
     gate_id: str,
     timeout: float = DEFAULT_TIMEOUT,
     poll_interval: float = DEFAULT_POLL,
+    project: str | None = None,
 ) -> str:
     """Blockiert bis POST /api/runs/{run_id}/gate das Gate beantwortet.
 
@@ -99,7 +102,7 @@ def wait(
     store = EventStore()
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        antwort = _finde_antwort(store, run_id, gate_id)
+        antwort = _finde_antwort(store, run_id, gate_id, project)
         if antwort is not None:
             return antwort
         time.sleep(poll_interval)
@@ -112,14 +115,18 @@ def wait(
         "gate_id": gate_id,
         "timeout_s": timeout,
         "run_id": run_id,
-    }, _Path2("."), "werkstatt")
+    }, _Path2("."), project or "werkstatt")
     _flush_projection()
     raise GateTimeout(
         f"Gate {gate_id} nach {timeout}s nicht beantwortet"
     )
 
 
-def expire_for_run(run_id: str, grund: str = "loop_ended") -> int:
+def expire_for_run(
+    run_id: str,
+    grund: str = "loop_ended",
+    project: str | None = None,
+) -> int:
     """Schliesst alle offenen Gates eines Runs atomar.
 
     Wird vom Loop-Lifecycle (loop.main() -> finally) gerufen:
@@ -130,16 +137,16 @@ def expire_for_run(run_id: str, grund: str = "loop_ended") -> int:
     if not run_id:
         return 0
     es = EventStore()
-    opens = es.query(run_id, kind="gate_open")
+    opens = es.query(run_id, kind="gate_open", project=project)
     if not opens:
         return 0
     beantwortet = {
         (e.get("payload") or {}).get("gate_id")
-        for e in es.query(run_id, kind="gate_answered")
+        for e in es.query(run_id, kind="gate_answered", project=project)
     }
     bereits_expired = {
         (e.get("payload") or {}).get("gate_id")
-        for e in es.query(run_id, kind="gate_expired")
+        for e in es.query(run_id, kind="gate_expired", project=project)
     }
     n = 0
     for ev in opens:
@@ -154,7 +161,7 @@ def expire_for_run(run_id: str, grund: str = "loop_ended") -> int:
             "gate_id": gid,
             "grund": grund,
             "run_id": run_id,
-        }, _Path3("."), "werkstatt")
+        }, _Path3("."), project or "werkstatt")
         n += 1
     return n
 

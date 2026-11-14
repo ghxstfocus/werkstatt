@@ -116,6 +116,14 @@ def test_chat_surfaces_followup_checkpoint_receipt() -> None:
     assert '_karte("assistant", p.detail' in js
 
 
+def test_chat_surfaces_followup_plan_disposition() -> None:
+    js = _chat_js()
+    assert 'kind === "loop_followup_disposition"' in js
+    assert 'Plan-Gate abgelaufen · wartet weiter' in js
+    assert 'p.status === "applied"' in js
+    assert '"Im Plan-Gate abgelehnt"' in js
+
+
 def test_selected_debug_mode_is_forwarded_as_debugger_capability():
     js = _chat_js()
     assert 'function _chatRequestMode()' in js

@@ -270,6 +270,17 @@
           hatNachricht = true;
           _updateProposalStatus(p.proposal_id, "Aufgenommen · Einordnung ausstehend");
           _karte("assistant", p.detail || "Der Loop hat den Folgeauftrag am sicheren Checkpoint aufgenommen.");
+        } else if (kind === "loop_followup_disposition") {
+          hatNachricht = true;
+          _updateProposalStatus(
+            p.proposal_id,
+            p.status === "applied"
+              ? "Geplant · wird ausgeführt"
+              : p.status === "rejected"
+                ? "Im Plan-Gate abgelehnt"
+                : "Plan-Gate abgelaufen · wartet weiter"
+          );
+          _karte("assistant", p.detail || "Der Loop hat den Folgeauftrag eingeordnet.");
         } else if (kind === "loop_action_failed") {
           _updateProposalStatus(p.proposal_id, "Fehlgeschlagen: " + (p.error || "unbekannter Fehler"));
         }
@@ -734,6 +745,7 @@
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({
             session_id: zustand.sessionId,
+            project: zustand.projekt,
             run_id: gate.run_id,
             gate_id: gate.gate_id,
             answer: String(answer).trim(),
@@ -1474,6 +1486,7 @@
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({
             session_id: zustand.sessionId,
+            project: projekt,
             run_id: gate.run_id,
             gate_id: gate.gate_id,
             answer: answer,

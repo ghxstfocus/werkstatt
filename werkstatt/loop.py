@@ -353,6 +353,18 @@ def _persist_run_result(
             if record is None:
                 return
             checkpoint = dict(record["checkpoint"])
+            if status == "completed":
+                followups = checkpoint.get("chat_followup_requests", [])
+                unresolved = [
+                    item for item in followups
+                    if isinstance(item, dict)
+                    and item.get("status") in {"received", "planning"}
+                ] if isinstance(followups, list) else []
+                if unresolved:
+                    raise RunInboxPendingError(
+                        "Run kann nicht erfolgreich enden; bestaetigte Chat-"
+                        "Folgeauftraege warten noch auf Plan und Freigabe.",
+                    )
             checkpoint["exit_code"] = exit_code
             version = store.finish_run_checkpoint(
                 project_name,
@@ -1122,7 +1134,7 @@ def _emit_lifecycle_end(
         except Exception:  # noqa: BLE001
             pass
     try:
-        expire_for_run(run_id, grund=kind)
+        expire_for_run(run_id, grund=kind, project=effektives_projekt)
     except Exception:  # noqa: BLE001
         pass
 

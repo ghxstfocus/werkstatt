@@ -10,10 +10,12 @@ import pytest
 
 class _GateStore:
     def __init__(self) -> None:
+        self.query_projects: list[str | None] = []
         self.events = [
             {
                 "kind": "gate_open",
                 "run_id": "demo-run",
+                "project": "demo",
                 "payload": {
                     "gate_id": "gate-1",
                     "prompt": "Plan freigeben?",
@@ -25,11 +27,14 @@ class _GateStore:
 
     def query(
         self, run_id: str, *, kind: str | None = None,
+        project: str | None = None,
     ) -> list[dict[str, Any]]:
         assert run_id == "demo-run"
+        self.query_projects.append(project)
         return [
             event for event in self.events
             if kind is None or event["kind"] == kind
+            if project is None or event.get("project") == project
         ]
 
 
@@ -90,6 +95,7 @@ def _client(
             "kind": kind,
             "run_id": payload.get("run_id"),
             "payload": dict(payload),
+            "project": _args[1] if len(_args) > 1 else None,
         })
         return True
 
@@ -111,6 +117,7 @@ def test_gate_sync_persists_one_card_and_replays_decision(
 
     assert first.status_code == second.status_code == 200
     assert [event["kind"] for event in first.json()["events"]] == ["gate_card"]
+    assert store.query_projects and set(store.query_projects) == {"demo"}
     session = chat_session.ChatSession(
         "demo", body["session_id"], db_pfad=tmp_path / "chat-sessions.db",
     )
@@ -126,6 +133,7 @@ def test_gate_sync_persists_one_card_and_replays_decision(
     )
     assert answered.status_code == 200
     assert store.events[-1]["kind"] == "gate_answered"
+    assert store.events[-1]["project"] == "demo"
     assert store.events[-1]["payload"]["session_id"] == body["session_id"]
 
     replay = client.post("/api/projects/demo/chat/gates/sync", json=body)
