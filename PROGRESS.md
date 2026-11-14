@@ -6658,8 +6658,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 ### Nachtrag — Hauptlinienstand der Loop-Ist-Aufnahme berichtigt
 
 - **Befund:** Die Kopfzeile der Loop-Ist-Aufnahme nannte nach dem Log-Kontextfix weiterhin `554a692` als geprueften Hauptlinienstand, obwohl `main` bereits `9c9e14f` erreicht hatte.
-- **Korrektur:** Die Aufnahme weist jetzt `9c9e14f` als aktuellen Doku-Stand und `88dd5b0` als den durch CI verifizierten Code-Stand aus. Der CI-Beleg wird nicht dem reinen Doku-Commit zugeschrieben; Serverbetrieb bleibt separat unverifiziert.
-- **Verifikation:** Git-Remote bestaetigte `HEAD == origin/main == 9c9e14f`; `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check` bestanden.
+- **Korrektur:** Die Aufnahme wurde erst auf den Doku-Stand `9c9e14f` und danach auf den aktuellen Code-Stand `bbe078c` nachgezogen. Der CI-Beleg fuer `88dd5b0` wird nicht den spaeteren Commits zugeschrieben; fuer `bbe078c` ist Linux-CI noch offen. Serverbetrieb bleibt separat unverifiziert.
+- **Verifikation:** Git-Remote bestaetigte `HEAD == origin/main == 9c9e14f` vor dem Loop-Fix; `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check` bestanden.
 
 ## 2026-11-14 — OP-398: ungetrackte Kriterien duerfen keinen Zielerfolg melden
 

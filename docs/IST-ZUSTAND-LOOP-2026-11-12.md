@@ -4,14 +4,16 @@ Diese Bestandsaufnahme beschreibt den Repository-Stand und trennt ihn vom
 laufenden Server. Ein gruener GitHub-Run beweist die Tests des Commits, aber
 nicht, dass der Server diesen Commit bereits ausfuehrt.
 
-Gepruefter Hauptlinienstand: `9c9e14f` (Dokumentationsnachzug zur
-Log-Kontextkorrektur). GitHub Actions Quality Gate
+Gepruefter Hauptlinienstand: `bbe078c` (OP-398-Abschluss verweigert
+ungetrackten Akzeptanzkriterien). GitHub Actions Quality Gate
 [43595830085](https://github.com/ghxstfocus/werkstatt/actions/runs/43595830085)
-lief fuer den enthaltenen Code-Commit `88dd5b0` erfolgreich durch: Ruff,
-vollstaendiges pytest, AST-/Audit-Katalog und Quality Gate. `9c9e14f` selbst
-enthaelt nur den Doku-Nachzug. Der aktuelle Serverstand ist damit nicht
-belegt; die letzte hier dokumentierte Serververifikation betrifft einen
-aelteren Commit und darf nicht auf `9c9e14f` uebertragen werden. Der Recovery-Beleg
+lief fuer den vorherigen Code-Commit `88dd5b0` erfolgreich durch: Ruff,
+vollstaendiges pytest, AST-/Audit-Katalog und Quality Gate. Fuer `bbe078c`
+bestanden lokal die drei gezielten Phasen-/Checkpoint-/Planner-Suiten mit 93
+Tests und 3 Skips sowie Ruff; ein Linux-CI-Lauf fuer diesen neuen Commit steht
+noch aus. Der aktuelle Serverstand ist ebenfalls nicht belegt; die letzte
+hier dokumentierte Serververifikation betrifft einen aelteren Commit und darf
+nicht auf `bbe078c` uebertragen werden. Der Recovery-Beleg
 aus PR #8 bleibt separat auf Commit `2130019` mit Quality-Gate-Run
 [43488902240](https://github.com/ghxstfocus/werkstatt/actions/runs/43488902240)
 verifiziert. Diese CI-Belege bestaetigen den jeweiligen Repository-Stand,
