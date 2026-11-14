@@ -216,7 +216,7 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
         if not isinstance(entry, dict):
             lines.append("(im aktuellen Python-AST-Index nicht vorhanden)")
             continue
-        requested = next(
+        requested: object = next(
             (
                 symbols
                 for scout_path, symbols in scout_apis.items()
