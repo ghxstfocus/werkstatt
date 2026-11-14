@@ -6699,3 +6699,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 
 - **Verifikation:** Die aktualisierte Linux-CI fuer PR-Head `fbbe939` ist erfolgreich: 2299 Tests bestanden, 5 uebersprungen; Ruff, Mypy, AST-/Audit-Katalog und Quality Gate gruen. PR #35 wurde mit Merge-Commit `938df74` auf `main` uebernommen. Ein separater Post-Merge-Lauf und der aktuelle Produktionsserver-Commit sind nicht belegt.
 - **Dokumentation:** `docs/IST-ZUSTAND-LOOP-2026-11-12.md` nennt nun `938df74` als aktuellen Hauptlinienstand, trennt den historischen CI-Beleg auf `026576f` ab und dokumentiert, dass OP-396/397 offen bleiben. Der Chatjob-Fix schliesst die Chat-zu-Loop-Trennung teilweise, nicht die gesamte OP-396-Akzeptanz.
+
+## 2026-11-14 — Chat-Intent muss Auftragssprache erkennen
+
+- **Befund:** Die erste Intent-Schranke suchte nur nach OP-ID plus Verb und akzeptierte so auch „kein Auftrag“, Negationen, hypothetische Aussagen und Fragen als OP-Umsetzungswunsch. Die allgemeine Loop-Aktionsschranke akzeptierte zudem jede Frage mit „bitte“, etwa „Bitte sag mir, ob ich den Loop starten soll?“.
+- **Aenderung:** OP-Handoff verlangt jetzt direkte Befehls-/Wunschsprache mit genau einem OP und lehnt Negation, reine Bemerkungen und unklare Fragen ab. Allgemeine Start-/Pause-/Fortsetzen-/Stop-Vorschlaege verlangen ebenfalls direkte Auftragsform oder eine eindeutige Bitte an den Assistenten. Ein expliziter Auftrag mit mehreren OP-IDs bleibt eine Rueckfrage statt einer Auswahl.
+- **Regressionen:** Meinungs-/Hypothesenfragen, „kein Auftrag“, negierte Befehle und ungerichtete Fragen erzeugen keinen Handoff; direkte Imperative, „Ich moechte, dass du ...“ und „Kannst du bitte ...?“ werden weiterhin erkannt.
+- **Verifikation:** `py_compile`, `git diff --check` und direkte Funktions-Gegenproben fuer 16 Loop- und 14 OP-Intentfaelle bestanden. Vollstaendiges Pytest/Ruff/Quality Gate ist fuer Linux-CI vorgesehen; lokal fehlt pytest und Ruff.

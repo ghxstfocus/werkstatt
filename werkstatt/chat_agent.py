@@ -46,16 +46,58 @@ def _repeated_tool_cycle(
 
 
 _EXPLICIT_OP_EXECUTION = re.compile(
-    r"\b(?:bearbeite|umsetzen|implementiere|implementieren|fixe|fixen|"
-    r"repariere|reparieren|erledige|erledigen|"
-    r"arbeite\s+(?:an|ab)|start(?:e|en)?)\b",
+    r"\b(?:bearbeite|bearbeiten|bearbeitest|umsetzen|setzt\s+um|"
+    r"setze\s+um|implementiere|implementieren|implementierst|fixe|fixen|"
+    r"fixst|repariere|reparieren|reparierst|erledige|erledigen|erledigst|"
+    r"arbeite\s+(?:an|ab)|starte|starten|startest|start)\b",
     re.IGNORECASE,
 )
 
 
+def _has_explicit_op_execution_intent(message: str) -> bool:
+    """Require directive language, not a mention, question, or negated request."""
+    action = _EXPLICIT_OP_EXECUTION.pattern
+    if _EXPLICIT_OP_EXECUTION.search(message) is None:
+        return False
+    if re.search(
+        r"\b(?:kein(?:e|en|er|es)?\s+(?:auftrag|umsetzungsauftrag)|"
+        r"nur\s+(?:eine?\s+)?(?:bemerkung|idee|frage)|"
+        r"ich\s+frage\s+nur)\b",
+        message,
+        re.IGNORECASE,
+    ):
+        return False
+    if re.search(
+        rf"\b(?:nicht|kein(?:e|en|er|es)?)\b.{{0,40}}{action}|"
+        rf"{action}.{{0,40}}\b(?:nicht|kein(?:e|en|er|es)?)\b",
+        message,
+        re.IGNORECASE,
+    ):
+        return False
+    op_ids = _explicit_op_ids(message)
+    if not op_ids:
+        return False
+    # Questions about an OP or an action are not handoff requests. The one
+    # supported interrogative form is a direct polite request to do the work.
+    if "?" in message and re.search(
+        r"\bkannst\s+du\s+bitte\b", message, re.IGNORECASE,
+    ) is None:
+        return False
+    direct_request = re.search(
+        rf"^\s*(?:bitte\s+)?{action}|"
+        rf"\b(?:bitte|ich\s+(?:will|moechte|möchte))\b"
+        rf".{{0,100}}{action}|"
+        rf"^\s*OP-\d+[a-z]?\b.{{0,60}}{action}|"
+        rf"\bkannst\s+du\s+bitte\b.{{0,100}}{action}",
+        message,
+        re.IGNORECASE,
+    )
+    return direct_request is not None
+
+
 def _explicit_op_execution_request(message: str) -> str | None:
     """Return an explicitly requested OP only for clear execution language."""
-    if _EXPLICIT_OP_EXECUTION.search(message) is None:
+    if not _has_explicit_op_execution_intent(message):
         return None
     op_ids = _explicit_op_ids(message)
     return op_ids[0] if len(op_ids) == 1 else None
@@ -64,31 +106,56 @@ def _explicit_op_execution_request(message: str) -> str | None:
 _LOOP_ACTION_INTENT = {
     "start": re.compile(
         r"\b(?:starte|starten|start|beginne|beginnen|bearbeite|bearbeiten|"
-        r"umsetzen|implementiere|implementieren|fixe|fixen|repariere|"
+        r"startest|bearbeitest|umsetzen|implementiere|implementieren|"
+        r"implementierst|fixe|fixen|fixst|repariere|reparieren|reparierst|"
         r"reparieren|erledige|erledigen)\b",
         re.IGNORECASE,
     ),
-    "pause": re.compile(r"\b(?:pausiere|pausieren|pause)\b", re.IGNORECASE),
+    "pause": re.compile(
+        r"\b(?:pausiere|pausieren|pause|pausierst)\b", re.IGNORECASE,
+    ),
     "resume": re.compile(
-        r"\b(?:fortsetzen|fortsetze|weiterlaufen|fortfuehren|fortfuehre)\b",
+        r"\b(?:fortsetzen|fortsetze|fortsetzt|weiterlaufen|fortfuehren|"
+        r"fortfuehre|fortfuehrst)\b",
         re.IGNORECASE,
     ),
-    "stop": re.compile(r"\b(?:stoppe|stoppen|abbrechen|abbruch)\b", re.IGNORECASE),
+    "stop": re.compile(
+        r"\b(?:stoppe|stoppen|stoppst|abbrechen|abbruch)\b", re.IGNORECASE,
+    ),
 }
 
 
 def _explicit_loop_action_intent(message: str, action: str) -> bool:
-    """Require an action verb in the current user turn before proposing control."""
+    """Require a direct command/request, not a question or casual mention."""
     pattern = _LOOP_ACTION_INTENT.get(action.casefold())
     if pattern is None or pattern.search(message) is None:
         return False
-    if "?" in message and not re.search(r"\bbitte\b", message, re.IGNORECASE):
-        return False
-    if action.casefold() == "start" and re.search(
-        r"\b(?:kann ich|soll ich|was sagst du|was meinst du)\b[^?]*\?",
+    if re.search(
+        r"\b(?:kein(?:e|en|er|es)?\s+(?:auftrag|umsetzungsauftrag)|"
+        r"nur\s+(?:eine?\s+)?(?:bemerkung|idee|frage)|"
+        r"ich\s+frage\s+nur)\b",
         message,
         re.IGNORECASE,
     ):
+        return False
+    verb = pattern.pattern
+    direct_request = re.search(
+        rf"^\s*(?:bitte\s+)?{verb}|"
+        rf"^\s*(?:bitte|ich\s+(?:will|moechte|möchte))\b"
+        rf".{{0,100}}{verb}|"
+        rf"\b(?:kannst|koenntest|könntest|wuerdest|würdest)\s+du\s+bitte\b"
+        rf".{{0,100}}{verb}|"
+        rf"\b(?:der\s+)?loop\s+soll\b.{{0,60}}{verb}",
+        message,
+        re.IGNORECASE,
+    )
+    if direct_request is None:
+        return False
+    if "?" in message and re.search(
+        r"\b(?:kannst|koenntest|könntest|wuerdest|würdest)\s+du\s+bitte\b",
+        message,
+        re.IGNORECASE,
+    ) is None:
         return False
     return re.search(
         r"\b(?:nicht|kein(?:e|en|er|es)?)\b.{0,40}\b"
@@ -766,7 +833,7 @@ def chat_loop(
         user_payload["job_id"] = request_id
     session.append("user", user_payload)
     op_ids = _explicit_op_ids(message)
-    if _EXPLICIT_OP_EXECUTION.search(message) is not None and len(op_ids) > 1:
+    if _has_explicit_op_execution_intent(message) and len(op_ids) > 1:
         antwort = (
             "Ich sehe mehrere OPs in deinem Umsetzungsauftrag: "
             + ", ".join(op_ids)
