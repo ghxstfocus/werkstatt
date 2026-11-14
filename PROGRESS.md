@@ -6600,6 +6600,13 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation:** Architect-Evidence und Scout-Kette: 8 bestanden; Ruff und `git diff --check` bestanden. Mypy ist im lokalen Windows-Umfeld nicht repo-weit belastbar (POSIX-Prozess-APIs und fehlendes `uvicorn`); GitHub Actions Quality Gate [43575805265](https://github.com/ghxstfocus/werkstatt/actions/runs/43575805265) fuer Commit `7739026`: erfolgreich, einschliesslich Ruff, 2.262 Pytests, Mypy, AST und Audit-Katalog.
 # 2026-11-14 — OP-398: geteilte Kriterien erst nach allen Teilaufgaben abdecken
 
+## 2026-11-14 — Chatauftrag nicht an terminalen Registry-Run binden
+
+- **Befund:** Der Chat-Job-Endpunkt vertraute beim Anhängen eines Auftrags allein dem Prozess-Registry-Status. Ein veralteter Registry-Eintrag konnte so eine beendete Run-ID übernehmen; beim Inbox-Handoff wurde die Chatnachricht dann mit `Run ist nicht mehr aktiv` abgewiesen.
+- **Aenderung:** Der Endpunkt bindet Chatjobs nur noch an Registry-Runs, deren persistierter Event-Store-Datensatz den Status `starting` oder `running` hat. Fehlt der Run-Datensatz oder ist er terminal, wird der Auftrag als eigenstaendiger Chatjob angenommen.
+- **Regression:** API-Test fuer einen veralteten Registry-Eintrag mit terminalem RunRecord; der bestehende Pausenfall prueft weiterhin die Bindung an einen aktiven Run.
+- **Verifikation:** `tests/test_chat_jobs_api.py` und `tests/test_chat_jobs.py`: 38 bestanden; Ruff, `tools/doku_check.py --strict --limit 10 --worktree` und `git diff --check`: bestanden. Windows-Mypy auf `web/app.py` bleibt wegen vorhandener POSIX-`os`-Symbole rot; Linux-CI steht noch aus.
+
 ## 2026-11-14 — OP-374: projektisolierter Backfill und Herkunftsstatus
 
 - **Befund:** Der Projektor hatte keinen expliziten Backfill pro Projekt. Historische SQLite-Zeilen ohne belegbare Projekt-/Run-Herkunft konnten in der Run-Uebersicht wie normale Erfolge erscheinen.
