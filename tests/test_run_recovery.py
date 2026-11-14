@@ -615,7 +615,8 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     phase_state = PhaseState("demo", base_dir=project_dir / ".werkstatt")
     phase_state.init_new(
         goal,
-        [{"id": "task-1", "name": "Bereits erledigt"}],
+        [{"id": "task-1", "name": "Bereits erledigt",
+          "criterion_refs": ["AC1"]}],
         tests=["pytest -q"],
         akzeptanzkriterien=["Der gespeicherte Run wird abgeschlossen"],
     )

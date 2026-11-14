@@ -857,7 +857,8 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
     phase_state = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     phase_state.init_new(
         "ziel",
-        [{"id": "task-1", "name": "Bereits erledigt"}],
+        [{"id": "task-1", "name": "Bereits erledigt",
+          "criterion_refs": ["AC1"]}],
         tests=["pytest -q"],
         akzeptanzkriterien=["Ergebnis bleibt verifiziert"],
     )

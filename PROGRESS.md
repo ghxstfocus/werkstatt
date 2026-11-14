@@ -6667,3 +6667,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Explizite Kriterien ohne gueltigen Tracking-Beleg blockieren jetzt den Zielabschluss mit `reason=criteria_untracked`; Kriterienstatus und Fehlergrund bleiben im Completion-Event sichtbar. Auftraege ohne explizite Akzeptanzkriterien bleiben kompatibel.
 - **Regression:** Der neue Test reproduzierte vor dem Fix `rc=0` und nach dem Fix verlangt er `rc=1`, einen unvollstaendigen Completion-Eintrag sowie kein `loop_erfolg`.
 - **Verifikation:** `tests/test_loop_phases.py`, `tests/test_phase_state.py` und `tests/test_planner_agent.py`: 93 bestanden, 3 uebersprungen. Ruff fuer Finalizer und Loop-Phasentests, `tools/doku_check.py --strict --limit 10 --worktree` sowie `git diff --check` bestanden.
+
+### Nachbesserung nach Linux-CI — AC-Zuordnungen in Loop-Fixtures
+
+- **Befund:** Der erste CI-Lauf fuer den Finalizer-Guard und der anschliessende Serverlauf meldeten dieselben neun Regressionen: generische Loop-/Resume-Fixtures erwarteten `rc=0`, obwohl ihre expliziten Akzeptanzkriterien keiner Aufgabe zugeordnet waren. Das ist jetzt kein gueltiger Erfolgsfall mehr; der Guard verhindert damit korrekt ein unbelegtes `loop_erfolg`.
+- **Korrektur:** Die betroffenen Happy-Path-, Resume-, Progress- und Recovery-Fixtures geben ihre Testkriterien explizit ueber `criterion_refs: ["AC1"]` in den Aufgaben an. Die Produktionsregel bleibt fail-closed. Damit pruefen diese Tests weiterhin erfolgreichen Abschluss, aber nur mit vollstaendiger Zielzuordnung.
+- **Verifikation:** Linux-CI/Server-Reproduktion: 9 fehlgeschlagene, 2273 bestandene, 5 uebersprungene Tests vor der Fixture-Korrektur. Die korrigierten Fixtures muessen noch durch die gezielten Tests und einen vollstaendigen Linux-CI-Lauf bestaetigt werden.
