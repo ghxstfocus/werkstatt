@@ -6706,3 +6706,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** OP-Handoff verlangt jetzt direkte Befehls-/Wunschsprache mit genau einem OP und lehnt Negation, reine Bemerkungen und unklare Fragen ab. Allgemeine Start-/Pause-/Fortsetzen-/Stop-Vorschlaege verlangen ebenfalls direkte Auftragsform oder eine eindeutige Bitte an den Assistenten. Ein expliziter Auftrag mit mehreren OP-IDs bleibt eine Rueckfrage statt einer Auswahl.
 - **Regressionen:** Meinungs-/Hypothesenfragen, „kein Auftrag“, negierte Befehle und ungerichtete Fragen erzeugen keinen Handoff; direkte Imperative, „Ich moechte, dass du ...“ und „Kannst du bitte ...?“ werden weiterhin erkannt.
 - **Verifikation:** `py_compile`, `git diff --check` und direkte Funktions-Gegenproben fuer 16 Loop- und 14 OP-Intentfaelle bestanden. Vollstaendiges Pytest/Ruff/Quality Gate ist fuer Linux-CI vorgesehen; lokal fehlt pytest und Ruff.
+
+### Nachtrag — PR #37 durch Linux-CI bestaetigt und gemergt
+
+- **Verifikation:** Linux-CI fuer PR-Head `0c1a839d8575f3c1c908f24f682725c74e31be8f` erfolgreich (Quality Gate, [Run 43609401260](https://github.com/ghxstfocus/werkstatt/actions/runs/43609401260)); PR #37 wurde als `7413012` auf `main` uebernommen. Lokale `py_compile`- und Intent-Gegenproben bestanden.
+- **Korrektur zur vorherigen Zeile:** Die inzwischen erweiterte Regressionstestsammlung deckt 17 Loop-Aktions- und 14 OP-Intentfaelle ab. Das vorherige „CI steht aus“ war zum Zeitpunkt des Eintrags richtig, ist durch den spaeteren CI-Lauf ueberholt.
+- **Grenze:** Kein separater Post-Merge-Lauf und kein aktueller Produktionsserver-Commit belegt. OP-396/397 bleiben offen.
