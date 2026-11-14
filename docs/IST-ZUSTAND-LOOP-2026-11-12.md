@@ -56,6 +56,10 @@ kein Vollstaendigkeitsbeleg; die Systemanweisung verlangt gezielte Folgefragen
 an Repo-/Audit-Tools anhand sichtbarer Run- und Sequenz-IDs. REST, Job-API und
 WebSocket teilen dieselbe Groessengrenze.
 
+Bei gemischten Logs mit JSONL-Audit-Eintraegen und normalem Text-Traceback
+muessen beide Evidenzarten in der Modellansicht erhalten bleiben; ein
+vorhandenes Audit-Event darf die Pytest-Fehlerzeilen nicht verdraengen.
+
 ### Nachpruefung: API-Wirkungen und Verify-Interpreter
 
 Der vorherige Signaturauszug war nur Prompt-Kontext: er belegte Namen und

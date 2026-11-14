@@ -232,7 +232,10 @@ def _verdichte_grosse_nutzernachricht(text: str) -> str:
         elif important.search(line):
             other_lines.append(line[:700])
 
-    selected_lines = event_lines[-16:] if event_lines else other_lines[-16:]
+    # Behalte in gemischten Logs Audit-Events und normale Traceback-Zeilen.
+    # Ein einzelnes JSONL-Event darf den eigentlichen Pytest-Fehler nicht
+    # aus dem Modellkontext verdraengen.
+    selected_lines = event_lines[-8:] + other_lines[-8:]
     sections = [
         (
             "[Lange Nutzernachricht fuer den Modellkontext verdichtet. "

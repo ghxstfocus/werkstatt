@@ -56,7 +56,7 @@ def test_large_pasted_jsonl_is_compacted_but_session_event_stays_unchanged():
     ])
     original = "PLEASE ANALYZE THIS RUN\n" + "\n".join(
         json.dumps(record) for record in records
-    ) + "\npadding " * 20_000 + "\nEND OF ATTACHED LOG"
+    ) + "\nAssertionError: mixed-log-regression-marker\n" + "padding " * 20_000 + "\nEND OF ATTACHED LOG"
     events = [{"kind": "user", "payload": {"text": original}}]
 
     messages = chat_agent._baue_messages(events)
@@ -68,6 +68,7 @@ def test_large_pasted_jsonl_is_compacted_but_session_event_stays_unchanged():
     assert "loop_verify_failed" in prompt_text
     assert "reviewer_phase_rejected" in prompt_text
     assert "run-important" in prompt_text
+    assert "mixed-log-regression-marker" in prompt_text
     assert events[0]["payload"]["text"] == original
 
 

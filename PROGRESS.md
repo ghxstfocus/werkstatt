@@ -6647,3 +6647,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** `/api/projects/{name}/chat/jobs` lehnte Nachrichten ueber 20.000 Zeichen mit HTTP 413 ab. Chat turns ueber 24.000 Zeichen wurden ausserdem ungekürzt in den Modellprompt kopiert.
 - **Aenderung:** Der gemeinsame harte Eingabedeckel betraegt 200.000 Zeichen fuer Job-REST, direkten Chat und WebSocket. Modellnachrichten ueber 24.000 Zeichen werden deterministisch auf markierten Anfang, Ende und priorisierte JSONL-Fehler-/Gate-Ereignisse verdichtet; der persistierte Sessionturn bleibt vollstaendig. ADR-0032 und die Loop-Ist-Aufnahme nennen die Vollstaendigkeitsgrenze.
 - **Verifikation:** Chat-Agent, Job-API und Frontend: 74 bestanden. Ruff und `git diff --check`: bestanden. `tools/doku_check.py --strict --limit 10 --worktree`: vor Doku-Nachzug meldete es erwartungsgemaess den uncommitteten Code-Drift; nach Doku-Nachzug erneut ausfuehren.
+
+### Nachpruefung: gemischte Audit- und Pytest-Logs
+
+- **Befund:** Die Verdichtung waehlt in gemischten langen Logs bisher entweder JSONL-Ereignisse oder normale Fehlerzeilen. Sobald ein passendes Audit-Event vorkommt, kann der Text-Traceback aus dem Modellkontext fallen.
+- **Aenderung:** Die kompakte Ansicht behaelt bis zu acht relevante JSONL-Ereignisse und acht relevante normale Fehler-/Gate-Zeilen gemeinsam. Der persistierte Chatturn bleibt unveraendert.
+- **Regression:** Der grosse Log-Test enthaelt gleichzeitig Audit-Events und einen markierten Pytest-Assertion-Fehler und verlangt beide im Modellkontext.
+- **Verifikation:** Chat-Agent, Job-API und Frontend: 74 bestanden, 1 bekannte StarletteDeprecationWarning. Ruff, strikter Doku-Drift-Check und `git diff --check`: bestanden. Kein Vollsuite-Lauf in dieser Nachpruefung.
