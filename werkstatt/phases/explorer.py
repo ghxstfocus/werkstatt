@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Any
 
 from werkstatt.phase_state import PhaseState
 from werkstatt.render import (
@@ -164,7 +165,7 @@ def _phase_explorer_and_setup(
         _verwandte = []
 
     _seen: set[str] = set()
-    explorer_result = {
+    explorer_result: dict[str, Any] = {
         "findings": _explorer_ergaenzung.get("findings", ""),
         "key_files": [],
         "next_reads": list(_explorer_ergaenzung.get("next_reads") or []),
