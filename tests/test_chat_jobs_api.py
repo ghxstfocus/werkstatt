@@ -171,6 +171,55 @@ def test_chat_job_does_not_bind_to_terminal_run_from_stale_registry(
     assert response.json()["run_id"] is None
 
 
+def test_new_chat_job_survives_pending_result_for_terminal_run(
+    client_and_base: tuple[Any, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, base = client_and_base
+    from werkstatt import chat_jobs, event_store
+    from werkstatt.web import app as app_modul
+
+    events = event_store.EventStore(base / "events.db")
+    events.create_run_record("demo", "run-finished", "Vorheriger Auftrag")
+    events.transition_run_status(
+        "demo", "run-finished", expected_status="running", status="completed",
+    )
+    jobs_db = base / ".werkstatt" / "chat-jobs" / "demo.db"
+    jobs = ChatJobStore(jobs_db)
+    old_job, _ = jobs.create(
+        "session-old", "Vorheriger Auftrag", "read", "old-result-request-01",
+        run_id="run-finished", project="demo",
+    )
+    assert jobs.mark_run_inbox_enqueued(old_job["job_id"])
+    assert jobs.claim(old_job["job_id"], "chat-worker")
+    assert jobs.finish(old_job["job_id"], answer="Fertiges Ergebnis")
+
+    class _Registry:
+        def read(self, project: str) -> None:
+            assert project == "demo"
+
+    monkeypatch.setattr(app_modul, "_loop_registry", lambda: _Registry())
+    monkeypatch.setattr(event_store, "EventStore", lambda: events)
+    monkeypatch.setattr(
+        chat_jobs, "sync_completed_job_turns", lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(chat_jobs, "_dispatch_pending", lambda *_args: None)
+
+    response = client.post(
+        "/api/projects/demo/chat/jobs",
+        json={
+            "session_id": "session-new",
+            "message": "Bitte OP 375 starten",
+            "mode": "read",
+            "idempotency_key": "request-after-terminal-run-01",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["run_id"] is None
+    assert jobs.get(old_job["job_id"])["run_result_enqueued"] == 1
+
+
 def test_history_repairs_completed_job_turn_after_worker_crash(
     client_and_base: tuple[Any, Path],
     monkeypatch: pytest.MonkeyPatch,

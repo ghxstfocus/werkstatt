@@ -270,6 +270,31 @@ class ChatJobStore:
             conn.commit()
             return cur.rowcount == 1
 
+    def mark_run_result_unavailable(self, job_id: str, reason: str) -> bool:
+        """Resolves a result outbox when its originating run cannot consume it."""
+        now = _now()
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.execute(
+                "UPDATE jobs SET run_result_enqueued=1,updated_at=? "
+                "WHERE job_id=? AND run_result_enqueued=0 "
+                "AND state IN ('succeeded','failed','cancelled')",
+                (now, job_id),
+            )
+            if cur.rowcount:
+                conn.execute(
+                    "INSERT INTO job_events(job_id,kind,payload,ts) "
+                    "VALUES(?,?,?,?)",
+                    (
+                        job_id,
+                        "run_result_handoff_skipped",
+                        json.dumps({"reason": reason}),
+                        now,
+                    ),
+                )
+            conn.commit()
+            return cur.rowcount == 1
+
     def set_run_snapshot(
         self,
         job_id: str,
@@ -974,7 +999,18 @@ def reconcile_run_inbox(
         after_rowid = int(results[-1]["outbox_seq"])
         for result in results:
             run_id = str(result["run_id"])
-            if event_store.get_run_record(project, run_id) is None:
+            run_record = event_store.get_run_record(project, run_id)
+            if run_record is None:
+                if store.mark_run_result_unavailable(
+                    str(result["job_id"]), "run_record_missing",
+                ):
+                    reconciled += 1
+                continue
+            if run_record.get("status") not in {"starting", "running"}:
+                if store.mark_run_result_unavailable(
+                    str(result["job_id"]), "run_already_terminal",
+                ):
+                    reconciled += 1
                 continue
             job_id = str(result["job_id"])
             answer = str(result.get("answer") or "")
@@ -992,13 +1028,24 @@ def reconcile_run_inbox(
                     error.encode("utf-8"),
                 ).hexdigest() if error else None,
             }
-            event_store.enqueue_run_message(
-                project,
-                run_id,
-                f"chat-job:{job_id}:result",
-                "job_result_notice",
-                payload,
-            )
+            try:
+                event_store.enqueue_run_message(
+                    project,
+                    run_id,
+                    f"chat-job:{job_id}:result",
+                    "job_result_notice",
+                    payload,
+                )
+            except RunNotActiveError:
+                # The run can finish between the status read and inbox insert.
+                # Its chat job is already terminal and replayable, so resolve
+                # this no-longer-consumable handoff instead of breaking new
+                # chat requests for the project.
+                if store.mark_run_result_unavailable(
+                    job_id, "run_ended_before_result_handoff",
+                ):
+                    reconciled += 1
+                continue
             if store.mark_run_result_enqueued(job_id):
                 reconciled += 1
 
