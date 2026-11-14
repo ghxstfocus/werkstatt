@@ -885,7 +885,7 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
     if kind.startswith("chat_job_"):
         event_kind = kind.removeprefix("chat_job_")
         if event_kind == "queued":
-            return f"Chat-Nachricht erhalten: {str(payload.get('message') or '')[:120]}"
+            return "Chat-Nachricht eingegangen"
         if event_kind == "started":
             return "Projekt wird geprueft"
         if event_kind == "chunk":
