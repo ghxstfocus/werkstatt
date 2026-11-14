@@ -216,7 +216,17 @@ def _format_target_api_evidence(state, explorer_ctx: dict | None) -> str:
         if not isinstance(entry, dict):
             lines.append("(im aktuellen Python-AST-Index nicht vorhanden)")
             continue
-        requested = scout_apis.get(path, [])
+        requested: object = next(
+            (
+                symbols
+                for scout_path, symbols in scout_apis.items()
+                if (
+                    isinstance(scout_path, str)
+                    and scout_path.strip().replace("\\", "/") == path
+                )
+            ),
+            [],
+        )
         requested_names: set[str] = set()
         if isinstance(requested, (list, tuple)):
             for symbol in requested:

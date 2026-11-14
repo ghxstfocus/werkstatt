@@ -18,10 +18,10 @@ def test_scout_architect_prompt_includes_exact_target_api_signatures() -> None:
         scout_auftrag={
             "auftrag_prosa": "Pruefe den Backfill.",
             "api_auszug": {
-                "werkstatt/projection.py": [
+                "werkstatt\\projection.py": [
                     "Projector.tail(von_audit_id)",
                 ],
-                "werkstatt/web/inspector.py": [
+                "werkstatt\\web\\inspector.py": [
                     "_letzter_run_id(es, projekt)",
                 ],
             },
@@ -32,6 +32,7 @@ def test_scout_architect_prompt_includes_exact_target_api_signatures() -> None:
     prompt = _planner_system("Bearbeite OP-374", state=state)
 
     assert "def tail(self, von_anfang) -> dict[str, int]" in prompt
+    assert "def _connect(self)" not in prompt
     assert "Scout nennt: Projector.tail(von_audit_id)" in prompt
     assert "def _letzter_run_id(es, projekt) -> str | None" in prompt
     assert "secret_unrelated" not in prompt
