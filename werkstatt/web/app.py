@@ -1687,6 +1687,7 @@ def create_app() -> FastAPI:
         from werkstatt.chat_jobs import (
             IdempotencyConflict,
             enqueue_chat_job,
+            reconcile_run_inbox,
             sync_completed_job_turns,
         )
         from werkstatt.chat_session import ChatSession
@@ -1717,6 +1718,10 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="idempotency_key ungueltig")
         db_path = _PROJECTS_BASE / ".werkstatt" / "chat-jobs" / f"{projekt}.db"
         try:
+            # Resolve old run-bound outbox entries independently from this
+            # standalone chat turn. In particular, a terminal run must not
+            # leave a completed result pending forever or poison later turns.
+            reconcile_run_inbox(projekt, db_path=db_path)
             sync_completed_job_turns(projekt, sid, db_path=db_path)
             context_seq = ChatSession(projekt, sid).max_seq()
             accepted = enqueue_chat_job(
