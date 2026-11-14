@@ -6723,5 +6723,5 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 ### Nachtrag — Cache-Versionen fuer Chatassets erneuert
 
 - **Befund:** Die geaenderten Chat- und Live-Feed-Skripte hatten in `layout.html` noch dieselben Cache-Busting-Querywerte wie zuvor. Ein Browser konnte damit trotz neuem Servercode alte Statusmeldungen weiterverwenden.
-- **Aenderung:** `chat.js` und `live_feed.js` erhalten eine neue Asset-Version. `chat_job_queued` zeigt keinen Inhalt an, weil der redigierte Audit-Payload die eigentliche Nachricht absichtlich nicht speichert.
+- **Aenderung:** Alle Asset-URLs in `layout.html` erhalten dieselbe neue Version. `chat_job_queued` zeigt keinen Inhalt an, weil der redigierte Audit-Payload die eigentliche Nachricht absichtlich nicht speichert.
 - **Verifikation:** Frontend-Regression fuer die Asset-URLs, Backend-Regression fuer redigierte Timeline-Angabe und JavaScript-Syntax; lokale Pytest/Ruff-Pruefung nicht verfuegbar, Linux-CI ausstehend.
