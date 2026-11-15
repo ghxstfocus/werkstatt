@@ -389,6 +389,7 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
         # Rebuild it from the same immutable parent transcript before retrying.
         parent.delete_snapshot(job_id)
         worker = parent.snapshot_to(job_id)
+        from werkstatt.audit import audit
         from werkstatt.chat_agent import chat_loop
         from werkstatt.chat_tools import CHAT_TOOLS
 
@@ -412,6 +413,23 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
             _claim_recovery_chat_call(state)
             state.llm_calls += 1
 
+        def audit_chat_model_request(manifest: dict[str, Any]) -> None:
+            written = audit(
+                "loop_reflection_chat_model_request",
+                {
+                    **manifest,
+                    "project": project,
+                    "session_id": session_id,
+                    "task_id": str(task.get("id", "")),
+                    "evidence_sha256": evidence_hash,
+                },
+                state.project_dir,
+                project,
+                run_id=run_id,
+            )
+            if not written:
+                raise RuntimeError("reflection_chat_model_request_audit_failed")
+
         answer = chat_loop(
             worker,
             prompt,
@@ -420,6 +438,7 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
             project_dir=state.project_dir,
             origin_session_id=session_id,
             on_llm_call=count_chat_call,
+            on_model_request=audit_chat_model_request,
             max_rounds=REFLECTION_CHAT_MAX_CALLS - 1,
             max_elapsed_s=REFLECTION_CHAT_MAX_ELAPSED_S,
             allow_time_budget_finalize=False,

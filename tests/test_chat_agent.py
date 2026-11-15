@@ -1,6 +1,7 @@
 """Tests fuer OP-231: chat_loop mit Mock-LLM."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -1013,6 +1014,44 @@ def test_chat_loop_beendet_recherche_am_zeit_checkpoint(
     assert len(requests_seen) == 1
     assert "Recherche-Zeitbudget" in requests_seen[0][-1]["content"]
     assert budgets == [1.0]
+
+
+def test_chat_model_request_manifest_matches_adapter_payload_without_content(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[tuple[list[dict[str, Any]], list[dict[str, Any]] | None]] = []
+    manifests: list[dict[str, Any]] = []
+
+    def fake_chat(messages, tools=None, cancel_check=None):
+        seen.append((messages, tools))
+        return {"choices": [{"message": {
+            "role": "assistant", "content": "Beleg liegt vor.",
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
+    answer = chat_agent.chat_loop(
+        session,
+        "Lies das Statusgeheimnis",
+        on_model_request=manifests.append,
+        request_id="job-model-evidence",
+    )
+
+    assert answer == "Beleg liegt vor."
+    assert len(seen) == len(manifests) == 1
+    messages, tools = seen[0]
+    payload = chat_agent._chat_provider_payload(messages, tools)
+    manifest = manifests[0]
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    assert manifest["request_sha256"] == hashlib.sha256(encoded).hexdigest()
+    assert manifest["request_id"] == "job-model-evidence"
+    assert manifest["request_number"] == 1
+    assert manifest["message_roles"]["system"] == 1
+    assert manifest["tool_count"] == len(tools or [])
+    assert "Lies das Statusgeheimnis" not in str(manifest)
+    assert "function" not in str(manifest)
 
 
 def test_chat_recovery_time_checkpoint_does_not_start_an_unbounded_final_call(

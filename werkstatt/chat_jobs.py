@@ -878,6 +878,9 @@ def _run_job(
             on_tool_result=lambda name, content: event(
                 "tool_result", name=name, content=content,
             ),
+            on_model_request=lambda manifest: event(
+                "model_request", **manifest,
+            ),
             on_research_budget=lambda budget_s: event(
                 "research_budget_reached", budget_s=budget_s,
             ),

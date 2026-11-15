@@ -743,24 +743,13 @@ def _deepseek_chat_stream(
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
         raise RuntimeError("DEEPSEEK_API_KEY nicht gesetzt")
-    _route = route_for_role("chat")
-    body: dict[str, Any] = {
-        "model": _route.model,
-        "thinking": {"type": _route.thinking},
-        "messages": messages,
-        "temperature": 0.0,
-        "stream": True,
-        "stream_options": {"include_usage": True},
-    }
-    if tools:
-        body["tools"] = tools
-        body["tool_choice"] = "auto"
+    body = _chat_provider_payload(messages, tools)
 
     _check_cancel(cancel_check)
     content_acc = ""
     tool_calls_acc: dict[int, dict[str, Any]] = {}
     usage_acc: dict[str, Any] | None = None
-    _provider_model = _route.model
+    _provider_model = str(body["model"])
     with requests.post(
         _DEEPSEEK_URL,
         json=body,
@@ -790,7 +779,7 @@ def _deepseek_chat_stream(
                     "prompt_tokens": int(_u.get("prompt_tokens", 0) or 0),
                     "completion_tokens": int(_u.get("completion_tokens", 0) or 0),
                     "total_tokens": int(_u.get("total_tokens", 0) or 0),
-                    "model": _route.model,
+                    "model": body["model"],
                     "provider_model": _provider_model,
                 }
             choices = obj.get("choices") or []
@@ -826,6 +815,77 @@ def _deepseek_chat_stream(
     return msg
 
 
+def _chat_provider_payload(
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Build the exact JSON body passed to the chat provider."""
+    route = route_for_role("chat")
+    body: dict[str, Any] = {
+        "model": route.model,
+        "thinking": {"type": route.thinking},
+        "messages": messages,
+        "temperature": 0.0,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if tools:
+        body["tools"] = tools
+        body["tool_choice"] = "auto"
+    return body
+
+
+def _chat_request_manifest(
+    payload: dict[str, Any], *, mode: str, request_id: str | None,
+    request_number: int,
+) -> dict[str, Any]:
+    """Describe and fingerprint the exact provider body without storing text."""
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    messages = payload["messages"]
+    counts: dict[str, int] = {}
+    message_manifest = []
+    for message in messages:
+        role = str(message.get("role", "unknown"))
+        counts[role] = counts.get(role, 0) + 1
+        message_text = json.dumps(
+            message, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        message_manifest.append({
+            "role": role,
+            "chars": len(message_text),
+            "sha256": hashlib.sha256(message_text.encode("utf-8")).hexdigest(),
+        })
+    tools = payload.get("tools") or []
+    encoded_tools = json.dumps(
+        tools, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "request_id": request_id,
+        "request_number": request_number,
+        "mode": mode,
+        "model": payload["model"],
+        "request_sha256": hashlib.sha256(encoded).hexdigest(),
+        "messages_sha256": hashlib.sha256(json.dumps(
+            messages, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest(),
+        "tools_sha256": hashlib.sha256(encoded_tools).hexdigest(),
+        "message_count": len(messages),
+        "message_chars": sum(item["chars"] for item in message_manifest),
+        "message_roles": counts,
+        "message_manifest": message_manifest,
+        "tool_count": len(tools),
+        "tool_names": [
+            str(tool.get("function", {}).get("name", ""))
+            for tool in tools if isinstance(tool, dict)
+        ],
+        "temperature": payload["temperature"],
+        "thinking": payload["thinking"],
+        "stream": payload["stream"],
+    }
+
+
 def _deepseek_chat(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
@@ -848,6 +908,7 @@ def _finalisiere_chat(
     on_chunk: Callable[[str], None] | None = None,
     cancel_check: Callable[[], bool] | None = None,
     on_llm_call: Callable[[], None] | None = None,
+    record_model_request: Callable[[list[dict[str, Any]], list[dict[str, Any]] | None], None] | None = None,
 ) -> str:
     """Schliesst einen Werkzeugturn anhand belegter Ergebnisse ab."""
     _check_cancel(cancel_check)
@@ -881,6 +942,8 @@ def _finalisiere_chat(
     ]
     if on_llm_call is not None:
         on_llm_call()
+    if record_model_request is not None:
+        record_model_request(_abschluss_messages, None)
     if cancel_check is None:
         _resp = _deepseek_chat(_abschluss_messages)
     else:
@@ -918,6 +981,7 @@ def chat_loop(
     cancel_check: Callable[[], bool] | None = None,
     origin_session_id: str | None = None,
     on_llm_call: Callable[[], None] | None = None,
+    on_model_request: Callable[[dict[str, Any]], None] | None = None,
     max_elapsed_s: float | None = _DEFAULT_MAX_ELAPSED_S,
     on_research_budget: Callable[[float], None] | None = None,
     allow_time_budget_finalize: bool = True,
@@ -958,6 +1022,24 @@ def chat_loop(
         *_baue_messages(session.load()),
     ]
     schemas = openai_schemas(tools, mode=mode)
+    provider_request_number = 0
+
+    def record_model_request(
+        request_messages: list[dict[str, Any]],
+        request_tools: list[dict[str, Any]] | None,
+    ) -> None:
+        nonlocal provider_request_number
+        provider_request_number += 1
+        if on_model_request is None:
+            return
+        payload = _chat_provider_payload(request_messages, request_tools)
+        on_model_request(_chat_request_manifest(
+            payload,
+            mode=mode,
+            request_id=request_id,
+            request_number=provider_request_number,
+        ))
+
     _active_turn_start = max(
         index for index, item in enumerate(messages) if item.get("role") == "user"
     )
@@ -987,6 +1069,7 @@ def chat_loop(
             messages, session, grund="time_budget",
             on_chunk=on_chunk, cancel_check=cancel_check,
             on_llm_call=on_llm_call,
+            record_model_request=record_model_request,
         )
 
     _rounds = 0
@@ -1002,6 +1085,7 @@ def chat_loop(
         _rounds += 1
         if on_llm_call is not None:
             on_llm_call()
+        record_model_request(messages, schemas)
         try:
             if cancel_check is None and _deepseek_chat is _DEFAULT_DEEPSEEK_CHAT:
                 def _deadline_check() -> bool:
@@ -1193,6 +1277,7 @@ def chat_loop(
                     messages, session, grund="stagnation",
                     on_chunk=on_chunk, cancel_check=cancel_check,
                     on_llm_call=on_llm_call,
+                    record_model_request=record_model_request,
                 )
             _warned_tool_cycles.add(_cycle)
             messages.append({
@@ -1212,4 +1297,5 @@ def chat_loop(
         messages, session, grund="round_limit",
         on_chunk=on_chunk, cancel_check=cancel_check,
         on_llm_call=on_llm_call,
+        record_model_request=record_model_request,
     )

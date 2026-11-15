@@ -90,6 +90,11 @@ def test_run_job_uses_snapshot_and_merges_completed_turn_once(
     gesehen: list[tuple[str, list[str]]] = []
 
     def _fake_chat_loop(session, message, **_kwargs):
+        _kwargs["on_model_request"]({
+            "request_number": 1,
+            "request_sha256": "a" * 64,
+            "message_count": 2,
+        })
         gesehen.append((
             session.session_id,
             [event["payload"].get("text", "") for event in session.load()],
@@ -117,6 +122,15 @@ def test_run_job_uses_snapshot_and_merges_completed_turn_once(
     result = ChatJobStore(db_path).get(job["job_id"])
     assert result is not None
     assert result["state"] == "succeeded"
+    request_events = [
+        event for event in result["events"] if event["kind"] == "model_request"
+    ]
+    assert len(request_events) == 1
+    assert request_events[0]["payload"] == {
+        "request_number": 1,
+        "request_sha256": "a" * 64,
+        "message_count": 2,
+    }
 
 
 def test_sync_completed_job_turns_repairs_missing_parent_projection(

@@ -300,6 +300,13 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     state.budget = {"max_llm_calls": 1}
     state.llm_calls = 1
     calls: dict[str, object] = {}
+    audit_events: list[tuple[str, dict[str, object], str | None]] = []
+    monkeypatch.setattr(
+        "werkstatt.audit.audit",
+        lambda kind, payload, _directory, _project, **kwargs: audit_events.append(
+            (kind, payload, kwargs.get("run_id")),
+        ) or True,
+    )
 
     class FakeSession:
         def __init__(self, project: str, session_id: str) -> None:
@@ -344,6 +351,11 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
         calls["allow_time_budget_finalize"] = kwargs[
             "allow_time_budget_finalize"
         ]
+        kwargs["on_model_request"]({
+            "request_number": 1,
+            "request_sha256": "b" * 64,
+            "message_count": 2,
+        })
         kwargs["on_llm_call"]()
         return json.dumps(expected)
 
@@ -373,6 +385,10 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     ] == 1
     assert "source_evidence" in calls["message"]
     assert "read_file-Auszug" in calls["message"]
+    assert audit_events[0][0] == "loop_reflection_chat_model_request"
+    assert audit_events[0][1]["evidence_sha256"]
+    assert audit_events[0][1]["request_sha256"] == "b" * 64
+    assert audit_events[0][2] == "alpha-run-1"
 
 
 def test_chat_request_reuses_completed_idempotent_job_turn(
