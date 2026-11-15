@@ -6815,3 +6815,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Der Abschlussbeleg bindet jetzt jedes Kriterium an die erledigten Task-IDs und erfolgreichen Verify-Stage-IDs. Fehlt eine Zuordnung oder ausgefuehrte erfolgreiche Stage, wird `checks_passed_unverified` samt konkreter Belegluecke protokolliert und in der Timeline als unvollstaendiger Zielbeleg benannt.
 - **Grenze:** Das schafft Rueckverfolgbarkeit, aber noch keinen Test-zu-Kriterium-Vertrag und keine adaptive Neuplanung. OP-398 bleibt offen.
 - **Verifikation:** `tests/test_loop_phases.py` und `tests/test_live_feed_backend.py`: 54 bestanden; Ruff, Mypy fuer Finalizer/Inspector, Doku-Drift und `git diff --check` bestanden. Das vollstaendige `py -m tools.quality_gate --json` wurde waehrend seines eingebetteten Pytest-Laufs lokal mit `KeyboardInterrupt` beendet; es liegt kein lokales Voll-Gate-Ergebnis vor. Linux-CI fuer den PR steht aus.
+
+### Nachtrag — Kriterien ohne Verify-Belege nicht als Run-Erfolg markieren
+
+- **Befund:** Der vorherige Nachtrag protokollierte `checks_passed_unverified`, emittierte danach aber dennoch `loop_erfolg`. Der Lauf konnte damit gleichzeitig unvollstaendige Zielbelege und Erfolg melden.
+- **Aenderung:** Bei expliziten Kriterien wird `loop_erfolg` nur emittiert, wenn die Kriterienbelegkette mindestens eine erfolgreiche Verify-Stage fuer jedes Kriterium enthaelt. Fehlen diese Belege, protokolliert der Finalizer `criteria_evidence_incomplete` und liefert einen Fehlerstatus zurueck.
+- **Regressionstest:** Der Phase-End-Resume-Pfad wird einmal mit erfolgreicher Verify-Stage und einmal mit leerem Stage-Ergebnis ausgefuehrt. Nur der erste Fall darf `loop_erfolg` emittieren.
+- **Verifikation:** Zwei parametrisierte Regressionen und Ruff fuer Finalizer/Phasentests bestanden lokal. Vollstaendige Phasen-, Qualitaets- und Linux-CI-Ergebnisse stehen noch aus.

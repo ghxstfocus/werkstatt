@@ -396,3 +396,13 @@ HTML-Stand auslieferte. Die Versionskennung aller Layout-Assets wird synchron
 erneuert, wie es der bestehende Layout-Vertrag verlangt.
 Der Audit-Event enthaelt absichtlich keinen Nachrichtentext; `chat_job_queued`
 wird deshalb neutral als „Chat-Nachricht eingegangen“ dargestellt.
+
+## Nachtrag — Erfolg nur bei belegter Kriterien-Verify (2026-11-14)
+
+Der bisherige Finalizer konnte `checks_passed_unverified` protokollieren und
+trotzdem anschliessend `loop_erfolg` emittieren. Das war ein widerspruechlicher
+Endzustand. Bei expliziten Akzeptanzkriterien blockiert der Finalizer den
+Erfolgsstatus nun, solange die Verify-Stage-Belege fehlen; der Lauf endet dann
+mit `criteria_evidence_incomplete`. Das beweist noch keine kriterienspezifische
+Testzuordnung: erfolgreiche globale Verify-Stages bleiben nur ein Mindestbeleg
+und ersetzen den in OP-398 geforderten belastbaren Ziel-/Replan-Vertrag nicht.

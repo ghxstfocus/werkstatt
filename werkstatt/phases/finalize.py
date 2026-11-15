@@ -1297,6 +1297,8 @@ def _phase_finalize(
             audit("loop_phase", _completion, pd, pn)
             rc = 1
         else:
+            _goal_evidence_complete = not _has_explicit_criteria
+            _criteria_evidence_gaps: list[str] = []
             if (
                 isinstance(_criterion_progress, dict)
                 and _criterion_progress.get("tracked") is True
@@ -1313,6 +1315,7 @@ def _phase_finalize(
                     )
                 )
                 _criteria_verified = not _criteria_evidence_gaps
+                _goal_evidence_complete = _criteria_verified
                 audit(
                     "loop_criteria_progress",
                     {
@@ -1353,7 +1356,29 @@ def _phase_finalize(
                     pd,
                     pn,
                 )
-            audit("loop_erfolg", {"project_name": project_name}, pd, pn)
+            if _goal_evidence_complete:
+                audit("loop_erfolg", {"project_name": project_name}, pd, pn)
+            elif _has_explicit_criteria:
+                audit(
+                    "loop_phase",
+                    {
+                        "phase": "completion",
+                        "status": "incomplete",
+                        "reason": "criteria_evidence_incomplete",
+                        "criteria_evidence_gaps": (
+                            _criteria_evidence_gaps[:20]
+                            if isinstance(_criteria_evidence_gaps, list)
+                            else ["criteria_evidence_missing"]
+                        ),
+                        "next_step": (
+                            "Belegluecken schliessen und die Abschluss-Verify "
+                            "erneut ausfuehren; der Run wird nicht als Erfolg markiert."
+                        ),
+                    },
+                    pd,
+                    pn,
+                )
+                rc = 1
 
     # M-307b: Phasen-Ende in PROGRESS.md
     # FIX AH 2026-10-31: Wurde bei jedem Loop-Ende geschrieben,
