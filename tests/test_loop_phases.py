@@ -416,6 +416,10 @@ def _run_finalize_commit_order(
 
     def _verify(_state, phase=None):
         assert phase == "phase_end"
+        _state.last_verify_results = (
+            [{"stage_id": "pytest_regression", "ok": True}]
+            if verify_ok else []
+        )
         if getattr(_state, "doku_nachzug_commit_only", False):
             order.append("verify_docs")
         else:
@@ -729,8 +733,15 @@ def test_finalize_blockiert_zielerfolg_bei_ungetrackten_akzeptanzkriterien(
 
 
 
+@pytest.mark.parametrize(
+    ("verify_stages", "expected_rc", "expected_success"),
+    [
+        ([{"stage_id": "pytest_regression", "ok": True}], 0, True),
+        ([], 1, False),
+    ],
+)
 def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
-    tmp_path, monkeypatch,
+    tmp_path, monkeypatch, verify_stages, expected_rc, expected_success,
 ):
     """Ein gespeicherter All-done-Checkpoint muss erneut final verifiziert werden."""
     from werkstatt.phase_state import PhaseState
@@ -785,9 +796,7 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
 
     def verify(_state, *, phase=None):
         order.append(("verify_post_commit" if any(step[0] == "commit" for step in order) else "verify", phase))
-        _state.last_verify_results = [
-            {"stage_id": "pytest_regression", "ok": True},
-        ]
+        _state.last_verify_results = verify_stages
         return True
 
     def append_progress(_project_dir, **_kwargs):
@@ -815,7 +824,7 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
         state, tasks_ok, returned_tasks, "testproj", phase_state,
     )
 
-    assert rc == 0
+    assert rc == expected_rc
     assert tasks_ok == 1
     assert state.tasks_ok_counter == 1
     assert order == [
@@ -823,38 +832,53 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
         ("commit", None),
         ("verify_post_commit", "phase_end"),
     ]
-    assert any(event[0] == "loop_erfolg" for event in audit_events)
+    assert any(event[0] == "loop_erfolg" for event in audit_events) is expected_success
     verified = [
         event[1] for event in audit_events
         if event[0] == "loop_criteria_progress"
         and event[1].get("status") == "verified"
     ]
-    assert verified == [{
-        "status": "verified",
-        "tracked": True,
-        "coverage_basis": "criterion_task_mapping_and_verify_stages",
-        "covered": ["AC1"],
-        "remaining": [],
-        "verification": "phase_end",
-        "criteria_evidence": [{
-            "criterion_id": "AC1",
-            "criterion": "Gesamtziel ist erfuellt",
-            "task_ids": ["t1"],
-            "task_status": "done",
-            "verify_stage_ids": ["pytest_regression"],
-            "verification_status": "passed",
-        }],
-        "evidence_gaps": [],
-        "decision_summary": (
-            "Jedes Akzeptanzkriterium ist auf erledigte Tasks "
-            "und erfolgreiche Verify-Stages zurueckgefuehrt."
-        ),
-        "evidence": [
-            "Alle zugeordneten Tasks sind erledigt.",
-            "Phase-End-Review, Human Gate und Abschluss-Verify bestanden.",
-            "Kriterienspezifische Task- und Verify-Belege sind verknuepft.",
-        ],
-    }]
+    if expected_success:
+        assert verified == [{
+            "status": "verified",
+            "tracked": True,
+            "coverage_basis": "criterion_task_mapping_and_verify_stages",
+            "covered": ["AC1"],
+            "remaining": [],
+            "verification": "phase_end",
+            "criteria_evidence": [{
+                "criterion_id": "AC1",
+                "criterion": "Gesamtziel ist erfuellt",
+                "task_ids": ["t1"],
+                "task_status": "done",
+                "verify_stage_ids": ["pytest_regression"],
+                "verification_status": "passed",
+            }],
+            "evidence_gaps": [],
+            "decision_summary": (
+                "Jedes Akzeptanzkriterium ist auf erledigte Tasks "
+                "und erfolgreiche Verify-Stages zurueckgefuehrt."
+            ),
+            "evidence": [
+                "Alle zugeordneten Tasks sind erledigt.",
+                "Phase-End-Review, Human Gate und Abschluss-Verify bestanden.",
+                "Kriterienspezifische Task- und Verify-Belege sind verknuepft.",
+            ],
+        }]
+    else:
+        assert verified == []
+        unverified = [
+            event[1] for event in audit_events
+            if event[0] == "loop_criteria_progress"
+            and event[1].get("status") == "checks_passed_unverified"
+        ]
+        assert unverified and unverified[0]["evidence_gaps"]
+        incomplete = [
+            event[1] for event in audit_events
+            if event[0] == "loop_phase"
+            and event[1].get("reason") == "criteria_evidence_incomplete"
+        ]
+        assert incomplete and incomplete[0]["criteria_evidence_gaps"]
 
 
 def test_criterion_evidence_reports_gaps_instead_of_guessing(tmp_path):

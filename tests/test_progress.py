@@ -85,7 +85,13 @@ def test_loop_schreibt_progress(tmp_path):
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]
 
-    with patch("werkstatt.loop._verify_patches", return_value=True), \
+    def verify_with_evidence(state, **_kwargs):
+        state.last_verify_results = [
+            {"stage_id": "pytest_regression", "ok": True},
+        ]
+        return True
+
+    with patch("werkstatt.loop._verify_patches", side_effect=verify_with_evidence), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \

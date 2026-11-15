@@ -718,6 +718,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "    if phase == 'phase_end':\n"
         "        from pathlib import Path\n"
         "        Path(verify_marker).write_text('phase_end', encoding='utf-8')\n"
+        "        _state.last_verify_results = [{'stage_id': 'pytest_regression', 'ok': True}]\n"
         "    return True\n"
         "finalize._verify_patches = _verify_patches\n"
         "finalize._post_commit_snapshot_check = "

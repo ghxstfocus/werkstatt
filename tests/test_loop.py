@@ -14,6 +14,11 @@ from werkstatt.state import RunState
 from werkstatt.verify import _stage_anzahl, _stage_count_by_phase, _stage_ids
 
 
+def _verify_ok_with_evidence(state, *_args, **_kwargs):
+    state.last_verify_results = [{"stage_id": "pytest_regression", "ok": True}]
+    return True
+
+
 def _state(tmp_path, tasks=True, tests=True, akz=True, explorer_ctx=None):
     st = RunState(
         block_id="t", aufgabe="a", start_ts="",
@@ -181,7 +186,7 @@ def test_loop_happy_path(tmp_path):
     st = _state(tmp_path)
     st.tasks = [{"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]}]
     # _verify_patches mocken (verhindert subprocess.run(pytest))
-    with patch("werkstatt.loop._verify_patches", return_value=True), \
+    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
@@ -231,7 +236,7 @@ def test_loop_uses_phase_state(tmp_path):
     st.tasks = [{"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]}]
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=st.akzeptanzkriterien)
-    with patch("werkstatt.loop._verify_patches", return_value=True), \
+    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
@@ -255,7 +260,7 @@ def test_loop_resume_nach_unterbrechung(tmp_path):
     ps.mark_done("t1")
     nxt = ps.get_next_task()
     assert nxt is not None and nxt["id"] == "t2"
-    with patch("werkstatt.loop._verify_patches", return_value=True), \
+    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
@@ -281,7 +286,7 @@ def test_loop_patch_reflection_bei_old_string_not_found(tmp_path):
         state.patches = bad_patch
         return True
 
-    with patch("werkstatt.loop._verify_patches", return_value=True), \
+    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_builder", side_effect=_mock_builder), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
@@ -298,7 +303,7 @@ def test_loop_patch_post_apply_verify(tmp_path):
     st.tasks = [{"id": "t1", "name": "Update README", "file": "README.md"}]
     (tmp_path / "README.md").write_text("# Test\n")
     # Patch ersetzt String, aber write schlaegt fehl (simuliert via Patch-Mock)
-    with patch("werkstatt.loop._verify_patches", return_value=True), \
+    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
@@ -360,7 +365,7 @@ def test_loop_preflight_vor_planner(tmp_path):
 
     with patch("werkstatt.planner._preflight_scan", side_effect=_mock_preflight), \
          patch("werkstatt.loop.run_planner", side_effect=_mock_planner), \
-         patch("werkstatt.loop._verify_patches", return_value=True), \
+         patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
@@ -387,7 +392,12 @@ def test_pre_build_uebersprungen_bei_follow_up(tmp_path):
     def _verify(state, phase=None):
         verify_calls["count"] += 1
         is_first_pre_build = verify_calls["count"] == 1 and phase == "pre_build"
-        return not is_first_pre_build
+        result = not is_first_pre_build
+        if result and phase == "phase_end":
+            state.last_verify_results = [
+                {"stage_id": "pytest_regression", "ok": True},
+            ]
+        return result
 
     with patch("werkstatt.loop._verify_patches", side_effect=_verify), \
          patch("werkstatt.loop.run_builder", return_value=True), \
@@ -470,7 +480,12 @@ def test_pre_build_deterministische_klassifikation(tmp_path):
     def _verify(state, phase=None):
         verify_calls["n"] += 1
         is_first_pre_build = verify_calls["n"] == 1 and phase == "pre_build"
-        return not is_first_pre_build
+        result = not is_first_pre_build
+        if result and phase == "phase_end":
+            state.last_verify_results = [
+                {"stage_id": "pytest_regression", "ok": True},
+            ]
+        return result
 
     with patch("werkstatt.loop._verify_patches", side_effect=_verify), \
          patch("werkstatt.loop.run_builder", return_value=True), \
@@ -624,7 +639,7 @@ def test_loop_task_read_only(tmp_path):
         return True
 
     with patch("werkstatt.loop.run_builder", side_effect=_mock_builder), \
-         patch("werkstatt.loop._verify_patches", return_value=True), \
+         patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
@@ -657,7 +672,7 @@ def test_loop_reviewer_after_reflection(tmp_path):
     st.last_verify_errors = ["pytest: mock failed"]
 
     with patch("werkstatt.loop.run_builder", return_value=True), \
-         patch("werkstatt.loop._verify_patches", return_value=True), \
+         patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", side_effect=_mock_reviewer), \
          patch("werkstatt.loop._reflection_loop", return_value=True), \
@@ -1461,7 +1476,7 @@ def test_reviewer_reject_ignoriert_wenn_pytest_gruen(tmp_path, monkeypatch):
                        "old_string": "x = 1", "new_string": "x = 2"}]
         return True
     monkeypatch.setattr(loop_mod, "run_builder", _fake_builder)
-    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: True)
+    monkeypatch.setattr(loop_mod, "_verify_patches", _verify_ok_with_evidence)
     monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
     monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
     monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
@@ -1516,7 +1531,7 @@ def test_reviewer_reject_fail_closed_bei_leerem_patch(tmp_path, monkeypatch):
         _s.patches = []
         return True
     monkeypatch.setattr(loop_mod, "run_builder", _fake_builder_empty)
-    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: True)
+    monkeypatch.setattr(loop_mod, "_verify_patches", _verify_ok_with_evidence)
     monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
     monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
     monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
@@ -1739,7 +1754,7 @@ def test_loop_builder_false_sofort_return(tmp_path, monkeypatch):
                         lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
     # run_builder liefert False (create-Task scheitert).
     monkeypatch.setattr(loop_mod, "run_builder", lambda s: False)
-    monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: True)
+    monkeypatch.setattr(loop_mod, "_verify_patches", _verify_ok_with_evidence)
     monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
     monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
     monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
