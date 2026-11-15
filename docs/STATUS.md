@@ -9,7 +9,7 @@ Letzte Aktualisierung: 2026-11-15.
 ## Offene Punkte
 ### OP-410: Architect-Retry drosselt max_tokens unter Reasoning-Bedarf
 
-**Status:** offen
+**Status:** open
 **Priorität:** hoch
 **Typ:** Bugfix
 **Betroffene Dateien:**
