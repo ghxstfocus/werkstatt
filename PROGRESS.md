@@ -6962,6 +6962,6 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 ### Architect-Prompt zeigt die tatsaechlich enthaltenen Explorer-Fundstellen — 2026-11-15
 
 - **Befund:** Im Architect-Systemprompt wurden bis zu fuenf Explorer-Previews nochmals auf 4.000 Zeichen geschnitten, ohne Quellhash oder exakten im Prompt verbliebenen Zeilenbereich. Ein Scout-Quellbeleg wurde dadurch am naechsten Rollen-Handoff erneut ungenauer.
-- **Aenderung im Arbeitsbaum:** Der Architect-Quelltextblock traegt jetzt Datei, tatsaechlichen nummerierten Zeilenbereich, Gesamtzeilen, Vollstaendigkeitsstatus und Quelldatei-SHA256. Bei einem weiteren 4.000-Zeichen-Cap werden nur im Prompt vorhandene Zeilen behauptet; unnummerierte Reste zeigen den Bereich als unbekannt und erhalten einen expliziten Kuerzungsmarker.
-- **Verifikation lokal:** Explorer-/Scout-/Architect-/Planner-Gruppe: 79 bestanden; Ruff, Compileall und git diff --check bestanden.
+- **Aenderung im Arbeitsbaum:** Der Architect-Quelltextblock traegt jetzt Datei, tatsaechlichen nummerierten Zeilenbereich, Gesamtzeilen, Vollstaendigkeitsstatus und Quelldatei-SHA256. Bei einem weiteren 4.000-Zeichen-Cap werden nur im Prompt vorhandene Zeilen behauptet; unnummerierte Reste zeigen den Bereich als unbekannt und erhalten einen expliziten Kuerzungsmarker. Datei-Pfade werden in Scout- und Architect-Markup escaped; Scout-Pfadescaping hat eine eigene Regression.
+- **Verifikation lokal:** Explorer-/Scout-/Architect-/Planner-Gruppe: 80 bestanden; Ruff, Compileall und git diff --check bestanden.
 - **Grenze:** Der Scout->Architect-Summarypfad und weitere Rollen sind noch nicht end-to-end auf Herkunft, Relevanz und Vollstaendigkeit geprueft. Follow-up nicht auf Main/Server; OP-405 bleibt offen.

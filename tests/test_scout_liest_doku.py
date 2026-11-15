@@ -193,3 +193,43 @@ def test_scout_marks_explorer_phase_char_truncation(monkeypatch, tmp_path):
     assert scout._run_scout(state, "Pruefe das Projektziel", {}, [], "key")
     assert len(prompts) == 1
     assert "6000 von 12000 Zeichen des zeilennummerierten Auszuges" in prompts[0]
+
+
+def test_scout_escapes_source_path_in_prompt_markup(monkeypatch, tmp_path):
+    state = mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        explorer_context={
+            "key_files": [{
+                "file": 'src/a".py',
+                "preview": "000001 | def f(): pass",
+                "source_line_ranges": [[1, 1]],
+                "source_total_lines": 1,
+                "source_complete": True,
+                "preview_source_chars": 23,
+                "source_sha256": "e" * 64,
+            }],
+        },
+    )
+    prompts: list[str] = []
+    monkeypatch.setattr(scout, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(
+        scout,
+        "ask_llm",
+        lambda _key, _system, user, **_kwargs: (
+            prompts.append(user) or SimpleNamespace(
+                ok=True,
+                content=json.dumps({
+                    "ziel": "Ziel", "relevante_dateien": [],
+                    "api_auszug": {}, "vorgeschlagene_aenderungen": [],
+                    "risiken": [], "auftrag_prosa": "Pruefe das Ziel.",
+                    "bereits_erfuellt": False,
+                }),
+            )
+        ),
+    )
+    monkeypatch.setattr(scout, "audit", lambda *_args, **_kwargs: None)
+
+    assert scout._run_scout(state, "Pruefe das Ziel", {}, [], "key")
+    assert 'datei="src/a&quot;.py"' in prompts[0]
+    assert 'datei="src/a".py"' not in prompts[0]

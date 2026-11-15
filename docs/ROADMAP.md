@@ -44,11 +44,11 @@ der Verify-Beleg je Kriterium fehlt. Die PR-CI [43691263964](https://github.com/
 bestand mit 2.351 Tests; Ruff, Mypy, AST und Audit-Katalog waren gruen. Das
 belegt den PR-Stand, nicht den Produktionsserver. OP-398 bleibt offen.
 
-Main `263d425` bindet Kriterien-Verify-Belege an Task und Run-ID und
+Main `90e0ca5` bindet Kriterien-Verify-Belege an Task und Run-ID und
 dispatcht jeweils einen Task mit erneuter Checkpoint-Entscheidung. Fuer
 `41d7f4b` wurde ein Servercheckout-Lauf mit 2.399 bestandenen und 5
-uebersprungenen Tests bestaetigt; dieser Beleg gilt nicht fuer `263d425`.
-Die Server-Vollsuite fuer `263d425` steht aus. Setup und Planfreigabe sind
+uebersprungenen Tests bestaetigt; dieser Beleg gilt nicht fuer `90e0ca5`.
+Die Server-Vollsuite fuer `90e0ca5` steht aus. Setup und Planfreigabe sind
 noch nicht Teil einer vollstaendig dynamischen Run-Dispatch-Schleife.
 
 

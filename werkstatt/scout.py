@@ -10,6 +10,7 @@ werkstatt.planner aufgeloest werden, damit Test-Patches wirken.
 from __future__ import annotations
 
 import re
+from html import escape
 from typing import Any
 
 SCOUT_CONTEXT_MAX_CHARS = 32_000
@@ -1050,8 +1051,9 @@ def _run_scout(
                 _source_chars = _k.get("preview_source_chars")
                 if not isinstance(_source_chars, int) or _source_chars < 0:
                     _source_chars = len(_pv)
+                _safe_file = escape(str(_pf), quote=True)
                 _preview_text = (
-                    f"[FUNDSTELLE: {_pf}; Zeilen {_source_lines} von "
+                    f"[FUNDSTELLE: {_safe_file}; Zeilen {_source_lines} von "
                     f"{_total_lines if isinstance(_total_lines, int) else 'unbekannt'}; "
                     f"Volltextauszug={str(_complete).lower()}; "
                     f"Auszug {_source_chars} Zeichen; "
@@ -1061,7 +1063,7 @@ def _run_scout(
                 if len(_pv) > 8000:
                     _preview_text += (
                         "\n[QUELLTEXTAUSZUG GEKUERZT: Datei "
-                        f"{_pf}; 8000 von {_source_chars} "
+                        f"{_safe_file}; 8000 von {_source_chars} "
                         "Explorer-Zeichen enthalten. "
                         "Fehlender Inhalt ist unbekannt; fuer davon "
                         "abhaengige Aussagen Quelle gezielt nachladen.]"
@@ -1074,7 +1076,7 @@ def _run_scout(
                         "Fehlender Inhalt ist unbekannt.]"
                     )
                 _previews_parts.append(
-                    f'<datei_inhalt datei="{_pf}">\n'
+                    f'<datei_inhalt datei="{_safe_file}">\n'
                     f'{_preview_text}\n</datei_inhalt>'
                 )
     # Phase 5c — projektbezogene Doku als optionale, einzeln budgetierte Belege.
