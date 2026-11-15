@@ -7,6 +7,71 @@ Format gemaess `DOC_CONVENTIONS.md` §5. Diese Queue enthaelt nur offene, konkre
 Letzte Aktualisierung: 2026-11-15.
 
 ## Offene Punkte
+### OP-410: Architect-Retry drosselt max_tokens unter Reasoning-Bedarf
+
+**Status:** offen
+**Priorität:** hoch
+**Typ:** Bugfix
+**Betroffene Dateien:**
+- `werkstatt/architect.py` (Konstante `ARCHITECT_MAX_TOKENS`, Aufrufstelle des
+  LLM-Requests mit `max_tokens=`)
+- `tests/test_architect_tokens.py` (bestehender Test, erweitern)
+- `tests/test_loop_planner_architect.py` (prüfen, ob `max_tokens == 4000`
+  in Zeile 466 mit dem neuen Verhalten kollidiert)
+
+**Belegter Fehler:**
+Run `werkstatt-20261115-111643-b290ddfe`, Seq 793496:
+`completion_tokens: 12000`, `content_len: 0`, 46.678 Zeichen Reasoning.
+Der Architect hat das gesamte Completion-Budget im CoT verbraucht und keine
+Antwort mehr produziert.
+
+**Ursache (zu verifizieren beim Bearbeiten):**
+Die Konstante `ARCHITECT_MAX_TOKENS` steht auf 32000. An der Aufrufstelle
+wird sie jedoch im Retry-Pfad überschrieben:
+
+    max_tokens=(
+        min(12000, ARCHITECT_MAX_TOKENS)
+        if _attempt else ARCHITECT_MAX_TOKENS
+    )
+
+Der zweite Versuch erhält damit 12000 statt 32000 — weniger als der
+Erstversuch, obwohl er mehr Kontext (Ablehnungsbefunde aus Versuch 1) und
+damit mehr Reasoning-Bedarf hat. Die Drosselung macht den Retry strukturell
+chancenlos.
+
+**Zu prüfen vor der Änderung:**
+1. Exakte Zeilennummern der Konstante und der Aufrufstelle mit `grep -n`
+   verifizieren (die oben genannten Zeilen 680 und 1360-1362 stammen aus
+   einer früheren Sitzung und sind nicht in dieser OP verifiziert).
+2. Herkunft des Werts 12000 klären: Ist er hartkodiert an der Aufrufstelle,
+   oder kommt er aus einer Projektkonfiguration
+   (`projects/werkstatt.yaml` hat `max_tokens_planner: 8192`, was 12000
+   nicht erklärt)?
+3. Prüfen, ob `tests/test_loop_planner_architect.py:466`
+   (`assert a["max_tokens"] == 4000`) denselben Aufrufpfad testet und
+   angepasst werden muss.
+
+**Akzeptanzkriterien:**
+- [ ] Der Retry-Pfad sendet denselben `max_tokens`-Wert wie der Erstversuch.
+- [ ] Die Drosselungslogik ist entfernt, nicht nur der Zahlenwert erhöht —
+      `min(32000, ARCHITECT_MAX_TOKENS)` bliebe sonst als irreführende
+      Struktur im Code stehen.
+- [ ] Neuer Test: Retry-Aufruf sendet `max_tokens == ARCHITECT_MAX_TOKENS`.
+      Der bestehende Test `test_architect_max_tokens_mindestens_32000` prüft
+      nur die Konstante, nicht den Aufruf — deshalb ist der Bug trotz grünem
+      Test durchgelaufen.
+- [ ] Kommentar an der Konstante aktualisiert: Die Loop-Test-6-Historie
+      (55706 Zeichen Reasoning bei 16000 max_tokens) muss den Retry-Fall
+      mitnennen.
+- [ ] `pytest tests/test_architect_tokens.py tests/test_loop_planner_architect.py`
+      grün.
+
+**Nicht Teil dieser OP:**
+- Die Preflight-Fehler, die dem Architect vorenthalten wurden
+  (`omitted: ["PREFLIGHT-FEHLER"]`) — separates Thema, siehe OP-405.
+- Eine generelle Überarbeitung des CoT-Triggers im Architect-Prompt. Ein
+  höheres Limit behebt das Symptom; ob der Prompt zu breites Reasoning
+  auslöst, ist eine eigene Untersuchung.
 ### OP-404: Codeguardian als unabhaengige Schutz- und Evidenzschicht
 - **Status:** open
 - **Typ:** change-guardian
