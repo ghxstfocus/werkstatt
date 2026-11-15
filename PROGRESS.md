@@ -7041,8 +7041,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Retry-Drosselung entfernt: Erstversuch und API-Preflight-Retry verwenden ARCHITECT_MAX_TOKENS. Kommentar nennt den hoeheren Reasoning-Bedarf. `test_architect_revises_plan_after_api_preflight_rejection` prueft beide tatsaechlichen Aufrufparameter.
 - Beleg: GitHub-Quality-Gate fuer b47ec23 gruen; Servercheckout b47ec23 mit 2446 bestanden und 5 uebersprungen bestaetigt. OP-410 aus der offenen STATUS-Queue entfernt.
 
-## 2026-11-15 – Chat-Handoff-Rueckmeldung bereinigt (lokal, noch nicht deployt)
+## 2026-11-15 – Chat-Handoff-Rueckmeldung bereinigt (Main 1cf1e0a, CI gruen; Server offen)
 - Reproduziert am aktuellen b47ec23-Stand: OP-410s Format `**Akzeptanzkriterien:**` ohne Listenstrich wurde vom OP-Selector als fehlend gelesen; ein pytest-Aufruf innerhalb der Kriterien wurde nicht als Testnachweis erkannt. Der Chat bekam deshalb `needs_input`.
 - `static/chat.js` erzeugte fuer jedes `needs_input`-Toolresult eine zusaetzliche Assistentenkarte, obwohl danach die finale Antwort denselben Handoff erklaert; Tool-Replay konnte weitere Duplikate erzeugen. Die UI wartet jetzt auf die finale Antwort.
 - Korrekturen: flexibles Lesen von STATUS-Feldtiteln, pytest-Nachweis innerhalb der Kriterien, keine zweite Auswahl fuer in PROGRESS abgeschlossene OPs und explizite Chat-Antwort „bereits abgeschlossen“. Mypy-Fehler auf den geaenderten Architect-Testbelegen wurden mit struktureller Typpruefung behoben.
-- Verifikation lokal: gezielte OP-Selector/Chat/Architect-Gruppe 182 bestanden, 2 uebersprungen; Mypy 4 Module, Ruff, `node --check static/chat.js`, Doku-Drift und `git diff --check` bestanden. Noch nicht auf Main/Server; kein Produktionsnachweis.
+- Verifikation lokal: gezielte OP-Selector/Chat/Architect-Gruppe 182 bestanden, 2 uebersprungen; Mypy 4 Module, Ruff, `node --check static/chat.js`, Doku-Drift und `git diff --check` bestanden. Commit `1cf1e0a` liegt auf Main; GitHub-Quality-Gate erfolgreich. Noch nicht auf dem Servercheckout bestaetigt; kein Produktionsnachweis.
