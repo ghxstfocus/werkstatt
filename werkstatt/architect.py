@@ -1792,12 +1792,20 @@ def run_architect(
         _arch_reply = _with_spinner(
             "Architect",
             lambda _prompt=_sys_prompt, _content=_arch_user_content,
-            _attempt=_versuch: ask_llm(
+            _attempt=_versuch, _request_chars=_request_chars: ask_llm(
                 api_key, _prompt, _content,
                 model=_get_architect_model(),
                 temperature=0.2,
                 max_tokens=ARCHITECT_MAX_TOKENS,
                 aufgabe="architect", heartbeat=False, state=state,
+                context_manifest={
+                    "budget_event": "planner_architect_context_budget",
+                    "attempt": _attempt + 1,
+                    "source_evidence": getattr(
+                        state, "architect_scout_source_manifest", {},
+                    ),
+                    "request_chars": _request_chars,
+                },
             ),
         )
         if not _arch_reply.ok:

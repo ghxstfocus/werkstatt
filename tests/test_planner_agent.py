@@ -645,8 +645,9 @@ def test_planner_split_persistiert_abnahmekriterien_und_originalauftrag(tmp_path
     )
     captured = {}
 
-    def _ask(_key, _system, user_content, **_kwargs):
+    def _ask(_key, _system, user_content, **kwargs):
         captured["prompt"] = user_content
+        captured["manifest"] = kwargs.get("context_manifest")
         return reply
 
     with patch("werkstatt.planner.ask_llm", side_effect=_ask), \
@@ -668,6 +669,9 @@ def test_planner_split_persistiert_abnahmekriterien_und_originalauftrag(tmp_path
     ]
     assert "ORIGINALAUFTRAG" in captured["prompt"]
     assert st.aufgabe.strip() in captured["prompt"]
+    assert captured["manifest"]["budget_event"] == "planner_split_context_budget"
+    assert captured["manifest"]["scope"] == "task_graph"
+    assert captured["manifest"]["required_context_complete"] is True
 
 
 def test_planner_split_blockiert_uebergrossen_auftrag_statt_vorab_zu_schneiden(

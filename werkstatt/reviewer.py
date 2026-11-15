@@ -806,6 +806,11 @@ def run_phase_end_review(state: RunState) -> bool:
                 model="deepseek-chat", temperature=0.2, max_tokens=4000,
                 redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
                 aufgabe="reviewer", state=state,
+                context_manifest={
+                    "budget_event": "reviewer_phase_context",
+                    "files": _phase_files,
+                    "user_chars": len(user),
+                },
             ),
         )
     except Exception as _exc:
@@ -1341,6 +1346,13 @@ def run_reviewer(state: RunState) -> bool:
         model="deepseek-chat", temperature=0.0, max_tokens=4000,
         redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
         aufgabe="reviewer", state=state,
+        context_manifest={
+            "budget_event": "reviewer_context_budget",
+            "budget": _review_context_meta,
+            "task_files": _normalized_files,
+            "diff_sha256": _diff_hash,
+            "target_sha256": _target_hashes,
+        },
     )
 
     if not reply.ok:

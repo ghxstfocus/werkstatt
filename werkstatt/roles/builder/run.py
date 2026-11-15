@@ -578,6 +578,12 @@ def _build_patches_fuer_datei(
         aufgabe="builder",
         state=state,
         progress_context={"files": [zieldatei]},
+        context_manifest={
+            "budget_event": "builder_context_budget",
+            "source_file": zieldatei,
+            "source_sha256": _source_hash if not _ist_neu else None,
+            "budget": _context_meta,
+        },
     )
     if not reply.ok:
         _builder_failure(state, "provider_error")

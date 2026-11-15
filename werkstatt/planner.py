@@ -866,7 +866,7 @@ def _cap_task_files(
 
 
 def _llm_split_einzel_task(
-    prosa: str, task: dict, api_key: str, pd, pn,
+    prosa: str, task: dict, api_key: str, pd, pn, state=None,
 ) -> list[dict]:
     """M-469: Zerlegt EINEN zu grossen Task in 2-3 Sub-Tasks (LLM)."""
     _system = PLANNER_SPLIT_SINGLE_SYSTEM
@@ -887,7 +887,15 @@ def _llm_split_einzel_task(
         lambda: ask_llm(
             api_key, _system, _user,
             model="deepseek-chat", temperature=0.2, max_tokens=4000,
-            aufgabe="planner-split",
+            aufgabe="planner-split", state=state,
+            context_manifest={
+                "budget_event": "planner_split_context_budget",
+                "scope": "single_task",
+                "task_id": str(task.get("id") or "")[:120],
+                "system_chars": len(_system),
+                "user_chars": len(_user),
+                "required_context_complete": True,
+            },
         ),
     )
     if not reply.ok:
@@ -1539,7 +1547,15 @@ def _zerlege_in_sub_tasks(
         lambda: ask_llm(
             api_key, PLANNER_SPLIT_SYSTEM, _user,
             model="deepseek-chat", temperature=0.2, max_tokens=8000,
-            aufgabe="planner-split",
+            aufgabe="planner-split", state=state,
+            context_manifest={
+                "budget_event": "planner_split_context_budget",
+                "scope": "task_graph",
+                "system_chars": len(PLANNER_SPLIT_SYSTEM),
+                "user_chars": len(_user),
+                "required_context_complete": True,
+                "key_files": key_files[:50],
+            },
         ),
     )
     if not reply.ok:
@@ -1635,7 +1651,7 @@ def _zerlege_in_sub_tasks(
                    "bullets": _bullets,
                    "komplexitaet": _komplexitaet,
                    "tiefe": _tiefe}, pd, pn)
-            _sub = _llm_split_einzel_task(prosa, t, api_key, pd, pn)
+            _sub = _llm_split_einzel_task(prosa, t, api_key, pd, pn, state=state)
             if _sub:
                 for _st in _sub:
                     _st_desc = _st.get("description", "")
@@ -1651,7 +1667,7 @@ def _zerlege_in_sub_tasks(
                     if not _st_gross or _tiefe + 1 >= 2:
                         _final.append(_st)
                     else:
-                        _sub2 = _llm_split_einzel_task(prosa, _st, api_key, pd, pn)
+                        _sub2 = _llm_split_einzel_task(prosa, _st, api_key, pd, pn, state=state)
                         _final.extend(_sub2 or [_st])
             else:
                 _final.append(t)

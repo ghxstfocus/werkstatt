@@ -617,6 +617,13 @@ def run_explorer(state: RunState, frage: str) -> dict:
         api_key, _explorer_system(), context,
         model="deepseek-chat", temperature=0.0, max_tokens=3000,
         state=state, aufgabe="explorer",
+        context_manifest={
+            "budget_event": "explorer_context",
+            "measurement_count": len(messungen),
+            "file_count": len(py_files),
+            "files_offered": py_files[:50],
+            "user_chars": len(context),
+        },
     )
     if not reply.ok:
         audit("explorer_llm_fehler", {"fehler": reply.error}, pd, pn)

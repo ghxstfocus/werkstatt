@@ -30,6 +30,7 @@ def test_scout_offers_status_and_adr_before_optional_project_docs(
         },
     )
     offered: list[str] = []
+    manifests: list[dict] = []
     original_budget = scout._budget_scout_context
 
     def capture_budget(assignment, sections, **kwargs):
@@ -38,9 +39,9 @@ def test_scout_offers_status_and_adr_before_optional_project_docs(
 
     monkeypatch.setattr(scout, "_budget_scout_context", capture_budget)
     monkeypatch.setattr(scout, "_with_spinner", lambda _label, call: call())
-    monkeypatch.setattr(
-        scout, "ask_llm",
-        lambda *_args, **_kwargs: SimpleNamespace(
+    def fake_ask_llm(*_args, **kwargs):
+        manifests.append(kwargs["context_manifest"])
+        return SimpleNamespace(
             ok=True,
             content=json.dumps({
                 "ziel": "Ziel", "relevante_dateien": [],
@@ -48,8 +49,9 @@ def test_scout_offers_status_and_adr_before_optional_project_docs(
                 "risiken": [], "auftrag_prosa": "Pruefe das Ziel.",
                 "bereits_erfuellt": False,
             }),
-        ),
-    )
+        )
+
+    monkeypatch.setattr(scout, "ask_llm", fake_ask_llm)
     monkeypatch.setattr(scout, "audit", lambda *_args, **_kwargs: None)
 
     result = scout._run_scout(
@@ -59,6 +61,9 @@ def test_scout_offers_status_and_adr_before_optional_project_docs(
     assert result is not None
     assert offered[:2] == ["PROJEKT-DOKU: status", "PROJEKT-DOKU: adr_index"]
     assert offered[2].startswith("QUELLTEXT")
+    assert manifests[0]["budget_event"] == "scout_context_budget"
+    assert manifests[0]["sections_offered"] == offered
+    assert manifests[0]["budget"]["included"]
     assert offered[-5:] == [
         "PROJEKT-DOKU: architecture",
         "PROJEKT-DOKU: conventions",

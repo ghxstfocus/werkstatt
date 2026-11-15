@@ -80,6 +80,10 @@ def test_reviewer_receives_every_full_target_as_untrusted_hashed_evidence(
     }
     assert context["required_complete"] is True
     assert context["used_chars"] <= context["max_chars"]
+    manifest = ask.call_args.kwargs["context_manifest"]
+    assert manifest["budget_event"] == "reviewer_context_budget"
+    assert manifest["budget"]["required_sections"] == context["required_sections"]
+    assert manifest["target_sha256"] == context["target_sha256"]
     assert (
         context["system_chars"]
         + context["used_chars"]

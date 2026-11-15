@@ -466,7 +466,7 @@ def test_architect_defensive_context_limit_is_audited(monkeypatch, tmp_path) -> 
 
     from werkstatt import architect
 
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
     audits: list[tuple[str, dict]] = []
 
     class Reply:
@@ -622,6 +622,7 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
 
     def ask_llm(_key, system, _user, **_kwargs):
         captured["system"] = system
+        captured["manifest"] = _kwargs.get("context_manifest")
         return Reply()
 
     state = SimpleNamespace(
@@ -666,6 +667,10 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
     assert source["source_sha256"] == hashlib.sha256(
         target.read_bytes(),
     ).hexdigest()
+    manifest = captured["manifest"]
+    assert isinstance(manifest, dict)
+    assert manifest["budget_event"] == "planner_architect_context_budget"
+    assert manifest["source_evidence"] == event["source_evidence"]
 
 
 def test_architect_source_retrieval_is_project_confined_and_marks_rejection(

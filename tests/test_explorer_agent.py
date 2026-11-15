@@ -24,11 +24,18 @@ def test_explorer_liefert_json(tmp_path):
         ok = True
         content = fake
 
-    with patch("werkstatt.explorer.ask_llm", return_value=FakeReply()):
+    with patch(
+        "werkstatt.explorer.ask_llm", return_value=FakeReply(),
+    ) as ask:
         result = run_explorer(st, "Wie funktioniert X?")
         assert result["findings"] == "X ist relevant"
         assert len(result["key_files"]) == 1
         assert result["key_files"][0]["file"] == "a.py"
+    manifest = ask.call_args.kwargs["context_manifest"]
+    assert manifest["budget_event"] == "explorer_context"
+    assert manifest["measurement_count"] == 0
+    assert manifest["file_count"] == 0
+    assert manifest["user_chars"] == len(ask.call_args.args[2])
 
 
 def test_explorer_ohne_key(tmp_path):

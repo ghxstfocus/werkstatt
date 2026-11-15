@@ -8,6 +8,7 @@ Konsumenten: pipeline.py (via Re-Export).
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 import threading
 import time
@@ -161,6 +162,37 @@ def _progress_context(
     return context
 
 
+def _safe_context_manifest(
+    manifest: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Keep bounded provenance metadata without copying prompt contents."""
+    if not isinstance(manifest, dict):
+        return None
+
+    forbidden = {"content", "excerpt", "prompt", "system", "text", "user"}
+
+    def clean(value: Any, depth: int = 0) -> Any:
+        if value is None or isinstance(value, (bool, int, float)):
+            return value
+        if isinstance(value, str):
+            return value[:240]
+        if depth >= 4:
+            return "[metadata_depth_limit]"
+        if isinstance(value, list):
+            return [clean(item, depth + 1) for item in value[:50]]
+        if isinstance(value, dict):
+            result: dict[str, Any] = {}
+            for key, item in list(value.items())[:50]:
+                if not isinstance(key, str) or key.lower() in forbidden:
+                    continue
+                result[key[:80]] = clean(item, depth + 1)
+            return result
+        return f"[unsupported:{type(value).__name__}]"
+
+    cleaned = clean(manifest)
+    return cleaned if isinstance(cleaned, dict) else None
+
+
 def _rolle_aus_aufgabe(aufgabe: str) -> str:
     """Mappt stabile Rollenlabels; freie Task-Namen bleiben unbekannt."""
     label = (aufgabe or "").strip().lower().replace("_", "-")
@@ -229,7 +261,8 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             heartbeat: bool = True,
             max_tokens: int = 4096,
             redact: bool = True,
-            progress_context: dict[str, Any] | None = None) -> LLMReply:
+            progress_context: dict[str, Any] | None = None,
+            context_manifest: dict[str, Any] | None = None) -> LLMReply:
     """Fragt das LLM.
 
     Auflage 2125: Wenn `state` uebergeben wird, zaehlt
@@ -276,10 +309,19 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     # LLMReply-Return gesetzt und einmal pro Call auditiert.
     _system_len = len(system_prompt)
     _user_len = len(user_content)
+    _context_manifest = _safe_context_manifest(context_manifest)
+    _manifest_json = json.dumps(
+        _context_manifest, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":"),
+    ) if _context_manifest is not None else ""
     if state is not None:
         audit("llm_call",
               {"agent": aufgabe,
                "model": model,
+               "context_manifest": _context_manifest,
+               "context_manifest_sha256": hashlib.sha256(
+                   _manifest_json.encode("utf-8")
+               ).hexdigest() if _manifest_json else None,
                "system_len": _system_len,
                "user_len": _user_len,
                # Hash the exact post-redaction strings sent in the request.
@@ -824,7 +866,8 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             heartbeat: bool = True,
             max_tokens: int = 4096,
             redact: bool = True,
-            progress_context: dict[str, Any] | None = None) -> LLMReply:
+            progress_context: dict[str, Any] | None = None,
+            context_manifest: dict[str, Any] | None = None) -> LLMReply:
     """Oeffentliche LLM-API mit Progress-Events (OP-111)."""
     from werkstatt.render import _emit_progress
     route = route_for_role(rolle or aufgabe, model)
@@ -857,6 +900,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             timeout=timeout, state=state, aufgabe=aufgabe,
             rolle=rolle, heartbeat=heartbeat, max_tokens=max_tokens,
             redact=redact, progress_context=_context,
+            context_manifest=context_manifest,
         )
     except Exception as exc:
         _emit_progress(_label, "response_failed", str(exc)[:80])

@@ -108,6 +108,13 @@ def test_builder_sends_source_hash_and_complete_current_file(tmp_path):
     assert file_context_event["user_sha256"] == sent_hash
     assert file_context_event["files"] == ["a.py"]
     assert file_context_event["included_in_prompt"] is True
+    manifest = ask_llm.call_args.kwargs["context_manifest"]
+    assert manifest["budget_event"] == "builder_context_budget"
+    assert manifest["source_sha256"] == expected_hash
+    assert manifest["budget"]["required_sections"] == [
+        "ZIELDATEI", "TASK", "ARCHITECT", "ZIELDATEI_INHALT",
+        "CHAT_RECOVERY_SOURCE_EVIDENCE",
+    ]
 
 
 def test_builder_rejects_stale_chat_recovery_evidence_before_model_call(tmp_path):
