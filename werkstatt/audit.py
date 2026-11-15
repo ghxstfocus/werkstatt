@@ -94,6 +94,8 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "loop_checkpoint_decision",
         "scout_context_budget",
         "planner_scout_context_budget_blocked",
+        "reviewer_context_budget",
+        "reviewer_context_budget_blocked",
     }
 )
 
