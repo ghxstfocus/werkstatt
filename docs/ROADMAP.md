@@ -1,7 +1,7 @@
 # Roadmap — Werkstatt
 
 
-Stand: 2026-11-14. Diese Roadmap beschreibt nur den aktuellen Produktfokus
+Stand: 2026-11-15. Diese Roadmap beschreibt nur den aktuellen Produktfokus
 und die Abfolge grober Meilensteine. Konkrete startbare Auftraege stehen in
 docs/STATUS.md; abgeschlossene Arbeit in PROGRESS.md. Alte Phasenberichte
 liegen im Archiv und sind keine aktuelle Betriebs- oder Architekturvorgabe.
@@ -38,6 +38,12 @@ M0 ist damit noch nicht vollstaendig: Live-Prozessstatus und lueckenlose
 Builder-Ereignisse bleiben bei OP-397 und OP-395. Plan-, Ergebnis- und
 Human-Gates bleiben verpflichtend.
 
+Am 2026-11-15 kam mit Main `1ffd396` (PR #57) eine weitere Abschlusskontrolle
+hinzu: Bei expliziten Kriterien verhindert der Finalizer `loop_erfolg`, wenn
+der Verify-Beleg je Kriterium fehlt. Die PR-CI [43691263964](https://github.com/ghxstfocus/werkstatt/actions/runs/43691263964)
+bestand mit 2.351 Tests; Ruff, Mypy, AST und Audit-Katalog waren gruen. Das
+belegt den PR-Stand, nicht den Produktionsserver. OP-398 bleibt offen.
+
 
 ### 1. Chat und UI als Arbeitsoberflaeche
 - OP-396: Projektchat, evidenzbasierte Antworten und sichere Loop-Steuerung.
@@ -61,7 +67,7 @@ Fehler, Run-Kontext und konkrete Diagnose.
 - OP-398: begruendete OP-Auswahl, adaptive Rollenwahl, deterministische Planvalidierung und Zielabgleich; gueltige Task-DAGs werden sortiert, fehlerhafte vor dem Plan-Gate abgewiesen.
 - OP-405: Rollenbelege und Kontextbudgets begrenzen und messbar halten.
 - OP-280: Doku-Drift beim Verify zuverlaessig erkennen.
-- OP-372 ist abgeschlossen. OP-374/375: Backfill, Projektstatistik und Event-Projektion semantisch korrekt halten.
+- OP-372 und OP-374 sind abgeschlossen. OP-375 bleibt offen fuer Projekt- und Gesamtstatistik mit belegbaren Fehlerklassen und ehrlicher Kennzeichnung partieller Historie.
 - OP-382: zehn vollstaendige UI-Runs mit Run-, Gate- und Verify-Belegen.
 
 Keine optionale Selbstverbesserung oder Memory-Injektion vor Abschluss
