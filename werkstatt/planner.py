@@ -2719,11 +2719,11 @@ def run_planner(state: RunState) -> bool:
         if _widersprueche:
             audit("planner_scout_api_widerspruch",
                   {"anzahl": len(_widersprueche),
-                   "widersprueche": _widersprueche[:10]}, pd, pn)
+                   "widersprueche": _widersprueche}, pd, pn)
             # OP-385 ersetzt user_content im Scout-Pfad durch den dedizierten
             # Scout-Block. Haenge die deterministischen Konflikte daher an
             # genau diesen tatsaechlich verwendeten Kontext.
-            state.scout_auftrag["api_widersprueche"] = _widersprueche[:10]
+            state.scout_auftrag["api_widersprueche"] = _widersprueche
 
     # Architect nur ueberspringen, wenn Scout-Aenderungen vollstaendig
     # und gegen den aktuellen Dateistand exakt belegbar sind.

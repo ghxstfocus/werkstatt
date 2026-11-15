@@ -10,6 +10,8 @@ werkstatt.planner aufgeloest, damit Test-Patches wirken.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from html import escape
 from pathlib import Path
@@ -99,25 +101,24 @@ def _format_op_felder_for_prompt(felder: dict) -> str:
     return "\n\n".join(parts) + "\n\n"
 
 
-def _format_scout_apis_arch(apis: dict, max_lines: int = 20) -> str:
+ARCHITECT_PROMPT_MAX_CHARS = 60_000
+
+
+def _format_scout_apis_arch(apis: dict) -> str:
     """M-Welle-I: Scout-API-Auszug als Prompt-Block (Architect)."""
     if not isinstance(apis, dict) or not apis:
         return ""
     lines = []
-    for datei, symbole in list(apis.items())[:10]:
+    for datei, symbole in apis.items():
         if not isinstance(symbole, list):
             continue
-        for sym in symbole[:5]:
+        for sym in symbole:
             if isinstance(sym, str):
                 lines.append(f"  {datei}: {sym}")
-                if len(lines) >= max_lines:
-                    break
-        if len(lines) >= max_lines:
-            break
     return chr(10).join(lines)
 
 
-def _format_scout_auftrag(auftrag: dict, max_prosa: int = 3000) -> str:
+def _format_scout_auftrag(auftrag: dict) -> str:
     """OP-385: Scout-Report als einzigen Architect-Prompt-Block rendern.
 
     Enthaelt alles, was der Architect braucht: Auftrag-Prosa,
@@ -128,7 +129,7 @@ def _format_scout_auftrag(auftrag: dict, max_prosa: int = 3000) -> str:
         return ""
     teile = ["<scout_auftrag>", "## Auftrag (vom Scout)"]
     prosa = str(auftrag.get("auftrag_prosa") or "").strip()
-    teile.append(prosa[:max_prosa] if prosa else "(kein Prosa-Auftrag vom Scout)")
+    teile.append(prosa if prosa else "(kein Prosa-Auftrag vom Scout)")
     apis = auftrag.get("api_auszug") or {}
     if isinstance(apis, dict) and apis:
         apis_str = _format_scout_apis_arch(apis)
@@ -140,12 +141,10 @@ def _format_scout_auftrag(auftrag: dict, max_prosa: int = 3000) -> str:
     if isinstance(risiken, list) and risiken:
         teile.append("")
         teile.append("## Risiken (vom Scout)")
-        for r in risiken[:10]:
-            teile.append(f"- {str(r)[:200]}")
+        for r in risiken:
+            teile.append(f"- {r if isinstance(r, str) else json.dumps(r, ensure_ascii=False)}")
     api_widersprueche = auftrag.get("api_widersprueche") or []
     if isinstance(api_widersprueche, list) and api_widersprueche:
-        import json
-
         teile.extend([
             "",
             "## Deterministische API-Hinweise (begrenzter Code-Index)",
@@ -156,7 +155,7 @@ def _format_scout_auftrag(auftrag: dict, max_prosa: int = 3000) -> str:
                 "sie fehlen, kennzeichne die API als ungeprueft und nicht "
                 "als fehlend oder verschoben:"
             ),
-            json.dumps(api_widersprueche[:10], ensure_ascii=False),
+            json.dumps(api_widersprueche, ensure_ascii=False),
         ])
     bereits = auftrag.get("bereits_erfuellt")
     if bereits:
@@ -1495,6 +1494,31 @@ def run_architect(
     _korrekturhinweis = ""
     for _versuch in range(2):
         _sys_prompt = _arch_sys + _korrekturhinweis
+        _request_chars = len(_sys_prompt) + len(_arch_user_content)
+        _scout_canonical = json.dumps(
+            _scout_auftrag, ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"),
+        ) if isinstance(_scout_auftrag, dict) else ""
+        _scout_handoff = _format_scout_auftrag(_scout_auftrag or {})
+        _request_fits = _request_chars <= ARCHITECT_PROMPT_MAX_CHARS
+        audit("planner_architect_context_budget", {
+            "scope": "llm_request",
+            "max_chars": ARCHITECT_PROMPT_MAX_CHARS,
+            "system_chars": len(_sys_prompt),
+            "user_chars": len(_arch_user_content),
+            "total_chars": _request_chars,
+            "scout_handoff_chars": len(_scout_handoff),
+            "scout_source_chars": len(_scout_canonical),
+            "scout_source_sha256": hashlib.sha256(
+                _scout_canonical.encode("utf-8"),
+            ).hexdigest() if _scout_canonical else None,
+            "required_context_complete": _request_fits,
+            "omitted": [],
+            "truncated": [],
+            "action": "send" if _request_fits else "blocked",
+        }, pd, pn)
+        if not _request_fits:
+            return False
         _arch_reply = _with_spinner(
             "Architect",
             lambda _prompt=_sys_prompt, _content=_arch_user_content,

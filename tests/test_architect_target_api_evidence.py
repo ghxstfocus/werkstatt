@@ -507,3 +507,137 @@ def test_architect_prompt_does_not_claim_unavailable_source_verification() -> No
     assert "benenne die Belegluecke" in ARCHITECT_SYSTEM
     assert "Behaupte nicht, Dateien selbst gelesen" in ARCHITECT_SYSTEM
     assert "Index-Treffer ist kein Beweis der Nichtexistenz" in ARCHITECT_SYSTEM
+
+
+def test_scout_handoff_preserves_every_reported_section_without_field_slices() -> None:
+    import json
+
+    from werkstatt.architect import _format_scout_auftrag
+
+    report = {
+        "auftrag_prosa": "P" * 3_500,
+        "api_auszug": {
+            f"pkg/module_{file_index}.py": [
+                f"Symbol{file_index}_{symbol_index}" for symbol_index in range(6)
+            ]
+            for file_index in range(12)
+        },
+        "risiken": [f"Risiko {index}: " + "R" * 240 for index in range(12)],
+        "api_widersprueche": [
+            {"datei": "pkg/api.py", "symbol": f"missing_{index}"}
+            for index in range(12)
+        ],
+    }
+
+    rendered = _format_scout_auftrag(report)
+
+    assert "P" * 3_500 in rendered
+    assert "pkg/module_11.py: Symbol11_5" in rendered
+    assert "Risiko 11: " + "R" * 240 in rendered
+    assert json.dumps(
+        report["api_widersprueche"], ensure_ascii=False,
+    ) in rendered
+
+
+def test_architect_blocks_oversized_complete_prompt_and_audits_handoff(
+    monkeypatch, tmp_path,
+) -> None:
+    from types import SimpleNamespace
+
+    from werkstatt import architect
+
+    calls: list[object] = []
+    audits: list[tuple[str, dict]] = []
+    report = {
+        "auftrag_prosa": "Pflichtkontext " * 5_000,
+        "api_auszug": {},
+        "risiken": [],
+    }
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        api_index_cache={"already_built": True},
+        docs={},
+        scout_auftrag=report,
+        architect_execution_context="",
+    )
+    monkeypatch.setattr(architect, "ask_llm", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(architect, "audit", lambda *a, **k: audits.append((a[0], a[1])))
+
+    assert not architect.run_architect(state, "Aufgabe", "", "key", None)
+    assert calls == []
+    event = next(
+        payload for kind, payload in audits
+        if kind == "planner_architect_context_budget"
+        and payload.get("scope") == "llm_request"
+    )
+    assert event["action"] == "blocked"
+    assert event["required_context_complete"] is False
+    assert event["scout_handoff_chars"] > 0
+    assert len(event["scout_source_sha256"]) == 64
+
+
+def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
+    monkeypatch, tmp_path,
+) -> None:
+    import hashlib
+    import json
+    from types import SimpleNamespace
+
+    from werkstatt import architect
+
+    prosa = "Vollstaendige Scout-Anforderung " * 100
+    report = {
+        "auftrag_prosa": prosa,
+        "api_auszug": {"pkg/target.py": [f"api_{index}" for index in range(30)]},
+        "risiken": [f"Risiko {index}: " + "R" * 240 for index in range(12)],
+        "api_widersprueche": [
+            {"datei": "pkg/api.py", "symbol": f"missing_{index}"}
+            for index in range(12)
+        ],
+    }
+    captured: dict[str, str] = {}
+    audits: list[tuple[str, dict]] = []
+
+    class Reply:
+        ok = True
+        content = "Architect-Plan. " * 8
+
+    def ask_llm(_key, system, _user, **_kwargs):
+        captured["system"] = system
+        return Reply()
+
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        api_index_cache={"already_built": True},
+        docs={},
+        scout_auftrag=report,
+        architect_execution_context="",
+    )
+    monkeypatch.setattr(architect, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(architect, "ask_llm", ask_llm)
+    monkeypatch.setattr(
+        architect, "audit", lambda kind, payload, *_a, **_k: audits.append((kind, payload)),
+    )
+
+    assert architect.run_architect(state, "Aufgabe", "", "key", None)
+    prompt = captured["system"]
+    assert prosa.strip() in prompt
+    assert "api_29" in prompt
+    assert "Risiko 11: " + "R" * 240 in prompt
+    assert '"symbol": "missing_11"' in prompt
+
+    canonical = json.dumps(
+        report, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    )
+    event = next(
+        payload for kind, payload in audits
+        if kind == "planner_architect_context_budget"
+        and payload.get("scope") == "llm_request"
+    )
+    assert event["action"] == "send"
+    assert event["required_context_complete"] is True
+    assert event["scout_source_sha256"] == hashlib.sha256(
+        canonical.encode("utf-8"),
+    ).hexdigest()
