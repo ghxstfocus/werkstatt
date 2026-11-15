@@ -15,6 +15,8 @@ _ALLOWED_CHAT_TOOLS = frozenset({
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 REFLECTION_EVIDENCE_MAX_CHARS = 18_000
 REFLECTION_PROMPT_MAX_CHARS = 24_000
+REFLECTION_CHAT_MAX_CALLS = 3
+REFLECTION_CHAT_MAX_ELAPSED_S = 90
 
 
 def originating_chat_session_id(run_record: Any) -> str | None:
@@ -354,22 +356,31 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
             if name in CHAT_TOOLS
         }
 
-        def count_chat_call() -> None:
-            from werkstatt.agent import _enforce_run_budget
+        recovery_calls = 0
 
-            if _enforce_run_budget(state):
-                raise RuntimeError("Werkstatt-LLM-Budget vor Chat-Aufruf erreicht")
+        def count_chat_call() -> None:
+            nonlocal recovery_calls
+            if recovery_calls >= REFLECTION_CHAT_MAX_CALLS:
+                raise RuntimeError("reflection_chat_recovery_call_limit")
+            # This evidence-bound consultation has a separate, small reserve:
+            # it is specifically requested after ordinary run work stalls or
+            # exhausts its budget. Count calls truthfully, but do not let the
+            # exhausted work budget prevent the coordinator from asking Chat.
+            recovery_calls += 1
             state.llm_calls += 1
+            state.reflection_chat_calls += 1
 
         answer = chat_loop(
             worker,
             prompt,
             tools=tools,
             mode="reflection",
-            max_rounds=3,
             project_dir=state.project_dir,
             origin_session_id=session_id,
             on_llm_call=count_chat_call,
+            max_rounds=REFLECTION_CHAT_MAX_CALLS - 1,
+            max_elapsed_s=REFLECTION_CHAT_MAX_ELAPSED_S,
+            allow_time_budget_finalize=False,
         )
         raw_task = _parse_task(answer, allowed_files)
         parsed = None

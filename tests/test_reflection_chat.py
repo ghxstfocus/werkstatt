@@ -76,6 +76,7 @@ def _state(tmp_path: Path) -> SimpleNamespace:
         reviewer_bugs=[],
         reflection_history=[],
         reflection_chat_attempts=set(),
+        reflection_chat_calls=0,
         reflection_chat_evidence=[],
     )
 
@@ -283,6 +284,9 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     tmp_path: Path,
 ) -> None:
     state = _state(tmp_path)
+    state.budget_exhausted_reason = "max_llm_calls"
+    state.budget = {"max_llm_calls": 1}
+    state.llm_calls = 1
     calls: dict[str, object] = {}
 
     class FakeSession:
@@ -323,6 +327,11 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
         calls["message"] = message
         calls["session"] = session
         calls["project_dir"] = kwargs["project_dir"]
+        calls["max_rounds"] = kwargs["max_rounds"]
+        calls["max_elapsed_s"] = kwargs["max_elapsed_s"]
+        calls["allow_time_budget_finalize"] = kwargs[
+            "allow_time_budget_finalize"
+        ]
         kwargs["on_llm_call"]()
         return json.dumps(expected)
 
@@ -342,7 +351,11 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     assert "Keep the public API stable" in calls["message"]
     assert calls["deleted"] == calls["snapshot"]
     assert calls["job_turn"]
-    assert state.llm_calls == 1
+    assert state.llm_calls == 2
+    assert calls["max_rounds"] == reflection_chat.REFLECTION_CHAT_MAX_CALLS - 1
+    assert calls["max_elapsed_s"] == reflection_chat.REFLECTION_CHAT_MAX_ELAPSED_S
+    assert calls["allow_time_budget_finalize"] is False
+    assert state.reflection_chat_calls == 1
     assert "source_evidence" in calls["message"]
     assert "read_file-Auszug" in calls["message"]
 
@@ -388,6 +401,49 @@ def test_chat_request_reuses_completed_idempotent_job_turn(
     }
 
 
+def test_exhausted_run_chat_reserve_is_separately_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    state.budget_exhausted_reason = "max_minutes"
+    calls = {"deleted": False}
+
+    class FakeSession:
+        def __init__(self, _project: str, _session_id: str) -> None:
+            pass
+
+        def get_job_turn(self, _job_id: str):
+            return None
+
+        def snapshot_to(self, _job_id: str):
+            return object()
+
+        def delete_snapshot(self, _job_id: str) -> bool:
+            calls["deleted"] = True
+            return True
+
+        def append_job_turn(self, *_args: object) -> None:
+            pass
+
+    monkeypatch.setattr("werkstatt.chat_session.ChatSession", FakeSession)
+
+    def overrun_chat_loop(_session, _message, **kwargs):
+        count_call = kwargs["on_llm_call"]
+        for _ in range(reflection_chat.REFLECTION_CHAT_MAX_CALLS):
+            count_call()
+        with pytest.raises(RuntimeError, match="recovery_call_limit"):
+            count_call()
+        raise RuntimeError("recovery_call_limit")
+
+    monkeypatch.setattr("werkstatt.chat_agent.chat_loop", overrun_chat_loop)
+
+    assert reflection_chat.ask_project_chat_for_builder_task(state) is None
+    assert state.reflection_chat_calls == reflection_chat.REFLECTION_CHAT_MAX_CALLS
+    assert state.reflection_chat_error == "RuntimeError"
+    assert calls["deleted"] is True
+
+
 def test_reflection_uses_chat_task_once_and_restores_original_task(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -427,20 +483,38 @@ def test_reflection_uses_chat_task_once_and_restores_original_task(
     assert state.reflection_chat_evidence == []
 
 
-def test_reflection_does_not_ask_chat_when_run_budget_is_exhausted(
+def test_reflection_asks_chat_from_bounded_reserve_when_run_budget_is_exhausted(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     state = _state(tmp_path)
     state.budget_exhausted_reason = "max_llm_calls"
-    monkeypatch.setattr(reflection, "_reflection_loop_core", lambda *_a, **_k: False)
+    core_calls = []
+
+    def fake_core(*_args, **_kwargs):
+        core_calls.append(True)
+        return len(core_calls) == 2
+
+    monkeypatch.setattr(
+        reflection, "_reflection_loop_core", fake_core,
+    )
+    monkeypatch.setattr(
+        reflection_chat, "_readable_evidence",
+        lambda _state: {"context_status": "complete_required"},
+    )
     monkeypatch.setattr(
         reflection_chat, "ask_project_chat_for_builder_task",
-        lambda _state: pytest.fail("Chat must not bypass the exhausted run budget"),
+        lambda _state: {
+            "name": "Bounded repair",
+            "description": "Fix the proven failure in the scoped file.",
+            "task_files": ["werkstatt/sample.py"],
+            "source_evidence": _source_evidence(),
+        },
     )
     monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
 
-    assert reflection._reflection_loop(state) is False
+    assert reflection._reflection_loop(state) is True
+    assert len(core_calls) == 2
 
 
 def test_phase_end_exhaustion_asks_chat_then_retries_scoped_file(
@@ -448,6 +522,7 @@ def test_phase_end_exhaustion_asks_chat_then_retries_scoped_file(
     tmp_path: Path,
 ) -> None:
     state = _state(tmp_path)
+    state.budget_exhausted_reason = "max_minutes"
     state.reviewer_bugs = [{
         "file": "werkstatt/sample.py",
         "severity": "high",
@@ -504,6 +579,28 @@ def test_phase_end_does_not_expand_chat_scope_beyond_planned_files(
     monkeypatch.setattr(
         reflection_chat, "ask_project_chat_for_builder_task",
         lambda _state: pytest.fail("Chat must not receive out-of-plan file scope"),
+    )
+    monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
+
+    assert reflection._phase_end_reflection(state) is False
+
+
+def test_chat_recovery_cannot_override_declined_phase_review_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+
+    def declined_gate(_state):
+        _state.reflection_chat_stop_reason = "human_gate_not_approved"
+        return False
+
+    monkeypatch.setattr(
+        reflection, "_phase_end_reflection_core", declined_gate,
+    )
+    monkeypatch.setattr(
+        reflection_chat, "ask_project_chat_for_builder_task",
+        lambda _state: pytest.fail("Chat must not override a declined gate"),
     )
     monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
 

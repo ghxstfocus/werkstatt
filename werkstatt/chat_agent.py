@@ -920,6 +920,7 @@ def chat_loop(
     on_llm_call: Callable[[], None] | None = None,
     max_elapsed_s: float | None = _DEFAULT_MAX_ELAPSED_S,
     on_research_budget: Callable[[float], None] | None = None,
+    allow_time_budget_finalize: bool = True,
 ) -> str:
     """User-Nachricht -> LLM-Loop -> Assistant-Antwort."""
     tools = tools if tools is not None else CHAT_TOOLS
@@ -972,6 +973,16 @@ def chat_loop(
     def _finish_time_budget() -> str:
         if on_research_budget is not None and max_elapsed_s is not None:
             on_research_budget(max_elapsed_s)
+        if not allow_time_budget_finalize:
+            answer = json.dumps(
+                {
+                    "decision": "cannot_solve",
+                    "reason": "recovery_chat_time_budget_reached",
+                },
+                ensure_ascii=False,
+            )
+            session.append("assistant", {"text": answer})
+            return answer
         return _finalisiere_chat(
             messages, session, grund="time_budget",
             on_chunk=on_chunk, cancel_check=cancel_check,

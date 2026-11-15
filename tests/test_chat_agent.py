@@ -1015,6 +1015,33 @@ def test_chat_loop_beendet_recherche_am_zeit_checkpoint(
     assert budgets == [1.0]
 
 
+def test_chat_recovery_time_checkpoint_does_not_start_an_unbounded_final_call(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = iter((0.0, 2.0))
+    monkeypatch.setattr(chat_agent.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(
+        chat_agent, "_deepseek_chat",
+        lambda *_args, **_kwargs: pytest.fail(
+            "Recovery timeout must not make another model call"
+        ),
+    )
+
+    answer = chat_agent.chat_loop(
+        session,
+        "Formuliere eine begrenzte Reparaturaufgabe",
+        mode="reflection",
+        max_elapsed_s=1.0,
+        allow_time_budget_finalize=False,
+    )
+
+    assert json.loads(answer) == {
+        "decision": "cannot_solve",
+        "reason": "recovery_chat_time_budget_reached",
+    }
+
+
 def test_chat_loop_abbruch_nach_werkzeugschritt_bleibt_replaybar(
     session: ChatSession,
     monkeypatch: pytest.MonkeyPatch,

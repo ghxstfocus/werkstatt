@@ -958,13 +958,6 @@ def _reflection_loop(
     if result:
         return True
 
-    if getattr(state, "budget_exhausted_reason", ""):
-        audit(
-            "loop_reflection_chat_skipped",
-            {"reason": "run_budget_exhausted"}, state.project_dir,
-            state.project_name,
-        )
-        return False
     if not getattr(state, "api_key", ""):
         audit(
             "loop_reflection_chat_skipped",
@@ -984,6 +977,8 @@ def _reflection_loop(
     import json as _json
 
     from werkstatt.reflection_chat import (
+        REFLECTION_CHAT_MAX_CALLS,
+        REFLECTION_CHAT_MAX_ELAPSED_S,
         _readable_evidence,
         ask_project_chat_for_builder_task,
     )
@@ -1037,6 +1032,13 @@ def _reflection_loop(
             "task_id": str(initial_task.get("id", ""))[:160],
             "evidence_hash": evidence_fingerprint,
             "context_budget": context_budget,
+            "recovery_reserve": {
+                "max_calls": REFLECTION_CHAT_MAX_CALLS,
+                "max_elapsed_s": REFLECTION_CHAT_MAX_ELAPSED_S,
+                "run_budget_exhausted": bool(
+                    getattr(state, "budget_exhausted_reason", "")
+                ),
+            },
             "authorized_files": initial_task.get("task_files", [])[:30]
             if isinstance(initial_task.get("task_files"), list) else [],
         },
@@ -1053,21 +1055,18 @@ def _reflection_loop(
             or "no_valid_scoped_task"
         )
     if proposed is None:
-        budget_stopped = bool(getattr(state, "budget_exhausted_reason", ""))
-        if budget_stopped:
-            audit(
-                "loop_reflection_chat_skipped",
-                {"reason": "run_budget_exhausted",
-                 "evidence_hash": evidence_fingerprint},
-                state.project_dir, state.project_name,
-            )
-        else:
-            audit(
-                "loop_reflection_chat_rejected",
-                {"reason": failure, "evidence_hash": evidence_fingerprint,
-                 "context_budget": context_budget},
-                state.project_dir, state.project_name,
-            )
+        audit(
+            "loop_reflection_chat_rejected",
+            {"reason": failure, "evidence_hash": evidence_fingerprint,
+             "context_budget": context_budget,
+             "recovery_chat_calls": getattr(
+                 state, "reflection_chat_calls", 0,
+             ),
+             "run_budget_exhausted": bool(
+                 getattr(state, "budget_exhausted_reason", "")
+             )},
+            state.project_dir, state.project_name,
+        )
         return False
 
     scoped_task = {
@@ -1087,6 +1086,9 @@ def _reflection_loop(
             "files": proposed["task_files"],
             "source_evidence": proposed["source_evidence"],
             "description": proposed["description"],
+            "recovery_chat_calls": getattr(
+                state, "reflection_chat_calls", 0,
+            ),
         },
         state.project_dir, state.project_name,
     )
@@ -1138,6 +1140,7 @@ def _phase_end_reflection_core(state: RunState) -> bool:
 
     pd = state.project_dir
     pn = state.project_name
+    state.reflection_chat_stop_reason = ""
     bugs = state.reviewer_bugs or []
     for _runde in range(2):
         if not bugs:
@@ -1237,6 +1240,10 @@ def _phase_end_reflection_core(state: RunState) -> bool:
         # Jede Reject-Runde braucht eine eigene menschliche Entscheidung.
         from werkstatt.phases.review import _phase_review_gate
         if _phase_review_gate(state) != 0:
+            # A declined/failed human gate is a hard stop. The originating
+            # Chat may advise after autonomous exhaustion, but cannot restart
+            # work the user explicitly stopped or failed to authorize.
+            state.reflection_chat_stop_reason = "human_gate_not_approved"
             return False
         if _runde == 1:
             # Die letzte j-Antwort ist eine explizite menschliche
@@ -1254,10 +1261,11 @@ def _phase_end_reflection(state: RunState) -> bool:
     result = _phase_end_reflection_core(state)
     if result:
         return True
-    if getattr(state, "budget_exhausted_reason", ""):
+    stop_reason = getattr(state, "reflection_chat_stop_reason", "")
+    if stop_reason:
         audit(
             "loop_reflection_chat_skipped",
-            {"reason": "run_budget_exhausted", "trigger": "phase_end"},
+            {"reason": stop_reason, "trigger": "phase_end"},
             state.project_dir, state.project_name,
         )
         return False
@@ -1315,6 +1323,8 @@ def _phase_end_reflection(state: RunState) -> bool:
     import json as _json
 
     from werkstatt.reflection_chat import (
+        REFLECTION_CHAT_MAX_CALLS,
+        REFLECTION_CHAT_MAX_ELAPSED_S,
         _readable_evidence,
         ask_project_chat_for_builder_task,
     )
@@ -1359,6 +1369,13 @@ def _phase_end_reflection(state: RunState) -> bool:
         "loop_reflection_chat_requested",
         {"trigger": "phase_end", "evidence_hash": evidence_fingerprint,
          "context_budget": context_budget,
+         "recovery_reserve": {
+             "max_calls": REFLECTION_CHAT_MAX_CALLS,
+             "max_elapsed_s": REFLECTION_CHAT_MAX_ELAPSED_S,
+             "run_budget_exhausted": bool(
+                 getattr(state, "budget_exhausted_reason", "")
+             ),
+         },
          "authorized_files": allowed_files},
         state.project_dir, state.project_name,
     )
@@ -1374,22 +1391,19 @@ def _phase_end_reflection(state: RunState) -> bool:
         )
     if proposed is None:
         state.aktuelle_task = original_task
-        budget_stopped = bool(getattr(state, "budget_exhausted_reason", ""))
-        if budget_stopped:
-            audit(
-                "loop_reflection_chat_skipped",
-                {"trigger": "phase_end", "reason": "run_budget_exhausted",
-                 "evidence_hash": evidence_fingerprint},
-                state.project_dir, state.project_name,
-            )
-        else:
-            audit(
-                "loop_reflection_chat_rejected",
-                {"trigger": "phase_end", "reason": failure,
-                 "evidence_hash": evidence_fingerprint,
-                 "context_budget": context_budget},
-                state.project_dir, state.project_name,
-            )
+        audit(
+            "loop_reflection_chat_rejected",
+            {"trigger": "phase_end", "reason": failure,
+             "evidence_hash": evidence_fingerprint,
+             "context_budget": context_budget,
+             "recovery_chat_calls": getattr(
+                 state, "reflection_chat_calls", 0,
+             ),
+             "run_budget_exhausted": bool(
+                 getattr(state, "budget_exhausted_reason", "")
+             )},
+            state.project_dir, state.project_name,
+        )
         return False
 
     state.reviewer_bugs = [
@@ -1412,7 +1426,10 @@ def _phase_end_reflection(state: RunState) -> bool:
         {"trigger": "phase_end", "evidence_hash": evidence_fingerprint,
          "builder_task": proposed["name"], "files": proposed["task_files"],
          "description": proposed["description"],
-         "source_evidence": proposed["source_evidence"]},
+         "source_evidence": proposed["source_evidence"],
+         "recovery_chat_calls": getattr(
+             state, "reflection_chat_calls", 0,
+         )},
         state.project_dir, state.project_name,
     )
     try:
