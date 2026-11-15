@@ -103,6 +103,7 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "chat_job_chat_snapshot_cleanup_failed",
         "chat_job_model_request",
         "log_line",
+        "llm_context_blocked",
     }
 )
 

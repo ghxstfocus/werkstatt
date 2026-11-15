@@ -142,9 +142,74 @@ def test_llm_request_is_not_sent_when_audit_write_fails(monkeypatch, tmp_path):
         temperature=0.0,
         state=state,
         aufgabe="builder",
-        context_manifest={"required": ["task", "verify"]},
+        context_manifest={
+            "budget_event": "builder_context_budget",
+            "required": ["task", "verify"],
+        },
     )
 
     assert reply.ok is False
     assert reply.error == "llm_call_audit_failed; provider request was not sent"
     assert state.llm_calls == 1
+
+
+def test_role_request_without_budget_evidence_is_blocked(monkeypatch, tmp_path):
+    state = mk_state(project_dir=tmp_path, project_name="missing-context")
+    events = []
+    monkeypatch.setattr(
+        agent,
+        "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests,
+        "post",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("Role request must have context evidence"),
+        ),
+    )
+
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt="system",
+        user_content="task without role manifest",
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="builder",
+    )
+
+    assert reply.ok is False
+    assert reply.error == "role_context_evidence_missing; provider request was not sent"
+    assert state.llm_calls == 1
+    blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
+    assert blocked == [{
+        "agent": "builder",
+        "reason": "required_role_context_evidence_missing",
+        "missing": ["context_manifest.budget_event"],
+        "provider_request_sent": False,
+    }]
+
+
+def test_role_request_without_run_state_is_blocked(monkeypatch):
+    provider_calls = []
+    monkeypatch.setattr(
+        agent.requests,
+        "post",
+        lambda *_args, **_kwargs: provider_calls.append(True),
+    )
+
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt="system",
+        user_content="task without run state",
+        model="deepseek-chat",
+        temperature=0.0,
+        state=None,
+        aufgabe="builder",
+        context_manifest={"budget_event": "builder_context_budget"},
+    )
+
+    assert reply.ok is False
+    assert reply.error == "role_context_evidence_missing; provider request was not sent"
+    assert provider_calls == []

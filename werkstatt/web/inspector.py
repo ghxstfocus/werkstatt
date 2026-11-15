@@ -819,6 +819,7 @@ _TL_LABELS: dict[str, str] = {
     "loop_human_gate_committed": "Human-Gate: committed",
     "progress": "Fortschritt",
     "llm_call": "LLM-Aufruf",
+    "llm_context_blocked": "LLM-Aufruf blockiert: Kontextbeleg fehlt",
     "llm_call_start": "Modellaufruf startet",
     "llm_call_heartbeat": "Modellaufruf läuft",
     "llm_call_end": "Modellaufruf beendet",

@@ -25,6 +25,10 @@ from werkstatt.state import LLMReply, Measurement, Messung, RunState
 from werkstatt.subprocess_env import subprocess_env
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+_EVIDENCE_REQUIRED_ROLES = frozenset({
+    "architect", "builder", "explorer", "planner", "planner-split",
+    "reviewer", "scout",
+})
 
 _PROMPT_DUMP_DIR = Path("/tmp/werkstatt-prompts")
 
@@ -313,6 +317,43 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         if _enforce_run_budget(state):
             return LLMReply(ok=False, error=state.budget_exhausted_reason)
         state.llm_calls += 1
+    if aufgabe in _EVIDENCE_REQUIRED_ROLES:
+        missing: list[str] = []
+        if state is None:
+            missing.append("run_state")
+        if (
+            not isinstance(context_manifest, dict)
+            or not isinstance(context_manifest.get("budget_event"), str)
+            or not context_manifest.get("budget_event", "").strip()
+        ):
+            missing.append("context_manifest.budget_event")
+        if missing:
+            audit_written = False
+            if state is not None:
+                audit_written = audit(
+                    "llm_context_blocked",
+                    {
+                        "agent": aufgabe,
+                        "reason": "required_role_context_evidence_missing",
+                        "missing": missing,
+                        "provider_request_sent": False,
+                    },
+                    state.project_dir,
+                    state.project_name,
+                    run_id=state.run_id,
+                )
+            audit_status = (
+                "; block audit write failed"
+                if state is not None and audit_written is False
+                else ""
+            )
+            return LLMReply(
+                ok=False,
+                error=(
+                    "role_context_evidence_missing; provider request was not sent"
+                    f"{audit_status}"
+                ),
+            )
     # Redaction: vor dem Senden anwenden
     # Auflage 2113: max_len=100_000, damit Block-Auftraege
     # groesser 2000 Zeichen nicht abgeschnitten werden.

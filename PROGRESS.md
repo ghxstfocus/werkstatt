@@ -7162,3 +7162,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung lokal:** Der zentrale Modellrequest uebergibt jetzt `RunState.run_id` direkt an `audit()`, statt die globale Run-ID implizit zu erben. Ein Regressionstest setzt eine abweichende globale ID und bestaetigt, dass der Beleg dem RunState des Request-Aufrufs zugeordnet wird.
 - **Verifikation lokal:** Agent-LLM-, Loop-Ask-LLM-, Audit-Warnungs- und Audit-Driftgruppe: 44 bestanden; Ruff, Mypy und Audit-Drift bestanden.
 - **Grenze:** Die Run-Bindung verhindert falsche Run-Zuordnung am zentralen Adapter, beweist aber keine semantische Vollstaendigkeit oder Relevanz des Rollen-Kontexts. OP-405/398 bleiben offen; kein Server-/Produktionsnachweis fuer diesen Schritt.
+
+
+## 2026-11-15 – Loop-Rollen ohne Belegmanifest vor Provider stoppen (lokal)
+- **Befund:** Produktive Rollen uebergaben RunState und Kontextmanifest, aber der zentrale Adapter erzwang diese Voraussetzungen nicht. Ein neuer oder fehlerhafter Rollenaufrufer konnte daher ohne Budget-/Kontextbeleg ein Modell ansprechen.
+- **Aenderung lokal:** Builder, Architect, Explorer, Planner, Planner-Split, Reviewer und Scout muessen `RunState` und nichtleeres `context_manifest.budget_event` mitgeben. Fehlt etwas, wird kein Providerrequest gesendet; bei vorhandenem RunState schreibt die Auditspur `llm_context_blocked` mit fehlenden Feldern. Das Ereignis hat ein eigenes Control-Timeline-Label. Unit- und Regressionstests pruefen fehlendes Manifest, fehlenden RunState und die Verhinderung des HTTP-Aufrufs.
+- **Verifikation lokal:** Agent-, Loop-Ask-LLM-, Audit- und Live-Feed-Gruppe: 69 bestanden; Ruff, Mypy, Audit-Drift und Control-Drift bestanden.
+- **Grenze / Hauptziel:** Die Schranke beweist, dass Rollen einen deklarierten Kontextbudgetbeleg und Run-Kontext haben; sie beweist noch nicht, dass die konkreten Abschnitte semantisch relevant oder vollstaendig sind. OP-405/398 bleiben offen; kein Server-/Produktionsnachweis.

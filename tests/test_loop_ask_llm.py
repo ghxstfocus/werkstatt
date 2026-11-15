@@ -439,6 +439,7 @@ def test_llm_usage_hat_stabile_rolle_ohne_agent_zu_ueberschreiben(tmp_path):
             temperature=0.0,
             state=state,
             aufgabe="planner-split",
+            context_manifest={"budget_event": "planner_split_context_budget"},
         )
 
     usage = [
@@ -451,7 +452,7 @@ def test_llm_usage_hat_stabile_rolle_ohne_agent_zu_ueberschreiben(tmp_path):
     assert usage[0]["prompt_tokens"] == 12
 
 
-def test_builder_request_overrides_reasoner_to_flash_and_disables_thinking():
+def test_builder_request_overrides_reasoner_to_flash_and_disables_thinking(tmp_path):
     with patch(
         "werkstatt.agent.requests.post",
         return_value=_ok_response("antwort"),
@@ -462,9 +463,10 @@ def test_builder_request_overrides_reasoner_to_flash_and_disables_thinking():
             user_content="USR",
             model="deepseek-reasoner",
             temperature=0.2,
-            state=None,
+            state=_state(tmp_path),
             aufgabe="builder",
             heartbeat=False,
+            context_manifest={"budget_event": "builder_context_budget"},
         )
 
     payload = mock_post.call_args.kwargs["json"]
@@ -474,7 +476,7 @@ def test_builder_request_overrides_reasoner_to_flash_and_disables_thinking():
     assert payload["temperature"] == 0.2
 
 
-def test_architect_request_uses_pro_thinking_without_temperature():
+def test_architect_request_uses_pro_thinking_without_temperature(tmp_path):
     with patch(
         "werkstatt.agent.requests.post",
         return_value=_ok_response("Plan"),
@@ -485,9 +487,10 @@ def test_architect_request_uses_pro_thinking_without_temperature():
             user_content="USR",
             model="deepseek-reasoner",
             temperature=0.2,
-            state=None,
+            state=_state(tmp_path),
             aufgabe="architect",
             heartbeat=False,
+            context_manifest={"budget_event": "planner_architect_context_budget"},
         )
 
     payload = mock_post.call_args.kwargs["json"]
