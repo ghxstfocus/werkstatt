@@ -51,6 +51,25 @@ def test_checkpoint_routes_next_planned_task_and_keeps_open_criteria_visible(
     assert decision["final_verify_required"] is True
 
 
+def test_checkpoint_replans_only_unassigned_criteria_after_graph_completion(
+    tmp_path,
+) -> None:
+    phase = _phase(
+        tmp_path,
+        [{"id": "t1", "name": "First criterion", "criterion_refs": ["AC1"]}],
+        ["First criterion", "Second criterion"],
+    )
+    phase.mark_done("t1")
+
+    decision = _checkpoint_decision_payload(phase, None)
+
+    assert decision["decision"] == "replan_unassigned_criteria"
+    assert decision["next_executor"] == "planner_and_plan_gate"
+    assert decision["criteria_task_coverage"]["uncovered"] == ["AC2"]
+    assert decision["goal_candidate_before_final_verify"] is False
+    assert decision["final_verify_required"] is True
+
+
 def test_checkpoint_does_not_claim_goal_for_untracked_criteria(tmp_path) -> None:
     phase = _phase(
         tmp_path,
@@ -332,6 +351,25 @@ def test_run_coordinator_resolves_blocked_graph_before_stale_verify(tmp_path) ->
     assert phase.get_task("t1").get("verification_pending") is not True
 
 
+def test_run_coordinator_dispatches_unassigned_criteria_replan(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [{"id": "t1", "action": "read", "criterion_refs": ["AC1"]}],
+        ["First criterion", "Second criterion"],
+    )
+    phase.mark_done("t1")
+
+    decision = _run_coordinator_action(
+        phase, _state_after_setup(str(phase.data["aufgabe"])),
+    )
+
+    assert decision["decision"] == "replan_unassigned_criteria"
+    assert decision["coordinator_action"] == "replan_unassigned_criteria"
+    assert decision["next_executor"] == "planner_and_plan_gate"
+
+
 def test_run_coordinator_stops_after_graph_is_already_blocked(tmp_path) -> None:
     from werkstatt.loop import _run_coordinator_action
 
@@ -354,6 +392,36 @@ def test_run_coordinator_stops_after_graph_is_already_blocked(tmp_path) -> None:
     assert decision["decision"] == "reject_blocked_graph"
     assert decision["coordinator_action"] == "reject_checkpoint"
     assert decision["goal_candidate_before_final_verify"] is False
+
+
+def test_task_loop_dispatches_criteria_replan_at_checkpoint(
+    tmp_path, monkeypatch,
+) -> None:
+    phase = _phase(
+        tmp_path,
+        [{"id": "t1", "action": "read", "criterion_refs": ["AC1"]}],
+        ["First criterion", "Second criterion"],
+    )
+    phase.mark_done("t1")
+    state = RunState(
+        project_dir=tmp_path,
+        project_name="demo",
+        aufgabe="Goal",
+        tasks=list(phase.data["tasks"]),
+        akzeptanzkriterien=list(phase.data["akzeptanzkriterien"]),
+    )
+    calls = []
+    monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "")
+    monkeypatch.setattr(task_phase, "audit", lambda *_a, **_kw: True)
+    monkeypatch.setattr(
+        "werkstatt.criteria_replan.replan_unassigned_criteria",
+        lambda _state, _phase: calls.append("replan") or False,
+    )
+
+    result = task_phase._phase_tasks_loop(state, phase, max_task_steps=1)
+
+    assert result[0] == 1
+    assert calls == ["replan"]
 
 
 def test_task_dispatch_returns_at_next_persisted_boundary(

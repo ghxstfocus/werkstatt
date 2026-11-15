@@ -68,10 +68,15 @@ aufzurufen. Task-, Kriterien-
 und Verify-Belege muessen zum aktiven Run passen. Verify-Evidenz nennt die
 taskbezogenen Scoping-Dateien samt aktuellem Inhalts-Hash. Aendert ein spaeterer
 Task diese Dateien, plant der Checkpoint eine Verify-/Review-only-Neupruefung
-des erledigten Tasks ein, bevor Phase-End-Verify angefordert werden kann. Der
-Checkpoint ist keine reine Timeline-Anzeige. Setup und Planfreigabe bleiben im
-aktuellen Migrationsstand noch explizite Vorbereitungsaktionen; die
-vollstaendige Phasenabloesung aus ADR-0032 ist offen.
+des erledigten Tasks ein, bevor Phase-End-Verify angefordert werden kann. Sind
+alle geplanten Tasks erledigt, aber Akzeptanzkriterien wegen fehlender
+Task-Zuordnung offen, plant der Checkpoint ausschliesslich diese bestehenden
+Kriterien neu. Die Erweiterung erhaelt abgeschlossene Tasks, verlangt dieselben
+Kriterientexte und durchlaeuft erneut Plan- und Human-Gate. Andere ungueltige
+Kriterienzuordnungen bleiben fail-closed. Der Checkpoint ist keine reine
+Timeline-Anzeige. Setup und Planfreigabe bleiben im aktuellen Migrationsstand
+noch explizite Vorbereitungsaktionen; die vollstaendige Phasenabloesung aus
+ADR-0032 ist offen.
 
 Rollen-Kontextbudgets muessen die tatsaechlich uebergebene Information
 abbilden: keine stillen Vorab-Slices vor dem Budgetierer. Ganze optionale

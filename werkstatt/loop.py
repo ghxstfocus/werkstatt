@@ -611,6 +611,8 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         action = "execute_task_checkpoint"
     elif decision.get("decision") == "resolve_blocked_graph":
         action = "resolve_task_graph"
+    elif decision.get("decision") == "replan_unassigned_criteria":
+        action = "replan_unassigned_criteria"
     elif decision.get("next_executor") == "phase_end_verify":
         action = "finalize_run"
     else:
@@ -975,7 +977,11 @@ def _run_pipeline_loop_impl(
                 if isinstance(record, dict) and record.get("status") == "done"
             ])
             break
-        if action not in {"execute_task_checkpoint", "resolve_task_graph"}:
+        if action not in {
+            "execute_task_checkpoint",
+            "resolve_task_graph",
+            "replan_unassigned_criteria",
+        }:
             phase_state.save()
             _persist_run_result(
                 EventStore(), project_name, get_run_id(), 1,

@@ -284,6 +284,20 @@ def _checkpoint_decision_payload(
         if task_progress.get("failed", 0):
             decision = "verify_with_failed_tasks"
             reason = "Task-Graph erschoepft, aber mindestens ein Task ist fehlgeschlagen."
+        elif (
+            task_progress.get("total", 0) > 0
+            and task_progress.get("done", 0) == task_progress.get("total", 0)
+            and criteria.get("tracked") is True
+            and criteria.get("error") == "criteria_not_assigned"
+            and criteria.get("uncovered")
+        ):
+            executor = "planner_and_plan_gate"
+            decision = "replan_unassigned_criteria"
+            reason = (
+                "Alle geplanten Tasks sind erledigt, aber explizite "
+                "Akzeptanzkriterien sind keinem Task zugeordnet; nur diese "
+                "Kriterien muessen am Checkpoint neu geplant werden."
+            )
         elif criteria.get("tracked") and not criteria.get("valid"):
             decision = "verify_invalid_criteria_mapping"
             reason = "Kriterienzuordnung ist ungueltig oder unvollstaendig."
@@ -915,6 +929,15 @@ def _phase_tasks_loop(
             )
             phase_state.save()
             return 1, tasks_ok, tasks
+        if decision == "replan_unassigned_criteria":
+            from werkstatt.criteria_replan import replan_unassigned_criteria
+
+            if not replan_unassigned_criteria(state, phase_state):
+                phase_state.save()
+                return 1, tasks_ok, tasks
+            tasks = state.tasks
+            tasks_ok = phase_state.progress().get("done", 0)
+            continue
         if decision == "resolve_blocked_graph":
             # OP-163: unerfuellte Deps -> als blocked markieren.
             _pending_after = [
