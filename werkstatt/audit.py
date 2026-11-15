@@ -81,6 +81,7 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "loop_builder_recovery_start",
         "loop_builder_recovery_result",
         "loop_builder_recovery_skipped",
+        "loop_run_coordinator_decision",
         "planner_architect_context_budget",
         "loop_explorer_required",
         "loop_explorer_skipped",

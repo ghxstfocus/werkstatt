@@ -56,6 +56,44 @@ def test_verify_only_runs_selected_failed_stages(tmp_path, monkeypatch):
     ]
 
 
+def test_verify_records_task_scope_for_placeholder_stage(tmp_path, monkeypatch):
+    contract_dir = tmp_path / ".werkstatt"
+    contract_dir.mkdir()
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("x=1\n", encoding="utf-8")
+    (contract_dir / "verify.json").write_text(
+        json.dumps({
+            "stages": [{
+                "id": "py_compile_changed",
+                "command": ["python3", "-m", "py_compile", "{task_files}"],
+                "phase": "post_build",
+            }],
+        }),
+        encoding="utf-8",
+    )
+    state = RunState(project_dir=tmp_path)
+    state.aktuelle_task = {
+        "id": "t1", "task_files": ["src/main.py"],
+    }
+    monkeypatch.setattr(verify, "audit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        verify,
+        "_verify_stage_with_heartbeat",
+        lambda command, *_args, **_kwargs: subprocess.CompletedProcess(
+            command, 0, "", "",
+        ),
+    )
+
+    assert verify._verify_patches(state, phase="post_build")
+    assert state.last_verify_results == [{
+        "stage_id": "py_compile_changed",
+        "exit_code": 0,
+        "ok": True,
+        "error_excerpt": "",
+        "scope_files": ["src/main.py"],
+    }]
+
+
 def test_verify_missing_selected_stage_fails_closed(tmp_path, monkeypatch):
     state = _state(tmp_path)
     calls = []

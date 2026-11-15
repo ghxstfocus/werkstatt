@@ -49,8 +49,20 @@ def _criterion_evidence_rows(
                 continue
             assigned.append(task_id)
             evidence = task.get("verify_evidence")
+            current_evidence_check = getattr(
+                phase_state, "task_verify_evidence_is_current", None,
+            )
+            evidence_matches_current_files = False
+            if callable(current_evidence_check):
+                try:
+                    evidence_matches_current_files = (
+                        current_evidence_check(task_id, evidence) is True
+                    )
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    evidence_matches_current_files = False
             if (
                 isinstance(evidence, dict)
+                and evidence_matches_current_files
                 and evidence.get("schema_version") == 1
                 and evidence.get("task_id") == task_id
                 and evidence.get("phase") == "post_build"
@@ -62,15 +74,27 @@ def _criterion_evidence_rows(
                 and criterion_id in evidence["criterion_refs"]
                 and isinstance(evidence.get("stages"), list)
             ):
+                evidence_files = {
+                    path.replace("\\", "/")
+                    for path in evidence["task_files"]
+                    if isinstance(path, str)
+                }
                 for stage in evidence["stages"]:
                     if not isinstance(stage, dict):
                         continue
                     stage_id = stage.get("stage_id")
+                    scope_files = stage.get("scope_files")
                     if (
                         stage.get("ok") is True
                         and stage.get("exit_code") == 0
                         and isinstance(stage_id, str)
                         and stage_id.strip()
+                        and isinstance(scope_files, list)
+                        and any(
+                            isinstance(path, str)
+                            and path.replace("\\", "/") in evidence_files
+                            for path in scope_files
+                        )
                     ):
                         task_verify_stages.add(stage_id.strip())
             get_task = getattr(phase_state, "get_task", None)

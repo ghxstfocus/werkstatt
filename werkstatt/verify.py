@@ -628,6 +628,36 @@ def _verify_patches(
         cmd = stage.get("command")
         if not cmd:
             continue
+        _command_template = " ".join(str(part) for part in cmd)
+        _task_scope_markers = (
+            "{task_files}", "{changed_files}", "{changed_py_files}",
+            "{changed_test_files}", "{changed_non_test_py_files}",
+        )
+        _is_task_scoped = any(
+            marker in _command_template for marker in _task_scope_markers
+        )
+        _scope_task_files: list[str] = []
+        if _is_task_scoped:
+            _current_task = getattr(state, "aktuelle_task", None)
+            _raw_task_files = (
+                _current_task.get("task_files")
+                if isinstance(_current_task, dict) else None
+            )
+            if not isinstance(_raw_task_files, list):
+                _raw_task_files = []
+            _scope_task_files = sorted({
+                str(path).replace("\\", "/")
+                for path in _raw_task_files
+                if isinstance(path, str) and path.strip()
+            })
+            if not _scope_task_files:
+                _scope_task_files = sorted({
+                    str(patch.get("file")).replace("\\", "/")
+                    for patch in (getattr(state, "patches", None) or [])
+                    if isinstance(patch, dict)
+                    and isinstance(patch.get("file"), str)
+                    and patch.get("file").strip()
+                })
         # M-322: Platzhalter ersetzen ({changed_files}, {changed_test_files}).
         _expanded = _expand_cmd_placeholders(list(cmd), state, project_dir)
         # M-443: venv-Binary nutzen, falls vorhanden.
@@ -661,6 +691,8 @@ def _verify_patches(
                 "ok": res.returncode == 0,
                 "error_excerpt": "",
             }
+            if _is_task_scoped:
+                _record["scope_files"] = _scope_task_files[:50]
             if res.returncode != 0:
                 # K22a: stderr einbeziehen -- ruff schreibt auf stderr.
                 _out = (res.stdout or "") + (res.stderr or "")
@@ -670,12 +702,15 @@ def _verify_patches(
             _stage_results.append(_record)
         except Exception as exc:
             _error = _extrahiere_fehlerkern(str(exc), max_chars=1200)
-            _stage_results.append({
+            _record = {
                 "stage_id": str(stage.get("id", "?"))[:120],
                 "exit_code": None,
                 "ok": False,
                 "error_excerpt": _error,
-            })
+            }
+            if _is_task_scoped:
+                _record["scope_files"] = _scope_task_files[:50]
+            _stage_results.append(_record)
             errors.append(f"{stage.get('id', '?')}-Fehler: {_error}")
 
     if _selected_stage_ids is not None:

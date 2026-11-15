@@ -106,15 +106,27 @@ def test_task_checkpoint_persists_only_successful_verify_evidence(tmp_path) -> N
     from werkstatt.phases.tasks import _record_task_verify_evidence
 
     phase_state = PhaseState("evidence", base_dir=tmp_path / ".werkstatt")
+    phase_state.run_id = "evidence-run"
     phase_state.init_new(
         "Task Verify",
-        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        [{
+            "id": "t1", "criterion_refs": ["AC1"],
+            "task_files": ["src/task.py"],
+        }],
         akzeptanzkriterien=["Ziel"],
     )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
     state = _state(tmp_path)
     state.last_verify_results = [
-        {"stage_id": "pytest_changed", "exit_code": 0, "ok": True},
-        {"stage_id": "ruff_changed", "exit_code": 1, "ok": False},
+        {
+            "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+            "scope_files": ["src/task.py"],
+        },
+        {
+            "stage_id": "ruff_changed", "exit_code": 1, "ok": False,
+            "scope_files": ["src/task.py"],
+        },
     ]
 
     assert _record_task_verify_evidence(state, phase_state, "t1")
@@ -123,6 +135,7 @@ def test_task_checkpoint_persists_only_successful_verify_evidence(tmp_path) -> N
     assert [item["stage_id"] for item in evidence["stages"]] == [
         "pytest_changed",
     ]
+    assert phase_state.task_verify_evidence_is_current("t1", evidence)
 
 
 def test_checkpoint_rejects_unregistered_task_action() -> None:
@@ -843,7 +856,10 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
         "id": "t1",
         "name": "Implementierung",
         "criterion_refs": ["AC1"],
+        "task_files": ["src/task.py"],
     }]
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
     checkpoint_dir = tmp_path / ".werkstatt"
     phase_state = PhaseState("testproj", base_dir=checkpoint_dir)
     phase_state.init_new(
@@ -855,7 +871,10 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
     phase_state.run_id = "testproj-resume-run"
     assert phase_state.record_task_verify_evidence(
         "t1",
-        [{"stage_id": "pytest_changed", "exit_code": 0, "ok": True}],
+        [{
+            "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+            "scope_files": ["src/task.py"],
+        }],
         phase="post_build",
     )
     phase_state.save()
@@ -986,16 +1005,21 @@ def test_criterion_evidence_reports_gaps_instead_of_guessing(tmp_path):
     phase_state = MagicMock()
     phase_state.run_id = "run-1"
     phase_state.get_task.return_value = {"status": "done"}
+    phase_state.task_verify_evidence_is_current.return_value = True
     rows, gaps = _criterion_evidence_rows(
         ["Kriterium wird verifiziert"],
         [{
             "id": "t1", "criterion_refs": ["AC1"],
+            "task_files": ["src/task.py"],
             "verify_evidence": {
                 "schema_version": 1, "task_id": "t1",
                 "phase": "post_build", "criterion_refs": ["AC1"],
                 "run_id": "run-1",
+                "task_files": ["src/task.py"],
+                "task_file_sha256": {"src/task.py": "a" * 64},
                 "stages": [{
                     "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+                    "scope_files": ["src/task.py"],
                 }],
             },
         }],
@@ -1018,6 +1042,7 @@ def test_criterion_evidence_does_not_reuse_unrelated_run_verify_for_task(
     phase_state = MagicMock()
     phase_state.run_id = "run-1"
     phase_state.get_task.return_value = {"status": "done"}
+    phase_state.task_verify_evidence_is_current.return_value = False
     rows, gaps = _criterion_evidence_rows(
         ["Kriterium wird verifiziert"],
         [{"id": "t1", "criterion_refs": ["AC1"]}],
@@ -1029,6 +1054,46 @@ def test_criterion_evidence_does_not_reuse_unrelated_run_verify_for_task(
     assert rows[0]["phase_end_verify_stage_ids"] == ["pytest_regression"]
     assert gaps == ["AC1:task_verify_evidence_missing"]
 
+
+def test_finalizer_rejects_task_verify_for_stale_file_content(tmp_path):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.phases.finalize import _criterion_evidence_rows
+
+    project_file = tmp_path / "src" / "task.py"
+    project_file.parent.mkdir()
+    project_file.write_text("value = 1\n", encoding="utf-8")
+    phase_state = PhaseState("testproj", base_dir=tmp_path / ".werkstatt")
+    phase_state.run_id = "verify-run"
+    phase_state.init_new(
+        "Verify-Provenance",
+        [{
+            "id": "t1", "criterion_refs": ["AC1"],
+            "task_files": ["src/task.py"],
+        }],
+        akzeptanzkriterien=["Der aktuelle Inhalt ist geprueft"],
+    )
+    phase_state.mark_done("t1")
+    assert phase_state.record_task_verify_evidence(
+        "t1",
+        [{
+            "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+            "scope_files": ["src/task.py"],
+        }],
+        phase="post_build",
+    )
+    record = phase_state.get_task("t1")
+    project_file.write_text("value = 2\n", encoding="utf-8")
+
+    rows, gaps = _criterion_evidence_rows(
+        ["Der aktuelle Inhalt ist geprueft"],
+        [record],
+        phase_state,
+        [{"stage_id": "pytest_regression", "exit_code": 0, "ok": True}],
+    )
+
+    assert rows[0]["verify_stage_ids"] == []
+    assert gaps == ["AC1:task_verify_evidence_missing"]
+
 def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
     tmp_path, monkeypatch,
 ):
@@ -1036,11 +1101,17 @@ def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
     from werkstatt.task_runner import _task_ende
 
     phase_state = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")
+    phase_state.run_id = "run-criteria-retry"
     phase_state.init_new(
         "Ziel trotz Checkpoint-Ausfall belegen",
-        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        [{
+            "id": "t1", "criterion_refs": ["AC1"],
+            "task_files": ["src/task.py"],
+        }],
         akzeptanzkriterien=["Ziel ist durch Verify belegt"],
     )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
     calls = 0
 
     def _criteria_progress():
@@ -1061,7 +1132,10 @@ def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
     phase_state.run_id = "run-criteria-retry"
     assert phase_state.record_task_verify_evidence(
         "t1",
-        [{"stage_id": "pytest_changed", "exit_code": 0, "ok": True}],
+        [{
+            "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+            "scope_files": ["src/task.py"],
+        }],
         phase="post_build",
     )
     state.tasks = [{"id": "t1"}]

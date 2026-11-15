@@ -37,7 +37,12 @@ def test_init_new_persistiert_criterion_refs_ueber_reload(tmp_path):
 
 
 def test_task_verify_evidence_is_persisted_and_bound_to_criteria(tmp_path):
-    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    project_dir = tmp_path / "project"
+    (project_dir / "src").mkdir(parents=True)
+    source = project_dir / "src" / "main.py"
+    source.write_text("value = 1\n", encoding="utf-8")
+    ps = PhaseState("testprojekt", base_dir=project_dir / ".werkstatt")
+    ps.run_id = "test-run"
     ps.init_new(
         "Kriterium mit Task-Verify-Beleg",
         [{"id": "t1", "task_files": ["src/main.py"],
@@ -48,37 +53,132 @@ def test_task_verify_evidence_is_persisted_and_bound_to_criteria(tmp_path):
     assert ps.record_task_verify_evidence(
         "t1",
         [
-            {"stage_id": "pytest_changed", "exit_code": 0, "ok": True},
-            {"stage_id": "ruff_changed", "exit_code": 1, "ok": False},
+            {
+                "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+                "scope_files": ["src/main.py"],
+            },
+            {
+                "stage_id": "ruff_changed", "exit_code": 1, "ok": False,
+                "scope_files": ["src/main.py"],
+            },
             {"stage_id": "pytest_bad", "exit_code": False, "ok": True},
         ],
         phase="post_build",
     )
 
-    resumed = PhaseState("testprojekt", base_dir=tmp_path)
+    resumed = PhaseState("testprojekt", base_dir=project_dir / ".werkstatt")
     assert resumed.load()
     evidence = resumed.get_task("t1")["verify_evidence"]
     assert evidence["criterion_refs"] == ["AC1"]
     assert evidence["task_files"] == ["src/main.py"]
+    assert evidence["task_file_sha256"] == ps._task_file_hashes(
+        ["src/main.py"],
+    )
     assert evidence["stages"] == [{
         "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+        "scope_files": ["src/main.py"],
     }]
+    assert resumed.task_verify_evidence_is_current("t1", evidence)
+    source.write_text("value = 2\n", encoding="utf-8")
+    assert not resumed.task_verify_evidence_is_current("t1", evidence)
 
 
 def test_task_verify_evidence_requires_a_successful_stage(tmp_path):
-    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    project_dir = tmp_path / "project"
+    (project_dir / "src").mkdir(parents=True)
+    (project_dir / "src" / "main.py").write_text("x=1\n", encoding="utf-8")
+    ps = PhaseState("testprojekt", base_dir=project_dir / ".werkstatt")
+    ps.run_id = "test-run"
     ps.init_new(
         "Kriterium ohne erfolgreichen Stage",
-        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        [{
+            "id": "t1", "task_files": ["src/main.py"],
+            "criterion_refs": ["AC1"],
+        }],
         akzeptanzkriterien=["Verhalten wird geprueft"],
     )
 
     assert not ps.record_task_verify_evidence(
         "t1",
-        [{"stage_id": "pytest_changed", "exit_code": 1, "ok": False}],
+        [{
+            "stage_id": "pytest_changed", "exit_code": 1, "ok": False,
+            "scope_files": ["src/main.py"],
+        }],
         phase="post_build",
     )
     assert "verify_evidence" not in ps.get_task("t1")
+
+
+def test_task_verify_evidence_does_not_borrow_global_stage(tmp_path):
+    project_dir = tmp_path / "project"
+    (project_dir / "src").mkdir(parents=True)
+    (project_dir / "src" / "main.py").write_text("x=1\n", encoding="utf-8")
+    ps = PhaseState("testprojekt", base_dir=project_dir / ".werkstatt")
+    ps.run_id = "test-run"
+    ps.init_new(
+        "Kriterium ohne taskbezogenen Stage",
+        [{
+            "id": "t1", "task_files": ["src/main.py"],
+            "criterion_refs": ["AC1"],
+        }],
+        akzeptanzkriterien=["Verhalten wird geprueft"],
+    )
+
+    assert not ps.record_task_verify_evidence(
+        "t1",
+        [{"stage_id": "pytest_regression", "exit_code": 0, "ok": True}],
+        phase="post_build",
+    )
+    assert "verify_evidence" not in ps.get_task("t1")
+
+
+def test_stale_task_evidence_is_requeued_as_verify_only(tmp_path):
+    project_dir = tmp_path / "project"
+    (project_dir / "src").mkdir(parents=True)
+    source = project_dir / "src" / "main.py"
+    source.write_text("value = 1\n", encoding="utf-8")
+    ps = PhaseState("testprojekt", base_dir=project_dir / ".werkstatt")
+    ps.run_id = "test-run"
+    ps.init_new(
+        "Stale task evidence",
+        [{
+            "id": "t1", "action": "update", "task_files": ["src/main.py"],
+            "criterion_refs": ["AC1"],
+        }],
+        akzeptanzkriterien=["Aktueller Inhalt ist verifiziert"],
+    )
+    assert ps.record_task_verify_evidence(
+        "t1",
+        [{
+            "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+            "scope_files": ["src/main.py"],
+        }],
+        phase="post_build",
+    )
+    ps.mark_done("t1")
+    source.write_text("value = 2\n", encoding="utf-8")
+
+    assert ps.queue_stale_task_reverification() == ["t1"]
+    reverify = ps.get_next_task()
+    assert reverify is not None
+    assert reverify["id"] == "t1"
+    assert reverify["action"] == "verify"
+    assert reverify["verification_only"] is True
+
+    ps.mark_running("t1")
+    assert ps.record_task_verify_evidence(
+        "t1",
+        [{
+            "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+            "scope_files": ["src/main.py"],
+        }],
+        phase="post_build",
+    )
+    ps.mark_done("t1")
+    assert ps.queue_stale_task_reverification() == []
+    assert ps.task_verify_evidence_is_current(
+        "t1", ps.get_task("t1")["verify_evidence"],
+    )
 
 
 def test_init_new_verwirft_ungueltige_criterion_refs(tmp_path):

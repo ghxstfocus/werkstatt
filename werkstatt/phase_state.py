@@ -12,7 +12,8 @@ Das ist KEIN Monolith. Nur State-Management.
 from __future__ import annotations
 
 import datetime
-from pathlib import Path
+import hashlib
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 import yaml
@@ -357,6 +358,16 @@ class PhaseState:
             if isinstance(t, dict) and t.get("id")
         }
         for task in self.data.get("tasks", []):
+            if (
+                isinstance(task, dict)
+                and task.get("verification_pending") is True
+                and task.get("status") in ("done", "pending", "running")
+            ):
+                verification_task = dict(task)
+                verification_task["action"] = "verify"
+                verification_task["verification_only"] = True
+                return verification_task
+        for task in self.data.get("tasks", []):
             if task.get("status") not in ("pending", "running"):
                 continue
             _deps = task.get("dependencies") or []
@@ -370,6 +381,32 @@ class PhaseState:
                     continue
             return task
         return None
+
+    def queue_stale_task_reverification(self) -> list[str]:
+        """Queue completed criterion tasks whose file evidence went stale."""
+        queued: list[str] = []
+        for task in self.data.get("tasks", []):
+            if (
+                not isinstance(task, dict)
+                or task.get("status") != "done"
+                or not task.get("criterion_refs")
+                or task.get("verification_pending") is True
+            ):
+                continue
+            task_id = task.get("id")
+            evidence = task.get("verify_evidence")
+            if (
+                not isinstance(task_id, str)
+                or self.task_verify_evidence_is_current(task_id, evidence)
+                or self._task_file_hashes(task.get("task_files")) is None
+            ):
+                continue
+            task["verification_pending"] = True
+            queued.append(task_id)
+        if queued:
+            self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+            self.save()
+        return queued
 
     def mark_blocked(
         self, task_id: str, *, grund: str = "unknown",
@@ -417,6 +454,103 @@ class PhaseState:
                 return task
         return None
 
+    def _task_file_hashes(self, task_files: object) -> dict[str, str] | None:
+        """Hash current, project-local task files for verify provenance."""
+        if (
+            not isinstance(task_files, list)
+            or not task_files
+            or len(task_files) > 50
+            or self.base_dir.name != ".werkstatt"
+        ):
+            return None
+        try:
+            project_root = self.base_dir.parent.resolve(strict=True)
+        except (OSError, RuntimeError):
+            return None
+        hashes: dict[str, str] = {}
+        for raw_path in task_files:
+            if (
+                not isinstance(raw_path, str)
+                or not raw_path.strip()
+                or len(raw_path) > 500
+            ):
+                return None
+            relative = Path(raw_path)
+            if (
+                relative.is_absolute()
+                or PureWindowsPath(raw_path).is_absolute()
+                or ".." in relative.parts
+            ):
+                return None
+            rel_path = relative.as_posix()
+            try:
+                target = (project_root / relative).resolve(strict=True)
+                target.relative_to(project_root)
+                if not target.is_file():
+                    return None
+                digest = hashlib.sha256()
+                with target.open("rb") as source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            except (OSError, RuntimeError, ValueError):
+                return None
+            hashes[rel_path] = digest.hexdigest()
+        if len(hashes) != len(task_files):
+            return None
+        return hashes
+
+    def task_verify_evidence_is_current(
+        self,
+        task_id: str,
+        evidence: object,
+    ) -> bool:
+        """Check evidence still describes this task's current file content."""
+        task = self.get_task(task_id)
+        if not isinstance(task, dict) or not isinstance(evidence, dict):
+            return False
+        refs = task.get("criterion_refs")
+        if (
+            evidence.get("schema_version") != 1
+            or evidence.get("task_id") != task_id
+            or evidence.get("phase") != "post_build"
+            or not isinstance(refs, list)
+            or evidence.get("criterion_refs") != refs
+            or not isinstance(self.run_id, str)
+            or evidence.get("run_id") != self.run_id
+        ):
+            return False
+        task_files = task.get("task_files")
+        normalized_task_files = (
+            sorted(path.replace("\\", "/") for path in task_files)
+            if isinstance(task_files, list)
+            and all(isinstance(path, str) for path in task_files)
+            else None
+        )
+        if evidence.get("task_files") != normalized_task_files:
+            return False
+        recorded_hashes = evidence.get("task_file_sha256")
+        if not isinstance(recorded_hashes, dict):
+            return False
+        current_hashes = self._task_file_hashes(task_files)
+        if current_hashes is None or current_hashes != recorded_hashes:
+            return False
+        file_set = set(current_hashes)
+        stages = evidence.get("stages")
+        return isinstance(stages, list) and any(
+            isinstance(stage, dict)
+            and stage.get("ok") is True
+            and stage.get("exit_code") == 0
+            and isinstance(stage.get("stage_id"), str)
+            and bool(stage.get("stage_id").strip())
+            and isinstance(stage.get("scope_files"), list)
+            and any(
+                isinstance(path, str)
+                and path.replace("\\", "/") in file_set
+                for path in stage["scope_files"]
+            )
+            for stage in stages
+        )
+
     def record_task_verify_evidence(
         self,
         task_id: str,
@@ -427,14 +561,21 @@ class PhaseState:
         """Persist successful verify stages against the criterion-linked task."""
         task = self.get_task(task_id)
         refs = task.get("criterion_refs") if isinstance(task, dict) else None
+        task_files = task.get("task_files") if isinstance(task, dict) else None
         if (
             not isinstance(task, dict)
             or not isinstance(refs, list)
             or not refs
             or phase != "post_build"
             or not isinstance(results, list)
+            or not isinstance(self.run_id, str)
+            or not self.run_id
         ):
             return False
+        task_file_hashes = self._task_file_hashes(task_files)
+        if task_file_hashes is None:
+            return False
+        task_file_set = set(task_file_hashes)
 
         stages: list[dict[str, Any]] = []
         for result in results:
@@ -451,10 +592,26 @@ class PhaseState:
                 or exit_code != 0
             ):
                 continue
+            scope_files = result.get("scope_files")
+            if (
+                not isinstance(scope_files, list)
+                or not any(
+                    isinstance(path, str)
+                    and path.replace("\\", "/") in task_file_set
+                    for path in scope_files
+                )
+            ):
+                continue
             stage: dict[str, Any] = {
                 "stage_id": stage_id[:120],
                 "exit_code": 0,
                 "ok": True,
+                "scope_files": sorted({
+                    path.replace("\\", "/")
+                    for path in scope_files
+                    if isinstance(path, str)
+                    and path.replace("\\", "/") in task_file_set
+                }),
             }
             artifact_hash = result.get("artifact_sha256")
             if isinstance(artifact_hash, str) and artifact_hash:
@@ -468,7 +625,8 @@ class PhaseState:
             "task_id": task_id,
             "phase": phase,
             "criterion_refs": list(refs),
-            "task_files": list(task.get("task_files") or []),
+            "task_files": sorted(task_file_set),
+            "task_file_sha256": task_file_hashes,
             "run_id": self.run_id,
             "verified_at": datetime.datetime.now(datetime.UTC).isoformat(),
             "stages": stages,
@@ -544,6 +702,7 @@ class PhaseState:
         _t = self.get_task(task_id)
         if _t is not None:
             _t["verdict"] = "verified"
+            _t.pop("verification_pending", None)
             self.save()
 
     def _propagate_failed_to_parents(self, task_id: str) -> None:
@@ -611,6 +770,9 @@ class PhaseState:
     def mark_failed(self, task_id: str, *, failure: str) -> None:
         """K38: mark_failed + propagation an Parents."""
         self.update_task(task_id, "failed", failure=failure)
+        task = self.get_task(task_id)
+        if task is not None:
+            task.pop("verification_pending", None)
         # K38: Wenn alle Kinder failed sind, Parent failed.
         self._propagate_failed_to_parents(task_id)
         self.save()

@@ -91,6 +91,173 @@ def test_checkpoint_marks_complete_graph_as_only_candidate_before_verify(
     assert decision["final_verify_required"] is True
 
 
+def test_run_coordinator_dispatches_one_task_at_a_time(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [
+            {"id": "t1", "action": "read", "criterion_refs": ["AC1"]},
+            {
+                "id": "t2", "action": "update", "criterion_refs": ["AC1"],
+                "dependencies": ["t1"],
+            },
+        ],
+        ["Feature works"],
+    )
+    state = RunState()
+
+    first = _run_coordinator_action(phase, state)
+    assert first["coordinator_action"] == "execute_task_checkpoint"
+    assert first["next_task_id"] == "t1"
+    assert first["next_executor"] == "read_only_task"
+
+    phase.mark_done("t1")
+    second = _run_coordinator_action(phase, state)
+    assert second["coordinator_action"] == "execute_task_checkpoint"
+    assert second["next_task_id"] == "t2"
+    assert second["next_executor"] == "builder"
+
+    phase.mark_done("t2")
+    final = _run_coordinator_action(phase, state)
+    assert final["coordinator_action"] == "finalize_run"
+    assert final["next_executor"] == "phase_end_verify"
+
+
+def test_run_coordinator_rejects_unknown_task_action(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [{"id": "t1", "action": "shell", "criterion_refs": ["AC1"]}],
+        ["Feature works"],
+    )
+
+    decision = _run_coordinator_action(phase, RunState())
+
+    assert decision["coordinator_action"] == "reject_checkpoint"
+    assert decision["decision"] == "reject_invalid_task_action"
+
+
+def test_run_coordinator_requeues_stale_criterion_evidence(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    project_dir = tmp_path / "project"
+    (project_dir / "src").mkdir(parents=True)
+    source = project_dir / "src" / "main.py"
+    source.write_text("value = 1\n", encoding="utf-8")
+    phase = PhaseState("demo", base_dir=project_dir / ".werkstatt")
+    phase.run_id = "demo-run"
+    phase.init_new(
+        "Revalidate content after a later change",
+        [{
+            "id": "t1", "action": "update", "criterion_refs": ["AC1"],
+            "task_files": ["src/main.py"],
+        }],
+        akzeptanzkriterien=["Current source content is verified"],
+    )
+    assert phase.record_task_verify_evidence(
+        "t1",
+        [{
+            "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+            "scope_files": ["src/main.py"],
+        }],
+        phase="post_build",
+    )
+    phase.mark_done("t1")
+    source.write_text("value = 2\n", encoding="utf-8")
+
+    decision = _run_coordinator_action(phase, RunState())
+
+    assert decision["coordinator_action"] == "execute_task_checkpoint"
+    assert decision["next_executor"] == "verify_and_review"
+    assert decision["next_task_id"] == "t1"
+    assert decision["verification_only"] is True
+    assert decision["stale_tasks_queued"] == ["t1"]
+
+
+def test_run_coordinator_resolves_blocked_graph_before_stale_verify(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    project_dir = tmp_path / "project"
+    (project_dir / "src").mkdir(parents=True)
+    source = project_dir / "src" / "main.py"
+    source.write_text("value = 1\n", encoding="utf-8")
+    phase = PhaseState("demo", base_dir=project_dir / ".werkstatt")
+    phase.run_id = "demo-run"
+    phase.init_new(
+        "Resolve graph before re-verifying",
+        [
+            {
+                "id": "t1", "action": "update", "criterion_refs": ["AC1"],
+                "task_files": ["src/main.py"],
+            },
+            {
+                "id": "t2", "action": "update", "dependencies": ["missing"],
+                "criterion_refs": ["AC1"], "task_files": ["src/main.py"],
+            },
+        ],
+        akzeptanzkriterien=["Current source content is verified"],
+    )
+    assert phase.record_task_verify_evidence(
+        "t1",
+        [{
+            "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+            "scope_files": ["src/main.py"],
+        }],
+        phase="post_build",
+    )
+    phase.mark_done("t1")
+    source.write_text("value = 2\n", encoding="utf-8")
+
+    decision = _run_coordinator_action(phase, RunState())
+
+    assert decision["coordinator_action"] == "resolve_task_graph"
+    assert decision["stale_tasks_queued"] == []
+    assert phase.get_task("t1").get("verification_pending") is not True
+
+
+def test_task_dispatch_returns_at_next_persisted_boundary(
+    tmp_path, monkeypatch,
+) -> None:
+    phase = _phase(
+        tmp_path,
+        [
+            {"id": "t1", "action": "read", "criterion_refs": ["AC1"]},
+            {"id": "t2", "action": "read", "criterion_refs": ["AC1"]},
+        ],
+        ["Inventory is complete"],
+    )
+    state = RunState(
+        project_dir=tmp_path,
+        project_name="demo",
+        aufgabe="Inventory is complete",
+        tasks=phase.data["tasks"],
+    )
+    monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "")
+    monkeypatch.setattr(task_phase, "audit", lambda *_a, **_kw: True)
+
+    result = task_phase._phase_tasks_loop(state, phase, max_task_steps=1)
+
+    assert result[0] == 0
+    assert phase.get_task("t1")["status"] == "done"
+    assert phase.get_task("t2")["status"] == "pending"
+
+
+def test_task_dispatch_rejects_empty_step_limit(tmp_path) -> None:
+    phase = _phase(
+        tmp_path,
+        [{"id": "t1", "action": "read", "criterion_refs": ["AC1"]}],
+        ["Inventory is complete"],
+    )
+    state = RunState(project_dir=tmp_path, project_name="demo")
+
+    import pytest
+
+    with pytest.raises(ValueError, match="max_task_steps"):
+        task_phase._phase_tasks_loop(state, phase, max_task_steps=0)
+
+
 def test_checkpoint_carries_compact_verify_evidence_without_raw_output(
     tmp_path,
 ) -> None:

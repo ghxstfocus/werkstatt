@@ -548,6 +548,44 @@ def _finish_run_after_followups(
         )
 
 
+def _run_coordinator_action(phase_state, state: RunState) -> dict:
+    """Choose the next run-level action from persisted task/goal evidence."""
+    from werkstatt.phases.tasks import _checkpoint_decision_payload
+
+    next_task = phase_state.get_next_task()
+    stale_tasks_queued: list[str] = []
+    task_progress = phase_state.progress()
+    if next_task is None and task_progress.get("pending", 0) == 0:
+        queue_stale = getattr(
+            phase_state, "queue_stale_task_reverification", None,
+        )
+        if callable(queue_stale):
+            queued = queue_stale()
+            if isinstance(queued, list):
+                stale_tasks_queued = [
+                    task_id for task_id in queued
+                    if isinstance(task_id, str)
+                ]
+            if stale_tasks_queued:
+                next_task = phase_state.get_next_task()
+    decision = _checkpoint_decision_payload(
+        phase_state, next_task, state=state,
+    )
+    if decision.get("decision") == "execute_planned_task":
+        action = "execute_task_checkpoint"
+    elif decision.get("decision") == "resolve_blocked_graph":
+        action = "resolve_task_graph"
+    elif decision.get("next_executor") == "phase_end_verify":
+        action = "finalize_run"
+    else:
+        action = "reject_checkpoint"
+    return {
+        **decision,
+        "coordinator_action": action,
+        "stale_tasks_queued": stale_tasks_queued,
+    }
+
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -719,6 +757,36 @@ def _run_pipeline_loop_impl(
             run_state=state, phase_state=phase_state,
         )
         return _rc_exp
+    if phase_state is None:
+        audit(
+            "loop_failed",
+            {"reason": "phase_state_missing_after_setup"},
+            state.project_dir,
+            project_name,
+        )
+        _persist_run_result(
+            EventStore(), project_name, get_run_id(), 1,
+            run_state=state, phase_state=None,
+        )
+        return 1
+    if phase_state.run_id not in (None, get_run_id()):
+        audit(
+            "loop_checkpoint_run_mismatch",
+            {
+                "checkpoint_run_id": phase_state.run_id,
+                "requested_run_id": get_run_id(),
+            },
+            state.project_dir,
+            project_name,
+        )
+        _persist_run_result(
+            EventStore(), project_name, get_run_id(), 1,
+            run_state=state, phase_state=phase_state,
+        )
+        return 1
+    # Task evidence is valid only when it is durably bound to this run.
+    phase_state.run_id = get_run_id()
+    phase_state.save()
 
     # 1. Plan-Gate (leer -> Planner muss erst laufen)
     #    Resume: wenn PhaseState vollstaendigen Plan-Checkpoint hat
@@ -745,18 +813,107 @@ def _run_pipeline_loop_impl(
         )
         return 1
 
-    # Fix AZ Stufe 8-C: Autonomer Task-Loop
-    check_run_lease(state)
-    _rc_task, tasks_ok, tasks = _phase_tasks_loop(state, phase_state)
-    if _rc_task != 0:
+    # ADR-0032: Re-evaluate the persisted goal after each completed task.
+    # The checkpoint selects one task executor or the final verification;
+    # the run driver does not hand the whole remaining graph to one fixed loop.
+    tasks_ok = sum(
+        1 for record in phase_state.data.get("tasks", [])
+        if isinstance(record, dict) and record.get("status") == "done"
+    )
+    tasks = state.tasks
+    while True:
         check_run_lease(state)
-        _persist_run_result(
-            EventStore(), project_name, get_run_id(), _rc_task,
-            run_state=state, phase_state=phase_state,
+        decision = _run_coordinator_action(phase_state, state)
+        audit(
+            "loop_run_coordinator_decision",
+            {
+                "run_id": get_run_id(),
+                "decision": decision.get("decision"),
+                "action": decision.get("coordinator_action"),
+                "reason": decision.get("reason"),
+                "next_task_id": decision.get("next_task_id"),
+                "next_executor": decision.get("next_executor"),
+                "verification_only": decision.get("verification_only"),
+                "stale_tasks_queued": decision.get("stale_tasks_queued"),
+                "task_progress": decision.get("task_progress"),
+                "criteria_task_coverage": decision.get(
+                    "criteria_task_coverage",
+                ),
+            },
+            state.project_dir,
+            project_name,
         )
-        return _rc_task
+        action = decision.get("coordinator_action")
+        if action == "finalize_run":
+            break
+        if action not in {"execute_task_checkpoint", "resolve_task_graph"}:
+            phase_state.save()
+            _persist_run_result(
+                EventStore(), project_name, get_run_id(), 1,
+                run_state=state, phase_state=phase_state,
+            )
+            return 1
 
-    # Fix AZ Stufe 8-D: Phase-End-Review + Human-Gate + Verify + PROGRESS + Summary
+        def _task_progress_snapshot() -> tuple[tuple, ...]:
+            snapshot = []
+            for record in phase_state.data.get("tasks", []):
+                if not isinstance(record, dict):
+                    continue
+                evidence = record.get("verify_evidence")
+                evidence = evidence if isinstance(evidence, dict) else {}
+                raw_hashes = evidence.get("task_file_sha256")
+                hashes = raw_hashes if isinstance(raw_hashes, dict) else {}
+                snapshot.append((
+                    record.get("id"),
+                    record.get("status"),
+                    record.get("failure"),
+                    record.get("verification_pending"),
+                    evidence.get("verified_at"),
+                    tuple(sorted(
+                        (str(path), str(digest))
+                        for path, digest in hashes.items()
+                    )),
+                ))
+            return tuple(snapshot)
+
+        before = _task_progress_snapshot()
+        task_index_offset = sum(
+            1 for record in phase_state.data.get("tasks", [])
+            if isinstance(record, dict)
+            and record.get("status") in {
+                "done", "failed", "blocked", "vetoed", "split",
+            }
+        )
+        _rc_task, tasks_ok, tasks = _phase_tasks_loop(
+            state, phase_state, 1, task_index_offset,
+        )
+        check_run_lease(state)
+        if _rc_task != 0:
+            _persist_run_result(
+                EventStore(), project_name, get_run_id(), _rc_task,
+                run_state=state, phase_state=phase_state,
+            )
+            return _rc_task
+        after = _task_progress_snapshot()
+        if before == after:
+            audit(
+                "loop_failed",
+                {
+                    "reason": "coordinator_checkpoint_no_progress",
+                    "action": action,
+                    "next_task_id": decision.get("next_task_id"),
+                },
+                state.project_dir,
+                project_name,
+            )
+            phase_state.save()
+            _persist_run_result(
+                EventStore(), project_name, get_run_id(), 1,
+                run_state=state, phase_state=phase_state,
+            )
+            return 1
+
+    # Finalize only after the current checkpoint explicitly requests it.
     check_run_lease(state)
     rc = _phase_finalize(state, tasks_ok, tasks, project_name, phase_state)
     return _finish_run_after_followups(

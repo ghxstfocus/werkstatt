@@ -326,6 +326,9 @@ def _checkpoint_decision_payload(
         "reason": reason,
         "next_task_id": next_task.get("id") if next_task else None,
         "next_action": next_task.get("action") if next_task else None,
+        "verification_only": bool(
+            next_task and next_task.get("verification_only") is True
+        ),
         "next_executor": executor,
         "task_progress": task_progress,
         "criteria_task_coverage": criteria_snapshot,
@@ -770,6 +773,8 @@ def _persist_run_checkpoint(
 def _phase_tasks_loop(
     state: RunState,
     phase_state,
+    max_task_steps: int | None = None,
+    task_index_offset: int = 0,
 ) -> tuple[int, int, list]:
     """Phase 3 (Fix AZ Stufe 8-C, 2026-10-31): Autonomer Task-Loop.
 
@@ -780,6 +785,10 @@ def _phase_tasks_loop(
     rc=1 -> Caller gibt direkt zurueck (Abbruch).
     rc=0 -> weiter mit Phase-End + Human-Gate.
     """
+    if max_task_steps is not None and max_task_steps < 1:
+        raise ValueError("max_task_steps must be positive or None")
+    if task_index_offset < 0:
+        raise ValueError("task_index_offset must be non-negative")
     pd = state.project_dir
     pn = state.project_name
 
@@ -803,7 +812,8 @@ def _phase_tasks_loop(
         if isinstance(task_record, dict) and task_record.get("status") == "done"
     )
     state.tasks_ok_counter = tasks_ok
-    i = 0
+    i = task_index_offset
+    task_steps = 0
     from werkstatt.agent import _enforce_run_budget
     # M-473: while-Loop statt for. Nach ADaPT-Split wird die
     # Schleife neu gestartet, damit Sub-Tasks gebaut werden.
@@ -873,6 +883,15 @@ def _phase_tasks_loop(
                 phase_state.save()
                 return 1, tasks_ok, tasks
         decision = decision_payload["decision"]
+        if (
+            max_task_steps is not None
+            and task_steps >= max_task_steps
+            and decision == "execute_planned_task"
+        ):
+            # Return at a durable task boundary. The outer run coordinator
+            # re-evaluates the goal/evidence before dispatching another worker.
+            phase_state.save()
+            return 0, tasks_ok, tasks
         if decision == "reject_invalid_task_action":
             audit(
                 "state_contract_violation",
@@ -937,7 +956,10 @@ def _phase_tasks_loop(
             phase_state.save()
             return 1, tasks_ok, tasks
         task_obj = next_task  # Sub-Tasks werden direkt aus PhaseState geholt.
-        i += 1
+        _verification_only = task_obj.get("verification_only") is True
+        if not _verification_only:
+            i += 1
+            task_steps += 1
         task_id = next_task.get("id", f"t{i}")
         phase_state.mark_running(task_id)
         task_name = task_obj.get("name", f"Task {i}") if isinstance(task_obj, dict) else str(task_obj)
@@ -988,7 +1010,8 @@ def _phase_tasks_loop(
             if _v_ok and _r_ok and _evidence_ok:
                 task_ok(i, len(tasks), elapsed_s=_el_task)
                 group_end()
-                tasks_ok += 1
+                if not _verification_only:
+                    tasks_ok += 1
                 state.tasks_ok_counter = tasks_ok
                 _audit_task_ok(
                     _task_ende(state, phase_state, task_id, ok=True, name=task_name),

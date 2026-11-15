@@ -15,7 +15,14 @@ from werkstatt.verify import _stage_anzahl, _stage_count_by_phase, _stage_ids
 
 
 def _verify_ok_with_evidence(state, *_args, **_kwargs):
-    state.last_verify_results = [{"stage_id": "pytest_regression", "ok": True}]
+    task = getattr(state, "aktuelle_task", None)
+    scope_files = (
+        task.get("task_files", []) if isinstance(task, dict) else []
+    )
+    state.last_verify_results = [{
+        "stage_id": "pytest_regression", "exit_code": 0, "ok": True,
+        "scope_files": scope_files,
+    }]
     return True
 
 
@@ -184,7 +191,12 @@ def test_loop_stoppt_bei_verify_fail(tmp_path):
 
 def test_loop_happy_path(tmp_path):
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]}]
+    st.tasks = [{
+        "id": "t1", "name": "Task 1", "criterion_refs": ["AC1"],
+        "task_files": ["src/task.py"],
+    }]
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
     # _verify_patches mocken (verhindert subprocess.run(pytest))
     with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_planner", return_value=True), \
@@ -233,7 +245,12 @@ def test_loop_cli_dry_run_uses_renderer():
 def test_loop_uses_phase_state(tmp_path):
     """Loop persistiert Task-Fortschritt in PhaseState."""
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]}]
+    st.tasks = [{
+        "id": "t1", "name": "Task 1", "criterion_refs": ["AC1"],
+        "task_files": ["src/task.py"],
+    }]
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=st.akzeptanzkriterien)
     with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
@@ -252,9 +269,17 @@ def test_loop_resume_nach_unterbrechung(tmp_path):
     """Resume: bereits erledigte Tasks werden uebersprungen."""
     st = _state(tmp_path)
     st.tasks = [
-        {"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]},
-        {"id": "t2", "name": "Task 2", "criterion_refs": ["AC1"]},
+        {
+            "id": "t1", "name": "Task 1", "criterion_refs": ["AC1"],
+            "task_files": ["src/task.py"],
+        },
+        {
+            "id": "t2", "name": "Task 2", "criterion_refs": ["AC1"],
+            "task_files": ["src/task.py"],
+        },
     ]
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=st.akzeptanzkriterien)
     ps.mark_done("t1")
