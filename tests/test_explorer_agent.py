@@ -39,13 +39,13 @@ def test_explorer_liefert_json(tmp_path):
     assert manifest["budget_event"] == "explorer_context"
     assert manifest["measurement_count"] == 0
     assert manifest["file_count"] == 0
-    assert manifest["file_scan_succeeded"] is False
+    assert manifest["file_scan_succeeded"] is True
     assert manifest["file_index_truncated"] is False
-    assert manifest["file_scan_complete"] is False
+    assert manifest["file_scan_complete"] is True
     assert manifest["files_offered"] == []
     assert manifest["files_omitted_from_prompt"] == 0
-    assert "Scan fehlgeschlagen oder teilweise" in ask.call_args.args[2]
-    assert "keine Python-Dateien gefunden" not in ask.call_args.args[2]
+    assert "Inventar vollstaendig; keine Python-Dateien gefunden" in ask.call_args.args[2]
+    assert "Scan fehlgeschlagen oder teilweise" not in ask.call_args.args[2]
     assert manifest["user_chars"] == len(ask.call_args.args[2])
 
 
@@ -74,10 +74,15 @@ def test_python_inventory_marks_prompt_omissions_and_scan_limit():
 
 
 def test_python_inventory_scan_limit_is_visible(tmp_path):
-    paths = [f"{tmp_path}/module_{index}.py" for index in range(201)]
-    result = type("Result", (), {"stdout": "\n".join(paths), "returncode": 0})()
+    paths = sorted(
+        str(tmp_path / f"module_{index}.py") for index in range(201)
+    )
+    def fake_walk(_root, *, topdown, onerror, followlinks):
+        assert topdown is True
+        assert followlinks is False
+        yield str(tmp_path), [], [f"module_{index}.py" for index in range(201)]
 
-    with patch("werkstatt.explorer.subprocess.run", return_value=result):
+    with patch("werkstatt.explorer.os.walk", side_effect=fake_walk):
         indexed, scan_succeeded, index_truncated = _list_py_file_inventory(tmp_path)
 
     assert indexed == paths[:200]
@@ -86,15 +91,14 @@ def test_python_inventory_scan_limit_is_visible(tmp_path):
 
 
 def test_python_inventory_nonzero_find_is_not_complete(tmp_path):
-    result = type("Result", (), {
-        "stdout": f"{tmp_path}/partial.py\n",
-        "returncode": 1,
-    })()
+    def fake_walk(_root, *, topdown, onerror, followlinks):
+        onerror(PermissionError("unreadable directory"))
+        yield str(tmp_path), [], ["partial.py"]
 
-    with patch("werkstatt.explorer.subprocess.run", return_value=result):
+    with patch("werkstatt.explorer.os.walk", side_effect=fake_walk):
         indexed, scan_succeeded, index_truncated = _list_py_file_inventory(tmp_path)
 
-    assert indexed == [f"{tmp_path}/partial.py"]
+    assert indexed == [str(tmp_path / "partial.py")]
     assert scan_succeeded is False
     assert index_truncated is False
 

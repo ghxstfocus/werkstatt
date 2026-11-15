@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -43,17 +43,34 @@ def _list_py_file_inventory(
     project_dir: Path,
     max_files: int = 200,
 ) -> tuple[list[str], bool, bool]:
-    """Return paths, scan success, and whether the index limit was reached."""
+    """Walk Python files deterministically without shell/platform dependencies."""
+    paths: list[str] = []
+    scan_error = False
+
+    def record_scan_error(_error: OSError) -> None:
+        nonlocal scan_error
+        scan_error = True
+
     try:
-        res = subprocess.run(
-            ["find", str(project_dir), "-name", "*.py", "-type", "f",
-             "-not", "-path", "*/.venv/*", "-not", "-path", "*/__pycache__/*"],
-            capture_output=True, text=True, timeout=30, check=False,
-        )
-        paths = [f for f in res.stdout.split("\n") if f.strip()]
-        return paths[:max_files], res.returncode == 0, len(paths) > max_files
-    except Exception:
-        return [], False, False
+        for directory, subdirs, filenames in os.walk(
+            project_dir,
+            topdown=True,
+            onerror=record_scan_error,
+            followlinks=False,
+        ):
+            subdirs[:] = sorted(
+                name for name in subdirs
+                if name not in {".venv", "__pycache__"}
+            )
+            for filename in sorted(filenames):
+                if not filename.endswith(".py"):
+                    continue
+                paths.append(str(Path(directory) / filename))
+                if len(paths) > max_files:
+                    return paths[:max_files], not scan_error, True
+    except OSError:
+        scan_error = True
+    return paths[:max_files], not scan_error, len(paths) > max_files
 
 
 def _list_py_files(project_dir: Path, max_files: int = 200) -> list[str]:

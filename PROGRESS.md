@@ -7211,3 +7211,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung lokal:** Inventar-Erhebung liefert jetzt getrennte Statuswerte fuer Scanerfolg und Indextrunkierung. Das Prompt benennt fehlgeschlagene/partielle Scans getrennt von einem erreichten Indexlimit und trennt beides von Pfaden, die erst beim 50er-Promptlimit ausgelassen wurden. Das Requestmanifest enthaelt diese drei unabhaengigen Angaben.
 - **Verifikation lokal:** Agent-/Explorer-/Loop-Explorer-/Requestgruppe: 73 bestanden; Ruff, Mypy fuer `explorer.py`, Audit-Drift und Control-Drift bestanden.
 - **Grenze / Hauptziel:** Aussagen bleiben an den begrenzten Scan gebunden; JIT-Nachladen und ein Rollen-Eval fehlen. OP-405/398 bleiben offen. Servercheckout `b78935d` (2.472/5) enthaelt diesen Folgeschritt nicht.
+
+
+## 2026-11-16 – Explorer-Inventar plattformunabhaengig erheben (lokal)
+- **Befund:** Der Explorer nutzte `find`; auf Windows war das Werkzeug nicht verfuegbar und der nun korrekt erkannte Scanfehler verhinderte lokale Bestandsaufnahme.
+- **Aenderung lokal:** Die Dateisuche laeuft jetzt ueber einen deterministischen Python-`os.walk`, schliesst `.venv` und `__pycache__` aus und folgt keinen Symlinks. Scanfehler, Indexlimit 200 und Promptlimit 50 bleiben getrennte Statusmerkmale.
+- **Verifikation lokal:** Agent-/Explorer-/Loop-Explorer-/Requestgruppe: 73 bestanden; Ruff, Mypy fuer `explorer.py`, Audit-Drift, Control-Drift, strikter Doku-Drift und Diff-Check bestanden.
+- **Grenze / Hauptziel:** Der Dateiindex bleibt begrenzt und liefert noch kein JIT-Nachladen. OP-405/398 bleiben offen. Der Nutzer bestaetigte `b78935d` mit 2.472/5; dieser lokale Folgeschritt liegt danach.

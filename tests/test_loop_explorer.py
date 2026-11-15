@@ -227,19 +227,21 @@ def test_explorer_system_kein_systematic_debugging():
 # =====================================================================
 
 def test_list_py_files_ok(tmp_path):
-    fake = type("R", (), {
-        "stdout": "/a/x.py\n/a/y.py\n\n",
-        "returncode": 0, "stderr": "",
-    })()
-    with patch("werkstatt.explorer.subprocess.run", return_value=fake):
-        out = explorer._list_py_files(tmp_path)
-    assert out == ["/a/x.py", "/a/y.py"]
+    (tmp_path / "x.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "y.py").write_text("y = 1\n", encoding="utf-8")
+    for ignored_dir in (".venv", "__pycache__"):
+        ignored = tmp_path / ignored_dir
+        ignored.mkdir()
+        (ignored / "ignored.py").write_text("ignored = True\n", encoding="utf-8")
+
+    out = explorer._list_py_files(tmp_path)
+
+    assert out == [str(tmp_path / "x.py"), str(tmp_path / "y.py")]
 
 
 def test_list_py_files_fehler(tmp_path):
     """Exception -> [] (fail-safe)."""
-    with patch("werkstatt.explorer.subprocess.run",
-               side_effect=RuntimeError("find weg")):
+    with patch("werkstatt.explorer.os.walk", side_effect=OSError("scan failed")):
         assert explorer._list_py_files(tmp_path) == []
 
 
