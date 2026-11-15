@@ -1054,6 +1054,52 @@ def test_chat_model_request_manifest_matches_adapter_payload_without_content(
     assert "function" not in str(manifest)
 
 
+def test_chat_model_request_manifest_matches_http_json_body(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests = pytest.importorskip("requests")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    posted: list[dict[str, Any]] = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_lines(self):
+            yield b'data: {"choices":[{"delta":{"content":"Antwort"}}]}'
+            yield b"data: [DONE]"
+
+    def fake_post(_url, **kwargs):
+        posted.append(kwargs["json"])
+        return FakeResponse()
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    manifests: list[dict[str, Any]] = []
+    answer = chat_agent.chat_loop(
+        session,
+        "Lies den privaten Statusinhalt",
+        on_model_request=manifests.append,
+        request_id="job-http-evidence",
+    )
+
+    assert answer == "Antwort"
+    assert len(posted) == len(manifests) == 1
+    actual_body = json.dumps(
+        posted[0], ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    assert manifests[0]["request_sha256"] == hashlib.sha256(
+        actual_body,
+    ).hexdigest()
+    assert "Lies den privaten Statusinhalt" not in str(manifests[0])
+
+
 def test_chat_recovery_time_checkpoint_does_not_start_an_unbounded_final_call(
     session: ChatSession,
     monkeypatch: pytest.MonkeyPatch,
