@@ -9,10 +9,10 @@ Letzte Aktualisierung: 2026-11-15.
 ## Offene Punkte
 ### OP-410: Architect-Retry drosselt max_tokens unter Reasoning-Bedarf
 
-**Status:** open
-**Priorität:** hoch
-**Typ:** Bugfix
-**Betroffene Dateien:**
+- **Status:** open
+- **Priorität:** hoch
+- **Typ:** Bugfix
+- **Betroffene Dateien:**
 - `werkstatt/architect.py` (Konstante `ARCHITECT_MAX_TOKENS`, Aufrufstelle des
   LLM-Requests mit `max_tokens=`)
 - `tests/test_architect_tokens.py` (bestehender Test, erweitern)
