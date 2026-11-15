@@ -549,7 +549,21 @@ def _finish_run_after_followups(
 
 
 def _run_coordinator_action(phase_state, state: RunState) -> dict:
-    """Choose the next run-level action from persisted task/goal evidence."""
+    """Choose one resumable run action from persisted checkpoint evidence."""
+    if phase_state is None or phase_state.data.get("setup_complete") is not True:
+        return {
+            "decision": "prepare_project_context",
+            "coordinator_action": "explore_setup",
+            "reason": "setup_checkpoint_missing",
+            "next_executor": "explorer_and_setup",
+        }
+    if phase_state.data.get("plan_complete") is not True:
+        return {
+            "decision": "prepare_approved_work_graph",
+            "coordinator_action": "plan_preflight",
+            "reason": "plan_checkpoint_missing",
+            "next_executor": "planner_and_preflight",
+        }
     from werkstatt.phases.tasks import _checkpoint_decision_payload
 
     next_task = phase_state.get_next_task()
@@ -745,81 +759,9 @@ def _run_pipeline_loop_impl(
     # 0. Aufgabe in State setzen (fuer Planner)
     state.aufgabe = aufgabe
 
-    # Fix AZ Stufe 8-A: Explorer + Preflight + PhaseState-Init
-    check_run_lease(state)
-    _rc_exp, phase_state = _phase_explorer_and_setup(
-        state, aufgabe, project_name, phase_state,
-    )
-    if _rc_exp != 0:
-        check_run_lease(state)
-        _persist_run_result(
-            EventStore(), project_name, get_run_id(), _rc_exp,
-            run_state=state, phase_state=phase_state,
-        )
-        return _rc_exp
-    if phase_state is None:
-        audit(
-            "loop_failed",
-            {"reason": "phase_state_missing_after_setup"},
-            state.project_dir,
-            project_name,
-        )
-        _persist_run_result(
-            EventStore(), project_name, get_run_id(), 1,
-            run_state=state, phase_state=None,
-        )
-        return 1
-    if phase_state.run_id not in (None, get_run_id()):
-        audit(
-            "loop_checkpoint_run_mismatch",
-            {
-                "checkpoint_run_id": phase_state.run_id,
-                "requested_run_id": get_run_id(),
-            },
-            state.project_dir,
-            project_name,
-        )
-        _persist_run_result(
-            EventStore(), project_name, get_run_id(), 1,
-            run_state=state, phase_state=phase_state,
-        )
-        return 1
-    # Task evidence is valid only when it is durably bound to this run.
-    phase_state.run_id = get_run_id()
-    phase_state.save()
-
-    # 1. Plan-Gate (leer -> Planner muss erst laufen)
-    #    Resume: wenn PhaseState vollstaendigen Plan-Checkpoint hat
-    #    (tasks + tests + akz), Planner ueberspringen und
-    #    state.* aus PhaseState befuellen.
-    # Fix AZ Stufe 8-B: Plan-Gate + Planner + Plan-Human-Gate + Pre-Build
-    check_run_lease(state)
-    _rc_plan, _done = _phase_plan_and_preflight(
-        state, aufgabe, project_name, phase_state,
-    )
-    if _done or _rc_plan != 0:
-        check_run_lease(state)
-        _persist_run_result(
-            EventStore(), project_name, get_run_id(), _rc_plan,
-            run_state=state, phase_state=phase_state,
-        )
-        return _rc_plan
-    from werkstatt.agent import _enforce_run_budget
-    if _enforce_run_budget(state):
-        check_run_lease(state)
-        _persist_run_result(
-            EventStore(), project_name, get_run_id(), 1,
-            run_state=state, phase_state=phase_state,
-        )
-        return 1
-
-    # ADR-0032: Re-evaluate the persisted goal after each completed task.
-    # The checkpoint selects one task executor or the final verification;
-    # the run driver does not hand the whole remaining graph to one fixed loop.
-    tasks_ok = sum(
-        1 for record in phase_state.data.get("tasks", [])
-        if isinstance(record, dict) and record.get("status") == "done"
-    )
+    # ADR-0032 M2: Setup, Plan, Task und Verify sind einzelne Checkpoint-
+    # Aktionen. Der Persistenzmarker entscheidet nach Resume erneut, was fehlt.
+    tasks_ok = 0
     tasks = state.tasks
     while True:
         check_run_lease(state)
@@ -844,7 +786,84 @@ def _run_pipeline_loop_impl(
             project_name,
         )
         action = decision.get("coordinator_action")
+        if action == "explore_setup":
+            check_run_lease(state)
+            _rc_exp, phase_state = _phase_explorer_and_setup(
+                state, aufgabe, project_name, phase_state,
+            )
+            if _rc_exp != 0 or phase_state is None:
+                rc = _rc_exp or 1
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), rc,
+                    run_state=state, phase_state=phase_state,
+                )
+                return rc
+            if phase_state.run_id not in (None, get_run_id()):
+                audit(
+                    "loop_checkpoint_run_mismatch",
+                    {
+                        "checkpoint_run_id": phase_state.run_id,
+                        "requested_run_id": get_run_id(),
+                    },
+                    state.project_dir,
+                    project_name,
+                )
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
+            phase_state.run_id = get_run_id()
+            phase_state.data["setup_complete"] = True
+            phase_state.save()
+            continue
+        if action == "plan_preflight":
+            if phase_state is None:
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=None,
+                )
+                return 1
+            check_run_lease(state)
+            _rc_plan, _done = _phase_plan_and_preflight(
+                state, aufgabe, project_name, phase_state,
+            )
+            if _done or _rc_plan != 0:
+                check_run_lease(state)
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), _rc_plan,
+                    run_state=state, phase_state=phase_state,
+                )
+                return _rc_plan
+            from werkstatt.agent import _enforce_run_budget
+            if _enforce_run_budget(state):
+                check_run_lease(state)
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
+            phase_state.data["setup_complete"] = True
+            phase_state.data["plan_complete"] = True
+            phase_state.save()
+            tasks = state.tasks
+            tasks_ok = len([
+                record for record in phase_state.data.get("tasks", [])
+                if isinstance(record, dict) and record.get("status") == "done"
+            ])
+            continue
+        if phase_state is None:
+            _persist_run_result(
+                EventStore(), project_name, get_run_id(), 1,
+                run_state=state, phase_state=None,
+            )
+            return 1
         if action == "finalize_run":
+            tasks = state.tasks
+            tasks_ok = len([
+                record for record in phase_state.data.get("tasks", [])
+                if isinstance(record, dict) and record.get("status") == "done"
+            ])
             break
         if action not in {"execute_task_checkpoint", "resolve_task_graph"}:
             phase_state.save()
@@ -854,9 +873,9 @@ def _run_pipeline_loop_impl(
             )
             return 1
 
-        def _task_progress_snapshot() -> tuple[tuple, ...]:
+        def _task_progress_snapshot(current_phase_state) -> tuple[tuple, ...]:
             snapshot = []
-            for record in phase_state.data.get("tasks", []):
+            for record in current_phase_state.data.get("tasks", []):
                 if not isinstance(record, dict):
                     continue
                 evidence = record.get("verify_evidence")
@@ -876,14 +895,14 @@ def _run_pipeline_loop_impl(
                 ))
             return tuple(snapshot)
 
-        before = _task_progress_snapshot()
-        task_index_offset = sum(
-            1 for record in phase_state.data.get("tasks", [])
+        before = _task_progress_snapshot(phase_state)
+        task_index_offset = len([
+            record for record in phase_state.data.get("tasks", [])
             if isinstance(record, dict)
             and record.get("status") in {
                 "done", "failed", "blocked", "vetoed", "split",
             }
-        )
+        ])
         _rc_task, tasks_ok, tasks = _phase_tasks_loop(
             state, phase_state, 1, task_index_offset,
         )
@@ -894,7 +913,7 @@ def _run_pipeline_loop_impl(
                 run_state=state, phase_state=phase_state,
             )
             return _rc_task
-        after = _task_progress_snapshot()
+        after = _task_progress_snapshot(phase_state)
         if before == after:
             audit(
                 "loop_failed",

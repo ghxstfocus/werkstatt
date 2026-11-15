@@ -12,6 +12,8 @@ from werkstatt.state import RunState
 def _phase(tmp_path, tasks, criteria):
     phase = PhaseState("demo", base_dir=tmp_path)
     phase.init_new("Ziel", tasks, akzeptanzkriterien=criteria)
+    phase.data["setup_complete"] = True
+    phase.data["plan_complete"] = True
     return phase
 
 
@@ -124,6 +126,34 @@ def test_run_coordinator_dispatches_one_task_at_a_time(tmp_path) -> None:
     assert final["next_executor"] == "phase_end_verify"
 
 
+def test_run_coordinator_selects_setup_then_plan_from_persisted_markers(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    state = RunState()
+    assert _run_coordinator_action(None, state)["coordinator_action"] == (
+        "explore_setup"
+    )
+
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.init_new("Goal", [], tests=[], akzeptanzkriterien=[])
+    phase.data["setup_complete"] = True
+    phase.save()
+    resumed_phase = PhaseState("demo", base_dir=tmp_path)
+    assert resumed_phase.load()
+    assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
+        "plan_preflight"
+    )
+
+    resumed_phase.data["plan_complete"] = True
+    resumed_phase.save()
+    final_phase = PhaseState("demo", base_dir=tmp_path)
+    assert final_phase.load()
+    decision = _run_coordinator_action(final_phase, state)
+    assert decision["coordinator_action"] == "finalize_run"
+
+
 def test_run_coordinator_rejects_unknown_task_action(tmp_path) -> None:
     from werkstatt.loop import _run_coordinator_action
 
@@ -156,6 +186,8 @@ def test_run_coordinator_requeues_stale_criterion_evidence(tmp_path) -> None:
         }],
         akzeptanzkriterien=["Current source content is verified"],
     )
+    phase.data["setup_complete"] = True
+    phase.data["plan_complete"] = True
     assert phase.record_task_verify_evidence(
         "t1",
         [{
@@ -199,6 +231,8 @@ def test_run_coordinator_resolves_blocked_graph_before_stale_verify(tmp_path) ->
         ],
         akzeptanzkriterien=["Current source content is verified"],
     )
+    phase.data["setup_complete"] = True
+    phase.data["plan_complete"] = True
     assert phase.record_task_verify_evidence(
         "t1",
         [{
