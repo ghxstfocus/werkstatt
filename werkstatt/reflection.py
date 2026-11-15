@@ -987,10 +987,26 @@ def _reflection_loop(
         ask_project_chat_for_builder_task,
     )
 
+    evidence = _readable_evidence(state)
+    context_budget = evidence.get("context_budget")
+    if not isinstance(context_budget, dict):
+        context_budget = {
+            "context_status": evidence.get("context_status"),
+            "required_chars": evidence.get("required_chars"),
+            "max_chars": evidence.get("max_chars"),
+            "sources": evidence.get("sources", {}),
+            "omitted_optional": evidence.get("omitted_optional", []),
+        }
+    if evidence.get("context_status") != "complete_required":
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "required_context_over_budget",
+             "context_budget": context_budget},
+            state.project_dir, state.project_name,
+        )
+        return False
     evidence_fingerprint = _hashlib.sha256(
-        _json.dumps(
-            _readable_evidence(state), ensure_ascii=False, sort_keys=True,
-        ).encode("utf-8"),
+        _json.dumps(evidence, ensure_ascii=False, sort_keys=True).encode("utf-8"),
     ).hexdigest()
     attempts = getattr(state, "reflection_chat_attempts", None)
     if attempts is None:
@@ -1019,6 +1035,7 @@ def _reflection_loop(
         {
             "task_id": str(initial_task.get("id", ""))[:160],
             "evidence_hash": evidence_fingerprint,
+            "context_budget": context_budget,
             "authorized_files": initial_task.get("task_files", [])[:30]
             if isinstance(initial_task.get("task_files"), list) else [],
         },
@@ -1046,7 +1063,8 @@ def _reflection_loop(
         else:
             audit(
                 "loop_reflection_chat_rejected",
-                {"reason": failure, "evidence_hash": evidence_fingerprint},
+                {"reason": failure, "evidence_hash": evidence_fingerprint,
+                 "context_budget": context_budget},
                 state.project_dir, state.project_name,
             )
         return False
@@ -1065,7 +1083,7 @@ def _reflection_loop(
             "evidence_hash": evidence_fingerprint,
             "builder_task": proposed["name"],
             "files": proposed["task_files"],
-            "description": proposed["description"][:800],
+            "description": proposed["description"],
         },
         state.project_dir, state.project_name,
     )
@@ -1078,7 +1096,7 @@ def _reflection_loop(
             max_runden=1,
             error_context=(
                 "Projektchat-Kurskorrektur: "
-                + proposed["description"][:1200]
+                + proposed["description"]
             ),
             phase=phase,
             verify_stage_ids=verify_stage_ids,
@@ -1276,11 +1294,10 @@ def _phase_end_reflection(state: RunState) -> bool:
         "name": "Phase-End-Review Repair",
         "action": "update",
         "task_files": allowed_files,
-        "description": "; ".join(
-            str(bug.get("description", ""))[:600]
-            for bug in (state.reviewer_bugs or [])
-            if isinstance(bug, dict) and bug.get("file") in allowed_files
-        )[:1800],
+        "description": (
+            "Bearbeite die unten vollstaendig uebergebenen Phase-End-"
+            "Reviewer-Befunde; die Originalbelege stehen im Feld reviewer_bugs."
+        ),
     }
     import hashlib as _hashlib
     import json as _json
@@ -1290,10 +1307,27 @@ def _phase_end_reflection(state: RunState) -> bool:
         ask_project_chat_for_builder_task,
     )
 
+    evidence = _readable_evidence(state)
+    context_budget = evidence.get("context_budget")
+    if not isinstance(context_budget, dict):
+        context_budget = {
+            "context_status": evidence.get("context_status"),
+            "required_chars": evidence.get("required_chars"),
+            "max_chars": evidence.get("max_chars"),
+            "sources": evidence.get("sources", {}),
+            "omitted_optional": evidence.get("omitted_optional", []),
+        }
+    if evidence.get("context_status") != "complete_required":
+        state.aktuelle_task = original_task
+        audit(
+            "loop_reflection_chat_skipped",
+            {"trigger": "phase_end", "reason": "required_context_over_budget",
+             "context_budget": context_budget},
+            state.project_dir, state.project_name,
+        )
+        return False
     evidence_fingerprint = _hashlib.sha256(
-        _json.dumps(
-            _readable_evidence(state), ensure_ascii=False, sort_keys=True,
-        ).encode("utf-8"),
+        _json.dumps(evidence, ensure_ascii=False, sort_keys=True).encode("utf-8"),
     ).hexdigest()
     attempts = getattr(state, "reflection_chat_attempts", None)
     if attempts is None:
@@ -1312,6 +1346,7 @@ def _phase_end_reflection(state: RunState) -> bool:
     audit(
         "loop_reflection_chat_requested",
         {"trigger": "phase_end", "evidence_hash": evidence_fingerprint,
+         "context_budget": context_budget,
          "authorized_files": allowed_files},
         state.project_dir, state.project_name,
     )
@@ -1339,7 +1374,8 @@ def _phase_end_reflection(state: RunState) -> bool:
             audit(
                 "loop_reflection_chat_rejected",
                 {"trigger": "phase_end", "reason": failure,
-                 "evidence_hash": evidence_fingerprint},
+                 "evidence_hash": evidence_fingerprint,
+                 "context_budget": context_budget},
                 state.project_dir, state.project_name,
             )
         return False
@@ -1362,7 +1398,7 @@ def _phase_end_reflection(state: RunState) -> bool:
         "loop_reflection_chat_task",
         {"trigger": "phase_end", "evidence_hash": evidence_fingerprint,
          "builder_task": proposed["name"], "files": proposed["task_files"],
-         "description": proposed["description"][:800]},
+         "description": proposed["description"]},
         state.project_dir, state.project_name,
     )
     try:

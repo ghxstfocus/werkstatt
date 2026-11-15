@@ -101,6 +101,78 @@ def test_reflection_chat_refuses_required_context_over_budget_before_session(
     assert state.reflection_chat_error == "required_context_over_budget"
 
 
+def test_reflection_context_budget_block_is_audited_with_source_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    events: list[tuple[str, dict[str, object]]] = []
+    manifest = {"goal": {"chars": 50_000, "sha256": "abc123"}}
+    monkeypatch.setattr(reflection, "_reflection_loop_core", lambda *_a, **_k: False)
+    monkeypatch.setattr(
+        reflection_chat, "_readable_evidence",
+        lambda _state: {
+            "context_status": "blocked_required_context_over_budget",
+            "required_chars": 50_000,
+            "max_chars": 18_000,
+            "sources": manifest,
+            "omitted_optional": [],
+        },
+    )
+    monkeypatch.setattr(
+        reflection, "audit",
+        lambda kind, payload, *_a, **_k: events.append((kind, payload)),
+    )
+
+    assert reflection._reflection_loop(state) is False
+
+    blocked = [
+        payload for kind, payload in events
+        if kind == "loop_reflection_chat_skipped"
+    ]
+    assert blocked == [{
+        "reason": "required_context_over_budget",
+        "context_budget": {
+            "context_status": "blocked_required_context_over_budget",
+            "required_chars": 50_000,
+            "max_chars": 18_000,
+            "sources": manifest,
+            "omitted_optional": [],
+        },
+    }]
+
+
+def test_phase_end_handoff_preserves_full_reviewer_finding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    finding = "Review-Beleg: " + ("konkreter Befund. " * 300)
+    state.reviewer_bugs = [{
+        "file": "werkstatt/sample.py",
+        "severity": "high",
+        "description": finding,
+    }]
+    state.tasks = [{"task_files": ["werkstatt/sample.py"]}]
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(reflection, "_phase_end_reflection_core", lambda _s: False)
+
+    def capture(_state):
+        captured["evidence"] = reflection_chat._readable_evidence(_state)
+
+    monkeypatch.setattr(
+        reflection_chat, "ask_project_chat_for_builder_task", capture,
+    )
+    monkeypatch.setattr(reflection, "audit", lambda *_args, **_kwargs: True)
+
+    assert reflection._phase_end_reflection(state) is False
+
+    evidence = captured["evidence"]
+    assert isinstance(evidence, dict)
+    assert evidence["context_status"] == "complete_required"
+    assert evidence["reviewer_bugs"][0]["description"] == finding
+
+
 def test_parse_task_accepts_only_authorized_files() -> None:
     valid = json.dumps({
         "decision": "task",

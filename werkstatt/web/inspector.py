@@ -762,6 +762,11 @@ _TL_LABELS: dict[str, str] = {
     "builder_file_context": "Builder: Datei-Kontext",
     "builder_context_budget": "Builder: Kontextbudget",
     "planner_architect_context_budget": "Architect: Kontextbudget",
+    "loop_reflection_chat_requested": "Reflection fragt Projektchat",
+    "loop_reflection_chat_skipped": "Reflection-Chat-Rueckfrage uebersprungen",
+    "loop_reflection_chat_rejected": "Reflection-Chat-Antwort abgelehnt",
+    "loop_reflection_chat_task": "Projektchat-Aufgabe an Builder",
+    "loop_reflection_chat_builder_result": "Builder nach Chat-Kurskorrektur",
     "planner_plan_abgelehnt": "Architect: Plan nach API-Pruefung abgelehnt",
     "scout_context_budget": "Scout: Kontextbudget",
     "planner_scout_context_budget_blocked": "Scout: Pflichtkontext ueber Budget",
@@ -848,6 +853,12 @@ _TL_PHASEN_NAMEN: dict[str, str] = {
 
 
 def _tl_status(kind: str, payload: dict[str, Any]) -> str:
+    if kind == "loop_reflection_chat_skipped":
+        return "info"
+    if kind == "loop_reflection_chat_rejected":
+        return "error"
+    if kind == "loop_reflection_chat_builder_result":
+        return "ok" if payload.get("recovered") is True else "error"
     if kind == "chat_job_succeeded":
         return "ok"
     if kind in ("chat_job_failed",):
@@ -888,6 +899,40 @@ def _tl_label(kind: str, payload: dict[str, Any]) -> str:
 
 def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
     """Kurze, menschenlesbare Zusatz-Info pro Event (1 Zeile)."""
+    if kind.startswith("loop_reflection_chat_"):
+        if kind == "loop_reflection_chat_requested":
+            budget = payload.get("context_budget")
+            if not isinstance(budget, dict):
+                return "Projektchat wird mit Run-Belegen gefragt"
+            sources = budget.get("sources")
+            source_count = len(sources) if isinstance(sources, dict) else 0
+            omitted = budget.get("omitted_optional")
+            omitted_text = (
+                ", ".join(str(item)[:48] for item in omitted[:3])
+                if isinstance(omitted, list) and omitted else "keine"
+            )
+            used = budget.get("used_chars", budget.get("required_chars", "?"))
+            maximum = budget.get("max_chars", "?")
+            return (
+                f"Pflichtkontext {used}/{maximum} Zeichen; "
+                f"Quellbelege {source_count}; optionale Abschnitte ausgelassen: "
+                f"{omitted_text}"
+            )
+        if kind == "loop_reflection_chat_skipped":
+            return "Rueckfrage gestoppt: " + str(payload.get("reason") or "Grund fehlt")[:120]
+        if kind == "loop_reflection_chat_rejected":
+            return "Chat-Reparatur nicht uebernommen: " + str(payload.get("reason") or "kein gueltiger Vorschlag")[:120]
+        if kind == "loop_reflection_chat_task":
+            files = payload.get("files")
+            file_count = len(files) if isinstance(files, list) else 0
+            return (
+                f"Builder-Aufgabe: {str(payload.get('builder_task') or 'unbenannt')[:100]}; "
+                f"Dateien im freigegebenen Scope: {file_count}"
+            )
+        if kind == "loop_reflection_chat_builder_result":
+            return "Builder-Recovery " + (
+                "bestanden" if payload.get("recovered") is True else "nicht erfolgreich"
+            )
     if kind == "planner_plan_abgelehnt" and payload.get("quelle") == "architect_api_preflight":
         metadata = payload.get("quellbelege")
         if not isinstance(metadata, dict):

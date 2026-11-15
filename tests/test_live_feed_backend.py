@@ -441,6 +441,39 @@ def test_scout_context_budget_is_visible_in_timeline():
     ) == "Scout: Pflichtkontext ueber Budget"
 
 
+def test_reflection_chat_context_budget_is_visible_in_control_timeline():
+    payload = {
+        "context_budget": {
+            "used_chars": 12_000,
+            "max_chars": 18_000,
+            "sources": {
+                "goal": {"chars": 600, "sha256": "goal-hash"},
+                "verify_errors": {"chars": 2_000, "sha256": "error-hash"},
+            },
+            "omitted_optional": ["architect_constraints"],
+        },
+    }
+    assert inspector._tl_label("loop_reflection_chat_requested", payload) == (
+        "Reflection fragt Projektchat"
+    )
+    detail = inspector._tl_detail("loop_reflection_chat_requested", payload)
+    assert "12000/18000 Zeichen" in detail
+    assert "Quellbelege 2" in detail
+    assert "architect_constraints" in detail
+
+    blocked = {"reason": "required_context_over_budget"}
+    assert inspector._tl_status("loop_reflection_chat_skipped", blocked) == "info"
+    assert inspector._tl_detail("loop_reflection_chat_skipped", blocked) == (
+        "Rueckfrage gestoppt: required_context_over_budget"
+    )
+    assert inspector._tl_status(
+        "loop_reflection_chat_builder_result", {"recovered": True},
+    ) == "ok"
+    assert inspector._tl_status(
+        "loop_reflection_chat_builder_result", {"recovered": False},
+    ) == "error"
+
+
 def test_architect_retrieval_evidence_is_visible_in_timeline():
     detail = inspector._tl_detail(
         "planner_plan_abgelehnt",
