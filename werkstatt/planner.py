@@ -66,6 +66,7 @@ PLANNER_SPLIT_CONTEXT_MAX_CHARS = 60000
 
 def _planner_split_context_fits(
     role: str, system: str, user: str, pd, pn,
+    *, source_evidence: dict | None = None,
 ) -> bool:
     """Reject oversized required planning context instead of silently slicing it."""
     total = len(system) + len(user)
@@ -79,6 +80,7 @@ def _planner_split_context_fits(
         "required_context_complete": fits,
         "omitted": [],
         "action": "send" if fits else "blocked",
+        "source_evidence": source_evidence or {},
     }, pd, pn)
     return fits
 
@@ -1509,17 +1511,64 @@ def _zerlege_in_sub_tasks(
     if state is not None:
         _skb = state.planner_skills_block or ""
     _originalauftrag = (aufgabe or "").strip()
+    source_context = ""
+    source_manifest: dict = {}
+    if state is not None and isinstance(getattr(state, "scout_auftrag", None), dict):
+        # Re-read the Scout-selected sources at the Planner boundary. The
+        # Architect may have run earlier; source hashes must still agree or
+        # the Planner must not build a task graph from a stale design.
+        from werkstatt.architect import _format_scout_source_evidence
+
+        source_context, source_manifest = _format_scout_source_evidence(
+            pd, state.scout_auftrag,
+        )
+        architect_manifest = getattr(
+            state, "architect_scout_source_manifest", {},
+        )
+        previous = {
+            str(item.get("path")): str(item.get("source_sha256"))
+            for item in (architect_manifest.get("sources", [])
+                         if isinstance(architect_manifest, dict) else [])
+            if isinstance(item, dict)
+            and isinstance(item.get("path"), str)
+            and isinstance(item.get("source_sha256"), str)
+        }
+        current: dict[str, str] = {}
+        source_records = source_manifest.get("sources", [])
+        if isinstance(source_records, list):
+            for item in source_records:
+                if (
+                    isinstance(item, dict)
+                    and isinstance(item.get("path"), str)
+                    and isinstance(item.get("source_sha256"), str)
+                ):
+                    current[item["path"]] = item["source_sha256"]
+        if previous != current:
+            audit("planner_split_context_budget", {
+                "role": "planner-split",
+                "action": "blocked",
+                "required_context_complete": False,
+                "reason": "source_changed_between_architect_and_planner",
+                "architect_sources": previous,
+                "planner_sources": current,
+                "source_evidence": source_manifest,
+            }, pd, pn)
+            return []
+
     _user = (
         (f"{_skb}\n\n" if _skb else "")
         + f"{_mess_planner_block}"
         + (f"## ORIGINALAUFTRAG (vollstaendig, Laenge "
            f"{len(_originalauftrag)}):\n{_originalauftrag}\n\n"
            if _originalauftrag else "")
+        + (f"## AKTUELLE QUELLBELEGE (Scout-Auswahl, erneut gelesen)\n"
+           f"{source_context}\n\n" if source_context else "")
         + f"## ARCHITECT-PROSA:\n{prosa}\n\n"
         + "## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files)
     )
     if not _planner_split_context_fits(
         "planner-split", PLANNER_SPLIT_SYSTEM, _user, pd, pn,
+        source_evidence=source_manifest,
     ):
         return []
     reply = _with_spinner(
@@ -1536,6 +1585,10 @@ def _zerlege_in_sub_tasks(
                 "user_chars": len(_user),
                 "required_context_complete": True,
                 "key_files": key_files[:50],
+                "source_evidence": source_manifest,
+                "source_evidence_sha256": hashlib.sha256(
+                    source_context.encode("utf-8"),
+                ).hexdigest() if source_context else None,
             },
         ),
     )

@@ -702,6 +702,97 @@ def test_planner_split_blockiert_uebergrossen_auftrag_statt_vorab_zu_schneiden(
     assert budget_events[0][1]["omitted"] == []
 
 
+def test_planner_split_reloads_scout_source_with_hash_provenance(tmp_path):
+    from werkstatt.architect import _format_scout_source_evidence
+    from werkstatt.planner import _zerlege_in_sub_tasks
+
+    source = tmp_path / "src.py"
+    source.write_text("def current_handler():\n    return 'current'\n", encoding="utf-8")
+    report = {
+        "relevante_dateien": [{
+            "pfad": "src.py",
+            "zeilen": [1],
+            "warum": "handler named by the task",
+        }],
+        "api_auszug": {},
+    }
+    _, architect_manifest = _format_scout_source_evidence(tmp_path, report)
+    st = _state(tmp_path)
+    st.scout_auftrag = report
+    st.architect_scout_source_manifest = architect_manifest
+    reply = MagicMock(
+        ok=True,
+        content=json.dumps({
+            "akzeptanzkriterien": ["Current handler is retained."],
+            "tasks": [{
+                "id": "t1", "name": "Update handler",
+                "task_files": ["src.py"], "criterion_refs": ["AC1"],
+            }],
+        }),
+    )
+    captured = {}
+
+    def ask(_key, _system, content, **kwargs):
+        captured["content"] = content
+        captured["manifest"] = kwargs["context_manifest"]
+        return reply
+
+    with patch("werkstatt.planner.ask_llm", side_effect=ask), \
+         patch("werkstatt.planner._with_spinner", side_effect=lambda _label, fn: fn()), \
+         patch("werkstatt.planner.audit"):
+        tasks = _zerlege_in_sub_tasks(
+            "## src.py\nRetain current_handler.", ["src.py"], "fake",
+            tmp_path, "demo", aufgabe="Update src.py", state=st,
+        )
+
+    assert tasks and "return 'current'" in captured["content"]
+    source_manifest = captured["manifest"]["source_evidence"]
+    assert source_manifest["sources"][0]["path"] == "src.py"
+    assert source_manifest["sources"][0]["source_sha256"] == architect_manifest[
+        "sources"
+    ][0]["source_sha256"]
+    assert captured["manifest"]["source_evidence_sha256"]
+
+
+def test_planner_split_stops_if_source_changes_after_architect(tmp_path):
+    from werkstatt.architect import _format_scout_source_evidence
+    from werkstatt.planner import _zerlege_in_sub_tasks
+
+    source = tmp_path / "src.py"
+    source.write_text("def current_handler():\n    return 'architect-view'\n", encoding="utf-8")
+    report = {
+        "relevante_dateien": [{"pfad": "src.py", "zeilen": [1]}],
+        "api_auszug": {},
+    }
+    _, architect_manifest = _format_scout_source_evidence(tmp_path, report)
+    source.write_text("def current_handler():\n    return 'changed-after-architect'\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.scout_auftrag = report
+    st.architect_scout_source_manifest = architect_manifest
+    calls = []
+    audit_events = []
+
+    with patch(
+        "werkstatt.planner.ask_llm",
+        side_effect=lambda *args, **kwargs: calls.append((args, kwargs)),
+    ), patch(
+        "werkstatt.planner.audit",
+        side_effect=lambda *args: audit_events.append(args),
+    ):
+        tasks = _zerlege_in_sub_tasks(
+            "## src.py\nBased on architect-view.", ["src.py"], "fake",
+            tmp_path, "demo", aufgabe="Update src.py", state=st,
+        )
+
+    assert tasks == []
+    assert calls == []
+    event = next(
+        payload for name, payload, *_ in audit_events
+        if name == "planner_split_context_budget"
+    )
+    assert event["reason"] == "source_changed_between_architect_and_planner"
+
+
 def test_run_planner_behaelt_kriterien_des_planner_splits(tmp_path):
     """Ein nachgelagerter Planner-Schritt darf Kriterien nicht wieder loeschen."""
     st = _state(tmp_path)

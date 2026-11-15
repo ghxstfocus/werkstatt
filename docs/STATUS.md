@@ -27,6 +27,8 @@ Letzte Aktualisierung: 2026-11-16.
 - **Tests:** Budgetgrenzen und Priorisierung je Rolle; JIT-Retrieval mit Projektisolation, Treffer, leere/mehrdeutige Suche; untrusted Tool-Ausgabe; sichtbare Ueberschreitung; Regression bei Rolle, Limit und Prompt-Aufbau; Tokens-/Qualitaetsvergleich.
 - **Blockiert von:** OP-398
 
+- **Planner-Handoff-Folgeschritt (lokal, noch nicht serververifiziert):** Der Taskgraph-Planner liest Scout-ausgewaehlte Quellfenster am eigenen Modellgrenzpunkt erneut projektgebunden ein; Zeilenbereiche, Vollstaendigkeit, ausgelassene Bereiche und SHA-256 werden im Quellenmanifest mit dem tatsaechlichen Planner-Request verbunden. Weichen die aktuellen Quellhashes von den beim Architect verwendeten ab, stoppt der Planner vor dem Provideraufruf. Planner-/Architect-Quellbeleggruppe: 53 bestanden, 3 uebersprungen; Ruff/Mypy/Driftchecks stehen fuer den kombinierten Stand aus.
+
 ### OP-396: Chat als projektbezogene Hauptoberflaeche
 - **Status:** open
 - **Typ:** ui-orchestration
