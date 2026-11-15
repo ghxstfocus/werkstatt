@@ -84,10 +84,15 @@ def test_loop_schreibt_progress(tmp_path):
                  "task_files": ["app/foo.py"], "criterion_refs": ["AC1"]}]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "foo.py").write_text("value = 1\n", encoding="utf-8")
 
     def verify_with_evidence(state, **_kwargs):
         state.last_verify_results = [
-            {"stage_id": "pytest_regression", "ok": True},
+            {
+                "stage_id": "pytest_regression", "exit_code": 0,
+                "ok": True, "scope_files": ["app/foo.py"],
+            },
         ]
         return True
 
@@ -96,6 +101,7 @@ def test_loop_schreibt_progress(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("werkstatt.phases.finalize._verify_patches", side_effect=verify_with_evidence), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop.audit"):
         rc = run_pipeline_loop("p", "a", [st])

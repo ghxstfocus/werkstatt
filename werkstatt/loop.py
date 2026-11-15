@@ -1402,6 +1402,17 @@ def _main_inner(argv: list[str] | None = None) -> int:
     # M-358: Footer mit echten Task-Zahlen (aus state).
     _tasks_total = len(getattr(_state, "tasks", []) or [])
     _tasks_ok = int(getattr(_state, "tasks_ok_counter", 0) or 0)
+    # A successful resume may only finalize tasks already marked done in the
+    # durable checkpoint, so this process executes zero tasks. Count those
+    # persisted completions for the CLI success guard as well.
+    try:
+        _checkpoint_done = _ps.progress().get("done", 0) if _ps.data else 0
+        if isinstance(_checkpoint_done, int) and not isinstance(
+            _checkpoint_done, bool,
+        ):
+            _tasks_ok = max(_tasks_ok, _checkpoint_done)
+    except (AttributeError, TypeError, ValueError):
+        pass
     # K13: rc=0 nur, wenn tatsaechlich Tasks erledigt wurden.
     _erfolg = (rc == 0) and (_tasks_ok > 0)
     _r.footer(success=_erfolg, tasks_total=_tasks_total, tasks_ok=_tasks_ok)

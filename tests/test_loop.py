@@ -406,7 +406,11 @@ def test_loop_preflight_vor_planner(tmp_path):
 def test_pre_build_uebersprungen_bei_follow_up(tmp_path):
     """M-299g: Pre-Build rot, aber Planner FOLLOW_UP -> Loop laeuft weiter."""
     st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1", "criterion_refs": ["AC1"]}]
+    (tmp_path / "README.md").write_text("before\n", encoding="utf-8")
+    st.tasks = [{
+        "id": "t1", "name": "Task 1", "task_files": ["README.md"],
+        "criterion_refs": ["AC1"],
+    }]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = ["Kriterium 1"]
     st.blocker_fehler = []
@@ -418,9 +422,12 @@ def test_pre_build_uebersprungen_bei_follow_up(tmp_path):
         verify_calls["count"] += 1
         is_first_pre_build = verify_calls["count"] == 1 and phase == "pre_build"
         result = not is_first_pre_build
-        if result and phase == "phase_end":
+        if result:
             state.last_verify_results = [
-                {"stage_id": "pytest_regression", "ok": True},
+                {
+                    "stage_id": "pytest_regression", "exit_code": 0,
+                    "ok": True, "scope_files": ["README.md"],
+                },
             ]
         return result
 
@@ -428,6 +435,7 @@ def test_pre_build_uebersprungen_bei_follow_up(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("werkstatt.phases.finalize._verify_patches", side_effect=_verify), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.audit"):
@@ -489,8 +497,10 @@ def test_extract_files_from_tasks():
 def test_pre_build_deterministische_klassifikation(tmp_path):
     """M-299i: Baseline-Fehler ausserhalb Task-Dateien -> Loop laeuft weiter."""
     st = _state(tmp_path)
+    (tmp_path / "README.md").write_text("before\n", encoding="utf-8")
     st.tasks = [{
         "id": "t1", "name": "Update README.md", "description": "Add line",
+        "task_files": ["README.md"],
         "criterion_refs": ["AC1"],
     }]
     st.tests = ["Test 1"]
@@ -506,9 +516,12 @@ def test_pre_build_deterministische_klassifikation(tmp_path):
         verify_calls["n"] += 1
         is_first_pre_build = verify_calls["n"] == 1 and phase == "pre_build"
         result = not is_first_pre_build
-        if result and phase == "phase_end":
+        if result:
             state.last_verify_results = [
-                {"stage_id": "pytest_regression", "ok": True},
+                {
+                    "stage_id": "pytest_regression", "exit_code": 0,
+                    "ok": True, "scope_files": ["README.md"],
+                },
             ]
         return result
 
@@ -516,6 +529,7 @@ def test_pre_build_deterministische_klassifikation(tmp_path):
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
+         patch("werkstatt.phases.finalize._verify_patches", side_effect=_verify), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.audit"):
@@ -650,12 +664,14 @@ def test_loop_task_read_only(tmp_path):
     st = _state(tmp_path)
     st.tasks = [
         {"id": "t1", "name": "Lesen", "action": "read",
-         "criterion_refs": ["AC1"]},
+         "task_files": []},
         {"id": "t2", "name": "Schreiben", "action": "update",
-         "task_files": ["app/foo.py"], "criterion_refs": ["AC1"]},
+         "task_files": ["app/foo.py"]},
     ]
     st.tests = ["Test 1"]
-    st.akzeptanzkriterien = ["Kriterium 1"]
+    st.akzeptanzkriterien = []
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "foo.py").write_text("value = 1\n", encoding="utf-8")
 
     builder_calls = []
     def _mock_builder(state):
@@ -665,7 +681,9 @@ def test_loop_task_read_only(tmp_path):
 
     with patch("werkstatt.loop.run_builder", side_effect=_mock_builder), \
          patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
+         patch("werkstatt.phases.finalize._verify_patches", side_effect=_verify_ok_with_evidence), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
+         patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop.audit"):

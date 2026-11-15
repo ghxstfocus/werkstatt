@@ -613,15 +613,27 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
     run_id = "demo-20261113-production-resume"
     goal = "HTTP-Recovery bis zur Phase-End-Verify"
     phase_state = PhaseState("demo", base_dir=project_dir / ".werkstatt")
+    (project_dir / "app").mkdir()
+    (project_dir / "app" / "resume.py").write_text(
+        "value = 1\n", encoding="utf-8",
+    )
     phase_state.init_new(
         goal,
         [{"id": "task-1", "name": "Bereits erledigt",
-          "criterion_refs": ["AC1"]}],
+          "task_files": ["app/resume.py"], "criterion_refs": ["AC1"]}],
         tests=["pytest -q"],
         akzeptanzkriterien=["Der gespeicherte Run wird abgeschlossen"],
     )
     phase_state.mark_done("task-1")
     phase_state.run_id = run_id
+    assert phase_state.record_task_verify_evidence(
+        "task-1",
+        [{
+            "stage_id": "pytest_regression", "exit_code": 0, "ok": True,
+            "scope_files": ["app/resume.py"],
+        }],
+        phase="post_build",
+    )
     phase_state.save()
 
     store = EventStore()
@@ -718,7 +730,8 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "    if phase == 'phase_end':\n"
         "        from pathlib import Path\n"
         "        Path(verify_marker).write_text('phase_end', encoding='utf-8')\n"
-        "        _state.last_verify_results = [{'stage_id': 'pytest_regression', 'ok': True}]\n"
+        "        _state.last_verify_results = [{'stage_id': 'pytest_regression', "
+        "'exit_code': 0, 'ok': True, 'scope_files': ['app/resume.py']}]\n"
         "    return True\n"
         "finalize._verify_patches = _verify_patches\n"
         "finalize._post_commit_snapshot_check = "

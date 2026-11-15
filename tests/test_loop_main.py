@@ -855,15 +855,27 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
 
     run_id = "p-resume-final-verify"
     phase_state = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "resume.py").write_text(
+        "value = 1\n", encoding="utf-8",
+    )
     phase_state.init_new(
         "ziel",
         [{"id": "task-1", "name": "Bereits erledigt",
-          "criterion_refs": ["AC1"]}],
+          "task_files": ["app/resume.py"], "criterion_refs": ["AC1"]}],
         tests=["pytest -q"],
         akzeptanzkriterien=["Ergebnis bleibt verifiziert"],
     )
     phase_state.mark_done("task-1")
     phase_state.run_id = run_id
+    assert phase_state.record_task_verify_evidence(
+        "task-1",
+        [{
+            "stage_id": "pytest_regression", "exit_code": 0, "ok": True,
+            "scope_files": ["app/resume.py"],
+        }],
+        phase="post_build",
+    )
     phase_state.save()
 
     verify_phases: list[str | None] = []
@@ -871,7 +883,10 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
     def verify(_state: RunState, *, phase: str | None = None) -> bool:
         verify_phases.append(phase)
         _state.last_verify_results = [
-            {"stage_id": "pytest_regression", "ok": True},
+            {
+                "stage_id": "pytest_regression", "exit_code": 0,
+                "ok": True, "scope_files": ["app/resume.py"],
+            },
         ]
         return True
 

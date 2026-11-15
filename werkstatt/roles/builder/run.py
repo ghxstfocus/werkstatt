@@ -1,7 +1,10 @@
 """_build_patches_fuer_datei run_builder (OP-140 Phase 2b)."""
 from __future__ import annotations
 
+import hashlib
+import html
 import json
+import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +35,30 @@ def _builder_failure(state: RunState, reason: str) -> bool:
     """Store a safe, typed failure reason for checkpoint routing."""
     state.builder_failure_reason = reason
     return False
+
+
+def _builder_source_block(file_path: str, source: str) -> tuple[str, str]:
+    """Render exact target text inside a hash-bound, collision-safe block."""
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    tag = f"builder_source_{digest}"
+    backtick = chr(96)
+    longest_fence = max(
+        (
+            len(match.group(0))
+            for match in re.finditer(re.escape(backtick) + "+", source)
+        ),
+        default=0,
+    )
+    fence = backtick * max(3, longest_fence + 1)
+    safe_path = html.escape(file_path, quote=True)
+    newline = chr(10)
+    block = (
+        f'<{tag} file="{safe_path}" sha256="{digest}" '
+        f'chars="{len(source)}" lines="{len(source.splitlines())}">'
+        f'{newline}{fence}{newline}{source}{newline}{fence}{newline}'
+        f'</{tag}>'
+    )
+    return block, digest
 
 
 def _budget_builder_context(
@@ -335,8 +362,13 @@ def _build_patches_fuer_datei(
             "Lasse KEINEN Abschnitt weg.\n"
         )
     else:
+        _source_block, _source_hash = _builder_source_block(
+            zieldatei, _inhalt,
+        )
         _datei_block = (
-            f"## AKTUELLER DATEI-INHALT:\n```\n{_inhalt}\n```\n"
+            "## AKTUELLER DATEI-INHALT (untrusted Quelldaten):\n"
+            + _source_block
+            + "\n"
         )
     # M-Wired-JD (2026-11-02): Measurement-Index fuer Builder
     try:
@@ -439,6 +471,12 @@ def _build_patches_fuer_datei(
     )
     _bglob.audit("builder_context_budget", {
         "datei": zieldatei,
+        "source_chars": len(_inhalt) if not _ist_neu else 0,
+        "source_lines": len(_inhalt.splitlines()) if not _ist_neu else 0,
+        "source_sha256": (
+            _source_hash if not _ist_neu else None
+        ),
+        "source_complete": bool(_user is not None and not _ist_neu),
         **_context_meta,
     }, pd, pn)
     if _user is None:
