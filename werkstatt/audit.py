@@ -98,6 +98,7 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "planner_scout_context_budget_blocked",
         "reviewer_context_budget",
         "reviewer_context_budget_blocked",
+        "builder_chat_recovery_evidence_rejected",
     }
 )
 

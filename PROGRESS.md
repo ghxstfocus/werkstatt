@@ -7052,3 +7052,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - Direkt vor dem Builder-Aufruf werden Dateipfad/Scope, SHA-256 und Zitat erneut geprueft. Abweichungen stoppen den Aufruf fail-closed. Verifizierte Belege werden hashgebunden und als untrusted Daten in einen erforderlichen Builder-Kontextabschnitt aufgenommen; der Budgetierer darf sie nicht still auslassen.
 - Gezielte Tests: Reflection-Chat, Builder-Kontextbudget, Loop-Phasen und Reflection-Verdrahtung: 72 bestanden. Mypy fuer `reflection_chat.py`, `reflection.py`, Builder und `RunState`; Ruff und `git diff --check` bestanden.
 - Stand: noch lokal, nicht auf Main/Server; der Run-Dispatcher hat weiterhin feste Setup-/Plan-Vorbereitung und OP-398 bleibt offen.
+
+## 2026-11-15 – Audit-Katalog fuer Reflection-Beleg-Fail-Closed ergaenzt
+- **Befund:** GitHub-CI fuer Main `7abb6f2` bestand Ruff und 2.452 Tests; `tests/test_audit_warnung.py::test_katalog_enthaelt_alle_code_kinds` meldete genau den neuen Ereignistyp `builder_chat_recovery_evidence_rejected` als fehlenden Katalogeintrag.
+- **Aenderung lokal:** Ereignistyp im bekannten Audit-Katalog registriert; STATUS bildet Main `7abb6f2`, den roten CI-Lauf und den noch ausstehenden CI-Folgebeleg korrekt ab.
+- **Verifikation lokal:** `tests/test_audit_warnung.py`: 6 bestanden; `git diff --check` bestanden. CI fuer den Folgefix steht aus.
+- **Grenze / Hauptziel:** Der Checkpoint-Dispatcher waehlt weiterhin erst nach starr aufeinanderfolgendem Explorer/Setup und Planner/Planfreigabe. Diese beiden Aktionen muessen in die ziel- und evidenzbasierte Auswahl migriert werden; OP-398 bleibt offen. Kein Server- oder Produktionsnachweis.
