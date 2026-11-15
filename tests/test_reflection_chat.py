@@ -61,6 +61,46 @@ def test_scoped_files_reject_paths_outside_project() -> None:
     ]
 
 
+def test_reflection_evidence_keeps_required_sources_whole_and_marks_optional_omissions(
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    state.aufgabe = "Ziel: " + ("vollstaendige Anforderung. " * 80)
+    state.aktuelle_task["description"] = "Task: " + ("vollstaendige Beschreibung. " * 80)
+    state.last_verify_errors = ["Fehlerbeleg " + ("x" * 1200) for _ in range(4)]
+    state.architect_prosa = "optional " + ("Architekturhinweis. " * 1600)
+
+    evidence = reflection_chat._readable_evidence(state)
+
+    assert evidence["context_status"] == "complete_required"
+    assert evidence["goal"] == state.aufgabe
+    assert evidence["task"]["description"] == state.aktuelle_task["description"]
+    assert evidence["verify_errors"] == state.last_verify_errors
+    assert evidence["context_budget"]["omitted_optional"] == [
+        "architect_constraints",
+    ]
+    assert evidence["context_budget"]["omissions_are_not_negative_evidence"]
+    assert evidence["context_budget"]["sources"]["architect_constraints"]["chars"] > 24_000
+    assert evidence["context_budget"]["sources"]["architect_constraints"]["sha256"]
+
+
+def test_reflection_chat_refuses_required_context_over_budget_before_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    state.aktuelle_task["description"] = "required " * 20_000
+    monkeypatch.setattr(
+        "werkstatt.chat_session.ChatSession",
+        lambda *_args: pytest.fail("Do not open a chat when required evidence is over budget"),
+    )
+
+    result = reflection_chat.ask_project_chat_for_builder_task(state)
+
+    assert result is None
+    assert state.reflection_chat_error == "required_context_over_budget"
+
+
 def test_parse_task_accepts_only_authorized_files() -> None:
     valid = json.dumps({
         "decision": "task",

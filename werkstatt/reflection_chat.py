@@ -12,6 +12,8 @@ _ALLOWED_CHAT_TOOLS = frozenset({
     "loop_status", "pytest_collect", "diagnose", "read_status", "next_op",
 })
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+REFLECTION_EVIDENCE_MAX_CHARS = 18_000
+REFLECTION_PROMPT_MAX_CHARS = 24_000
 
 
 def originating_chat_session_id(run_record: Any) -> str | None:
@@ -51,12 +53,12 @@ def _compact_items(value: Any, keys: tuple[str, ...]) -> list[Any]:
     if not isinstance(value, list):
         return []
     compacted: list[Any] = []
-    for item in value[:12]:
+    for item in value:
         if isinstance(item, str):
-            compacted.append(item[:900])
+            compacted.append(item)
         elif isinstance(item, dict):
             compacted.append({
-                key: str(item[key])[:900]
+                key: str(item[key])
                 for key in keys
                 if isinstance(item.get(key), (str, int, float, bool))
             })
@@ -64,15 +66,16 @@ def _compact_items(value: Any, keys: tuple[str, ...]) -> list[Any]:
 
 
 def _readable_evidence(state: Any) -> dict[str, Any]:
+    """Pack full required recovery evidence and whole optional sections."""
     task = state.aktuelle_task if isinstance(state.aktuelle_task, dict) else {}
-    return {
-        "run_id": str(getattr(state, "run_id", ""))[:160],
-        "phase": str(getattr(state, "phase_id", "") or "reflection")[:100],
-        "goal": str(getattr(state, "aufgabe", ""))[:1200],
+    required = {
+        "run_id": str(getattr(state, "run_id", "")),
+        "phase": str(getattr(state, "phase_id", "") or "reflection"),
+        "goal": str(getattr(state, "aufgabe", "")),
         "task": {
-            "id": str(task.get("id", ""))[:160],
-            "name": str(task.get("name", ""))[:300],
-            "description": str(task.get("description", ""))[:1800],
+            "id": str(task.get("id", "")),
+            "name": str(task.get("name", "")),
+            "description": str(task.get("description", "")),
             "authorized_files": _scoped_files(task),
             "acceptance_criteria": _compact_items(
                 task.get("acceptance_criteria")
@@ -85,23 +88,25 @@ def _readable_evidence(state: Any) -> dict[str, Any]:
             getattr(state, "tests", []),
             ("id", "name", "file", "command", "description", "criterion_id"),
         ),
-        "architect_constraints": str(
-            getattr(state, "architect_prosa", "") or ""
-        )[:2400],
         "verify_errors": [
-            str(item)[:900]
-            for item in (getattr(state, "last_verify_errors", None) or [])[:8]
+            str(item)
+            for item in (getattr(state, "last_verify_errors", None) or [])
             if isinstance(item, (str, int, float))
         ],
         "reviewer_bugs": [
             {
-                key: str(item.get(key, ""))[:700]
+                key: str(item.get(key, ""))
                 for key in ("file", "line", "severity", "description")
                 if item.get(key) is not None
             }
-            for item in (getattr(state, "reviewer_bugs", None) or [])[:8]
+            for item in (getattr(state, "reviewer_bugs", None) or [])
             if isinstance(item, dict)
         ],
+    }
+    optional = {
+        "architect_constraints": str(
+            getattr(state, "architect_prosa", "") or ""
+        ),
         "reflection_history": [
             {
                 key: item.get(key)
@@ -109,15 +114,59 @@ def _readable_evidence(state: Any) -> dict[str, Any]:
                 if isinstance(item.get(key), (int, str))
             } | {
                 "verify_errors": [
-                    str(error)[:400]
-                    for error in item.get("verify_errors", [])[:3]
+                    str(error)
+                    for error in item.get("verify_errors", [])
                     if isinstance(error, str)
                 ],
             }
-            for item in (getattr(state, "reflection_history", None) or [])[-4:]
+            for item in (getattr(state, "reflection_history", None) or [])
             if isinstance(item, dict)
         ],
     }
+    manifests = {
+        key: {
+            "chars": len(encoded := json.dumps(
+                value, ensure_ascii=False, sort_keys=True, default=str,
+            )),
+            "sha256": hashlib.sha256(encoded.encode("utf-8")).hexdigest(),
+        }
+        for key, value in {**required, **optional}.items()
+    }
+    required_chars = len(json.dumps(
+        required, ensure_ascii=False, sort_keys=True, default=str,
+    ))
+    if required_chars > REFLECTION_EVIDENCE_MAX_CHARS:
+        return {
+            "context_status": "blocked_required_context_over_budget",
+            "required_chars": required_chars,
+            "max_chars": REFLECTION_EVIDENCE_MAX_CHARS,
+            "sources": manifests,
+            "omitted_optional": [],
+        }
+
+    evidence: dict[str, Any] = dict(required)
+    omitted: list[str] = []
+    for name, value in optional.items():
+        candidate = {**evidence, name: value}
+        size = len(json.dumps(
+            candidate, ensure_ascii=False, sort_keys=True, default=str,
+        ))
+        if size <= REFLECTION_EVIDENCE_MAX_CHARS:
+            evidence[name] = value
+        else:
+            omitted.append(name)
+    evidence["context_status"] = "complete_required"
+    context_budget: dict[str, Any] = {
+        "max_chars": REFLECTION_EVIDENCE_MAX_CHARS,
+        "sources": manifests,
+        "omitted_optional": omitted,
+        "omissions_are_not_negative_evidence": True,
+    }
+    evidence["context_budget"] = context_budget
+    context_budget["used_chars"] = len(json.dumps(
+        evidence, ensure_ascii=False, sort_keys=True, default=str,
+    ))
+    return evidence
 
 
 def _parse_task(answer: str, allowed_files: list[str]) -> dict[str, Any] | None:
@@ -178,6 +227,9 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
         return None
 
     evidence = _readable_evidence(state)
+    if evidence.get("context_status") != "complete_required":
+        state.reflection_chat_error = "required_context_over_budget"
+        return None
     evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
     evidence_hash = hashlib.sha256(evidence_json.encode("utf-8")).hexdigest()
     run_id = str(getattr(state, "run_id", "") or "run")
@@ -198,8 +250,15 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
         "Builder-Schritt mit Fehlerursache und Verify-Hinweis\","
         "\"task_files\":[\"...\"]}}. Bei fehlender belastbarer "
         "Reparaturaufgabe: {\"decision\":\"cannot_solve\","
-        "\"reason\":\"...\"}.\n\nBELEGE:\n" + evidence_json
+        "\"reason\":\"...\"}. Fehlende optionale Belege oder ihre Hash-/"
+        "Groessenmetadaten sind keine Negativbelege. Lies benoetigte, aber "
+        "ausgelassene Informationen mit den Projektwerkzeugen gezielt nach; "
+        "wenn das nicht belastbar gelingt, lehne ab.\n\nBELEGE:\n"
+        + evidence_json
     )
+    if len(prompt) > REFLECTION_PROMPT_MAX_CHARS:
+        state.reflection_chat_error = "prompt_over_budget"
+        return None
 
     parent = None
     worker = None
