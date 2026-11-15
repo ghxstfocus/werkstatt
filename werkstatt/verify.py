@@ -651,13 +651,16 @@ def _verify_patches(
                 if isinstance(path, str) and path.strip()
             })
             if not _scope_task_files:
-                _scope_task_files = sorted({
-                    str(patch.get("file")).replace("\\", "/")
-                    for patch in (getattr(state, "patches", None) or [])
-                    if isinstance(patch, dict)
-                    and isinstance(patch.get("file"), str)
-                    and patch.get("file").strip()
-                })
+                _patch_scope_files: set[str] = set()
+                for patch in getattr(state, "patches", None) or []:
+                    if not isinstance(patch, dict):
+                        continue
+                    patch_file = patch.get("file")
+                    if isinstance(patch_file, str) and patch_file.strip():
+                        _patch_scope_files.add(
+                            patch_file.replace("\\", "/"),
+                        )
+                _scope_task_files = sorted(_patch_scope_files)
         # M-322: Platzhalter ersetzen ({changed_files}, {changed_test_files}).
         _expanded = _expand_cmd_placeholders(list(cmd), state, project_dir)
         # M-443: venv-Binary nutzen, falls vorhanden.

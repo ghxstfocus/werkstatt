@@ -7008,3 +7008,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung lokal:** `pending` zaehlt jetzt nur `pending`- und `running`-Tasks; blockierte Tasks werden separat im Fortschrittsbeleg ausgegeben. Wenn nach der Graph-Aufloesung weiterhin blockierte Tasks vorliegen, lehnt der Checkpoint die erneute Dispatch-Entscheidung mit konkreter Begruendung fail-closed ab.
 - **Verifikation lokal:** PhaseState-, Checkpoint- und Loop-Phasen-Regressionen: 101 bestanden. Der Serverlauf `00c1ca5` des Nutzers bestaetigt 2.436 bestanden und 5 uebersprungene Tests fuer den vorherigen Stand; die lokale Aenderung ist darin nicht enthalten.
 - **Grenze:** Das beseitigt einen No-Progress-/Fehlroutingpfad, implementiert aber keine adaptive Neuplanung eines blockierten Graphen. OP-398 und der Produktionsnachweis bleiben offen.
+
+### CI-Typpruefung fuer Checkpoint-Evidenz und Verify-Scope korrigiert — 2026-11-15
+
+- **Befund:** Der Push von `6b84465` bestand Ruff und 2.438 Tests, aber das Linux-Quality-Gate fand zwei Mypy-Fehler: wiederholte Dictionary-Lookups verhinderten die Typverengung fuer `stage_id` und Verify-Patchpfade.
+- **Aenderung lokal:** Beide Werte werden einmal gelesen, geprueft und erst danach verwendet. Der Checkpoint- und Verify-Scope bleibt unveraendert.
+- **Verifikation lokal:** Mypy mit `--follow-imports=silent` fuer `phase_state.py`, `phases/tasks.py` und `verify.py`: keine Fehler. Ruff, Compileall und `git diff --check` bestanden; Checkpoint-/PhaseState-/Verify-Gruppe: 118 bestanden. `test_verify_contract_stage.py` konnte im Windows-Checkout nicht gesammelt werden, weil das Testmodul `state_inventory` aus dem Linux-Produktionspfad erwartet.
+- **Grenze:** Korrigierter Stand wartet auf Linux-Quality-Gate. Der vorangegangene Vollsuite-Test von `6b84465` ist gruen; dessen gesamtes Quality-Gate war wegen Mypy rot. OP-398 und Produktionsnachweis bleiben offen.

@@ -536,20 +536,27 @@ class PhaseState:
             return False
         file_set = set(current_hashes)
         stages = evidence.get("stages")
-        return isinstance(stages, list) and any(
-            isinstance(stage, dict)
-            and stage.get("ok") is True
-            and stage.get("exit_code") == 0
-            and isinstance(stage.get("stage_id"), str)
-            and bool(stage.get("stage_id").strip())
-            and isinstance(stage.get("scope_files"), list)
-            and any(
-                isinstance(path, str)
-                and path.replace("\\", "/") in file_set
-                for path in stage["scope_files"]
-            )
-            for stage in stages
-        )
+        if not isinstance(stages, list):
+            return False
+        for stage in stages:
+            if not isinstance(stage, dict):
+                continue
+            stage_id = stage.get("stage_id")
+            scope_files = stage.get("scope_files")
+            if (
+                stage.get("ok") is True
+                and stage.get("exit_code") == 0
+                and isinstance(stage_id, str)
+                and stage_id.strip()
+                and isinstance(scope_files, list)
+                and any(
+                    isinstance(path, str)
+                    and path.replace("\\", "/") in file_set
+                    for path in scope_files
+                )
+            ):
+                return True
+        return False
 
     def record_task_verify_evidence(
         self,
