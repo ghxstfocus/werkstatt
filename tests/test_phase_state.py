@@ -36,6 +36,51 @@ def test_init_new_persistiert_criterion_refs_ueber_reload(tmp_path):
     assert resumed.data["tasks"][0]["criterion_refs"] == ["AC1", "AC3"]
 
 
+def test_task_verify_evidence_is_persisted_and_bound_to_criteria(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new(
+        "Kriterium mit Task-Verify-Beleg",
+        [{"id": "t1", "task_files": ["src/main.py"],
+          "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["Verhalten wird geprueft"],
+    )
+
+    assert ps.record_task_verify_evidence(
+        "t1",
+        [
+            {"stage_id": "pytest_changed", "exit_code": 0, "ok": True},
+            {"stage_id": "ruff_changed", "exit_code": 1, "ok": False},
+            {"stage_id": "pytest_bad", "exit_code": False, "ok": True},
+        ],
+        phase="post_build",
+    )
+
+    resumed = PhaseState("testprojekt", base_dir=tmp_path)
+    assert resumed.load()
+    evidence = resumed.get_task("t1")["verify_evidence"]
+    assert evidence["criterion_refs"] == ["AC1"]
+    assert evidence["task_files"] == ["src/main.py"]
+    assert evidence["stages"] == [{
+        "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+    }]
+
+
+def test_task_verify_evidence_requires_a_successful_stage(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new(
+        "Kriterium ohne erfolgreichen Stage",
+        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["Verhalten wird geprueft"],
+    )
+
+    assert not ps.record_task_verify_evidence(
+        "t1",
+        [{"stage_id": "pytest_changed", "exit_code": 1, "ok": False}],
+        phase="post_build",
+    )
+    assert "verify_evidence" not in ps.get_task("t1")
+
+
 def test_init_new_verwirft_ungueltige_criterion_refs(tmp_path):
     ps = PhaseState("testprojekt", base_dir=tmp_path)
 

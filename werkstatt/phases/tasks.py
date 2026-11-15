@@ -182,6 +182,64 @@ def _audit_task_ok(
     audit("loop_task_ok", payload, project_dir, project_name)
 
 
+def _record_task_verify_evidence(
+    state: RunState,
+    phase_state: Any,
+    task_id: str,
+) -> bool:
+    """Persist actual successful verify stages on their criterion-linked task."""
+    task_record = phase_state.get_task(task_id) if phase_state is not None else None
+    if not isinstance(task_record, dict):
+        return True
+    refs = task_record.get("criterion_refs")
+    if not isinstance(refs, list) or not refs:
+        return True
+    recorder = getattr(phase_state, "record_task_verify_evidence", None)
+    recorded = False
+    if callable(recorder):
+        try:
+            recorded = recorder(
+                task_id,
+                getattr(state, "last_verify_results", None),
+                phase="post_build",
+            ) is True
+        except (OSError, RuntimeError, TypeError, ValueError):
+            recorded = False
+    stage_ids = [
+        result.get("stage_id")
+        for result in (getattr(state, "last_verify_results", None) or [])
+        if isinstance(result, dict)
+        and result.get("ok") is True
+        and isinstance(result.get("exit_code"), int)
+        and not isinstance(result.get("exit_code"), bool)
+        and result.get("exit_code") == 0
+        and isinstance(result.get("stage_id"), str)
+    ]
+    payload = {
+        "task_id": task_id,
+        "criterion_refs": refs[:30],
+        "stage_ids": stage_ids[:50],
+    }
+    if recorded:
+        audit(
+            "loop_criteria_task_verify_evidence",
+            payload,
+            state.project_dir,
+            state.project_name,
+        )
+    else:
+        audit(
+            "loop_criteria_task_verify_evidence_missing",
+            {
+                **payload,
+                "reason": "no_successful_task_verify_stages",
+            },
+            state.project_dir,
+            state.project_name,
+        )
+    return recorded
+
+
 def _checkpoint_decision_payload(
     phase_state: Any,
     next_task: dict[str, Any] | None,
@@ -922,8 +980,12 @@ def _phase_tasks_loop(
                 check_run_lease(state)
             else:
                 _r_ok = False
+            _evidence_ok = (
+                _record_task_verify_evidence(state, phase_state, task_id)
+                if _v_ok and _r_ok else False
+            )
             _el_task = time.monotonic() - _t_task
-            if _v_ok and _r_ok:
+            if _v_ok and _r_ok and _evidence_ok:
                 task_ok(i, len(tasks), elapsed_s=_el_task)
                 group_end()
                 tasks_ok += 1
@@ -935,7 +997,14 @@ def _phase_tasks_loop(
                 )
             else:
                 group_end()
-                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="verify_failed")
+                _task_ende(
+                    state, phase_state, task_id, ok=False,
+                    name=task_name,
+                    failure=(
+                        "verify_evidence_missing"
+                        if _v_ok and _r_ok else "verify_failed"
+                    ),
+                )
             continue
 
         _builder_ok = _run_with_progress(
@@ -996,17 +1065,37 @@ def _phase_tasks_loop(
                     {"task_id": i, "recovered": _recovered}, pd, pn,
                 )
                 if _recovered:
-                    tasks_ok += 1
-                    state.tasks_ok_counter = tasks_ok
-                    _audit_task_ok(
-                        _task_ende(
-                            state, phase_state, task_id, ok=True,
-                            name=task_name,
-                        ),
-                        task_id, task_name, pd, pn,
-                        via="single_reflection_checkpoint",
+                    _review_recovered = bool(run_reviewer(state))
+                    check_run_lease(state)
+                    _evidence_recovered = (
+                        _record_task_verify_evidence(
+                            state, phase_state, task_id,
+                        ) if _review_recovered else False
                     )
-                    continue
+                    audit(
+                        "loop_builder_recovery_result",
+                        {
+                            "task_id": i,
+                            "recovered": _recovered and _review_recovered,
+                            "reviewed": _review_recovered,
+                            "evidence_recorded": _evidence_recovered,
+                        },
+                        pd, pn,
+                    )
+                    if _review_recovered and _evidence_recovered:
+                        tasks_ok += 1
+                        state.tasks_ok_counter = tasks_ok
+                        task_ok(i, len(tasks), elapsed_s=time.monotonic() - _t_task)
+                        group_end()
+                        _audit_task_ok(
+                            _task_ende(
+                                state, phase_state, task_id, ok=True,
+                                name=task_name,
+                            ),
+                            task_id, task_name, pd, pn,
+                            via="single_reflection_checkpoint",
+                        )
+                        continue
             elif _loop_action in ("create", "update"):
                 audit(
                     "loop_builder_recovery_skipped",
@@ -1712,6 +1801,16 @@ def _phase_tasks_loop(
                        failure=_ap_grund)
             continue
 
+        _evidence_ok = _record_task_verify_evidence(
+            state, phase_state, task_id,
+        )
+        if not _evidence_ok:
+            _task_ende(
+                state, phase_state, task_id, ok=False,
+                name=task_name, failure="verify_evidence_missing",
+            )
+            group_end()
+            continue
         _el_task = time.monotonic() - _t_task
         task_ok(i, len(tasks), elapsed_s=_el_task)
         try:

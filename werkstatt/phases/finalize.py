@@ -18,13 +18,16 @@ def _criterion_evidence_rows(
         return [], ["acceptance_criteria_missing"]
     if not isinstance(tasks, list):
         return [], ["task_graph_missing"]
-    passed_stages = sorted({
+    phase_end_stages = sorted({
         str(item.get("stage_id") or "").strip()
         for item in verify_results
         if isinstance(item, dict)
         and item.get("ok") is True
         and str(item.get("stage_id") or "").strip()
     }) if isinstance(verify_results, list) else []
+    expected_run_id = getattr(phase_state, "run_id", None)
+    if not isinstance(expected_run_id, str) or not expected_run_id:
+        expected_run_id = ""
 
     rows: list[dict[str, object]] = []
     gaps: list[str] = []
@@ -35,6 +38,7 @@ def _criterion_evidence_rows(
             continue
         assigned: list[str] = []
         incomplete: list[str] = []
+        task_verify_stages: set[str] = set()
         for task in tasks:
             refs = task.get("criterion_refs") if isinstance(task, dict) else None
             if not isinstance(refs, list) or criterion_id not in refs:
@@ -44,6 +48,31 @@ def _criterion_evidence_rows(
                 incomplete.append("task_id_missing")
                 continue
             assigned.append(task_id)
+            evidence = task.get("verify_evidence")
+            if (
+                isinstance(evidence, dict)
+                and evidence.get("schema_version") == 1
+                and evidence.get("task_id") == task_id
+                and evidence.get("phase") == "post_build"
+                and (
+                    bool(expected_run_id)
+                    and evidence.get("run_id") == expected_run_id
+                )
+                and isinstance(evidence.get("criterion_refs"), list)
+                and criterion_id in evidence["criterion_refs"]
+                and isinstance(evidence.get("stages"), list)
+            ):
+                for stage in evidence["stages"]:
+                    if not isinstance(stage, dict):
+                        continue
+                    stage_id = stage.get("stage_id")
+                    if (
+                        stage.get("ok") is True
+                        and stage.get("exit_code") == 0
+                        and isinstance(stage_id, str)
+                        and stage_id.strip()
+                    ):
+                        task_verify_stages.add(stage_id.strip())
             get_task = getattr(phase_state, "get_task", None)
             try:
                 status_record = get_task(task_id) if callable(get_task) else task
@@ -62,8 +91,10 @@ def _criterion_evidence_rows(
             gaps.append(f"{criterion_id}:task_mapping_missing")
         elif incomplete:
             gaps.append(f"{criterion_id}:tasks_not_done")
-        if not passed_stages:
-            gaps.append(f"{criterion_id}:successful_verify_stage_missing")
+        if assigned and not task_verify_stages:
+            gaps.append(f"{criterion_id}:task_verify_evidence_missing")
+        if not phase_end_stages:
+            gaps.append(f"{criterion_id}:successful_phase_end_verify_stage_missing")
         rows.append({
             "criterion_id": criterion_id,
             "criterion": criterion.strip(),
@@ -71,8 +102,13 @@ def _criterion_evidence_rows(
             "task_status": (
                 "done" if assigned and not incomplete else "incomplete"
             ),
-            "verify_stage_ids": passed_stages,
-            "verification_status": "passed" if passed_stages else "missing",
+            "verify_stage_ids": sorted(task_verify_stages),
+            "phase_end_verify_stage_ids": phase_end_stages,
+            "verification_status": (
+                "passed"
+                if task_verify_stages and phase_end_stages and not incomplete
+                else "missing"
+            ),
         })
     return rows, gaps
 
@@ -1326,7 +1362,7 @@ def _phase_finalize(
                         ),
                         "tracked": True,
                         "coverage_basis": (
-                            "criterion_task_mapping_and_verify_stages"
+                            "criterion_task_mapping_task_verify_and_phase_end"
                             if _criteria_verified
                             else "task_graph_and_phase_checks_only"
                         ),
@@ -1337,7 +1373,8 @@ def _phase_finalize(
                         "evidence_gaps": _criteria_evidence_gaps,
                         "decision_summary": (
                             "Jedes Akzeptanzkriterium ist auf erledigte Tasks "
-                            "und erfolgreiche Verify-Stages zurueckgefuehrt."
+                            "mit taskgebundenen Verify-Belegen sowie die "
+                            "Phase-End-Verify zurueckgefuehrt."
                             if _criteria_verified else
                             "Tasks und Abschlusspruefung sind gruen, aber die "
                             "kriterienspezifische Belegkette ist unvollstaendig."
@@ -1346,7 +1383,7 @@ def _phase_finalize(
                             "Alle zugeordneten Tasks sind erledigt.",
                             "Phase-End-Review, Human Gate und Abschluss-Verify bestanden.",
                             *(
-                                ["Kriterienspezifische Task- und Verify-Belege sind verknuepft."]
+                                ["Kriterien, erledigte Tasks, deren Verify-Belege und die Phase-End-Verify sind verknuepft."]
                                 if _criteria_verified else
                                 ["Kein Zielnachweis: Belegluecken "
                                  + ", ".join(_criteria_evidence_gaps[:8])]

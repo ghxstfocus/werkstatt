@@ -101,6 +101,30 @@ def test_builder_recovery_only_retries_typed_correctable_failures() -> None:
     assert _builder_failure_recoverable(state) == (False, "failure_reason_missing")
 
 
+def test_task_checkpoint_persists_only_successful_verify_evidence(tmp_path) -> None:
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.phases.tasks import _record_task_verify_evidence
+
+    phase_state = PhaseState("evidence", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new(
+        "Task Verify",
+        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["Ziel"],
+    )
+    state = _state(tmp_path)
+    state.last_verify_results = [
+        {"stage_id": "pytest_changed", "exit_code": 0, "ok": True},
+        {"stage_id": "ruff_changed", "exit_code": 1, "ok": False},
+    ]
+
+    assert _record_task_verify_evidence(state, phase_state, "t1")
+    evidence = phase_state.get_task("t1")["verify_evidence"]
+    assert evidence["criterion_refs"] == ["AC1"]
+    assert [item["stage_id"] for item in evidence["stages"]] == [
+        "pytest_changed",
+    ]
+
+
 def test_checkpoint_rejects_unregistered_task_action() -> None:
     from werkstatt.phases.tasks import _checkpoint_decision_payload
 
@@ -829,6 +853,11 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
     )
     phase_state.mark_done("t1")
     phase_state.run_id = "testproj-resume-run"
+    assert phase_state.record_task_verify_evidence(
+        "t1",
+        [{"stage_id": "pytest_changed", "exit_code": 0, "ok": True}],
+        phase="post_build",
+    )
     phase_state.save()
 
     # Simuliere den Prozessneustart: Nur der persistierte Checkpoint bleibt.
@@ -910,7 +939,7 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
         assert verified == [{
             "status": "verified",
             "tracked": True,
-            "coverage_basis": "criterion_task_mapping_and_verify_stages",
+            "coverage_basis": "criterion_task_mapping_task_verify_and_phase_end",
             "covered": ["AC1"],
             "remaining": [],
             "verification": "phase_end",
@@ -919,18 +948,20 @@ def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
                 "criterion": "Gesamtziel ist erfuellt",
                 "task_ids": ["t1"],
                 "task_status": "done",
-                "verify_stage_ids": ["pytest_regression"],
+                "verify_stage_ids": ["pytest_changed"],
+                "phase_end_verify_stage_ids": ["pytest_regression"],
                 "verification_status": "passed",
             }],
             "evidence_gaps": [],
             "decision_summary": (
                 "Jedes Akzeptanzkriterium ist auf erledigte Tasks "
-                "und erfolgreiche Verify-Stages zurueckgefuehrt."
+                "mit taskgebundenen Verify-Belegen sowie die "
+                "Phase-End-Verify zurueckgefuehrt."
             ),
             "evidence": [
                 "Alle zugeordneten Tasks sind erledigt.",
                 "Phase-End-Review, Human Gate und Abschluss-Verify bestanden.",
-                "Kriterienspezifische Task- und Verify-Belege sind verknuepft.",
+                "Kriterien, erledigte Tasks, deren Verify-Belege und die Phase-End-Verify sind verknuepft.",
             ],
         }]
     else:
@@ -953,18 +984,50 @@ def test_criterion_evidence_reports_gaps_instead_of_guessing(tmp_path):
     from werkstatt.phases.finalize import _criterion_evidence_rows
 
     phase_state = MagicMock()
+    phase_state.run_id = "run-1"
     phase_state.get_task.return_value = {"status": "done"}
     rows, gaps = _criterion_evidence_rows(
         ["Kriterium wird verifiziert"],
-        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        [{
+            "id": "t1", "criterion_refs": ["AC1"],
+            "verify_evidence": {
+                "schema_version": 1, "task_id": "t1",
+                "phase": "post_build", "criterion_refs": ["AC1"],
+                "run_id": "run-1",
+                "stages": [{
+                    "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
+                }],
+            },
+        }],
         phase_state,
         [],
     )
 
     assert rows[0]["task_ids"] == ["t1"]
     assert rows[0]["task_status"] == "done"
+    assert rows[0]["verify_stage_ids"] == ["pytest_changed"]
+    assert rows[0]["phase_end_verify_stage_ids"] == []
+    assert gaps == ["AC1:successful_phase_end_verify_stage_missing"]
+
+
+def test_criterion_evidence_does_not_reuse_unrelated_run_verify_for_task(
+    tmp_path,
+):
+    from werkstatt.phases.finalize import _criterion_evidence_rows
+
+    phase_state = MagicMock()
+    phase_state.run_id = "run-1"
+    phase_state.get_task.return_value = {"status": "done"}
+    rows, gaps = _criterion_evidence_rows(
+        ["Kriterium wird verifiziert"],
+        [{"id": "t1", "criterion_refs": ["AC1"]}],
+        phase_state,
+        [{"stage_id": "pytest_regression", "exit_code": 0, "ok": True}],
+    )
+
     assert rows[0]["verify_stage_ids"] == []
-    assert gaps == ["AC1:successful_verify_stage_missing"]
+    assert rows[0]["phase_end_verify_stage_ids"] == ["pytest_regression"]
+    assert gaps == ["AC1:task_verify_evidence_missing"]
 
 def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
     tmp_path, monkeypatch,
@@ -995,6 +1058,12 @@ def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
 
     monkeypatch.setattr(phase_state, "criteria_progress", _criteria_progress)
     state = _state(tmp_path, run_id="run-criteria-retry")
+    phase_state.run_id = "run-criteria-retry"
+    assert phase_state.record_task_verify_evidence(
+        "t1",
+        [{"stage_id": "pytest_changed", "exit_code": 0, "ok": True}],
+        phase="post_build",
+    )
     state.tasks = [{"id": "t1"}]
     task_events = []
     monkeypatch.setattr(

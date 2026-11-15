@@ -417,6 +417,66 @@ class PhaseState:
                 return task
         return None
 
+    def record_task_verify_evidence(
+        self,
+        task_id: str,
+        results: object,
+        *,
+        phase: str,
+    ) -> bool:
+        """Persist successful verify stages against the criterion-linked task."""
+        task = self.get_task(task_id)
+        refs = task.get("criterion_refs") if isinstance(task, dict) else None
+        if (
+            not isinstance(task, dict)
+            or not isinstance(refs, list)
+            or not refs
+            or phase != "post_build"
+            or not isinstance(results, list)
+        ):
+            return False
+
+        stages: list[dict[str, Any]] = []
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            stage_id = result.get("stage_id")
+            exit_code = result.get("exit_code")
+            if (
+                result.get("ok") is not True
+                or not isinstance(stage_id, str)
+                or not stage_id.strip()
+                or not isinstance(exit_code, int)
+                or isinstance(exit_code, bool)
+                or exit_code != 0
+            ):
+                continue
+            stage: dict[str, Any] = {
+                "stage_id": stage_id[:120],
+                "exit_code": 0,
+                "ok": True,
+            }
+            artifact_hash = result.get("artifact_sha256")
+            if isinstance(artifact_hash, str) and artifact_hash:
+                stage["artifact_sha256"] = artifact_hash[:128]
+            stages.append(stage)
+        if not stages:
+            return False
+
+        task["verify_evidence"] = {
+            "schema_version": 1,
+            "task_id": task_id,
+            "phase": phase,
+            "criterion_refs": list(refs),
+            "task_files": list(task.get("task_files") or []),
+            "run_id": self.run_id,
+            "verified_at": datetime.datetime.now(datetime.UTC).isoformat(),
+            "stages": stages,
+        }
+        self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+        self.save()
+        return True
+
     # --- Status-Updates ---
 
     def update_task(
