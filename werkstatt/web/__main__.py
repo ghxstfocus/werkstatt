@@ -16,6 +16,15 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8001)
     parser.add_argument("--reload", action="store_true")
+    parser.add_argument(
+        "--timeout-graceful-shutdown",
+        type=int,
+        default=10,
+        help=(
+            "Sekunden, die Uvicorn offenen Requests/WebSockets zum Beenden "
+            "gibt, bevor es sie abbricht (Default: 10)."
+        ),
+    )
     args = parser.parse_args()
 
     # Token sofort generieren (nicht erst beim ersten Request),
@@ -42,6 +51,7 @@ def main() -> None:
         host=args.host,
         port=args.port,
         reload=args.reload,
+        timeout_graceful_shutdown=args.timeout_graceful_shutdown,
     )
 
 

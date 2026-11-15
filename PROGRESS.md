@@ -7017,3 +7017,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation lokal:** Mypy mit `--follow-imports=silent` fuer `phase_state.py`, `phases/tasks.py` und `verify.py`: keine Fehler. Ruff, Compileall und `git diff --check` bestanden; Checkpoint-/PhaseState-/Verify-Gruppe: 118 bestanden. `test_verify_contract_stage.py` konnte im Windows-Checkout nicht gesammelt werden, weil das Testmodul `state_inventory` aus dem Linux-Produktionspfad erwartet.
 - **Verifikation:** Commit `9d1c7f4` ist auf Main; das GitHub-Linux-Quality-Gate ist erfolgreich. Der Nutzer bestaetigt zusaetzlich auf dem Server 2.438 bestandene und 5 uebersprungene Tests fuer `9d1c7f4`. Der Mypy-Fehler des Vorlaeufers `6b84465` ist behoben.
 - **Grenze:** OP-398 und Produktionsnachweis bleiben offen. Setup und Planfreigabe sind noch nicht Teil einer vollstaendig dynamischen Dispatch-Schleife; zielgebundene Neuplanung nach ausgeschoepfter Recovery fehlt weiterhin.
+
+### Webserver-Shutdown wartet nicht unbegrenzt auf persistente WebSockets — 2026-11-15
+
+- **Befund:** Der Nutzer-Server zeigte nach SIGTERM `Shutting down` und `Waiting for background tasks to complete`; PID `3775508` blieb aktiv, Port 8001 war nicht mehr gebunden und HTTP lieferte 000. Werkstatt hat persistente WebSocket-Endpunkte fuer Audit, Terminal und Chat. Uvicorn ohne Graceful-Shutdown-Timeout kann dadurch unbegrenzt auf offene Verbindungen warten.
+- **Aenderung lokal:** `python -m werkstatt.web` uebergibt jetzt standardmaessig `timeout_graceful_shutdown=10`; `--timeout-graceful-shutdown` kann den Wert explizit ueberschreiben. Nach Ablauf beendet Uvicorn verbleibende ASGI-Verbindungen.
+- **Verifikation lokal:** Neue CLI-Regressionen fuer Default und Override plus bestehender Web-Entry-Test: 5 bestanden. Der Lauf prueft die CLI-Weitergabe, keinen tatsaechlichen Prozess-Shutdown. Doku-/CI- und Servernachweis fuer den Fix stehen aus.
+- **Grenze:** Produktions-Webserver steht nach Nutzerbeleg aktuell ohne Listener und mit wartendem Prozess; PID und Listener muessen vor einem Signal erneut geprueft werden. OP-396 und Produktionsnachweis bleiben offen.
