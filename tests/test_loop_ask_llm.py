@@ -466,7 +466,10 @@ def test_builder_request_overrides_reasoner_to_flash_and_disables_thinking(tmp_p
             state=_state(tmp_path),
             aufgabe="builder",
             heartbeat=False,
-            context_manifest={"budget_event": "builder_context_budget"},
+            context_manifest={
+                "budget_event": "builder_context_budget",
+                "user_sha256": hashlib.sha256(b"USR").hexdigest(),
+            },
         )
 
     payload = mock_post.call_args.kwargs["json"]

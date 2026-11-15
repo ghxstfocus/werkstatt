@@ -580,6 +580,7 @@ def _build_patches_fuer_datei(
         progress_context={"files": [zieldatei]},
         context_manifest={
             "budget_event": "builder_context_budget",
+            "user_sha256": _user_sha256,
             "source_file": zieldatei,
             "source_sha256": _source_hash if not _ist_neu else None,
             "budget": _context_meta,

@@ -40,6 +40,7 @@ _ROLE_CONTEXT_BUDGET_EVENTS: dict[str, frozenset[str]] = {
     }),
     "scout": frozenset({"scout_context_budget"}),
 }
+_ROLE_CONTEXT_DIGEST_REQUIRED = frozenset({"builder"})
 
 _PROMPT_DUMP_DIR = Path("/tmp/werkstatt-prompts")
 
@@ -343,6 +344,15 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             or budget_event not in expected_budget_events
         ):
             missing.append("context_manifest.budget_event")
+        if aufgabe in _ROLE_CONTEXT_DIGEST_REQUIRED:
+            expected_user_sha256 = hashlib.sha256(
+                user_content.encode("utf-8")
+            ).hexdigest()
+            if (
+                not isinstance(context_manifest, dict)
+                or context_manifest.get("user_sha256") != expected_user_sha256
+            ):
+                missing.append("context_manifest.user_sha256")
         if missing:
             audit_written = False
             if state is not None:
