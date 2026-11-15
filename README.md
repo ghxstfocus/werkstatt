@@ -22,7 +22,9 @@ nicht blockieren.
   Fokus und spaetere Phasen. PROGRESS dokumentiert abgeschlossene Arbeit.
 - Lokale Serverprojekte sind vorhanden. GitHub-Projektquellen und
   projektbezogene Modellwahl sind geplante Arbeit in OP-399/OP-400; ADR-0030
-  ist vorgeschlagen und noch keine angenommene Implementierungsentscheidung.
+  ist angenommen. Die dazu gehoerenden Projektquellen- und Modellfunktionen
+  sind noch nicht vollstaendig implementiert; bis dahin gelten lokale Quellen
+  und globale Modell-Defaults.
 
 ## Installation
 
@@ -46,11 +48,15 @@ API-Schluessel gehoeren in die serverseitige Umgebung oder eine lokale
 
 ## Architektur und Leitplanken
 
-Die Rollen-Pipeline ist im Loop deterministisch orchestriert. Explorer und
-Scout sammeln Kontext; Architect und Planner formen einen begrenzten Plan;
-Builder erstellt Aenderungen; Verify und Reviewer pruefen sie; Reflection
-behandelt fehlgeschlagene Versuche. Rollenrouting und Modell-Defaults stehen
-in werkstatt/model_routing.py und werkstatt/rollen.py.
+Der Loop verbindet deterministische Kontrollen mit bedarfsabhaengigen Rollen.
+Explorer liefert Repo-Fakten; der Planner waehlt Scout und Architect nach
+Auftragsbreite, Unsicherheit und Risiko. Der Planner ueberfuehrt den
+Architect-Plan in einen validierten Task-Graph. Builder ist der schreibende
+Worker; Verify prueft deterministisch, Reviewer und Reflection werden nach
+Befund und Risiko eingesetzt. Diese adaptive Auswahl ist teilweise umgesetzt;
+der vollstaendige zielorientierte Arbeitsgraph und seine Neuplanung bleiben
+offene Arbeit in OP-398. Rollenrouting und Modell-Defaults stehen in
+werkstatt/model_routing.py und werkstatt/rollen.py.
 
 Der Chat ist ein paralleler, projektgebundener Kontroll- und Diagnosepfad.
 Er kann Repository-Fragen beantworten, Hintergrundjobs begleiten und

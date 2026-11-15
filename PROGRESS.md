@@ -6822,3 +6822,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Bei expliziten Kriterien wird `loop_erfolg` nur emittiert, wenn die Kriterienbelegkette mindestens eine erfolgreiche Verify-Stage fuer jedes Kriterium enthaelt. Fehlen diese Belege, protokolliert der Finalizer `criteria_evidence_incomplete` und liefert einen Fehlerstatus zurueck.
 - **Regressionstest:** Der Phase-End-Resume-Pfad wird einmal mit erfolgreicher Verify-Stage und einmal mit leerem Stage-Ergebnis ausgefuehrt. Nur der erste Fall darf `loop_erfolg` emittieren.
 - **Verifikation:** Zwei parametrisierte Regressionen und Ruff fuer Finalizer/Phasentests bestanden lokal. Vollstaendige Phasen-, Qualitaets- und Linux-CI-Ergebnisse stehen noch aus.
+
+### Nachtrag — PR #57 auf Main und Linux-CI abgeschlossen
+
+- **Beleg:** PR #57 wurde als `1ffd396` auf `main` gemergt. GitHub Actions Quality Gate fuer den PR-Head `001efdf3b705e58e6e29e823c2467de426c7c0fe` lief erfolgreich ([Run 43691263964](https://github.com/ghxstfocus/werkstatt/actions/runs/43691263964)): 2.351 Tests bestanden, Ruff/Mypy/AST/Audit-Katalog ohne Fehler.
+- **Einordnung:** Der Fix verhindert bei expliziten Akzeptanzkriterien eine falsche `loop_erfolg`-Meldung ohne Verify-Belege. Er schliesst OP-398 nicht und belegt keinen Lauf auf dem Produktionsserver.
