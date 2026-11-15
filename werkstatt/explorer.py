@@ -42,8 +42,8 @@ Keine Erklaerung, nur JSON."""
 def _list_py_file_inventory(
     project_dir: Path,
     max_files: int = 200,
-) -> tuple[list[str], bool]:
-    """Return indexed Python paths and whether the inventory is complete."""
+) -> tuple[list[str], bool, bool]:
+    """Return paths, scan success, and whether the index limit was reached."""
     try:
         res = subprocess.run(
             ["find", str(project_dir), "-name", "*.py", "-type", "f",
@@ -51,31 +51,39 @@ def _list_py_file_inventory(
             capture_output=True, text=True, timeout=30, check=False,
         )
         paths = [f for f in res.stdout.split("\n") if f.strip()]
-        return paths[:max_files], res.returncode == 0 and len(paths) <= max_files
+        return paths[:max_files], res.returncode == 0, len(paths) > max_files
     except Exception:
-        return [], False
+        return [], False, False
 
 
 def _list_py_files(project_dir: Path, max_files: int = 200) -> list[str]:
     """Compatibility wrapper returning the bounded Python path list."""
-    paths, _complete = _list_py_file_inventory(project_dir, max_files)
+    paths, _scan_succeeded, _index_truncated = _list_py_file_inventory(
+        project_dir, max_files,
+    )
     return paths
 
 
 def _python_inventory_context(
     paths: list[str],
     *,
-    scan_complete: bool,
+    scan_succeeded: bool,
+    index_truncated: bool,
     index_cap: int = 200,
     prompt_cap: int = 50,
 ) -> tuple[str, dict[str, Any]]:
     """Describe inventory and prompt omissions without implying absence."""
     offered = paths[:prompt_cap]
     prompt_omitted = max(0, len(paths) - len(offered))
-    if not scan_complete:
+    if not scan_succeeded:
         status = (
-            f"Inventar unvollstaendig oder nicht verfuegbar; Indexlimit "
-            f"{index_cap}. Fehlende Pfade sind unbekannt, kein Negativbeleg."
+            "Scan fehlgeschlagen oder teilweise; die angezeigten Treffer "
+            "sind unvollstaendig, fehlende Pfade sind unbekannt."
+        )
+    elif index_truncated:
+        status = (
+            f"Indexlimit {index_cap} erreicht; weitere Pfade koennen "
+            "fehlen und sind unbekannt."
         )
     elif not paths:
         status = "Inventar vollstaendig; keine Python-Dateien gefunden."
@@ -95,7 +103,9 @@ def _python_inventory_context(
     )
     manifest = {
         "file_count": len(paths),
-        "file_scan_complete": scan_complete,
+        "file_scan_succeeded": scan_succeeded,
+        "file_index_truncated": index_truncated,
+        "file_scan_complete": scan_succeeded and not index_truncated,
         "file_scan_cap": index_cap,
         "files_offered": offered,
         "files_omitted_from_prompt": prompt_omitted,
@@ -657,9 +667,13 @@ def run_explorer(state: RunState, frage: str) -> dict:
         audit("explorer_kein_key", {}, pd, pn)
         return {"findings": "", "key_files": [], "next_reads": []}
 
-    py_files, _file_scan_complete = _list_py_file_inventory(Path(pd))
+    py_files, _scan_succeeded, _index_truncated = _list_py_file_inventory(
+        Path(pd),
+    )
     file_inventory, inventory_manifest = _python_inventory_context(
-        py_files, scan_complete=_file_scan_complete,
+        py_files,
+        scan_succeeded=_scan_succeeded,
+        index_truncated=_index_truncated,
     )
     context = (
         f"Frage: {frage}\n\n"

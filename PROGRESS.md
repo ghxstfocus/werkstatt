@@ -7204,3 +7204,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung lokal:** Scanstatus und Limit werden getrennt vom Pfadbestand ermittelt. Das Prompt kennzeichnet ein nicht verfuegbares/unvollstaendiges Inventar und Prompt-Auslassungen als unbekannt/keine Negativbelege; ein vollstaendiges leeres Inventar wird separat ausgewiesen. Das Requestmanifest zaehlt Indexumfang, Scanvollstaendigkeit, angebotene Pfade und Auslassungen.
 - **Verifikation lokal:** Explorer-Agent- und Explorer-Helfergruppe: 33 bestanden; Assertions decken Fehlerstatus, 200er Indexgrenze und 50er Promptgrenze ab.
 - **Grenze / Hauptziel:** Die vorhandene Begrenzung auf 50 Modellpfade bleibt; diese Aenderung macht die Belegluecke sichtbar, implementiert aber noch kein Explorer-JIT-Nachladen und beweist keine semantische Relevanz. OP-405/398 bleiben offen. Servercheckout `b78935d` bestand laut Nutzer mit 2.472/5; diese Aenderung liegt danach.
+
+
+## 2026-11-16 – Explorer-Scanfehler und Indexlimit getrennt ausweisen (lokal)
+- **Befund:** Die erste Explorer-Inventar-Korrektur unterschied eine unvollstaendige Bestandsaufnahme zwar von einem leeren Ergebnis, vermischte aber noch Scanfehler und das Erreichen des 200er-Indexlimits in einem Status.
+- **Aenderung lokal:** Inventar-Erhebung liefert jetzt getrennte Statuswerte fuer Scanerfolg und Indextrunkierung. Das Prompt benennt fehlgeschlagene/partielle Scans getrennt von einem erreichten Indexlimit und trennt beides von Pfaden, die erst beim 50er-Promptlimit ausgelassen wurden. Das Requestmanifest enthaelt diese drei unabhaengigen Angaben.
+- **Verifikation lokal:** Agent-/Explorer-/Loop-Explorer-/Requestgruppe: 73 bestanden; Ruff, Mypy fuer `explorer.py`, Audit-Drift und Control-Drift bestanden.
+- **Grenze / Hauptziel:** Aussagen bleiben an den begrenzten Scan gebunden; JIT-Nachladen und ein Rollen-Eval fehlen. OP-405/398 bleiben offen. Servercheckout `b78935d` (2.472/5) enthaelt diesen Folgeschritt nicht.
