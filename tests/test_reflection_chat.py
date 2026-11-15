@@ -81,6 +81,17 @@ def _state(tmp_path: Path) -> SimpleNamespace:
     )
 
 
+def _install_run_store(monkeypatch, state, tmp_path: Path):
+    from werkstatt.event_store import EventStore
+
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(
+        state.project_name, state.run_id, state.aufgabe, status="running",
+    )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+    return store
+
+
 def test_scoped_files_reject_paths_outside_project() -> None:
     assert reflection_chat._scoped_files({"task_files": ["../outside.py"]}) == []
     assert reflection_chat._scoped_files({"task_files": ["C:/outside.py"]}) == []
@@ -284,6 +295,7 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     tmp_path: Path,
 ) -> None:
     state = _state(tmp_path)
+    store = _install_run_store(monkeypatch, state, tmp_path)
     state.budget_exhausted_reason = "max_llm_calls"
     state.budget = {"max_llm_calls": 1}
     state.llm_calls = 1
@@ -356,6 +368,9 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     assert calls["max_elapsed_s"] == reflection_chat.REFLECTION_CHAT_MAX_ELAPSED_S
     assert calls["allow_time_budget_finalize"] is False
     assert state.reflection_chat_calls == 1
+    assert store.get_run_record("alpha", "alpha-run-1")["checkpoint"][
+        "reflection_chat_recovery_calls"
+    ] == 1
     assert "source_evidence" in calls["message"]
     assert "read_file-Auszug" in calls["message"]
 
@@ -406,6 +421,7 @@ def test_exhausted_run_chat_reserve_is_separately_bounded(
     tmp_path: Path,
 ) -> None:
     state = _state(tmp_path)
+    store = _install_run_store(monkeypatch, state, tmp_path)
     state.budget_exhausted_reason = "max_minutes"
     calls = {"deleted": False}
 
@@ -442,6 +458,29 @@ def test_exhausted_run_chat_reserve_is_separately_bounded(
     assert state.reflection_chat_calls == reflection_chat.REFLECTION_CHAT_MAX_CALLS
     assert state.reflection_chat_error == "RuntimeError"
     assert calls["deleted"] is True
+    assert store.get_run_record("alpha", "alpha-run-1")["checkpoint"][
+        "reflection_chat_recovery_calls"
+    ] == reflection_chat.REFLECTION_CHAT_MAX_CALLS
+
+
+def test_recovery_chat_reserve_survives_new_runstate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    store = _install_run_store(monkeypatch, state, tmp_path)
+    for _ in range(reflection_chat.REFLECTION_CHAT_MAX_CALLS):
+        reflection_chat._claim_recovery_chat_call(state)
+
+    resumed = _state(tmp_path)
+    with pytest.raises(RuntimeError, match="recovery_budget_exhausted"):
+        reflection_chat._claim_recovery_chat_call(resumed)
+
+    record = store.get_run_record("alpha", "alpha-run-1")
+    assert record is not None
+    assert record["checkpoint"]["reflection_chat_recovery_calls"] == (
+        reflection_chat.REFLECTION_CHAT_MAX_CALLS
+    )
 
 
 def test_reflection_uses_chat_task_once_and_restores_original_task(

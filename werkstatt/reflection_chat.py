@@ -264,6 +264,48 @@ def _verify_source_evidence(
     return verified
 
 
+def _claim_recovery_chat_call(state: Any) -> int:
+    """Durably reserve one of the run's bounded Reflection-Chat calls."""
+    project = getattr(state, "project_name", None)
+    run_id = getattr(state, "run_id", None)
+    if not isinstance(project, str) or not project.strip() or not isinstance(
+        run_id, str,
+    ) or not run_id.strip():
+        raise RuntimeError("reflection_chat_run_identity_missing")
+
+    from werkstatt.event_store import EventStore
+
+    store = EventStore()
+    for _ in range(5):
+        record = store.get_run_record(project, run_id)
+        if record is None:
+            raise RuntimeError("reflection_chat_run_checkpoint_missing")
+        checkpoint = record.get("checkpoint")
+        if not isinstance(checkpoint, dict):
+            raise TypeError("reflection_chat_checkpoint_invalid")
+        used = checkpoint.get("reflection_chat_recovery_calls", 0)
+        if (
+            isinstance(used, bool) or not isinstance(used, int) or used < 0
+        ):
+            raise RuntimeError("reflection_chat_recovery_counter_invalid")
+        if used >= REFLECTION_CHAT_MAX_CALLS:
+            raise RuntimeError("reflection_chat_recovery_budget_exhausted")
+        updated = dict(checkpoint)
+        updated["reflection_chat_recovery_calls"] = used + 1
+        try:
+            store.update_run_checkpoint(
+                project,
+                run_id,
+                updated,
+                expected_version=record["checkpoint_version"],
+            )
+        except RuntimeError:
+            continue
+        state.reflection_chat_calls = used + 1
+        return used + 1
+    raise RuntimeError("reflection_chat_checkpoint_conflict")
+
+
 def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
     """Ask the run's originating Chat for a single in-scope repair task.
 
@@ -367,8 +409,8 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
             # exhausts its budget. Count calls truthfully, but do not let the
             # exhausted work budget prevent the coordinator from asking Chat.
             recovery_calls += 1
+            _claim_recovery_chat_call(state)
             state.llm_calls += 1
-            state.reflection_chat_calls += 1
 
         answer = chat_loop(
             worker,
