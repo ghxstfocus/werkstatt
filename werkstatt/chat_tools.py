@@ -475,6 +475,20 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                     checkpoint[key], (str, int, float, bool, type(None)),
                 )
             }
+            dispatch = checkpoint.get("coordinator_decision")
+            if isinstance(dispatch, dict):
+                dispatch_summary: dict[str, str | int] = {}
+                for key, limit in (
+                    ("decision", 120), ("action", 120), ("reason", 500),
+                    ("executor", 120), ("task_id", 120),
+                ):
+                    value = dispatch.get(key)
+                    if isinstance(value, str):
+                        dispatch_summary[key] = value[:limit]
+                version = dispatch.get("checkpoint_version")
+                if isinstance(version, int) and not isinstance(version, bool):
+                    dispatch_summary["checkpoint_version"] = version
+                result["checkpoint"]["coordinator_decision"] = dispatch_summary
             safe_point = checkpoint.get("safe_point")
             if isinstance(safe_point, dict):
                 safe_summary: dict[str, Any] = {

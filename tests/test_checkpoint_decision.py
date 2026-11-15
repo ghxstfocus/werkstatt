@@ -154,6 +154,36 @@ def test_run_coordinator_selects_setup_then_plan_from_persisted_markers(
     assert decision["coordinator_action"] == "finalize_run"
 
 
+def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
+    from werkstatt.event_store import EventStore
+    from werkstatt.loop import _persist_run_coordinator_decision
+
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record("demo", "demo-run-1", "Complete goal")
+    decision = {
+        "decision": "execute_planned_task",
+        "coordinator_action": "execute_task_checkpoint",
+        "reason": "Builder needed for the next dependency-free task.",
+        "next_executor": "builder",
+        "next_task_id": "task-1",
+    }
+
+    _persist_run_coordinator_decision(
+        store, "demo", "demo-run-1", decision,
+    )
+
+    record = store.get_run_record("demo", "demo-run-1")
+    assert record is not None
+    assert record["checkpoint"]["coordinator_decision"] == {
+        "decision": "execute_planned_task",
+        "action": "execute_task_checkpoint",
+        "reason": "Builder needed for the next dependency-free task.",
+        "executor": "builder",
+        "task_id": "task-1",
+        "checkpoint_version": 1,
+    }
+
+
 def test_run_coordinator_rejects_unknown_task_action(tmp_path) -> None:
     from werkstatt.loop import _run_coordinator_action
 

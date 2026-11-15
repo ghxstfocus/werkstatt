@@ -600,6 +600,45 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
     }
 
 
+def _persist_run_coordinator_decision(
+    store: EventStore,
+    project_name: str,
+    run_id: str,
+    decision: dict,
+    *,
+    run_state: RunState | None = None,
+) -> None:
+    """Publish the current bounded dispatch decision in the durable RunRecord."""
+    for _attempt in range(5):
+        if run_state is not None:
+            check_run_lease(run_state)
+        record = store.get_run_record(project_name, run_id)
+        if record is None or record.get("status") not in {"starting", "running"}:
+            raise RuntimeError("Aktiver RunCheckpoint fuer Dispatch fehlt")
+        checkpoint = dict(record.get("checkpoint") or {})
+        checkpoint["coordinator_decision"] = {
+            "decision": str(decision.get("decision") or "")[:120],
+            "action": str(decision.get("coordinator_action") or "")[:120],
+            "reason": str(decision.get("reason") or "")[:500],
+            "executor": str(decision.get("next_executor") or "")[:120],
+            "task_id": str(decision.get("next_task_id") or "")[:120],
+            "checkpoint_version": int(record["checkpoint_version"]) + 1,
+        }
+        try:
+            store.update_run_checkpoint(
+                project_name,
+                run_id,
+                checkpoint,
+                expected_version=int(record["checkpoint_version"]),
+            )
+            return
+        except RuntimeError:
+            # Inbox/Chat may update the same checkpoint concurrently. Reload
+            # and merge our bounded status into the latest durable snapshot.
+            continue
+    raise RuntimeError("Dispatch-Entscheidung konnte nicht CAS-persistiert werden")
+
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -785,6 +824,26 @@ def _run_pipeline_loop_impl(
             state.project_dir,
             project_name,
         )
+        try:
+            _persist_run_coordinator_decision(
+                EventStore(), project_name, get_run_id(), decision,
+                run_state=state,
+            )
+        except RuntimeError as exc:
+            audit(
+                "loop_failed",
+                {
+                    "reason": "coordinator_decision_persist_failed",
+                    "error": str(exc)[:300],
+                },
+                state.project_dir,
+                project_name,
+            )
+            _persist_run_result(
+                EventStore(), project_name, get_run_id(), 1,
+                run_state=state, phase_state=phase_state,
+            )
+            return 1
         action = decision.get("coordinator_action")
         if action == "explore_setup":
             check_run_lease(state)

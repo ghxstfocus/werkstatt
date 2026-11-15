@@ -363,6 +363,15 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
     )
     store.update_run_checkpoint(
         "alpha", "alpha-run-1", {
+            "coordinator_decision": {
+                "decision": "execute_planned_task",
+                "action": "execute_task_checkpoint",
+                "reason": "Builder fuer Task 2.",
+                "executor": "builder",
+                "task_id": "task-2",
+                "checkpoint_version": 4,
+                "private_prompt": "never expose",
+            },
             "safe_point": {
                 "phase": "build", "next_task_id": "task-2",
                 "completed_task_ids": ["task-1"],
@@ -384,6 +393,12 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
     assert parsed["run_id"] == "alpha-run-1"
     assert parsed["checkpoint_status"] == "available"
     assert parsed["checkpoint"]["safe_point"]["next_task_id"] == "task-2"
+    assert parsed["checkpoint"]["coordinator_decision"]["action"] == (
+        "execute_task_checkpoint"
+    )
+    assert parsed["checkpoint"]["coordinator_decision"]["executor"] == "builder"
+    assert "private_prompt" not in result
+    assert "never expose" not in result
     assert parsed["recent_events"][0]["summary"] == "Builder laeuft"
     assert "secret prompt" not in result
     assert "do not expose" not in result
