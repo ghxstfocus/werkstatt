@@ -17,6 +17,12 @@ def _phase(tmp_path, tasks, criteria):
     return phase
 
 
+def _state_after_setup(goal: str = "Ziel") -> RunState:
+    state = RunState(aufgabe=goal)
+    state.coordinator_setup_context_ready = True
+    return state
+
+
 def test_checkpoint_routes_next_planned_task_and_keeps_open_criteria_visible(
     tmp_path,
 ) -> None:
@@ -107,7 +113,7 @@ def test_run_coordinator_dispatches_one_task_at_a_time(tmp_path) -> None:
         ],
         ["Feature works"],
     )
-    state = RunState()
+    state = _state_after_setup()
 
     first = _run_coordinator_action(phase, state)
     assert first["coordinator_action"] == "execute_task_checkpoint"
@@ -126,12 +132,12 @@ def test_run_coordinator_dispatches_one_task_at_a_time(tmp_path) -> None:
     assert final["next_executor"] == "phase_end_verify"
 
 
-def test_run_coordinator_selects_setup_then_plan_from_persisted_markers(
+def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     tmp_path,
 ) -> None:
     from werkstatt.loop import _run_coordinator_action
 
-    state = RunState()
+    state = RunState(aufgabe="Goal")
     assert _run_coordinator_action(None, state)["coordinator_action"] == (
         "explore_setup"
     )
@@ -142,6 +148,12 @@ def test_run_coordinator_selects_setup_then_plan_from_persisted_markers(
     phase.save()
     resumed_phase = PhaseState("demo", base_dir=tmp_path)
     assert resumed_phase.load()
+    # A new process must rebuild its transient Explorer context even though
+    # the old process had completed setup.
+    assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
+        "explore_setup"
+    )
+    state.coordinator_setup_context_ready = True
     assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
         "plan_preflight"
     )
@@ -152,6 +164,19 @@ def test_run_coordinator_selects_setup_then_plan_from_persisted_markers(
     assert final_phase.load()
     decision = _run_coordinator_action(final_phase, state)
     assert decision["coordinator_action"] == "finalize_run"
+
+    planned_phase = _phase(
+        tmp_path / "planned",
+        [{"id": "task-1", "action": "read", "criterion_refs": ["AC1"]}],
+        ["Inspect implementation"],
+    )
+    planned_phase.data["plan_complete"] = True
+    planned_phase.save()
+    resumed_state = _state_after_setup()
+    selected = _run_coordinator_action(planned_phase, resumed_state)
+    assert selected["coordinator_action"] == "execute_task_checkpoint"
+    assert selected["next_task_id"] == "task-1"
+    assert resumed_state.tasks[0]["id"] == "task-1"
 
 
 def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
@@ -213,7 +238,9 @@ def test_run_coordinator_rejects_unknown_task_action(tmp_path) -> None:
         ["Feature works"],
     )
 
-    decision = _run_coordinator_action(phase, RunState())
+    decision = _run_coordinator_action(
+        phase, _state_after_setup(str(phase.data["aufgabe"])),
+    )
 
     assert decision["coordinator_action"] == "reject_checkpoint"
     assert decision["decision"] == "reject_invalid_task_action"
@@ -249,7 +276,9 @@ def test_run_coordinator_requeues_stale_criterion_evidence(tmp_path) -> None:
     phase.mark_done("t1")
     source.write_text("value = 2\n", encoding="utf-8")
 
-    decision = _run_coordinator_action(phase, RunState())
+    decision = _run_coordinator_action(
+        phase, _state_after_setup(str(phase.data["aufgabe"])),
+    )
 
     assert decision["coordinator_action"] == "execute_task_checkpoint"
     assert decision["next_executor"] == "verify_and_review"
@@ -294,7 +323,9 @@ def test_run_coordinator_resolves_blocked_graph_before_stale_verify(tmp_path) ->
     phase.mark_done("t1")
     source.write_text("value = 2\n", encoding="utf-8")
 
-    decision = _run_coordinator_action(phase, RunState())
+    decision = _run_coordinator_action(
+        phase, _state_after_setup(str(phase.data["aufgabe"])),
+    )
 
     assert decision["coordinator_action"] == "resolve_task_graph"
     assert decision["stale_tasks_queued"] == []
@@ -314,7 +345,9 @@ def test_run_coordinator_stops_after_graph_is_already_blocked(tmp_path) -> None:
     )
     phase.mark_blocked("t1", grund="deps:missing")
 
-    decision = _run_coordinator_action(phase, RunState())
+    decision = _run_coordinator_action(
+        phase, _state_after_setup(str(phase.data["aufgabe"])),
+    )
 
     assert decision["task_progress"]["pending"] == 0
     assert decision["task_progress"]["blocked"] == 1

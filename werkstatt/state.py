@@ -145,6 +145,9 @@ class RunState:
     # OP-135b: Explorer-Dateiliste (key_files + findings + next_reads).
     # Struktur identisch zu pipeline_phases.py:explorer_result.
     explorer_context: dict = field(default_factory=dict)
+    # The Explorer handoff is process-local. A resumed worker must rebuild it
+    # even if PhaseState records that setup completed in an earlier process.
+    coordinator_setup_context_ready: bool = False
 
     # M-WelleE (2026-11-02): strukturierte Explorer-Findings.
     # Fliesst in Architect- und Builder-Prompt. Format:

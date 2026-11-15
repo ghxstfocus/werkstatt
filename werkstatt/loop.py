@@ -550,14 +550,36 @@ def _finish_run_after_followups(
 
 def _run_coordinator_action(phase_state, state: RunState) -> dict:
     """Choose one resumable run action from persisted checkpoint evidence."""
-    if phase_state is None or phase_state.data.get("setup_complete") is not True:
+    if not state.coordinator_setup_context_ready:
         return {
             "decision": "prepare_project_context",
             "coordinator_action": "explore_setup",
-            "reason": "setup_checkpoint_missing",
+            "reason": "current_process_setup_context_missing",
             "next_executor": "explorer_and_setup",
         }
-    if phase_state.data.get("plan_complete") is not True:
+    plan_checkpoint_current = bool(
+        phase_state is not None
+        and phase_state.data.get("plan_complete") is True
+        and phase_state.data.get("aufgabe") == state.aufgabe
+    )
+    if plan_checkpoint_current and phase_state is not None:
+        # A persisted plan survives process restarts; hydrate the current
+        # RunState before allowing the dispatcher to skip planner/preflight.
+        if not state.tasks:
+            tasks = phase_state.data.get("tasks")
+            state.tasks = tasks if isinstance(tasks, list) else []
+        if not state.tests:
+            tests = phase_state.data.get("tests")
+            state.tests = tests if isinstance(tests, list) else []
+        if not state.akzeptanzkriterien:
+            criteria = phase_state.data.get("akzeptanzkriterien")
+            state.akzeptanzkriterien = (
+                criteria if isinstance(criteria, list) else []
+            )
+        if not state.phasen:
+            phases = phase_state.data.get("phasen")
+            state.phasen = phases if isinstance(phases, list) else []
+    if not plan_checkpoint_current:
         return {
             "decision": "prepare_approved_work_graph",
             "coordinator_action": "plan_preflight",
@@ -903,6 +925,7 @@ def _run_pipeline_loop_impl(
             phase_state.run_id = get_run_id()
             phase_state.data["setup_complete"] = True
             phase_state.save()
+            state.coordinator_setup_context_ready = True
             continue
         if action == "plan_preflight":
             if phase_state is None:
