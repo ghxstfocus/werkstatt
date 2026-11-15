@@ -146,7 +146,7 @@ def test_selbst_check_block_format():
 # --- Env-Schalter in planner.py (statischer Check) ---
 
 def test_planner_hat_env_schalter():
-    src = Path("/opt/werkstatt/werkstatt/planner.py").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parents[1] / "werkstatt" / "planner.py").read_text(encoding="utf-8")
     assert "WERKSTATT_ARCHITECT_PROMPT" in src
     assert '!= "v1"' in src
     assert "build_architect_docs_section_v2" in src
@@ -155,7 +155,7 @@ def test_planner_hat_env_schalter():
 
 def test_alte_user_content_form_noch_da():
     """Der alte Pfad bleibt als else-Zweig erhalten (kein Zwang zu v2)."""
-    src = Path("/opt/werkstatt/werkstatt/planner.py").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parents[1] / "werkstatt" / "planner.py").read_text(encoding="utf-8")
     assert 'f"Aufgabe: {aufgabe}' in src
 
 def test_planner_system_liest_file_feld():

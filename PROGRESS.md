@@ -6888,3 +6888,30 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Der Scout behaelt den Nutzerauftrag vollstaendig. Optionale, priorisierte Dokument-, Quelltext-, Index-, Explorer- und Grep-Abschnitte werden nur vollstaendig aufgenommen; ausgelassene Abschnitte erscheinen als explizite Nicht-Negativbelege im Prompt und mit Umfang in Audit/Control. Wenn schon der Pflichtauftrag das Budget ueberschreitet, stoppt der Scout vor dem Modellaufruf fail-closed.
 - **Quellensicherheit:** Der Scout-Prompt stuft Repository-Dateien, Dokumente, Indizes, Messungen und Grep-Ausgaben ausdruecklich als nicht vertrauenswuerdige Daten statt Anweisungen ein.
 - **Verifikation:** Scout-Budget-/Planner-Architektur-/Live-Feed-/Audit-Kataloggruppe: 64 bestanden. Ruff, Mypy fuer `werkstatt/scout.py`, JavaScript-Syntax, Doku-Drift, Registry-Drift (UTF-8) und `git diff --check` bestanden. Die bestehenden Scout-Doku-/OP-Tests mit festem `/opt/werkstatt`-Pfad sind auf diesem Windows-Checkout nicht lauffaehig. Dies ist ein Teilstand von OP-405: JIT-Retrieval, Budgets fuer alle aktiven Rollen, Verify-Routing und ein repraesentativer Token-/Qualitaetseval fehlen weiterhin; Voll-Quality-Gate und Produktionsnachweis fehlen ebenfalls. OP-396/397/398/405 bleiben offen.
+
+### Nachtrag — Checkpoint waehlt den Task-Executor operativ
+
+- **Befund:** Der Checkpoint protokollierte bereits `next_executor`, aber die Dispatch-Stellen prueften nur das allgemeine `execute_planned_task` und leiteten danach erneut aus `action` ab. Unbekannte Aktionen konnten so in den Builderpfad fallen.
+- **Aenderung:** Der Checkpoint-Executor steuert jetzt Read-only-, Verify/Review- und Builderpfade. Plan-Gate und Checkpoint lehnen nicht registrierte Aktionen fail-closed vor einem Worker ab. AGENTS.md beschreibt den operativen Vertrag.
+- **Verifikation:** Checkpoint-Entscheidungen: 7 bestanden; Taskgraph-Gate fuer ungueltige Aktionen: 1 bestanden.
+
+### Nachtrag — Projektchat als Koordinator mit Projekt-Serverdiagnose
+
+- **Aenderung:** Chat-Systemprompt benennt Koordinatorrolle und Belegkette einschliesslich Luecken-/Kuerzungspruefung, gezieltem Nachladen und Grenzen tatsaechlicher Werkzeuge. `server_status` und `server_logs` sind rein lesende, begrenzte Werkzeuge. Service/Port kommen aus optionaler Serverzuordnung im jeweiligen Projektmanifest; project_dir muss exakt zum aktiven Checkout passen. Werkzeuge verwenden keine freien Shell-Befehle. Der Werkstatt-Eintrag konfiguriert `werkstatt-web.service` auf Port 8001; die Projektvorlage dokumentiert die optionale Zuordnung. Ein kontrollierter Neustart mit erneuter Zustandspruefung vor Ausfuehrung ist noch nicht implementiert.
+- **Verifikation:** Chat-Agent: 66 bestanden. Server-Tool-Tests: 3 bestanden. Chat-Tool-Tests: 43 bestanden, 2 uebersprungen; ein Skip ist die fehlende externe `grep`-CLI auf Windows, der andere ein bestehender bedingter Test.
+
+### Nachtrag — Architect laedt API-Preflight-Belege gezielt nach
+
+- **Aenderung:** Preflight-Retrieval erhaelt Planreihenfolge, protokolliert fehlende/unlesbare oder nicht gefundene Symbole und markiert ausgelassene Dateien/Zeilenbereiche ausdruecklich als fehlende Evidenz. Control zeigt die relevanten Metadaten kompakt.
+- **Verifikation:** Architect-API-Evidence und Live-Feed-Backend: 44 bestanden; Ruff und `git diff --check` bestanden. Dies schliesst OP-405 nicht ab; weitere Rollenbudgets, Retrieval und Evaluation bleiben offen.
+
+### Nachtrag — Architect-Retry behaelt Reasoning-Budget
+
+- **Befund:** Der zweite Architect-Aufruf reduzierte `max_tokens` auf 12000, obwohl der Korrekturaufruf zusaetzliche Preflight-Befunde und Quellbelege enthaelt. Der Retry konnte dadurch weniger Reasoning-/Antwortbudget erhalten als der Erstaufruf.
+- **Aenderung:** Beide Architect-Aufrufe verwenden jetzt `ARCHITECT_MAX_TOKENS`; der Regressionstest prueft die Werte direkt im API-Preflight-Retry. Die Loop-Test-6-Kommentare nennen den Retry-Bedarf.
+- **Verifikation:** `tests/test_architect_tokens.py`, `tests/test_loop_planner_architect.py` und `tests/test_architect_target_api_evidence.py`: 63 bestanden. OP-410 bleibt offen, bis die vollstaendige Phase-End-Verify bestanden und der Abschluss konsistent dokumentiert ist.
+
+### Nachtrag — Portabilitaet von Loop-Regressionstests geprueft
+
+- **Aenderung:** Ein Antipattern-End-to-End-Test verwendete im Fixture einen anderen `old_string` als den vorhandenen Dateiinhalt; dadurch testete er `old_string_not_found` statt des Antipattern-Vetos. Der Fixture-Inhalt passt jetzt zum Patch. Zwei statische Architect-Prompt-Tests lesen den Planner relativ zum Testdateipfad statt aus festem `/opt/werkstatt`.
+- **Verifikation:** `tests/test_antipattern.py` und `tests/test_architect_prompt_v2.py`: 32 bestanden. Die Gesamt-Testsuite wurde auf Windows gestartet und ist nicht vollstaendig gruen: POSIX-Dateimodus und ein nicht vorhandenes `python3`-Kommando blockieren 3 weitere Tests; danach bricht pytest-timeout mit internem Capture-AssertionError ab. Der Production/Server-Nachweis fehlt weiterhin.

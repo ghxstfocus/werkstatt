@@ -182,6 +182,8 @@ def test_plan_gate_rejects_invalid_task_graph_before_human_gate(tmp_path) -> Non
     invalid_graphs = [
         ([{"id": "t1"}, {"id": "t1"}], "mehrfach vergeben"),
         ([{"id": "t1", "dependencies": ["missing"]}], "unbekannte dependency"),
+        ([{"id": "t1", "action": "architect"}], "keine registrierte Aktion"),
+        ([{"id": "t1", "action": ["update"]}], "keine registrierte Aktion"),
         ([{"id": "t1", "dependencies": ["t1"]}], "sich selbst"),
         (
             [

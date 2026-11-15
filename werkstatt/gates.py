@@ -117,6 +117,15 @@ def _task_graph_error(tasks: list) -> str | None:
             dependencies = task.get("dependencies")
             if dependencies is None:
                 dependencies = []
+            action = task.get("action")
+            if action is not None and (
+                not isinstance(action, str)
+                or action not in ("create", "update", "read", "verify")
+            ):
+                return (
+                    f"Task {task_id!r} hat keine registrierte Aktion "
+                    f"({action!r}); erlaubt sind create, update, read, verify"
+                )
         else:
             return f"Task {index} ist weder Objekt noch Text"
 

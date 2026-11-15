@@ -762,6 +762,7 @@ _TL_LABELS: dict[str, str] = {
     "builder_file_context": "Builder: Datei-Kontext",
     "builder_context_budget": "Builder: Kontextbudget",
     "planner_architect_context_budget": "Architect: Kontextbudget",
+    "planner_plan_abgelehnt": "Architect: Plan nach API-Pruefung abgelehnt",
     "scout_context_budget": "Scout: Kontextbudget",
     "planner_scout_context_budget_blocked": "Scout: Pflichtkontext ueber Budget",
     "builder_patches_erstellt": "Builder: Patches erstellt",
@@ -887,6 +888,23 @@ def _tl_label(kind: str, payload: dict[str, Any]) -> str:
 
 def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
     """Kurze, menschenlesbare Zusatz-Info pro Event (1 Zeile)."""
+    if kind == "planner_plan_abgelehnt" and payload.get("quelle") == "architect_api_preflight":
+        metadata = payload.get("quellbelege")
+        if not isinstance(metadata, dict):
+            return "API-Befund; der Entwurf wird gezielt korrigiert."
+        files = metadata.get("files")
+        omitted = metadata.get("omitted_files")
+        unmatched = metadata.get("unmatched_symbols")
+        details: list[str] = []
+        if isinstance(files, list) and files:
+            details.append("gelesen: " + ", ".join(str(item)[:80] for item in files[:4]))
+        if isinstance(omitted, list) and omitted:
+            details.append("ausgelassen: " + ", ".join(str(item)[:80] for item in omitted[:3]))
+        if isinstance(unmatched, list) and unmatched:
+            details.append(f"ohne Symboltreffer: {len(unmatched)}")
+        if metadata.get("truncated"):
+            details.append("Auszug am Kontextbudget begrenzt")
+        return "; ".join(details) or "API-Befund; der Entwurf wird gezielt korrigiert."
     if kind.startswith("chat_job_"):
         event_kind = kind.removeprefix("chat_job_")
         if event_kind == "queued":

@@ -1,5 +1,8 @@
 project: werkstatt
 project_dir: /opt/werkstatt
+server:
+  systemd_unit: werkstatt-web.service
+  port: 8001
 docs:
   entry: AGENTS.md
   status: docs/STATUS.md

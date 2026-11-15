@@ -748,6 +748,17 @@ def test_system_prompt_routes_next_work_questions_through_selector() -> None:
     assert "veraendert nichts" in chat_agent._SYSTEM_PROMPT
 
 
+def test_system_prompt_defines_project_coordinator_and_evidence_chain() -> None:
+    prompt = chat_agent._SYSTEM_PROMPT
+    assert "Projektkoordinator und dauerhafte Ansprechpartner" in prompt
+    assert "Informationskette" in prompt
+    assert "direkt gelesene Belege, Schlussfolgerungen und noch unbekannte Punkte" in prompt
+    assert "ein Rollenprompt verleiht keine zusaetzlichen" in prompt
+    assert "Loop-Handoff enthaelt das unveraenderte Nutzerziel" in prompt
+    assert "server_status" in prompt and "server_logs" in prompt
+    assert "Behaupte keinen Neustart" in prompt
+
+
 def test_system_prompt_requires_exact_op_evidence_before_planning() -> None:
     assert "read_status mit genau dieser op_id" in chat_agent._SYSTEM_PROMPT
     assert "STATUS-Auszug" in chat_agent._SYSTEM_PROMPT

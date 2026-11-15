@@ -25,7 +25,7 @@ Run `werkstatt-20261115-111643-b290ddfe`, Seq 793496:
 Der Architect hat das gesamte Completion-Budget im CoT verbraucht und keine
 Antwort mehr produziert.
 
-**Ursache (zu verifizieren beim Bearbeiten):**
+**Verifizierte Ursache:**
 Die Konstante `ARCHITECT_MAX_TOKENS` steht auf 32000. An der Aufrufstelle
 wird sie jedoch im Retry-Pfad überschrieben:
 
@@ -34,22 +34,19 @@ wird sie jedoch im Retry-Pfad überschrieben:
         if _attempt else ARCHITECT_MAX_TOKENS
     )
 
-Der zweite Versuch erhält damit 12000 statt 32000 — weniger als der
-Erstversuch, obwohl er mehr Kontext (Ablehnungsbefunde aus Versuch 1) und
-damit mehr Reasoning-Bedarf hat. Die Drosselung macht den Retry strukturell
-chancenlos.
+Der frühere zweite Versuch erhielt damit 12000 statt 32000 — weniger als
+der Erstversuch, obwohl er mehr Kontext und Reasoning-Bedarf hat. Die
+Drosselung ist im aktuellen Arbeitsstand entfernt; beide Aufrufe verwenden
+`ARCHITECT_MAX_TOKENS`. OP-410 bleibt bis zur vollständigen Phase-End-Verify
+offen.
 
-**Zu prüfen vor der Änderung:**
-1. Exakte Zeilennummern der Konstante und der Aufrufstelle mit `grep -n`
-   verifizieren (die oben genannten Zeilen 680 und 1360-1362 stammen aus
-   einer früheren Sitzung und sind nicht in dieser OP verifiziert).
-2. Herkunft des Werts 12000 klären: Ist er hartkodiert an der Aufrufstelle,
-   oder kommt er aus einer Projektkonfiguration
-   (`projects/werkstatt.yaml` hat `max_tokens_planner: 8192`, was 12000
-   nicht erklärt)?
-3. Prüfen, ob `tests/test_loop_planner_architect.py:466`
-   (`assert a["max_tokens"] == 4000`) denselben Aufrufpfad testet und
-   angepasst werden muss.
+**Gegenprüfung am 2026-11-15:**
+1. `ARCHITECT_MAX_TOKENS` ist 32000; der Architect-LLM-Aufruf verwendet den
+   Wert bei Erstversuch und Retry.
+2. Die frühere Drosselung war direkt am Retry-Aufruf hartkodiert; keine
+   Projektkonfiguration lieferte den Wert 12000.
+3. `tests/test_loop_planner_architect.py:466` prueft den Scout-Aufruf
+   (`deepseek-chat`), nicht den Architect-Aufruf; der Test bleibt unveraendert.
 
 **Akzeptanzkriterien:**
 - [ ] Der Retry-Pfad sendet denselben `max_tokens`-Wert wie der Erstversuch.
@@ -94,7 +91,7 @@ chancenlos.
 - **Status:** open
 - **Typ:** ui-orchestration
 - **Betroffene Dateien:** Chat/Web-UI, Chat- und Loop-Control-Tests
-- **Akzeptanzkriterien:** Repo-Fragen liefern Datei-/Zeilen- oder Testbelege. Das Status-Werkzeug liest die kanonische Queue, Roadmap und Architektur sowie den neuesten Abschnitt aus der Root-`PROGRESS.md`; eine verbotene `docs/PROGRESS.md`-Kopie darf den aktuellen Stand nicht ueberschreiben. Der Chat erstellt fuer direkte Auftraege und OPs einen begruendeten Plan samt Empfehlung und uebergibt genau diesen ohne Copy/Paste an den Loop. Planstand und Freigabeversion bleiben interne Metadaten; die UI zeigt eine natuerliche Zusammenfassung. Neue Chatfragen koennen parallel beantwortet werden. Bei laengerer Arbeit zeigt eine einzelne temporaere Zeile im Chat knapp den aktuellen Schritt; sie wird ersetzt und nach Abschluss entfernt. Die detaillierten Ereignisse bleiben in Control replaybar. Das Plan-Gate erscheint im Chat; Freigabe ist intern an Projekt und Planstand gebunden. Eine relevante Scope-/Basis-Aenderung invalidiert die alte Freigabe; Mehrdeutigkeit fragt gezielt nach. Die freigegebene Version autorisiert Code, Tests, Doku, Verify und lokalen Commit nur innerhalb ihres Umfangs; externe/destruktive Aktionen erhalten ein separates Gate. Werkzeugarbeit endet nicht an einer willkuerlichen Standard-Rundenzahl, sondern an einer finalen Antwort, Nutzerabbruch oder erkannten Stillstand: Wiederholte identische Aufrufe mit gleichem Ergebnis loesen erst eine Kurskorrektur, bei weiterem Stillstand eine belegte Abschlussantwort mit offenen Punkten aus. Abgeschlossene Dialoghistorie und aktive Werkzeugrunden werden innerhalb definierter Kontextbudgets priorisiert und verdichtet, ohne den persistenten Event-Store zu kuerzen; gekuerzte Ausgaben sind als Auszuege markiert und koennen gezielt erneut gelesen werden. Kontrollaktionen bleiben explizit; ein bestaetigter Start bei bereits laufendem Loop wird als nicht gestartet gemeldet und nicht als Erfolg verbucht; Ergebnis-Gate und Reconnect sind abgesichert.
+- **Akzeptanzkriterien:** Repo-Fragen liefern Datei-/Zeilen- oder Testbelege. Das Status-Werkzeug liest die kanonische Queue, Roadmap und Architektur sowie den neuesten Abschnitt aus der Root-`PROGRESS.md`; eine verbotene `docs/PROGRESS.md`-Kopie darf den aktuellen Stand nicht ueberschreiben. Der Chat erstellt fuer direkte Auftraege und OPs einen begruendeten Plan samt Empfehlung und uebergibt genau diesen ohne Copy/Paste an den Loop. Planstand und Freigabeversion bleiben interne Metadaten; die UI zeigt eine natuerliche Zusammenfassung. Neue Chatfragen koennen parallel beantwortet werden. Bei laengerer Arbeit zeigt eine einzelne temporaere Zeile im Chat knapp den aktuellen Schritt; sie wird ersetzt und nach Abschluss entfernt. Die detaillierten Ereignisse bleiben in Control replaybar. Das Plan-Gate erscheint im Chat; Freigabe ist intern an Projekt und Planstand gebunden. Eine relevante Scope-/Basis-Aenderung invalidiert die alte Freigabe; Mehrdeutigkeit fragt gezielt nach. Die freigegebene Version autorisiert Code, Tests, Doku, Verify und lokalen Commit nur innerhalb ihres Umfangs; externe/destruktive Aktionen erhalten ein separates Gate. Fuer jedes Projekt mit gepruefter optionaler Serverzuordnung im Projektmanifest kann der Chat den zugeordneten Dienst, Listener, Prozesse, Checkout und begrenzte Logs lesend untersuchen; Unit, Port und project_dir muessen validiert und an den aktiven Checkout gebunden sein. Argumente oder Logtext duerfen keine freien Shell-Befehle steuern und Auszuege werden als nicht vertrauenswuerdige Daten markiert. Ohne passende Zuordnung meldet der Chat die fehlende Konfiguration. Ein Dienstneustart braucht einen eigenen, ablaufenden, sessiongebundenen UI-Vorschlag, der Prozessidentitaet, Listener, cleanen Checkout und idle Loop-Zustand festhaelt und unmittelbar vor Ausfuehrung erneut validiert; Mehrdeutigkeit oder Aenderung bricht fail-closed ab. Ereignis und Ergebnis sind auditierbar; keine blinde Prozessbeendigung. Werkzeugarbeit endet nicht an einer willkuerlichen Standard-Rundenzahl, sondern an einer finalen Antwort, Nutzerabbruch oder erkannten Stillstand: Wiederholte identische Aufrufe mit gleichem Ergebnis loesen erst eine Kurskorrektur, bei weiterem Stillstand eine belegte Abschlussantwort mit offenen Punkten aus. Abgeschlossene Dialoghistorie und aktive Werkzeugrunden werden innerhalb definierter Kontextbudgets priorisiert und verdichtet, ohne den persistenten Event-Store zu kuerzen; gekuerzte Ausgaben sind als Auszuege markiert und koennen gezielt erneut gelesen werden. Kontrollaktionen bleiben explizit; ein bestaetigter Start bei bereits laufendem Loop wird als nicht gestartet gemeldet und nicht als Erfolg verbucht; Ergebnis-Gate und Reconnect sind abgesichert.
 - **Tests:** Status-Tool liest Root-PROGRESS statt verbotener Duplikatdatei und liefert aktuelle STATUS/ROADMAP/ARCHITECTURE-Quellen; Plan-Version und Loop-Handoff, Empfehlungsbelege, Freigabe/Ablehnung/Revision, mehrdeutige Antworten, Projektisolation, Kontrollaktionen, Reconnect und parallele Fragen waehrend eines Runs; mehr als fuenf Werkzeugrunden ohne Abbruch, Fortsetzung bis Ziel, Nutzerabbruch, echte Run-Budgetgrenze oder belegter Stillstand, Kurskorrektur bei wiederholtem identischem Werkzeugzyklus und Nutzerabbruch. Abgeschlossene alte Turns halten das Prompt-Zeichenbudget ein; alte Roh-Werkzeugausgaben werden nicht erneut injiziert. Auch waehrend eines aktiven Auftrags wird der Werkzeugkontext zwischen abgeschlossenen Runden auf ein Zeichenbudget begrenzt: neueste Runden bleiben bevorzugt vollstaendig, aeltere Belege werden markiert verdichtet; grosse Einzel-Ausgaben werden nur im Prompt gekuerzt und bleiben im Event-Store vollstaendig. Ein gekuerzter Beleg muss bei Bedarf gezielt erneut gelesen werden. Der persistente Transcript bleibt unveraendert.
 - **Blockiert von:** —
 
@@ -112,7 +109,7 @@ chancenlos.
 - **Betroffene Dateien:** STATUS-Parser, OP-Selector, Loop-Start und Tests
 - **Aktueller Teilstand (Main `1ffd396`, 2026-11-15):** Der Finalizer meldet bei expliziten Akzeptanzkriterien keinen Run-Erfolg mehr, wenn Kriterienbelege aus erfolgreichen Verify-Stages fehlen. Das behebt eine falsche Gruenmeldung, schliesst OP-398 aber nicht: zielgebundene Neuplanung, Fortsetzung nach offenen Kriterien und die uebrigen Akzeptanzkriterien bleiben offen.
 - **Akzeptanzkriterien:** Nur eindeutig startbare offene OPs mit aufgeloesten Blockern, Akzeptanzkriterien und Verifikation werden vorgeschlagen. Mehrdeutigkeit oder veralteter Status stoppt den Start und liefert dem Chat Kandidaten samt Gruenden. Ein deterministischer Plan-Compiler prueft Abdeckung der Akzeptanzkriterien, Abhaengigkeiten und Zyklen vor dem Plan-Gate. Der Koordinator waehlt Scout, Architect und bedarfsgesteuerten Spec-First-Pfad nach Auftragsbreite, Unsicherheit und Risiko; einfache Auftraege ueberspringen unnoetige Rollen. Begrenzte OP-Buendel werden vor Ausfuehrung im Plan-Gate einzeln verstaendlich freigegeben. Nach jedem gruenen Schritt prueft der Koordinator die gespeicherten Belege gegen das uebergeordnete Ziel und dessen Akzeptanzkriterien. Gruen allein beendet den Auftrag nicht: erst wenn alle freigegebenen Graph-Aufgaben erledigt, das Ziel belegt erreicht und die abschliessende Verify erfolgreich ist, wird abgeschlossen. Auch ein Scout-No-Op durchlaeuft nach dem Ergebnis-Gate die Phase-End-Verify; die Full-Suite darf in Repo- und Scaffold-Verify-Konfiguration bei leerem Diff nicht durch einen Changed-Files-Guard entfallen. Fehlgeschlagene, blockierte oder offene Tasks koennen nach freigegebener Teilpruefung dokumentiert und gegebenenfalls committed werden, duerfen den Run aber nie als loop_erfolg markieren. Sonst waehlt der Loop selbst den naechsten begruendeten Schritt innerhalb der freigegebenen Grenze. Neue, unabhaengige Funde werden als Folgeauftrag vorgemerkt; unklare oder scopeveraendernde Schritte gehen als gezielte Chat-Rueckfrage zur Freigabe.
-- **Tests:** Statusvarianten, Blocker, Ambiguitaet, Auswahlbegruendung und Fail-closed; Task-Plan-Compiler weist duplizierte/fehlende IDs, malformed, unbekannte, doppelte und selbstreferenzierende Abhaengigkeiten sowie Zyklen vor dem Plan-Gate ab; Run-Abschluss mit failed/blocked/pending/running Tasks bleibt trotz gruenem Verify ohne loop_erfolg; Scout-No-Op fuehrt nach dem Human-Gate Phase-End-Verify und Full-Suite aus und bleibt bei rotem Verify ohne loop_erfolg; nach einem gruenen Zwischenschritt wird weitergearbeitet, wenn Zielkriterien offen sind; fehlende explizite Kriterienzuordnung wird am Checkpoint als ungetrackt markiert und nie als Zielerreichung dargestellt; bei belegter Zielerreichung wird sauber abgeschlossen; kein endloses Reflexions-/Folgeauftragswachstum; neuer Fund bleibt vom freigegebenen Scope getrennt; jede Fortsetzungsentscheidung erscheint in Control als kurze Begruendung mit Beleg und naechstem Schritt.
+- **Tests:** Statusvarianten, Blocker, Ambiguitaet, Auswahlbegruendung und Fail-closed; Task-Plan-Compiler weist duplizierte/fehlende IDs, malformed, unbekannte, doppelte und selbstreferenzierende Abhaengigkeiten sowie Zyklen vor dem Plan-Gate ab; Run-Abschluss mit failed/blocked/pending/running Tasks bleibt trotz gruenem Verify ohne loop_erfolg; Scout-No-Op fuehrt nach dem Human-Gate Phase-End-Verify und Full-Suite aus und bleibt bei rotem Verify ohne loop_erfolg; nach einem gruenen Zwischenschritt wird weitergearbeitet, wenn Zielkriterien offen sind; fehlende explizite Kriterienzuordnung wird am Checkpoint als ungetrackt markiert und nie als Zielerreichung dargestellt; bei belegter Zielerreichung wird sauber abgeschlossen; kein endloses Reflexions-/Folgeauftragswachstum; neuer Fund bleibt vom freigegebenen Scope getrennt; jede Fortsetzungsentscheidung erscheint in Control als kurze Begruendung mit Beleg und naechstem Schritt; der Checkpoint dispatcht nur registrierte Task-Aktionen an den passenden Executor und weist unbekannte Aktionen vor jedem Worker fail-closed ab.
 - **Blockiert von:** —
 
 ### OP-399: Projekt-Hub fuer GitHub- und lokale Quellen

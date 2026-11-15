@@ -335,7 +335,10 @@ def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_p
     assert "BEGRENZTE QUELLBELEGE" in contents[1]
     assert "def get_run_record(self, run_id)" in contents[1]
     assert "Zeilen 1-3" in contents[1]
-    assert limits == [architect.ARCHITECT_MAX_TOKENS, 12000]
+    assert limits == [
+        architect.ARCHITECT_MAX_TOKENS,
+        architect.ARCHITECT_MAX_TOKENS,
+    ]
     assert state.architect_prosa == (
         "Nutze `EventStore.append(event)` fuer das vorhandene API. " * 4
     ).strip()
@@ -362,6 +365,77 @@ def test_api_preflight_source_context_is_project_confined_and_bounded(tmp_path) 
     assert "outside'" not in excerpt
     assert metadata["files"] == ["werkstatt/safe.py"]
     assert metadata["chars"] <= 1200
+
+
+def test_api_preflight_retrieval_preserves_plan_path_order_and_reports_omissions(tmp_path) -> None:
+    from werkstatt.architect import _api_preflight_source_context
+
+    root = tmp_path / "project"
+    first = root / "werkstatt" / "first.py"
+    second = root / "werkstatt" / "second.py"
+    first.parent.mkdir(parents=True)
+    first.write_text("class Store:\n    def load(self):\n        return 1\n", encoding="utf-8")
+    second.write_text("class Cache:\n    def load(self):\n        return 2\n", encoding="utf-8")
+    plan = (
+        "## werkstatt/second.py\nUse `Cache.load()`\n"
+        "## werkstatt/first.py\nUse `Store.load()`"
+    )
+
+    excerpt, metadata = _api_preflight_source_context(root, plan, [], max_files=1)
+
+    assert metadata["requested_files"] == ["werkstatt/second.py", "werkstatt/first.py"]
+    assert metadata["files"] == ["werkstatt/second.py"]
+    assert metadata["omitted_files"] == ["werkstatt/first.py"]
+    assert "def load(self)" in excerpt
+    assert "Retrieval-Auslassungen (keine Negativbelege)" in excerpt
+
+
+def test_api_preflight_marks_unmatched_symbols_and_missing_files(tmp_path) -> None:
+    from werkstatt.architect import _api_preflight_source_context
+
+    root = tmp_path / "project"
+    safe = root / "werkstatt" / "safe.py"
+    safe.parent.mkdir(parents=True)
+    safe.write_text("class Store:\n    def load(self):\n        return 1\n", encoding="utf-8")
+    plan = (
+        "## werkstatt/safe.py\nUse `Store.missing()`\n"
+        "## werkstatt/not_found.py\nUse `Cache.load()`"
+    )
+
+    excerpt, metadata = _api_preflight_source_context(root, plan, [])
+
+    assert metadata["unmatched_symbols"] == [{
+        "path": "werkstatt/safe.py",
+        "symbols": ["missing"],
+        "searched_lines": 3,
+    }]
+    assert metadata["unreadable"] == [{
+        "path": "werkstatt/not_found.py",
+        "reason": "not_found",
+    }]
+    assert "kein Beleg fuer Nichtexistenz" in excerpt
+    assert "Datei nicht gefunden" in excerpt
+
+
+def test_api_preflight_never_slices_source_midline_at_budget(tmp_path) -> None:
+    from werkstatt.architect import _api_preflight_source_context
+
+    root = tmp_path / "project"
+    target = root / "werkstatt" / "safe.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "class Store:\n    def load(self):\n        return 'x' * 100\n",
+        encoding="utf-8",
+    )
+
+    excerpt, metadata = _api_preflight_source_context(
+        root, "## werkstatt/safe.py\nUse `Store.load()`", [], max_chars=350,
+    )
+
+    assert metadata["chars"] == len(excerpt) <= 350
+    assert metadata["truncated"] is True
+    assert "return 'x' * 100" not in excerpt
+    assert metadata["omitted_files"] == ["werkstatt/safe.py"]
 
 
 def test_execution_context_budget_marks_truncated_and_omitted_sections() -> None:

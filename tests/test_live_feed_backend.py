@@ -441,6 +441,26 @@ def test_scout_context_budget_is_visible_in_timeline():
     ) == "Scout: Pflichtkontext ueber Budget"
 
 
+def test_architect_retrieval_evidence_is_visible_in_timeline():
+    detail = inspector._tl_detail(
+        "planner_plan_abgelehnt",
+        {
+            "quelle": "architect_api_preflight",
+            "quellbelege": {
+                "files": ["werkstatt/a.py"],
+                "omitted_files": ["werkstatt/b.py"],
+                "unmatched_symbols": [{"path": "werkstatt/a.py"}],
+                "truncated": True,
+            },
+        },
+    )
+
+    assert "gelesen: werkstatt/a.py" in detail
+    assert "ausgelassen: werkstatt/b.py" in detail
+    assert "ohne Symboltreffer: 1" in detail
+    assert "Kontextbudget begrenzt" in detail
+
+
 def test_nicht_getrackte_kriterien_verursachen_keinen_falschen_nullfortschritt():
     detail = inspector._tl_detail(
         "loop_criteria_progress",

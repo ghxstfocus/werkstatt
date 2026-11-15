@@ -3,6 +3,12 @@
 project: <name>
 project_dir: /opt/<name>
 
+# Optional server diagnostics. Set these only when this project has a
+# systemd-managed service whose working checkout is project_dir.
+# server:
+#   systemd_unit: <name>.service
+#   port: 8000
+
 docs:
   entry: AGENTS.md
   status: docs/STATUS.md

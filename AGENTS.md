@@ -54,6 +54,13 @@ Jeder Skip ist durch aktuellen Repo-Beleg begrenzt und wird auditiert.
 Mehrdeutigkeit, Diagnose, breite Aenderung oder veralteter Textbeleg
 eskalieren in den normalen Scout-/Architect-Pfad.
 
+Am Task-Checkpoint ist `loop_checkpoint_decision` die operative Auswahl fuer
+den naechsten Executor: `read` geht an den Read-only-Pfad, `verify` an Verify
+und Review, `create`/`update` an den Builder. Nicht registrierte Aktionen
+stoppen vor einem Worker fail-closed. Nach jedem Task wird der Checkpoint mit
+Task-, Kriterien- und Verify-Belegen neu berechnet; er ist keine reine
+Timeline-Anzeige.
+
 ## Werkzeuge (CLI)
 
 - python3 -m werkstatt.loop --project NAME --aufgabe "TEXT"

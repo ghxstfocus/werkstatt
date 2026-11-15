@@ -173,16 +173,23 @@ def _checkpoint_decision_payload(
     task_progress = phase_state.progress()
     criteria = phase_state.criteria_progress()
     if next_task is not None:
-        action = str(next_task.get("action", "update"))
+        raw_action = next_task.get("action", "update")
+        action = str("update" if raw_action is None else raw_action)
         executor = {
             "read": "read_only_task",
             "verify": "verify_and_review",
             "create": "builder",
             "update": "builder",
-            "architect": "builder",
-        }.get(action, "planned_task_executor")
-        decision = "execute_planned_task"
-        reason = "Naechster abhaengigkeitsfreier Task aus dem freigegebenen Graph."
+        }.get(action)
+        if executor is None:
+            decision = "reject_invalid_task_action"
+            reason = f"Task-Aktion {action!r} hat keinen freigegebenen Executor."
+        else:
+            decision = "execute_planned_task"
+            reason = (
+                f"{executor} fuer naechsten abhaengigkeitsfreien Task "
+                "aus dem freigegebenen Graph gewaehlt."
+            )
     elif task_progress.get("pending", 0):
         executor = None
         decision = "resolve_blocked_graph"
@@ -789,6 +796,20 @@ def _phase_tasks_loop(
                 phase_state.save()
                 return 1, tasks_ok, tasks
         decision = decision_payload["decision"]
+        if decision == "reject_invalid_task_action":
+            audit(
+                "state_contract_violation",
+                {
+                    "invariant": "checkpoint_action_has_registered_executor",
+                    "decision": decision,
+                    "task_id": next_task.get("id") if next_task else None,
+                    "action": next_task.get("action") if next_task else None,
+                },
+                pd,
+                pn,
+            )
+            phase_state.save()
+            return 1, tasks_ok, tasks
         if decision == "resolve_blocked_graph":
             # OP-163: unerfuellte Deps -> als blocked markieren.
             _pending_after = [
@@ -823,6 +844,21 @@ def _phase_tasks_loop(
             )
             phase_state.save()
             return 1, tasks_ok, tasks
+        next_executor = decision_payload.get("next_executor")
+        if next_executor not in {"read_only_task", "verify_and_review", "builder"}:
+            audit(
+                "state_contract_violation",
+                {
+                    "invariant": "checkpoint_executor_is_registered",
+                    "decision": decision,
+                    "task_id": next_task.get("id"),
+                    "executor": next_executor,
+                },
+                pd,
+                pn,
+            )
+            phase_state.save()
+            return 1, tasks_ok, tasks
         task_obj = next_task  # Sub-Tasks werden direkt aus PhaseState geholt.
         i += 1
         task_id = next_task.get("id", f"t{i}")
@@ -845,8 +881,7 @@ def _phase_tasks_loop(
 
         # M-306d Fix 1: Pro-Task action-Check. read-only Tasks
         # erzeugen keinen Patch, markieren sich direkt als ok.
-        _is_read = isinstance(task_obj, dict) and task_obj.get("action") == "read"
-        if _is_read:
+        if next_executor == "read_only_task":
             audit("loop_task_read_only", {"task_id": task_id, "name": task_name}, pd, pn)
             _el_task = time.monotonic() - _t_task
             task_ok(i, len(tasks), elapsed_s=_el_task)
@@ -860,8 +895,7 @@ def _phase_tasks_loop(
             continue
 
         # Verify-Task: kein Builder, direkt Verify + Reviewer.
-        _is_verify = isinstance(task_obj, dict) and task_obj.get("action") == "verify"
-        if _is_verify:
+        if next_executor == "verify_and_review":
             _v_ok = bool(_verify_patches(state, phase="post_build"))
             check_run_lease(state)
             if _v_ok:
@@ -904,6 +938,48 @@ def _phase_tasks_loop(
                 audit("loop_builder_failed", {"task_id": i, "action": _loop_action}, pd, pn)
                 _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="builder_failed")
                 continue
+
+            # A failed Builder call is a checkpoint for one bounded,
+            # evidence-checked course correction. Do not retry work whose
+            # prerequisites already failed; that task remains independently
+            # visible as a dependency failure below.
+            _has_failed_dependency, _failed_dependency_files = (
+                _pruefe_prior_failed_dependency(phase_state, task_id)
+            )
+            if _loop_action in ("create", "update") and not _has_failed_dependency:
+                audit(
+                    "loop_builder_recovery_start",
+                    {"task_id": i, "action": _loop_action,
+                     "strategy": "single_reflection_checkpoint"},
+                    pd, pn,
+                )
+                _recovered = bool(_reflection_loop(
+                    state,
+                    max_runden=1,
+                    error_context=(
+                        "Der Builder-Aufruf ist fehlgeschlagen. Prüfe die "
+                        "aktuellen Verify-Belege und versuche eine gezielte, "
+                        "auf die aktuelle Aufgabe begrenzte Korrektur. "
+                        "Task gilt nur bei erfolgreicher Verifikation als erledigt."
+                    ),
+                ))
+                check_run_lease(state)
+                audit(
+                    "loop_builder_recovery_result",
+                    {"task_id": i, "recovered": _recovered}, pd, pn,
+                )
+                if _recovered:
+                    tasks_ok += 1
+                    state.tasks_ok_counter = tasks_ok
+                    _audit_task_ok(
+                        _task_ende(
+                            state, phase_state, task_id, ok=True,
+                            name=task_name,
+                        ),
+                        task_id, task_name, pd, pn,
+                        via="single_reflection_checkpoint",
+                    )
+                    continue
 
             # Idempotenz-Erkennung (nur create).
             # M-355: Loop-Idempotenz-Check entfernt. Der Builder

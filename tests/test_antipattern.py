@@ -256,7 +256,7 @@ def test_live_pfad_antipattern_veto(
         '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
     )
     (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "x.py").write_text("b = 2\n")
+    (tmp_path / "core" / "x.py").write_text("a = 1\n")
 
     st = RunState(
         block_id="p", aufgabe="a", start_ts="", docs={}, agents={},

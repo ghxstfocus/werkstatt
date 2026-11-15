@@ -172,6 +172,7 @@
     loop_checkpoint_decision: "Checkpoint: naechster Schritt",
     scout_context_budget: "Scout: Kontextbudget",
     planner_scout_context_budget_blocked: "Scout: Pflichtkontext ueber Budget",
+    planner_plan_abgelehnt: "Architect: Plan nach API-Pruefung abgelehnt",
     loop_failed: "Run fehlgeschlagen",
     loop_human_gate_rejected: "Freigabe abgelehnt",
     gate_expired: "Freigabe abgelaufen",

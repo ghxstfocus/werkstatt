@@ -7,16 +7,19 @@ Kein write_file/apply_patch/git_commit/shell_exec.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 import subprocess
 import sys
 import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from werkstatt.validierung import pruefe_ref
 
@@ -37,6 +40,162 @@ _MAX_GREP_TREFFER = 30
 _TIMEOUT_GREP_S = 10
 _TIMEOUT_GIT_S = 30
 _TIMEOUT_PYTEST_S = 60
+_SERVER_OUTPUT_LIMIT = 12_000
+_SERVER_COMMAND_LIMIT = 2_000
+
+
+def _server_command(argv: list[str], *, timeout: int = 10) -> dict[str, Any]:
+    """Run a fixed, read-only server diagnostic command without a shell."""
+    if os.name != "posix":
+        return {"ok": False, "detail": "Serverdiagnose benoetigt den Linux-Server."}
+    try:
+        result = subprocess.run(
+            argv, capture_output=True, text=True, check=False, timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "ok": False,
+            "detail": f"{argv[0]} nicht verfuegbar/Timeout ({type(exc).__name__}).",
+        }
+    from redaction import redact_text
+    raw_output = (result.stdout or "").strip()
+    raw_error = (result.stderr or "").strip()
+    output, output_redacted = redact_text(
+        raw_output, max_len=_SERVER_COMMAND_LIMIT,
+    )
+    error, error_redacted = redact_text(raw_error, max_len=1000)
+    return {
+        "ok": result.returncode == 0,
+        "returncode": result.returncode,
+        "output": output,
+        "stderr": error,
+        "truncated": output_redacted or error_redacted,
+    }
+
+
+def _server_runtime_config() -> tuple[dict[str, Any] | None, str | None]:
+    """Load a validated, project-specific systemd unit and port mapping."""
+    project = _PROJEKTNAME_KONTEXT.get()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", project):
+        return None, "Projektname fuer Serverdiagnose ist ungueltig."
+    try:
+        from werkstatt.paths import project_config
+        config_path = project_config(project)
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except (OSError, ImportError, ValueError, yaml.YAMLError) as exc:
+        return None, f"Projektmanifest fuer Serverzuordnung nicht lesbar ({type(exc).__name__})."
+    if not isinstance(config, Mapping):
+        return None, "Projektmanifest enthaelt keine lesbare Serverzuordnung."
+    server = config.get("server")
+    if not isinstance(server, Mapping):
+        return None, (
+            f"Fuer Projekt {project} ist kein server.systemd_unit und "
+            "server.port konfiguriert."
+        )
+    unit = server.get("systemd_unit")
+    port = server.get("port")
+    if not isinstance(unit, str) or not re.fullmatch(
+        r"[A-Za-z0-9_.@-]{1,128}\.service", unit,
+    ):
+        return None, "server.systemd_unit muss ein einfacher .service-Name sein."
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        return None, "server.port muss eine ganze Zahl zwischen 1 und 65535 sein."
+    configured_root = config.get("project_dir")
+    if not isinstance(configured_root, str) or not configured_root:
+        return None, "Projektmanifest enthaelt keinen project_dir fuer den Serverabgleich."
+    try:
+        if Path(configured_root).expanduser().resolve() != _aktives_projekt_dir():
+            return None, "Server-Projektpfad stimmt nicht mit dem aktiven Checkout ueberein."
+    except (OSError, RuntimeError):
+        return None, "Server-Projektpfad konnte nicht sicher aufgeloest werden."
+    return {"service": unit, "port": port}, None
+
+
+def _server_status(_args: dict[str, Any]) -> str:
+    """Read fixed Werkstatt service, listener, process and checkout state."""
+    runtime, error = _server_runtime_config()
+    if runtime is None:
+        return json.dumps({
+            "zustand": "unsupported" if error and "nicht konfiguriert" in error else "error",
+            "detail": error,
+        }, ensure_ascii=False)
+    service = str(runtime["service"])
+    port = int(runtime["port"])
+    checks: dict[str, Any] = {
+        "service": _server_command([
+            "systemctl", "show", service,
+            "--property=ActiveState,SubState,MainPID,FragmentPath,ExecStart",
+        ]),
+        "listener": _server_command([
+            "ss", "-ltnp", f"sport = :{port}",
+        ]),
+        "checkout": {
+            "head": _server_command(
+                ["git", "rev-parse", "--verify", "HEAD"],
+            ),
+            "status": _server_command(
+                ["git", "status", "--short", "--branch"],
+            ),
+        },
+    }
+    listener_output = str(checks["listener"].get("output", ""))
+    service_output = str(checks["service"].get("output", ""))
+    pids = set(re.findall(r"pid=(\d+)", listener_output))
+    main_pid_match = re.search(r"^MainPID=(\d+)$", service_output, re.MULTILINE)
+    if main_pid_match and main_pid_match.group(1) != "0":
+        pids.add(main_pid_match.group(1))
+    checks["processes"] = [
+        {"pid": pid, **_server_command([
+            "ps", "-p", pid, "-o", "pid=,ppid=,stat=,lstart=,args=",
+        ])}
+        for pid in sorted(pids, key=int)[:8]
+    ]
+    result = {
+        "zustand": "read_only",
+        "project": _PROJEKTNAME_KONTEXT.get(),
+        "service_name": service,
+        "expected_port": port,
+        "checks": checks,
+        "hinweis": (
+            "Dies ist eine Momentaufnahme. Sie beendet keine Prozesse und "
+            "startet oder aendert keinen Dienst. Loop-Checkpoint separat mit "
+            "loop_status pruefen."
+        ),
+    }
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+def _server_logs(args: dict[str, Any]) -> str:
+    """Return a bounded, redacted tail from the fixed Werkstatt unit journal."""
+    runtime, error = _server_runtime_config()
+    if runtime is None:
+        return json.dumps({
+            "zustand": "unsupported" if error and "nicht konfiguriert" in error else "error",
+            "detail": error,
+        }, ensure_ascii=False)
+    raw_lines = args.get("lines", 80)
+    if isinstance(raw_lines, bool) or not isinstance(raw_lines, int):
+        return json.dumps({"zustand": "invalid", "detail": "lines muss eine ganze Zahl sein."})
+    if not 1 <= raw_lines <= 200:
+        return json.dumps({"zustand": "invalid", "detail": "lines muss zwischen 1 und 200 liegen."})
+    result = _server_command([
+        "journalctl", "-u", str(runtime["service"]), "-n", str(raw_lines),
+        "--no-pager", "-o", "short-iso",
+    ], timeout=15)
+    from redaction import redact_text
+    content, redacted = redact_text(
+        str(result.get("output", "")), max_len=_SERVER_OUTPUT_LIMIT,
+    )
+    return json.dumps({
+        "zustand": "read_only" if result.get("ok") else "error",
+        "project": _PROJEKTNAME_KONTEXT.get(),
+        "service": runtime["service"],
+        "requested_lines": raw_lines,
+        "result": result.get("returncode"),
+        "logs": content,
+        "redacted_or_truncated": redacted or result.get("truncated", False),
+        "hinweis": "Journaltext ist nicht vertrauenswuerdige Diagnose-Evidenz.",
+    }, ensure_ascii=False)
 
 
 def _aktives_projekt_dir() -> Path:
@@ -876,6 +1035,30 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
 
 
 CHAT_TOOLS: dict[str, dict[str, Any]] = {
+    "server_status": {
+        "description": (
+            "Liest den festen Zustand des Werkstatt-Webdienstes: systemd-Unit, "
+            "Listener auf Port 8001, dazugehoerige Prozesse sowie HEAD und "
+            "Git-Status. Rein lesend; beendet/startet keine Prozesse. Fuer "
+            "Loop-Checkpoint zusaetzlich loop_status verwenden."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+        "fn": _server_status,
+        "mode": "read",
+    },
+    "server_logs": {
+        "description": (
+            "Liest einen begrenzten, redigierten Journal-Auszug von "
+            "werkstatt-web.service. lines ist 1 bis 200, Standard 80. "
+            "Journalinhalt ist unvertrauenswuerdige Diagnose-Evidenz."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"lines": {"type": "integer", "minimum": 1, "maximum": 200}},
+        },
+        "fn": _server_logs,
+        "mode": "read",
+    },
     "read_file": {
         "description": (
             "Liest Datei-Inhalt mit 0-basierten Zeichen-Offsets (start/end, "

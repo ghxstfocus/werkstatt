@@ -43,6 +43,8 @@ def _audit_events(tmp_path: Path) -> list[dict]:
     logs = tmp_path / "audit-logs"
     if not logs.is_dir():
         return []
+
+
     out: list[dict] = []
     for f in sorted(logs.glob("agent-pipeline-*.jsonl")):
         for line in f.read_text().splitlines():
@@ -50,6 +52,58 @@ def _audit_events(tmp_path: Path) -> list[dict]:
             if line:
                 out.append(json.loads(line))
     return out
+
+
+@pytest.mark.parametrize(
+    ("action", "executor"),
+    [
+        ("read", "read_only_task"),
+        ("verify", "verify_and_review"),
+        ("create", "builder"),
+        ("update", "builder"),
+    ],
+)
+def test_checkpoint_selects_registered_executor_for_task_action(
+    action: str, executor: str,
+) -> None:
+    from werkstatt.phases.tasks import _checkpoint_decision_payload
+
+    class Phase:
+        def progress(self):
+            return {"pending": 1, "failed": 0, "done": 0}
+
+        def criteria_progress(self):
+            return {
+                "tracked": True, "valid": True,
+                "covered": [], "uncovered": [],
+            }
+
+    decision = _checkpoint_decision_payload(
+        Phase(), {"id": "t1", "action": action},
+    )
+
+    assert decision["decision"] == "execute_planned_task"
+    assert decision["next_executor"] == executor
+    assert executor in decision["reason"]
+
+
+def test_checkpoint_rejects_unregistered_task_action() -> None:
+    from werkstatt.phases.tasks import _checkpoint_decision_payload
+
+    class Phase:
+        def progress(self):
+            return {"pending": 1, "failed": 0, "done": 0}
+
+        def criteria_progress(self):
+            return {"tracked": False, "valid": True, "covered": [], "uncovered": []}
+
+    decision = _checkpoint_decision_payload(
+        Phase(), {"id": "t1", "action": "architect"},
+    )
+
+    assert decision["decision"] == "reject_invalid_task_action"
+    assert decision["next_executor"] is None
+    assert "keinen freigegebenen Executor" in decision["reason"]
 
 
 def _kind(tmp_path: Path, kind: str) -> list[dict]:
