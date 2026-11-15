@@ -376,6 +376,7 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             },
             state.project_dir,
             state.project_name,
+            run_id=state.run_id,
         )
         if audit_written is False:
             return LLMReply(

@@ -66,9 +66,11 @@ def test_llm_call_binds_context_manifest_to_exact_sent_prompt(
     monkeypatch, tmp_path,
 ) -> None:
     events = []
-    monkeypatch.setattr(agent, "audit", lambda kind, payload, *_a: events.append(
-        (kind, payload),
-    ))
+    monkeypatch.setattr(
+        agent,
+        "audit",
+        lambda kind, payload, *_a, **_kw: events.append((kind, payload)),
+    )
     monkeypatch.setattr(agent.requests, "post", lambda *_a, **_kw: _DummyResponse())
     state = mk_state(project_dir=tmp_path, project_name="manifest-test")
     manifest = {

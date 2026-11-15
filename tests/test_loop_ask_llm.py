@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import requests
 
 from werkstatt import agent
+from werkstatt import audit as audit_mod
 from werkstatt.state import RunState
 
 # ---------------------------------------------------------------------
@@ -215,14 +216,21 @@ def test_system_len_nach_redaction(tmp_path):
 
 def test_audit_llm_call(tmp_path):
     s = _state(tmp_path)
+    s.run_id = "state-owned-run"
+    previous_run_id = audit_mod.get_run_id()
+    audit_mod.set_run_id("other-global-run")
     with patch("werkstatt.agent.requests.post",
                return_value=_ok_response()) as post:
-        _call(s, system="S" * 10, user="U" * 20)
+        try:
+            _call(s, system="S" * 10, user="U" * 20)
+        finally:
+            audit_mod.set_run_id(previous_run_id)
     evs = [e for e in _audit_events(tmp_path) if e.get("kind") == "llm_call"]
     assert len(evs) == 1
     ev = evs[0]
     # audit() merged Payload flach ins Event.
     assert ev["agent"] == "unit-test"
+    assert ev["run_id"] == "state-owned-run"
     assert ev["model"] == "deepseek-flash"
     assert ev["system_len"] == 10
     assert ev["user_len"] == 20
