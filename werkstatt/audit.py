@@ -100,6 +100,9 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "reviewer_context_budget_blocked",
         "builder_chat_recovery_evidence_rejected",
         "loop_reflection_chat_model_request",
+        "chat_job_chat_snapshot_cleanup_failed",
+        "chat_job_model_request",
+        "log_line",
     }
 )
 

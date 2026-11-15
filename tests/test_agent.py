@@ -119,3 +119,30 @@ def test_context_manifest_bounds_total_nested_metadata_size() -> None:
     assert cleaned is not None
     assert cleaned["_manifest_truncated"] is True
     assert len(json.dumps(cleaned, ensure_ascii=False)) < 32_000
+
+
+def test_llm_request_is_not_sent_when_audit_write_fails(monkeypatch, tmp_path):
+    state = mk_state(project_dir=tmp_path, project_name="audit-failure")
+    monkeypatch.setattr(agent, "audit", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        agent.requests,
+        "post",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("Provider request must not be sent without audit"),
+        ),
+    )
+
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt="system",
+        user_content="required role evidence",
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="builder",
+        context_manifest={"required": ["task", "verify"]},
+    )
+
+    assert reply.ok is False
+    assert reply.error == "llm_call_audit_failed; provider request was not sent"
+    assert state.llm_calls == 1

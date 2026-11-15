@@ -60,26 +60,12 @@ def test_katalog_enthaelt_alle_code_kinds():
     Wenn dieser Test rot wird: neuen Kind in _AUDIT_KINDS_BEKANNT
     in werkstatt/audit.py ergaenzen.
     """
-    import re
-    from pathlib import Path
+    from tools.audit_drift import finde_code_kinds, finde_katalog
 
-    from werkstatt.audit import _AUDIT_KINDS_BEKANNT
+    kinds_im_code = finde_code_kinds()
+    katalog = finde_katalog()
 
-    kinds_im_code: set[str] = set()
-    pat_audit = re.compile(r'\baudit(?:_safe)?\(\s*["\']([a-z_][a-z0-9_]*)["\']')
-    pat_store = re.compile(r'append\([^)]*?kind\s*=\s*["\']([a-z_][a-z0-9_]*)["\']')
-    pat_web = re.compile(r'_audit_web_loop_event\(\s*[^,]+,\s*[^,]+,\s*["\']([a-z_][a-z0-9_]*)["\']')
-    pat_control = re.compile(r'_audit_loop_control\(\s*[^,]+,\s*[^,]+,\s*["\']([a-z_][a-z0-9_]*)["\']')
-    pat_chat_job = re.compile(r'["\'](chat_job_[a-z_]+)["\']')
-    for f in Path("werkstatt").rglob("*.py"):
-        src = f.read_text(encoding="utf-8", errors="replace")
-        for pat in (pat_audit, pat_store, pat_web, pat_control, pat_chat_job):
-            if pat is pat_chat_job and f.name == "audit.py":
-                continue
-            for m in pat.finditer(src):
-                kinds_im_code.add(m.group(1))
-
-    fehlend = sorted(kinds_im_code - _AUDIT_KINDS_BEKANNT)
+    fehlend = sorted(kinds_im_code - katalog)
     assert not fehlend, (
         f"{len(fehlend)} Kinds im Code fehlen im Katalog: {fehlend[:20]}"
     )
@@ -91,26 +77,12 @@ def test_katalog_enthaelt_keine_toten_kinds():
     Ein toter Eintrag ist Alt-Last: kein Aufrufer, keine externe
     Quelle. Loeschen, nicht behalten.
     """
-    import re
-    from pathlib import Path
+    from tools.audit_drift import finde_code_kinds, finde_katalog
 
-    from werkstatt.audit import _AUDIT_KINDS_BEKANNT
+    kinds_im_code = finde_code_kinds()
+    katalog = finde_katalog()
 
-    kinds_im_code: set[str] = set()
-    pat_audit = re.compile(r'\baudit(?:_safe)?\(\s*["\']([a-z_][a-z0-9_]*)["\']')
-    pat_store = re.compile(r'append\([^)]*?kind\s*=\s*["\']([a-z_][a-z0-9_]*)["\']')
-    pat_web = re.compile(r'_audit_web_loop_event\(\s*[^,]+,\s*[^,]+,\s*["\']([a-z_][a-z0-9_]*)["\']')
-    pat_control = re.compile(r'_audit_loop_control\(\s*[^,]+,\s*[^,]+,\s*["\']([a-z_][a-z0-9_]*)["\']')
-    pat_chat_job = re.compile(r'["\'](chat_job_[a-z_]+)["\']')
-    for f in Path("werkstatt").rglob("*.py"):
-        src = f.read_text(encoding="utf-8", errors="replace")
-        for pat in (pat_audit, pat_store, pat_web, pat_control, pat_chat_job):
-            if pat is pat_chat_job and f.name == "audit.py":
-                continue
-            for m in pat.finditer(src):
-                kinds_im_code.add(m.group(1))
-
-    tot = sorted(_AUDIT_KINDS_BEKANNT - kinds_im_code)
+    tot = sorted(katalog - kinds_im_code)
     assert not tot, (
         f"{len(tot)} tote Katalog-Eintraege (kein Code-Aufruf): {tot[:20]}"
     )

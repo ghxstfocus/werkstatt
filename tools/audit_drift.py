@@ -40,7 +40,85 @@ def finde_code_kinds() -> set[str]:
             tree = ast.parse(py.read_text(encoding="utf-8"))
         except (SyntaxError, UnicodeDecodeError):
             continue
-        for node in ast.walk(tree):
+        nodes = list(ast.walk(tree))
+        for node in nodes:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name != "project_pending_events":
+                continue
+            # The projector prefixes persisted ChatJobStore lifecycle kinds.
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Assign):
+                    continue
+                if not any(isinstance(target, ast.Name) and target.id == "statuses" for target in child.targets):
+                    continue
+                if isinstance(child.value, ast.Dict):
+                    kinds.update(
+                        f"chat_job_{key.value}"
+                        for key in child.value.keys
+                        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                    )
+        # Typed wrappers keep event names at their call sites while passing
+        # the kind parameter to audit()/append_event(). Resolve those literal
+        # call sites so the registry check covers persisted events as well.
+        wrapper_kind_args: dict[str, tuple[int, str]] = {}
+        for node in nodes:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            params = [arg.arg for arg in node.args.args]
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Call):
+                    continue
+                func = child.func
+                is_audit = (
+                    isinstance(func, ast.Name)
+                    and func.id in {"audit", "audit_safe"}
+                ) or (
+                    isinstance(func, ast.Attribute)
+                    and func.attr in {"audit", "audit_safe"}
+                )
+                is_append_event = (
+                    isinstance(func, ast.Attribute)
+                    and func.attr == "append_event"
+                )
+                if is_audit and child.args and isinstance(child.args[0], ast.Name):
+                    kind_name = child.args[0].id
+                elif is_append_event and len(child.args) > 1 and isinstance(child.args[1], ast.Name):
+                    kind_name = child.args[1].id
+                else:
+                    continue
+                if kind_name in params:
+                    prefix = "chat_job_" if is_append_event else ""
+                    wrapper_kind_args[node.name] = (params.index(kind_name), prefix)
+
+        # Resolve wrappers around wrappers (for example the web pause helper
+        # delegates to _audit_web_loop_event) until the simple chain settles.
+        changed = True
+        while changed:
+            changed = False
+            for node in nodes:
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if node.name in wrapper_kind_args:
+                    continue
+                params = [arg.arg for arg in node.args.args]
+                for child in ast.walk(node):
+                    if not isinstance(child, ast.Call) or not isinstance(child.func, ast.Name):
+                        continue
+                    delegated = wrapper_kind_args.get(child.func.id)
+                    if delegated is None:
+                        continue
+                    index, prefix = delegated
+                    if len(child.args) <= index:
+                        continue
+                    kind_arg = child.args[index]
+                    if not isinstance(kind_arg, ast.Name):
+                        continue
+                    kind_name = kind_arg.id
+                    if kind_name in params:
+                        wrapper_kind_args[node.name] = (params.index(kind_name), prefix)
+                        changed = True
+                        break
+
+        for node in nodes:
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
@@ -64,20 +142,61 @@ def finde_code_kinds() -> set[str]:
                             and isinstance(kw.value, ast.Constant)
                             and isinstance(kw.value.value, str)):
                         kinds.add(kw.value.value)
+            # ChatJobStore.append_event(job_id, kind, payload).
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "append_event"
+                and len(node.args) > 1
+                and isinstance(node.args[1], ast.Constant)
+                and isinstance(node.args[1].value, str)
+            ):
+                suffix = node.args[1].value
+                event_kind = (
+                    "chat_job_run_snapshot_cleanup_failed"
+                    if suffix == "run_snapshot_cleanup_failed"
+                    else f"chat_job_{suffix}"
+                )
+                kinds.add(event_kind)
+            # Literal event names passed through typed audit/event wrappers.
+            if isinstance(func, ast.Name) and func.id in wrapper_kind_args:
+                index, prefix = wrapper_kind_args[func.id]
+                if len(node.args) > index:
+                    kind = node.args[index]
+                    if isinstance(kind, ast.Constant) and isinstance(kind.value, str):
+                        kinds.add(prefix + kind.value)
     return kinds
 
 
 def finde_katalog() -> set[str]:
     """Liest _AUDIT_KINDS_BEKANNT aus werkstatt/audit.py."""
     src = AUDIT_FILE.read_text(encoding="utf-8")
-    m = re.search(
-        r'_AUDIT_KINDS_BEKANNT[^=]*=\s*frozenset\(\{(.*?)\}\)',
-        src,
-        re.DOTALL,
-    )
-    if not m:
-        return set()
-    return set(re.findall(r"'([a-z_][a-z0-9_]*)'", m.group(1)))
+    tree = ast.parse(src)
+    kinds: set[str] = set()
+    for node in ast.walk(tree):
+        targets: list[ast.expr]
+        if isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            value = node.value
+        elif isinstance(node, ast.Assign):
+            targets = node.targets
+            value = node.value
+        else:
+            continue
+        if not any(
+            isinstance(target, ast.Name)
+            and target.id == "_AUDIT_KINDS_BEKANNT"
+            for target in targets
+        ) or value is None:
+            continue
+        # Every literal in the static set/union expression is a catalog kind.
+        # Names in the right hand side (the previous set) contribute no
+        # literals; their earlier assignment is collected separately.
+        kinds.update(
+            child.value for child in ast.walk(value)
+            if isinstance(child, ast.Constant)
+            and isinstance(child.value, str)
+        )
+    return kinds
 
 
 def klassifiziere(

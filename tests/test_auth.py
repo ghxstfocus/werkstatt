@@ -29,9 +29,11 @@ def test_token_wird_generiert_und_persistiert(tmp_path):
     tok = auth.get_token()
     assert len(tok) >= 32
     assert auth.TOKEN_FILE.exists()
-    # mode 0600 (oder mindestens nicht world-readable)
-    mode = os.stat(auth.TOKEN_FILE).st_mode & 0o777
-    assert mode & 0o077 == 0, f"mode={oct(mode)} zu offen"
+    # POSIX exposes the permission bits used by auth.get_token(); Windows
+    # does not provide equivalent mode semantics through stat().
+    if os.name == "posix":
+        mode = os.stat(auth.TOKEN_FILE).st_mode & 0o777
+        assert mode & 0o077 == 0, f"mode={oct(mode)} zu offen"
     # Reload liefert denselben Token
     auth._TOKEN = None
     assert auth.get_token() == tok

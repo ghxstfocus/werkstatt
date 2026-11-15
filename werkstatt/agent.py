@@ -352,27 +352,38 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         separators=(",", ":"),
     ) if _context_manifest is not None else ""
     if state is not None:
-        audit("llm_call",
-              {"agent": aufgabe,
-               "model": model,
-               "context_manifest": _context_manifest,
-               "context_manifest_sha256": hashlib.sha256(
-                   _manifest_json.encode("utf-8")
-               ).hexdigest() if _manifest_json else None,
-               "system_len": _system_len,
-               "user_len": _user_len,
-               # Hash the exact post-redaction strings sent in the request.
-               # This lets role-context audits prove which content crossed
-               # the model boundary without copying prompts into the audit.
-               "system_sha256": hashlib.sha256(
-                   system_prompt.encode("utf-8")
-               ).hexdigest(),
-               "user_sha256": hashlib.sha256(
-                   user_content.encode("utf-8")
-               ).hexdigest(),
-               "max_tokens": max_tokens},
-              state.project_dir,
-              state.project_name)
+        audit_written = audit(
+            "llm_call",
+            {
+                "agent": aufgabe,
+                "model": model,
+                "context_manifest": _context_manifest,
+                "context_manifest_sha256": hashlib.sha256(
+                    _manifest_json.encode("utf-8")
+                ).hexdigest() if _manifest_json else None,
+                "system_len": _system_len,
+                "user_len": _user_len,
+                # Hash the exact post-redaction strings sent in the request.
+                # This lets role-context audits prove which content crossed
+                # the model boundary without copying prompts into the audit.
+                "system_sha256": hashlib.sha256(
+                    system_prompt.encode("utf-8")
+                ).hexdigest(),
+                "user_sha256": hashlib.sha256(
+                    user_content.encode("utf-8")
+                ).hexdigest(),
+                "max_tokens": max_tokens,
+            },
+            state.project_dir,
+            state.project_name,
+        )
+        if audit_written is False:
+            return LLMReply(
+                ok=False,
+                error="llm_call_audit_failed; provider request was not sent",
+                system_len=_system_len,
+                user_len=_user_len,
+            )
 
     # Prompt-Dump (nur bei WERKSTATT_PROMPT_DUMP=1).
     _dump_prompt(aufgabe, model, system_prompt, user_content)
