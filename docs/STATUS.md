@@ -72,6 +72,7 @@ chancenlos.
 - Eine generelle Überarbeitung des CoT-Triggers im Architect-Prompt. Ein
   höheres Limit behebt das Symptom; ob der Prompt zu breites Reasoning
   auslöst, ist eine eigene Untersuchung.
+  
 ### OP-404: Codeguardian als unabhaengige Schutz- und Evidenzschicht
 - **Status:** open
 - **Typ:** change-guardian
