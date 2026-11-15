@@ -870,6 +870,9 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
 
     def verify(_state: RunState, *, phase: str | None = None) -> bool:
         verify_phases.append(phase)
+        _state.last_verify_results = [
+            {"stage_id": "pytest_regression", "ok": True},
+        ]
         return True
 
     def commit(state: RunState) -> tuple[bool, str]:
