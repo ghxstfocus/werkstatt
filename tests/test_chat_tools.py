@@ -404,6 +404,70 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
     assert "do not expose" not in result
 
 
+def test_loop_status_explains_goal_and_pinned_start_without_private_fields(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import app
+
+    monkeypatch.setattr(
+        app, "_loop_registry",
+        lambda: SimpleNamespace(read=lambda _project: {
+            "run_id": "alpha-run-goal", "state": "running",
+            "updated_at": 12.5,
+        }),
+    )
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(
+        project="alpha",
+        run_id="alpha-run-goal",
+        target="OP-411: Repair checkpoint recovery",
+        base_commit="a" * 40,
+        start_context={
+            "schema_version": 1,
+            "goal": "OP-411: Repair checkpoint recovery",
+            "op_id": "OP-411",
+            "origin": "chat",
+            "origin_session_id": "private-session-id",
+            "proposal_id": "private-proposal-id",
+            "selection_reason": {
+                "kind": "explicit_op",
+                "summary": "The user selected this open OP.",
+                "private": "must not leak",
+            },
+            "source": {
+                "kind": "github",
+                "pinned_sha": "b" * 40,
+                "worktree": "C:/private/worktree",
+            },
+            "private_prompt": "must not leak",
+        },
+    )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+
+    result = chat_tools.execute_tool(
+        "loop_status", {}, project_dir=tmp_path, project_name="alpha",
+    )
+
+    parsed = json.loads(result)
+    assert parsed["goal"] == "OP-411: Repair checkpoint recovery"
+    assert parsed["run_context"] == {
+        "op_id": "OP-411",
+        "origin": "chat",
+        "source_kind": "github",
+        "pinned_revision": "b" * 40,
+        "base_commit": "a" * 40,
+        "selection_reason": {
+            "kind": "explicit_op",
+            "summary": "The user selected this open OP.",
+        },
+    }
+    assert "private-session-id" not in result
+    assert "private-proposal-id" not in result
+    assert "C:/private/worktree" not in result
+    assert "must not leak" not in result
+
+
 def test_loop_status_falls_back_to_durable_cli_run(monkeypatch, tmp_path):
     from werkstatt.event_store import EventStore
     from werkstatt.web import app

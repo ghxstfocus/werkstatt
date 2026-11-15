@@ -465,6 +465,48 @@ def _read_active_run(_args: dict[str, Any]) -> str:
         if record is None:
             result["checkpoint_status"] = "missing"
             return json.dumps(result, ensure_ascii=False)
+        start_context = record.get("start_context")
+        start_context = start_context if isinstance(start_context, dict) else {}
+        goal = record.get("target") or start_context.get("goal")
+        if isinstance(goal, str) and goal:
+            result["goal"] = goal[:4_000]
+            result["goal_truncated"] = len(goal) > 4_000
+        run_context: dict[str, Any] = {}
+        op_id = start_context.get("op_id")
+        if isinstance(op_id, str) and re.fullmatch(r"OP-\d+[a-z]?", op_id):
+            run_context["op_id"] = op_id
+        origin = start_context.get("origin")
+        if origin in {"chat", "web"}:
+            run_context["origin"] = origin
+        source = start_context.get("source")
+        if isinstance(source, dict) and source.get("kind") in {"local", "github"}:
+            run_context["source_kind"] = source["kind"]
+            pinned_sha = source.get("pinned_sha")
+            if (
+                isinstance(pinned_sha, str)
+                and re.fullmatch(r"[0-9a-f]{7,64}", pinned_sha)
+            ):
+                run_context["pinned_revision"] = pinned_sha
+        base_commit = record.get("base_commit")
+        if (
+            isinstance(base_commit, str)
+            and re.fullmatch(r"[0-9a-f]{7,64}", base_commit)
+        ):
+            run_context["base_commit"] = base_commit
+        selection_reason = start_context.get("selection_reason")
+        if isinstance(selection_reason, str):
+            run_context["selection_reason"] = selection_reason[:600]
+        elif isinstance(selection_reason, dict):
+            safe_reason = {
+                key: value[:400]
+                for key, value in selection_reason.items()
+                if key in {"kind", "summary"}
+                and isinstance(value, str)
+            }
+            if safe_reason:
+                run_context["selection_reason"] = safe_reason
+        if run_context:
+            result["run_context"] = run_context
         checkpoint = record.get("checkpoint")
         result["checkpoint_status"] = "available"
         if isinstance(checkpoint, dict):
@@ -1174,8 +1216,9 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "loop_status": {
         "description": (
             "Liest den aktuellen Prozessstatus des Loops im aktiven Projekt, "
-            "den letzten dauerhaften Checkpoint und bis zu 20 kompakte "
-            "Ereigniszusammenfassungen. Keine Prompts oder Datei-Inhalte. "
+            "sein Ziel und freigegebene Startmetadaten, den letzten "
+            "dauerhaften Checkpoint und bis zu 20 kompakte "
+            "Ereigniszusammenfassungen. Keine Modellprompts oder Datei-Inhalte. "
             "Nutze es bei Fragen zum laufenden Run; fuer Details audit_query."
         ),
         "parameters": {"type": "object", "properties": {}},
