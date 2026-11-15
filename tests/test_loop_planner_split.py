@@ -280,6 +280,58 @@ def test_planner_system_rendert_datei_inhalt():
     assert "def foo():\n    return 1" in s
 
 
+def test_planner_system_behaelt_quellfundstelle_und_dateihash():
+    preview = "000012 | def foo():\n000013 |     return 1"
+    s = planner._planner_system(
+        "Aufgabe",
+        explorer_ctx={"key_files": [{
+            "file": "a.py",
+            "preview": preview,
+            "source_line_ranges": [[12, 13]],
+            "source_total_lines": 20,
+            "source_complete": False,
+            "preview_source_chars": len(preview),
+            "source_sha256": "c" * 64,
+        }]},
+    )
+
+    assert 'zeilen="12-13" gesamtzeilen="20"' in s
+    assert 'vollstaendig="false"' in s
+    assert 'sha256="' + "c" * 64 + '"' in s
+
+
+def test_planner_system_markiert_architect_zeichenlimit_als_unbekannt():
+    s = planner._planner_system(
+        "Aufgabe",
+        explorer_ctx={"key_files": [{
+            "file": "large.py",
+            "preview": "x" * 5_000,
+            "source_line_ranges": [[1, 500]],
+            "source_total_lines": 500,
+            "source_complete": True,
+            "preview_source_chars": 5_000,
+            "source_sha256": "d" * 64,
+        }]},
+    )
+
+    assert 'zeilen="unbekannt (Auszug unnummeriert gekuerzt)"' in s
+    assert 'vollstaendig="false"' in s
+    assert "ARCHITECT-AUSZUG GEKUERZT: 4000 von 5000 Zeichen" in s
+
+
+def test_planner_system_escaped_dateipfad_bleibt_ein_xml_attribut():
+    s = planner._planner_system(
+        "Aufgabe",
+        explorer_ctx={"key_files": [{
+            "file": 'src/a".py',
+            "preview": "def foo(): pass",
+        }]},
+    )
+
+    assert 'datei="src/a&quot;.py"' in s
+    assert 'datei="src/a".py"' not in s
+
+
 def test_planner_system_ohne_preview_kein_ist_zustand():
     """Ohne preview kein <ist_zustand>-Block."""
     ctx = {"key_files": [

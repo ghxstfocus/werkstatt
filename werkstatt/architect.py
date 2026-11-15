@@ -10,7 +10,24 @@ werkstatt.planner aufgeloest, damit Test-Patches wirken.
 """
 from __future__ import annotations
 
+import re
+from html import escape
 from pathlib import Path
+
+
+def _source_line_ranges(text: str) -> list[list[int]]:
+    """Return line-number ranges actually present in a numbered excerpt."""
+    numbers = [
+        int(match.group(1))
+        for match in re.finditer(r"(?m)^(\d{6,}) \|", text)
+    ]
+    ranges: list[list[int]] = []
+    for number in numbers:
+        if ranges and number == ranges[-1][1] + 1:
+            ranges[-1][1] = number
+        elif not ranges or number != ranges[-1][1]:
+            ranges.append([number, number])
+    return ranges
 
 
 def _extrahiere_op_felder(aufgabe: str, docs_status: str) -> dict:
@@ -1144,7 +1161,10 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
             if isinstance(k, dict) and k.get("file")
         ]
         if _files:
-            _files_str = "\n".join(f"  - {f}" for f in _files)
+            _files_str = "\n".join(
+                f"  - {escape(str(file_path), quote=True)}"
+                for file_path in _files
+            )
             parts.append(
                 "<measured_files>\n"
                 f"Der Explorer hat {len(_files)} Datei(en) mit Fehlern "
@@ -1172,9 +1192,61 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
                 _pf = _k.get("file", "")
                 _pv = _k.get("preview", "")
                 if _pf and _pv:
+                    _arch_excerpt = _pv[:4000]
+                    _arch_ranges = _source_line_ranges(_arch_excerpt)
+                    if _arch_ranges:
+                        _range_text = ",".join(
+                            f"{start}-{end}" for start, end in _arch_ranges
+                        )
+                    elif len(_pv) > 4000:
+                        _range_text = "unbekannt (Auszug unnummeriert gekuerzt)"
+                    else:
+                        _raw_ranges = _k.get("source_line_ranges")
+                        if (
+                            isinstance(_raw_ranges, list)
+                            and all(
+                                isinstance(span, list)
+                                and len(span) == 2
+                                and all(isinstance(value, int) for value in span)
+                                for span in _raw_ranges
+                            )
+                        ):
+                            _range_text = ",".join(
+                                f"{start}-{end}"
+                                for start, end in _raw_ranges
+                            ) or "keine"
+                        else:
+                            _range_text = "unbekannt"
+                    _source_hash = _k.get("source_sha256")
+                    if (
+                        not isinstance(_source_hash, str)
+                        or len(_source_hash) != 64
+                        or any(char not in "0123456789abcdef" for char in _source_hash)
+                    ):
+                        _source_hash = "unbekannt"
+                    _source_chars = _k.get("preview_source_chars")
+                    if not isinstance(_source_chars, int) or _source_chars < 0:
+                        _source_chars = len(_pv)
+                    _preview_complete = (
+                        _k.get("source_complete") is True
+                        and len(_pv) <= 4000
+                        and _source_chars == len(_pv)
+                    )
+                    _truncation_notice = (
+                        "[ARCHITECT-AUSZUG GEKUERZT: "
+                        f"4000 von {len(_pv)} Zeichen enthalten. "
+                        "Fehlender Inhalt ist unbekannt.]\n"
+                        if len(_pv) > 4000 else ""
+                    )
+                    _safe_file = escape(str(_pf), quote=True)
                     _previews.append(
-                        f'<datei_inhalt datei="{_pf}">\n'
-                        f'{_pv[:4000]}\n'
+                        f'<datei_inhalt datei="{_safe_file}" '
+                        f'zeilen="{_range_text}" '
+                        f'gesamtzeilen="{_k.get("source_total_lines", "unbekannt")}" '
+                        f'vollstaendig="{str(_preview_complete).lower()}" '
+                        f'sha256="{_source_hash}">\n'
+                        f'{_arch_excerpt}\n'
+                        f'{_truncation_notice}'
                         f'</datei_inhalt>'
                     )
             if _previews:

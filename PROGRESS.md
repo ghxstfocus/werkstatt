@@ -6958,3 +6958,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung im Arbeitsbaum:** Deterministischer Evidenzleser prueft den Pfad innerhalb des Projekt-Roots, liest Dateiinhalt erneut, rendert enthaltene Quellzeilen mit Originalnummern und liefert Zeilenbereiche, Gesamtzeilen, Vollstaendigkeitsstatus sowie SHA-256 der Quelldatei. Modellvorschlaege liefern nur noch Pfad und Suchhinweis; deren Vorschautext wird verworfen. Scout zeigt den im Prompt tatsaechlich enthaltenen Zeilenbereich und markiert auch nachgelagerte Zeichenkuerzungen.
 - **Verifikation lokal:** Explorer-/Grep-Fallback-/Scout-/Planner-Selektionsgruppe: 76 bestanden; Ruff, Compileall und git diff --check bestanden.
 - **Grenze:** Das ist der Explorer-zu-Scout-Pfad, keine Ende-zu-Ende-Garantie fuer Planner, Architect, Builder, Reviewer, Verify und Chat. Der Follow-up ist lokal, nicht auf Main/Server; OP-405 bleibt offen.
+
+### Architect-Prompt zeigt die tatsaechlich enthaltenen Explorer-Fundstellen — 2026-11-15
+
+- **Befund:** Im Architect-Systemprompt wurden bis zu fuenf Explorer-Previews nochmals auf 4.000 Zeichen geschnitten, ohne Quellhash oder exakten im Prompt verbliebenen Zeilenbereich. Ein Scout-Quellbeleg wurde dadurch am naechsten Rollen-Handoff erneut ungenauer.
+- **Aenderung im Arbeitsbaum:** Der Architect-Quelltextblock traegt jetzt Datei, tatsaechlichen nummerierten Zeilenbereich, Gesamtzeilen, Vollstaendigkeitsstatus und Quelldatei-SHA256. Bei einem weiteren 4.000-Zeichen-Cap werden nur im Prompt vorhandene Zeilen behauptet; unnummerierte Reste zeigen den Bereich als unbekannt und erhalten einen expliziten Kuerzungsmarker.
+- **Verifikation lokal:** Explorer-/Scout-/Architect-/Planner-Gruppe: 79 bestanden; Ruff, Compileall und git diff --check bestanden.
+- **Grenze:** Der Scout->Architect-Summarypfad und weitere Rollen sind noch nicht end-to-end auf Herkunft, Relevanz und Vollstaendigkeit geprueft. Follow-up nicht auf Main/Server; OP-405 bleibt offen.
