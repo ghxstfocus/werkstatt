@@ -6951,3 +6951,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung im Arbeitsbaum:** Projektdokumente gehen ungekürzt als optionale, ganze Abschnitte in die Priorisierung; passt ein Abschnitt nicht, markiert das Budget ihn als ausgelassen. Ein begrenzter Explorer-Auszug nennt Pfad, enthaltene/urspruengliche Zeichenanzahl und weist fehlenden Inhalt explizit als unbekannt aus.
 - **Verifikation lokal:** Scout-Doku-, Budget-, Ketten-, Checkpoint- und Phase-State-Gruppe: 66 bestanden; Ruff und `git diff --check` bestanden.
 - **Grenze:** Weitere vorgelagerte Auszuege (z. B. Explorer-Zeilenfenster, Planner-/Architect-Kontext und Review-/Reflection-Rollen) brauchen eine rollenuebergreifende Herkunfts-/Fundstelleninventur. Dieser Follow-up ist lokal und noch nicht auf Main oder Server; OP-405 bleibt offen.
+
+### Explorer-Quellbelege mit Zeilen, Hash und projektlokalem Re-Read — 2026-11-15
+
+- **Befund:** Grosse Explorer-Dateien wurden mit ausgelassenen Zeilen, aber ohne Originalzeilennummern an Scout/Planner gegeben. Aus Scout-Ausgaben war dadurch keine exakte Fundstelle ableitbar. Vom Explorer-Modell gelieferte Pfad-/Vorschauobjekte wurden ausserdem direkt weitergereicht.
+- **Aenderung im Arbeitsbaum:** Deterministischer Evidenzleser prueft den Pfad innerhalb des Projekt-Roots, liest Dateiinhalt erneut, rendert enthaltene Quellzeilen mit Originalnummern und liefert Zeilenbereiche, Gesamtzeilen, Vollstaendigkeitsstatus sowie SHA-256 der Quelldatei. Modellvorschlaege liefern nur noch Pfad und Suchhinweis; deren Vorschautext wird verworfen. Scout zeigt den im Prompt tatsaechlich enthaltenen Zeilenbereich und markiert auch nachgelagerte Zeichenkuerzungen.
+- **Verifikation lokal:** Explorer-/Grep-Fallback-/Scout-/Planner-Selektionsgruppe: 76 bestanden; Ruff, Compileall und git diff --check bestanden.
+- **Grenze:** Das ist der Explorer-zu-Scout-Pfad, keine Ende-zu-Ende-Garantie fuer Planner, Architect, Builder, Reviewer, Verify und Chat. Der Follow-up ist lokal, nicht auf Main/Server; OP-405 bleibt offen.

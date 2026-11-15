@@ -6,6 +6,7 @@ nur noch findings. Kein Raten.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -72,14 +73,15 @@ def _verwandte_dateien(project_dir: Path, dateien: list[str]) -> list[str]:
     sowie Test-Dateien, die den Modul-Stamm enthalten.
     """
     verwandt: list[str] = []
-    gesehen: set[str] = set(dateien)
-    for rel in dateien:
+    normalized_files = [rel.replace("\\", "/") for rel in dateien]
+    gesehen: set[str] = set(normalized_files)
+    for rel in normalized_files:
         p = project_dir / rel
         if not p.exists():
             continue
         # 1. Gleicher Ordner: alle *.py.
         for nachbar in sorted(p.parent.glob("*.py")):
-            nrel = str(nachbar.relative_to(project_dir))
+            nrel = nachbar.relative_to(project_dir).as_posix()
             if nrel not in gesehen:
                 gesehen.add(nrel)
                 verwandt.append(nrel)
@@ -88,7 +90,7 @@ def _verwandte_dateien(project_dir: Path, dateien: list[str]) -> list[str]:
         tests_dir = project_dir / "tests"
         if tests_dir.exists():
             for t in tests_dir.rglob(f"*{stamm}*.py"):
-                trel = str(t.relative_to(project_dir))
+                trel = t.relative_to(project_dir).as_posix()
                 if trel not in gesehen:
                     gesehen.add(trel)
                     verwandt.append(trel)
@@ -192,7 +194,7 @@ def _messen(frage: str, project_dir: Path) -> dict[str, Any]:
             if len(_candidates) == 1:
                 _target = _candidates[0]
                 try:
-                    _pf = str(_target.relative_to(project_dir))
+                    _pf = _target.relative_to(project_dir).as_posix()
                 except ValueError:
                     pass
         if _target.is_file():
@@ -361,6 +363,79 @@ def _datei_inhalt(
         )
     except (OSError, UnicodeDecodeError):
         return ""
+
+
+def _datei_inhalt_mit_fundstellen(
+    project_dir: Path,
+    rel: str,
+    suchbegriffe: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return a project-local excerpt with stable original line numbers.
+
+    Unlike `_datei_inhalt`, this rendering is intended for role handoffs:
+    every included source line carries its original file line number. Missing,
+    external, or unreadable paths return an explicit empty evidence record.
+    """
+    empty: dict[str, Any] = {
+        "text": "",
+        "line_ranges": [],
+        "total_lines": 0,
+        "complete": False,
+        "reason": "source_unavailable",
+        "source_sha256": None,
+    }
+    try:
+        root = Path(project_dir).resolve(strict=True)
+        target = (root / rel).resolve(strict=True)
+        target.relative_to(root)
+        if not target.is_file():
+            return empty
+        source_bytes = target.read_bytes()
+        text = source_bytes.decode("utf-8", errors="replace")
+    except (OSError, RuntimeError, ValueError):
+        return empty
+
+    lines = text.splitlines()
+    total = len(lines)
+    if total <= 200:
+        selected = list(range(total))
+    else:
+        hits = {
+            index
+            for index, line in enumerate(lines)
+            if any(term and term in line for term in (suchbegriffe or []))
+        }
+        if hits:
+            selected = sorted({
+                line_index
+                for hit in hits
+                for line_index in range(max(0, hit - 100), min(total, hit + 100))
+            })
+        else:
+            selected = list(range(100)) + list(range(total - 50, total))
+
+    ranges: list[list[int]] = []
+    rendered: list[str] = []
+    previous = -2
+    for index in selected:
+        if index > previous + 1:
+            if previous >= 0:
+                rendered.append(f"[... Zeilen {previous + 2}-{index} ausgelassen ...]")
+            ranges.append([index + 1, index + 1])
+        else:
+            ranges[-1][1] = index + 1
+        rendered.append(f"{index + 1:06d} | {lines[index]}")
+        previous = index
+
+    complete = total <= 200
+    return {
+        "text": "\n".join(rendered),
+        "line_ranges": ranges,
+        "total_lines": total,
+        "complete": complete,
+        "reason": "complete_file" if complete else "bounded_line_excerpt",
+        "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
+    }
 
 
 def _migrations_stand(project_dir: Path) -> dict:

@@ -68,6 +68,55 @@ def test_datei_inhalt_klein_komplett(tmp_path):
     assert explorer._datei_inhalt(tmp_path, "klein.py") == "a\nb\nc\n"
 
 
+def test_datei_inhalt_mit_fundstellen_haelt_originalzeilen(tmp_path):
+    import hashlib
+
+    (tmp_path / "small.py").write_text("alpha\nbeta\n")
+
+    evidence = explorer._datei_inhalt_mit_fundstellen(
+        tmp_path, "small.py",
+    )
+
+    assert evidence["text"] == "000001 | alpha\n000002 | beta"
+    assert evidence["line_ranges"] == [[1, 2]]
+    assert evidence["total_lines"] == 2
+    assert evidence["complete"] is True
+    assert evidence["source_sha256"] == hashlib.sha256(
+        (tmp_path / "small.py").read_bytes(),
+    ).hexdigest()
+
+
+def test_datei_inhalt_mit_fundstellen_markiert_begrenzten_ausschnitt(
+    tmp_path,
+):
+    lines = [f"line_{index}" for index in range(300)]
+    lines[150] = "needle"
+    (tmp_path / "large.py").write_text("\n".join(lines))
+
+    evidence = explorer._datei_inhalt_mit_fundstellen(
+        tmp_path, "large.py", suchbegriffe=["needle"],
+    )
+
+    assert "000151 | needle" in evidence["text"]
+    assert evidence["line_ranges"] == [[51, 250]]
+    assert evidence["total_lines"] == 300
+    assert evidence["complete"] is False
+
+
+def test_datei_inhalt_mit_fundstellen_verweigert_pfad_ausserhalb(
+    tmp_path,
+):
+    outside = tmp_path.parent / "outside.py"
+    outside.write_text("secret\n")
+
+    evidence = explorer._datei_inhalt_mit_fundstellen(
+        tmp_path, "../outside.py",
+    )
+
+    assert evidence["text"] == ""
+    assert evidence["reason"] == "source_unavailable"
+
+
 def test_datei_inhalt_gross_truncated(tmp_path):
     (tmp_path / "gross.py").write_text("\n".join(
         f"zeile{i}" for i in range(300)))

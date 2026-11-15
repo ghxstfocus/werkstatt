@@ -77,6 +77,14 @@ Auslassungen und begrenzte Trefferlisten sind keine Negativbelege. Bei einer
 Entscheidung, die von ausgelassenem Inhalt abhaengt, muss die Rolle gezielt
 nachladen oder die Belegluecke ausweisen.
 
+Explorer-Quelltext fuer Rollen-Handoffs wird nach projektlokaler Pfadpruefung
+erneut aus dem Repo gelesen. Auszuege tragen Originalzeilennummern,
+Zeilenbereiche, Vollstaendigkeitsstatus und SHA-256 der Quelldatei. Vom
+Explorer-Modell gelieferte Vorschau-Texte werden nicht als Quellbeleg
+weitergereicht. Der Scout-Prompt muss den tatsaechlich enthaltenen
+Zeilenumfang anzeigen; ein spaeteres Zeichenlimit darf die Fundstelle nicht
+groesser erscheinen lassen als den uebergebenen Text.
+
 ## Werkzeuge (CLI)
 
 - python3 -m werkstatt.loop --project NAME --aufgabe "TEXT"

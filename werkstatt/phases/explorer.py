@@ -168,6 +168,33 @@ def _phase_explorer_and_setup(
         "key_files": [],
         "next_reads": list(_explorer_ergaenzung.get("next_reads") or []),
     }
+    def _file_evidence(
+        file_path: str,
+        why: str,
+        confidence: str,
+        char_limit: int,
+    ) -> dict[str, Any]:
+        from werkstatt.explorer import _datei_inhalt_mit_fundstellen
+
+        evidence = _datei_inhalt_mit_fundstellen(
+            Path(pd), file_path, suchbegriffe=_suchbegriffe,
+        )
+        excerpt = str(evidence.get("text") or "")
+        preview = excerpt[:char_limit]
+        char_limited = len(excerpt) > char_limit
+        return {
+            "file": file_path,
+            "why": why,
+            "confidence": confidence,
+            "preview": preview,
+            "source_line_ranges": evidence.get("line_ranges", []),
+            "source_total_lines": evidence.get("total_lines", 0),
+            "source_complete": evidence.get("complete") is True
+            and not char_limited,
+            "preview_source_chars": len(excerpt),
+            "source_sha256": evidence.get("source_sha256"),
+        }
+
     for f in _alle_genannten[:8]:
         if f not in _seen:
             _seen.add(f)
@@ -178,25 +205,25 @@ def _phase_explorer_and_setup(
             # Live-Beleg 2026-10-30 21:44: alerts.html hatte schon
             # class="table table-alerts", der Architect plante
             # trotzdem einen Patch.
-            from werkstatt.explorer import _datei_inhalt as _di
-            _preview = _di(Path(pd), f, suchbegriffe=_suchbegriffe)[:12000]
-            explorer_result["key_files"].append(
-                {"file": f, "why": "explizit in Aufgabe",
-                 "confidence": "high", "preview": _preview}
-            )
+            explorer_result["key_files"].append(_file_evidence(
+                f, "explizit in Aufgabe", "high", 12000,
+            ))
     for f in _verwandte:
         if f not in _seen:
             _seen.add(f)
-            from werkstatt.explorer import _datei_inhalt as _di
-            _preview = _di(Path(pd), f, suchbegriffe=_suchbegriffe)[:6000]
-            explorer_result["key_files"].append(
-                {"file": f, "why": "verwandt (M-396)",
-                 "confidence": "medium", "preview": _preview}
-            )
+            explorer_result["key_files"].append(_file_evidence(
+                f, "verwandt (M-396)", "medium", 6000,
+            ))
     for k in _explorer_key:
         if isinstance(k, dict) and k.get("file") and k["file"] not in _seen:
-            _seen.add(k["file"])
-            explorer_result["key_files"].append(k)
+            _explorer_path = str(k["file"]).replace("\\", "/")
+            _seen.add(_explorer_path)
+            explorer_result["key_files"].append(_file_evidence(
+                _explorer_path,
+                str(k.get("why") or "Explorer-Vorschlag"),
+                str(k.get("confidence") or "low"),
+                6000,
+            ))
     # OP-XXX (2026-11-09): Fallback-Grep bei leeren key_files.
     # Live-Bug 2026-11-09 20:25 (Run werkstatt-20261109-202502-4e5bfd9c):
     # Aufgabe "OP-389b: DRY-Migration auf `require_ws_auth`" enthaelt
@@ -229,14 +256,9 @@ def _phase_explorer_and_setup(
             if _rel in _seen:
                 continue
             _seen.add(_rel)
-            from werkstatt.explorer import _datei_inhalt as _di_fb
-            _preview = _di_fb(Path(pd), _rel, suchbegriffe=_suchbegriffe)[:6000]
-            explorer_result["key_files"].append({
-                "file": _rel,
-                "why": f"grep:{_hit_b}",
-                "confidence": "medium",
-                "preview": _preview,
-            })
+            explorer_result["key_files"].append(_file_evidence(
+                _rel, f"grep:{_hit_b}", "medium", 6000,
+            ))
             audit("loop_explorer_grep_fallback",
                   {"file": _rel, "begriff": _hit_b}, pd, pn)
             if len(explorer_result["key_files"]) >= 5:
@@ -245,7 +267,20 @@ def _phase_explorer_and_setup(
     audit("loop_explorer_ergaenzt",
           {"explizit": len(_explizite_dateien[:5]),
            "verwandt": len(_verwandte),
-           "gesamt": len(explorer_result["key_files"])},
+           "gesamt": len(explorer_result["key_files"]),
+           "source_evidence": [
+               {
+                   "file": item.get("file"),
+                   "line_ranges": item.get("source_line_ranges"),
+                   "total_lines": item.get("source_total_lines"),
+                   "complete": item.get("source_complete"),
+                   "preview_chars": len(item.get("preview", "")),
+                   "source_chars": item.get("preview_source_chars"),
+                   "source_sha256": item.get("source_sha256"),
+               }
+               for item in explorer_result["key_files"]
+               if isinstance(item, dict)
+           ]},
           pd, pn)
     _el_exp = time.monotonic() - _t_exp
     if explorer_result.get("key_files"):

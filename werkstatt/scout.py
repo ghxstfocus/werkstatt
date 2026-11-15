@@ -9,9 +9,25 @@ werkstatt.planner aufgeloest werden, damit Test-Patches wirken.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 SCOUT_CONTEXT_MAX_CHARS = 32_000
+
+
+def _source_line_ranges_in_excerpt(text: str) -> list[list[int]]:
+    """Extract exact original line numbers present in a numbered excerpt."""
+    line_numbers = [
+        int(match.group(1))
+        for match in re.finditer(r"(?m)^(\d{6,}) \|", text)
+    ]
+    ranges: list[list[int]] = []
+    for line_number in line_numbers:
+        if ranges and line_number == ranges[-1][1] + 1:
+            ranges[-1][1] = line_number
+        elif not ranges or line_number != ranges[-1][1]:
+            ranges.append([line_number, line_number])
+    return ranges
 
 
 def _budget_scout_context(
@@ -995,13 +1011,67 @@ def _run_scout(
             _pv = _k.get("preview", "")
             if _pf and _pv:
                 _preview_text = _pv[:8000]
+                _line_ranges = _k.get("source_line_ranges")
+                _total_lines = _k.get("source_total_lines")
+                _prompt_line_ranges = _source_line_ranges_in_excerpt(
+                    _preview_text,
+                )
+                if (
+                    _prompt_line_ranges
+                ):
+                    _source_lines = ",".join(
+                        f"{span[0]}-{span[1]}"
+                        for span in _prompt_line_ranges
+                    )
+                elif len(_pv) > 8000:
+                    _source_lines = "unbekannt (Auszug unnummeriert gekuerzt)"
+                elif (
+                    isinstance(_line_ranges, list)
+                    and all(
+                        isinstance(span, list)
+                        and len(span) == 2
+                        and all(isinstance(value, int) for value in span)
+                        for span in _line_ranges
+                    )
+                ):
+                    _source_lines = ",".join(
+                        f"{span[0]}-{span[1]}" for span in _line_ranges
+                    ) or "keine"
+                else:
+                    _source_lines = "unbekannt"
+                _complete = _k.get("source_complete") is True
+                _source_hash = _k.get("source_sha256")
+                if (
+                    not isinstance(_source_hash, str)
+                    or len(_source_hash) != 64
+                    or any(char not in "0123456789abcdef" for char in _source_hash)
+                ):
+                    _source_hash = "unbekannt"
+                _source_chars = _k.get("preview_source_chars")
+                if not isinstance(_source_chars, int) or _source_chars < 0:
+                    _source_chars = len(_pv)
+                _preview_text = (
+                    f"[FUNDSTELLE: {_pf}; Zeilen {_source_lines} von "
+                    f"{_total_lines if isinstance(_total_lines, int) else 'unbekannt'}; "
+                    f"Volltextauszug={str(_complete).lower()}; "
+                    f"Auszug {_source_chars} Zeichen; "
+                    f"Quelldatei-SHA256={_source_hash}]\n"
+                    + _preview_text
+                )
                 if len(_pv) > 8000:
                     _preview_text += (
                         "\n[QUELLTEXTAUSZUG GEKUERZT: Datei "
-                        f"{_pf}; {len(_preview_text)} von {len(_pv)} "
-                        "Zeichen dieses Explorer-Auszuges enthalten. "
+                        f"{_pf}; 8000 von {_source_chars} "
+                        "Explorer-Zeichen enthalten. "
                         "Fehlender Inhalt ist unbekannt; fuer davon "
                         "abhaengige Aussagen Quelle gezielt nachladen.]"
+                    )
+                if _source_chars > len(_pv):
+                    _preview_text += (
+                        "\n[EXPLORER-VORSCHAU GEKUERZT: "
+                        f"{len(_pv)} von {_source_chars} Zeichen des "
+                        "zeilennummerierten Auszuges wurden uebergeben. "
+                        "Fehlender Inhalt ist unbekannt.]"
                     )
                 _previews_parts.append(
                     f'<datei_inhalt datei="{_pf}">\n'

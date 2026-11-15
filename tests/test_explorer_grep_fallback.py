@@ -12,6 +12,7 @@ _suchbegriffe gesetzt und key_files leer. Kein LLM, testbar.
 """
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -74,6 +75,59 @@ def test_grep_fallback_findet_dateien_bei_backtick_suchbegriff(tmp_path):
     assert "werkstatt/irrelevant.py" not in files, (
         f"irrelevant.py darf NICHT in key_files sein. Gefunden: {files}"
     )
+    evidence = next(
+        item for item in ctx["key_files"]
+        if item.get("file") == "werkstatt/auth.py"
+    )
+    assert evidence["source_line_ranges"] == [[1, 2]]
+    assert evidence["source_total_lines"] == 2
+    assert evidence["source_complete"] is True
+    assert "000001 | def require_ws_auth(ws):" in evidence["preview"]
+    assert evidence["source_sha256"] == hashlib.sha256(
+        (tmp_path / "werkstatt" / "auth.py").read_bytes(),
+    ).hexdigest()
+
+
+def test_explorer_vorschau_wird_vor_handoff_aus_repo_neu_gelesen(tmp_path):
+    (tmp_path / "src").mkdir()
+    source = tmp_path / "src" / "core.py"
+    source.write_text("def actual_source():\n    return 7\n")
+
+    from werkstatt.phases import explorer as exp
+
+    state = _state(tmp_path, "Analysiere src/core.py")
+    untrusted_preview = "FORGED PREVIEW"
+    with (
+        patch.object(
+            exp,
+            "run_explorer",
+            return_value={
+                "findings": "Vorschlag",
+                "key_files": [{
+                    "file": "src/core.py",
+                    "preview": untrusted_preview,
+                    "why": "Explorer-Vorschlag",
+                    "confidence": "high",
+                }],
+            },
+        ),
+        patch.object(exp, "group_start"),
+        patch.object(exp, "group_end"),
+        patch.object(exp, "step"),
+        patch.object(exp, "audit"),
+    ):
+        exp._phase_explorer_and_setup(
+            state, "Analysiere src/core.py", "test", None,
+        )
+
+    evidence = next(
+        item for item in state.explorer_context["key_files"]
+        if item["file"] == "src/core.py"
+    )
+    assert untrusted_preview not in evidence["preview"]
+    assert "000001 | def actual_source():" in evidence["preview"]
+    assert evidence["source_line_ranges"] == [[1, 2]]
+    assert evidence["source_complete"] is True
 
 
 def test_eindeutige_literalersetzung_ueberspringt_explorer_llm(tmp_path):
