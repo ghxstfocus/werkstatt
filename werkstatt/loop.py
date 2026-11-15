@@ -639,6 +639,35 @@ def _persist_run_coordinator_decision(
     raise RuntimeError("Dispatch-Entscheidung konnte nicht CAS-persistiert werden")
 
 
+def _select_loop_run_id(
+    project_name: str,
+    state: RunState,
+    phase_state: PhaseState | None,
+    store: EventStore,
+) -> str:
+    """Keep explicit resume IDs; rotate stale process-global IDs for new runs."""
+    requested = state.run_id or (
+        phase_state.run_id if phase_state is not None else None
+    )
+    if requested:
+        if get_run_id() != requested:
+            set_run_id(requested)
+        return requested
+
+    current = get_run_id()
+    existing = store.get_run_record(project_name, current) if current else None
+    if current and (
+        existing is None or existing.get("status") in {"starting", "running"}
+    ):
+        return current
+
+    import uuid
+
+    new_run_id = f"{project_name}-{uuid.uuid4().hex}"
+    set_run_id(new_run_id)
+    return new_run_id
+
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -654,10 +683,9 @@ def run_pipeline_loop(
             project_name, aufgabe, state_ref,
             phasen_state=phasen_state, phase_state=phase_state,
         )
-    if not get_run_id():
-        set_run_id(f"{project_name}-{time.strftime('%Y%m%d-%H%M%S')}")
-    run_id = get_run_id()
     store = EventStore()
+    run_id = _select_loop_run_id(project_name, state, phase_state, store)
+    state.run_id = run_id
     store.create_run_record(
         project_name, run_id, aufgabe, base_commit=_git_head(state.project_dir),
     )
@@ -1385,6 +1413,7 @@ def _main_inner(argv: list[str] | None = None) -> int:
         if not _ps.run_id:
             _ps.run_id = f"{args.project}-{_uuid.uuid4().hex}"
         set_run_id(_ps.run_id)
+    _state.run_id = _ps.run_id or args.run_id
 
     # K14: Stop muss auch bei SIGTERM den Checkpoint persistieren und
     # einen eventuell angelegten User-Stash wiederherstellen.

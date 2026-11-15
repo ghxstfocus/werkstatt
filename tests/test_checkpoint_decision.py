@@ -184,6 +184,26 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
     }
 
 
+def test_new_direct_loop_rotates_terminal_process_global_run_id(tmp_path):
+    from werkstatt.audit import get_run_id, set_run_id
+    from werkstatt.event_store import EventStore
+    from werkstatt.loop import _select_loop_run_id
+
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(
+        "demo", "demo-terminal", "Old goal", status="completed",
+    )
+    state = RunState(project_name="demo")
+    set_run_id("demo-terminal")
+    try:
+        selected = _select_loop_run_id("demo", state, None, store)
+        assert selected != "demo-terminal"
+        assert selected.startswith("demo-")
+        assert get_run_id() == selected
+    finally:
+        set_run_id("")
+
+
 def test_run_coordinator_rejects_unknown_task_action(tmp_path) -> None:
     from werkstatt.loop import _run_coordinator_action
 
