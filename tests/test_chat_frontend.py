@@ -124,6 +124,17 @@ def test_loop_action_card_renders_from_live_and_legacy_tool_results() -> None:
     assert result.index("_verarbeiteLoopActionErgebnis(name, content);") > result.index("for (var i")
 
 
+def test_loop_action_needs_input_is_not_rendered_twice() -> None:
+    js = _chat_js()
+    start = js.index('if (proposal.zustand === "needs_input")')
+    end = js.index("\n      }", start) + len("\n      }")
+    branch = js[start:end]
+
+    assert "return true" in branch
+    assert "_karte(" not in branch
+    assert "final assistant response explains this result" in branch
+
+
 def test_chat_surfaces_followup_checkpoint_receipt() -> None:
     js = _chat_js()
     assert 'kind === "loop_followup_checkpointed"' in js

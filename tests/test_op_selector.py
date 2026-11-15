@@ -36,6 +36,33 @@ def test_selects_single_ready_op_and_explains_plan_gate() -> None:
     assert "pytest" in result["auswahl"]["verifikation"]
 
 
+def test_acceptance_heading_without_list_marker_and_embedded_pytest_are_parsed() -> None:
+    status = (
+        "### OP-410: Retry pruefen\n"
+        "- **Status:** open\n"
+        "**Akzeptanzkriterien:**\n"
+        "- [ ] Erst- und Retry-Aufruf verwenden dasselbe Tokenlimit.\n"
+        "- [ ] `pytest tests/test_architect_tokens.py tests/test_loop_planner_architect.py` gruen.\n"
+    )
+
+    result = select_next_op(status)
+
+    assert result["zustand"] == "selected"
+    assert result["auswahl"]["id"] == "OP-410"
+    assert "pytest tests/test_architect_tokens.py" in result["auswahl"]["verifikation"]
+
+
+def test_completed_op_is_not_offered_for_a_second_run() -> None:
+    progress = "### 2026-11-15 — OP-410 abgeschlossen\n"
+    completed = parse_completed_op_ids(progress)
+
+    result = select_next_op(_op("OP-410"), completed_ids=completed)
+
+    assert result["zustand"] == "no_candidate"
+    assert result["kandidaten"] == []
+    assert "bereits als abgeschlossen" in result["ausgeschlossen"][0]["gruende"][0]
+
+
 def test_abstains_when_multiple_ready_ops_exist() -> None:
     result = select_next_op(_op("OP-001") + "\n" + _op("OP-002"))
 

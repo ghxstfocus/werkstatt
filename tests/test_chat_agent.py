@@ -166,6 +166,58 @@ def test_chat_loop_can_handoff_explicit_op_implementation_request(
     assert proposal["payload"]["arguments"] == {"op_id": "OP-321"}
 
 
+def test_chat_loop_explains_op_is_already_completed(
+    session: ChatSession,
+    fake_llm,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_session
+
+    monkeypatch.setattr(
+        chat_session, "_db_pfad", lambda _project: session.db_pfad,
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "PROGRESS.md").write_text(
+        "### 2026-11-15 — OP-321 abgeschlossen\n",
+        encoding="utf-8",
+    )
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "start-completed-op",
+                "type": "function",
+                "function": {
+                    "name": "request_loop_action",
+                    "arguments": json.dumps({
+                        "action": "start", "op_id": "OP-321",
+                    }),
+                },
+            }],
+        },
+        {"role": "assistant", "content": "Generic model fallback."},
+    )
+
+    answer = chat_agent.chat_loop(
+        session, "Bearbeite OP-321.", project_dir=tmp_path,
+    )
+
+    assert answer == (
+        "OP-321 ist in PROGRESS.md als abgeschlossen dokumentiert. "
+        "Es wurde kein neuer Run gestartet."
+    )
+
+
 def test_chat_remark_cannot_create_loop_action_even_if_model_requests_it(
     session: ChatSession,
     fake_llm,

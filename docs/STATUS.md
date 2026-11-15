@@ -7,69 +7,6 @@ Format gemaess `DOC_CONVENTIONS.md` §5. Diese Queue enthaelt nur offene, konkre
 Letzte Aktualisierung: 2026-11-15.
 
 ## Offene Punkte
-### OP-410: Architect-Retry drosselt max_tokens unter Reasoning-Bedarf
-
-- **Status:** open
-- **Priorität:** hoch
-- **Typ:** Bugfix
-- **Betroffene Dateien:**
-- `werkstatt/architect.py` (Konstante `ARCHITECT_MAX_TOKENS`, Aufrufstelle des
-  LLM-Requests mit `max_tokens=`)
-- `tests/test_architect_tokens.py` (bestehender Test, erweitern)
-- `tests/test_loop_planner_architect.py` (prüfen, ob `max_tokens == 4000`
-  in Zeile 466 mit dem neuen Verhalten kollidiert)
-
-**Belegter Fehler:**
-Run `werkstatt-20261115-111643-b290ddfe`, Seq 793496:
-`completion_tokens: 12000`, `content_len: 0`, 46.678 Zeichen Reasoning.
-Der Architect hat das gesamte Completion-Budget im CoT verbraucht und keine
-Antwort mehr produziert.
-
-**Verifizierte Ursache:**
-Die Konstante `ARCHITECT_MAX_TOKENS` steht auf 32000. An der Aufrufstelle
-wird sie jedoch im Retry-Pfad überschrieben:
-
-    max_tokens=(
-        min(12000, ARCHITECT_MAX_TOKENS)
-        if _attempt else ARCHITECT_MAX_TOKENS
-    )
-
-Der frühere zweite Versuch erhielt damit 12000 statt 32000 — weniger als
-der Erstversuch, obwohl er mehr Kontext und Reasoning-Bedarf hat. Die
-Drosselung ist im aktuellen Arbeitsstand entfernt; beide Aufrufe verwenden
-`ARCHITECT_MAX_TOKENS`. OP-410 bleibt bis zur vollständigen Phase-End-Verify
-offen.
-
-**Gegenprüfung am 2026-11-15:**
-1. `ARCHITECT_MAX_TOKENS` ist 32000; der Architect-LLM-Aufruf verwendet den
-   Wert bei Erstversuch und Retry.
-2. Die frühere Drosselung war direkt am Retry-Aufruf hartkodiert; keine
-   Projektkonfiguration lieferte den Wert 12000.
-3. `tests/test_loop_planner_architect.py:466` prueft den Scout-Aufruf
-   (`deepseek-chat`), nicht den Architect-Aufruf; der Test bleibt unveraendert.
-
-**Akzeptanzkriterien:**
-- [ ] Der Retry-Pfad sendet denselben `max_tokens`-Wert wie der Erstversuch.
-- [ ] Die Drosselungslogik ist entfernt, nicht nur der Zahlenwert erhöht —
-      `min(32000, ARCHITECT_MAX_TOKENS)` bliebe sonst als irreführende
-      Struktur im Code stehen.
-- [ ] Neuer Test: Retry-Aufruf sendet `max_tokens == ARCHITECT_MAX_TOKENS`.
-      Der bestehende Test `test_architect_max_tokens_mindestens_32000` prüft
-      nur die Konstante, nicht den Aufruf — deshalb ist der Bug trotz grünem
-      Test durchgelaufen.
-- [ ] Kommentar an der Konstante aktualisiert: Die Loop-Test-6-Historie
-      (55706 Zeichen Reasoning bei 16000 max_tokens) muss den Retry-Fall
-      mitnennen.
-- [ ] `pytest tests/test_architect_tokens.py tests/test_loop_planner_architect.py`
-      grün.
-
-**Nicht Teil dieser OP:**
-- Die Preflight-Fehler, die dem Architect vorenthalten wurden
-  (`omitted: ["PREFLIGHT-FEHLER"]`) — separates Thema, siehe OP-405.
-- Eine generelle Überarbeitung des CoT-Triggers im Architect-Prompt. Ein
-  höheres Limit behebt das Symptom; ob der Prompt zu breites Reasoning
-  auslöst, ist eine eigene Untersuchung.
-  
 ### OP-404: Codeguardian als unabhaengige Schutz- und Evidenzschicht
 - **Status:** open
 - **Typ:** change-guardian
@@ -82,7 +19,7 @@ offen.
 - **Status:** open
 - **Typ:** loop-quality
 - **Betroffene Dateien:** Rollen-/Prompt-Builders, Repo-Retrieval, Verify-Konfiguration und Tests
-- **Aktueller Teilstand (Servercheckout `1b11dc5`, lokale Follow-ups bis `3aa71f1` plus aktueller Arbeitsbaum, 2026-11-15):** Builder hat ein deterministisches Budget mit Pflicht-/Optional-Kontext; Architect-Ausfuehrungskontext hat ein geordnetes Budget. Der Scout nutzt ebenfalls ein gemeinsames Budget. Explorer-Ausgaben werden projektlokal erneut gelesen; Quellbelege tragen Originalzeilen, Zeilenbereiche, Vollstaendigkeitsstatus und SHA-256. Scout- und Architect-Prompts zeigen den tatsaechlich enthaltenen Fundstellenbereich. Der Reviewer liest alle Task-Dateien erneut ein, markiert Diff und Dateien als untrusted Belege, bindet Pfade und SHA-256 ein und blockiert mit Audit, wenn Pflichtbelege nicht vollstaendig passen. Planner-Split uebergibt den vollen Nutzerauftrag und die volle Architect-Prosa, sofern System- und User-Kontext zusammen in 60.000 Zeichen passen; darueber wird vor dem LLM-Aufruf mit vollstaendiger Budget-Auditinformation blockiert. Neuer lokaler Follow-up: Architect uebernimmt nun die komplette Scout-Prosa, alle API-Auszug-Symbole, Risiken und deterministischen API-Widersprueche ohne feldweise Slices. Vor jedem Architect-LLM-Aufruf wird die Gesamtgroesse von System- und User-Kontext auf 60.000 Zeichen begrenzt; Ueberlauf stoppt fail-closed. Das Kontextbudget-Audit bindet Report-Groesse und SHA-256 des tatsaechlichen Scout-Reports ein. Gezielt geprueft, noch nicht auf Main/Server. Optionaler Kontext muss ganz aufgenommen oder sichtbar als ausgelassen markiert sein; Auslassungen sind keine Negativbelege. Der Server bestaetigte fuer `1b11dc5` 2.426 bestanden und 5 uebersprungen; der Reviewer- und Planner-Follow-up ist lokal gezielt getestet, aber noch nicht auf dem Server. JIT-Retrieval fuer jede aktive Rolle, Verify-Routing und repraesentative Token-/Qualitaetsevaluation fehlen weiterhin; OP-405 bleibt offen.
+- **Aktueller Teilstand (Servercheckout `b47ec23`, vom Nutzer mit 2.446 bestanden/5 uebersprungen bestaetigt, 2026-11-15):** Die vorherigen Implementierungen enthalten deterministische Pflicht-/Optional-Kontextbudgets fuer Builder, Scout, Architect und Planner, aktuelle projektgebundene Explorer-Belege sowie erneutes Lesen und Hash-Bindung fuer Reviewer-Dateien. Commit `1bf988c` uebergibt den kompletten Scout-Handoff ohne stille Feld-Slices und blockiert einen Architect-Request ueber 60.000 Zeichen fail-closed. Commit `b47ec23` ergaenzt projektgebundene JIT-Quellbelege fuer Scout-markierte Dateien: aktuelle Zeilenbereiche, SHA-256, ausgelassene Bereiche, Pfadablehnungen und ungueltige Zeilenhinweise werden im Architect-Kontext und Audit sichtbar. GitHub-Quality-Gate und die Server-Vollsuite fuer `b47ec23` sind gruen. Noch offen sind JIT-Nachladung fuer weitere Rollen, Verify-Routing und eine repraesentative Token-/Qualitaetsevaluation. Der Testlauf belegt nicht, dass der laufende Webserverprozess bereits neu gestartet wurde; OP-405 bleibt offen.
 - **Akzeptanzkriterien:** Jede aktive Rolle hat ein deterministisches Kontextbudget und eine Priorisierung, die Nutzerauftrag, relevante ADRs, aktuelle Diff-/Verify-Belege und Sicherheitsregeln vor optionalem Kontext erhaelt. Rollen koennen bei belegtem Bedarf projektgebunden, read-only und begrenzt Dateien/Symbole nachladen; Belege tragen Pfad und Fundstelle. Scout-/Explorer-Negativtreffer aus einem begrenzten Index gelten nicht als Nichtexistenzbeweis; der Architect muss Zielpfad und Sprachraum anhand aktuellen Quelltexts verifizieren oder die Belegluecke benennen. Ueberschreitungen und Retrieval-Ergebnisse werden auditiert und sichtbar markiert, nie still abgeschnitten. Volle Logs bleiben als Artefakte verfuegbar, aber nur relevante markierte Auszuege gelangen in Modellkontexte. Verify prueft Budget und Rollenrouting deterministisch. Rollen-Tokens und Ergebnisqualitaet werden auf einem repräsentativen Eval-Satz gemessen.
 - **Tests:** Budgetgrenzen und Priorisierung je Rolle; JIT-Retrieval mit Projektisolation, Treffer, leere/mehrdeutige Suche; untrusted Tool-Ausgabe; sichtbare Ueberschreitung; Regression bei Rolle, Limit und Prompt-Aufbau; Tokens-/Qualitaetsvergleich.
 - **Blockiert von:** OP-398
@@ -93,8 +30,9 @@ offen.
 - **Betroffene Dateien:** Chat/Web-UI, Chat- und Loop-Control-Tests
 - **Aktueller Teilstand (Servercheckout `3aa71f1`, 2026-11-15):** Der Nutzer-Serverlauf belegte Uvicorns `Waiting for background tasks to complete` nach SIGTERM: der Listener wurde geschlossen, persistente Werkstatt-WebSockets hielten den Prozess ohne Graceful-Shutdown-Timeout im Shutdown. `3aa71f1` setzt `timeout_graceful_shutdown=10` als CLI-Default. Nach verifiziertem SIGINT des haengenden Altprozesses startete der Nutzer genau einen neuen Webserver (PID `182140`) mit dieser Option; `ss` zeigte den Listener auf `0.0.0.0:8001`, Uvicorn meldete `Application startup complete`, Projekt-API-Aufrufe lieferten 200. Ein nicht authentifizierter `GET /` lieferte 401, erwartungsgemaess wegen der Auth-Middleware. Der reale Timeout-Abbruch offener WebSockets beim naechsten Shutdown ist noch nicht gemessen; OP-396 bleibt offen.
 - **Akzeptanzkriterien:** Repo-Fragen liefern Datei-/Zeilen- oder Testbelege. Das Status-Werkzeug liest die kanonische Queue, Roadmap und Architektur sowie den neuesten Abschnitt aus der Root-`PROGRESS.md`; eine verbotene `docs/PROGRESS.md`-Kopie darf den aktuellen Stand nicht ueberschreiben. Der Chat erstellt fuer direkte Auftraege und OPs einen begruendeten Plan samt Empfehlung und uebergibt genau diesen ohne Copy/Paste an den Loop. Planstand und Freigabeversion bleiben interne Metadaten; die UI zeigt eine natuerliche Zusammenfassung. Neue Chatfragen koennen parallel beantwortet werden. Bei laengerer Arbeit zeigt eine einzelne temporaere Zeile im Chat knapp den aktuellen Schritt; sie wird ersetzt und nach Abschluss entfernt. Die detaillierten Ereignisse bleiben in Control replaybar. Das Plan-Gate erscheint im Chat; Freigabe ist intern an Projekt und Planstand gebunden. Eine relevante Scope-/Basis-Aenderung invalidiert die alte Freigabe; Mehrdeutigkeit fragt gezielt nach. Die freigegebene Version autorisiert Code, Tests, Doku, Verify und lokalen Commit nur innerhalb ihres Umfangs; externe/destruktive Aktionen erhalten ein separates Gate. Fuer jedes Projekt mit gepruefter optionaler Serverzuordnung im Projektmanifest kann der Chat den zugeordneten Dienst, Listener, Prozesse, Checkout und begrenzte Logs lesend untersuchen; Unit, Port und project_dir muessen validiert und an den aktiven Checkout gebunden sein. Argumente oder Logtext duerfen keine freien Shell-Befehle steuern und Auszuege werden als nicht vertrauenswuerdige Daten markiert. Ohne passende Zuordnung meldet der Chat die fehlende Konfiguration. Ein Dienstneustart braucht einen eigenen, ablaufenden, sessiongebundenen UI-Vorschlag, der Prozessidentitaet, Listener, cleanen Checkout und idle Loop-Zustand festhaelt und unmittelbar vor Ausfuehrung erneut validiert; Mehrdeutigkeit oder Aenderung bricht fail-closed ab. Ereignis und Ergebnis sind auditierbar; keine blinde Prozessbeendigung. Werkzeugarbeit endet nicht an einer willkuerlichen Standard-Rundenzahl, sondern an einer finalen Antwort, Nutzerabbruch oder erkannten Stillstand: Wiederholte identische Aufrufe mit gleichem Ergebnis loesen erst eine Kurskorrektur, bei weiterem Stillstand eine belegte Abschlussantwort mit offenen Punkten aus. Abgeschlossene Dialoghistorie und aktive Werkzeugrunden werden innerhalb definierter Kontextbudgets priorisiert und verdichtet, ohne den persistenten Event-Store zu kuerzen; gekuerzte Ausgaben sind als Auszuege markiert und koennen gezielt erneut gelesen werden. Kontrollaktionen bleiben explizit; ein bestaetigter Start bei bereits laufendem Loop wird als nicht gestartet gemeldet und nicht als Erfolg verbucht; Ergebnis-Gate und Reconnect sind abgesichert.
-- **Lokaler Follow-up (2026-11-15, noch nicht auf Main/Server):** Zusaetzlich zum Zykluserkenner endet eine Chat-Recherche nach standardmaessig 120 Sekunden an einem Zeit-Checkpoint. Ein laufender Modell-Stream prueft die Deadline kooperativ; danach wird ohne weitere Werkzeuge aus den bereits erhobenen Belegen abgeschlossen und Luecken werden als offen markiert. Der Chat-Job schreibt `research_budget_reached` als Control-Ereignis. Das ist eine Recherchegrenze, keine feste Zahl von Werkzeugrunden.
-- **Tests:** Status-Tool liest Root-PROGRESS statt verbotener Duplikatdatei und liefert aktuelle STATUS/ROADMAP/ARCHITECTURE-Quellen; Plan-Version und Loop-Handoff, Empfehlungsbelege, Freigabe/Ablehnung/Revision, mehrdeutige Antworten, Projektisolation, Kontrollaktionen, Reconnect und parallele Fragen waehrend eines Runs; mehr als fuenf Werkzeugrunden ohne Abbruch, Fortsetzung bis Ziel, Nutzerabbruch, echte Run-Budgetgrenze oder belegter Stillstand, Kurskorrektur bei wiederholtem identischem Werkzeugzyklus und Nutzerabbruch. Der lokale Zeit-Checkpoint muss Recherche nach Ablauf beenden, eine belegte Abschlussantwort anfordern und im Chat-Job-Control protokolliert werden. Abgeschlossene alte Turns halten das Prompt-Zeichenbudget ein; alte Roh-Werkzeugausgaben werden nicht erneut injiziert. Auch waehrend eines aktiven Auftrags wird der Werkzeugkontext zwischen abgeschlossenen Runden auf ein Zeichenbudget begrenzt: neueste Runden bleiben bevorzugt vollstaendig, aeltere Belege werden markiert verdichtet; grosse Einzel-Ausgaben werden nur im Prompt gekuerzt und bleiben im Event-Store vollstaendig. Ein gekuerzter Beleg muss bei Bedarf gezielt erneut gelesen werden. Der persistente Transcript bleibt unveraendert.
+- **Servercheckout-Follow-up (`b47ec23`, 2026-11-15):** Zusaetzlich zum Zykluserkenner endet eine Chat-Recherche nach standardmaessig 120 Sekunden an einem Zeit-Checkpoint. Ein laufender Modell-Stream prueft die Deadline kooperativ; danach wird ohne weitere Werkzeuge aus den bereits erhobenen Belegen abgeschlossen und Luecken werden als offen markiert. Der Chat-Job schreibt `research_budget_reached` als Control-Ereignis. Das ist eine Recherchegrenze, keine feste Zahl von Werkzeugrunden. Die Server-Vollsuite fuer `b47ec23` bestand laut Nutzer mit 2.446/5; der laufende Webserverprozess wurde damit noch nicht nachgewiesen neu gestartet.
+- **Lokaler Chat-Follow-up (noch nicht auf Main/Server):** Der aktuelle Chat liefert bei `request_loop_action` mit `needs_input` bereits eine finale Antwort; `static/chat.js` erzeugte zusaetzlich pro Tool-Result eine Assistentenkarte und konnte dieselbe Klaerung beim Reconnect erneut anzeigen. Die UI zeigt kuenftig nur die finale Antwort. Der OP-Selector liest nun auch fett formatierte Feldtitel ohne Listenstrich und kann einen expliziten pytest-Befehl aus den Akzeptanzkriterien als Testnachweis verwenden. Abgeschlossene OPs aus PROGRESS werden nicht erneut angeboten; der Chat erklaert einen erneuten Start als bereits abgeschlossen. Der Screenshot des Nutzers belegt eine alte Run-Ablehnung, keinen aktuellen Loop-Prozesszustand. Gezielte Regressionen: 182 bestanden, 2 uebersprungen; Mypy, Ruff und JS-Syntax bestanden.
+- **Tests:** Status-Tool liest Root-PROGRESS statt verbotener Duplikatdatei und liefert aktuelle STATUS/ROADMAP/ARCHITECTURE-Quellen; Plan-Version und Loop-Handoff, Empfehlungsbelege, Freigabe/Ablehnung/Revision, mehrdeutige Antworten, Projektisolation, Kontrollaktionen, Reconnect und parallele Fragen waehrend eines Runs; mehr als fuenf Werkzeugrunden ohne Abbruch, Fortsetzung bis Ziel, Nutzerabbruch, echte Run-Budgetgrenze oder belegter Stillstand, Kurskorrektur bei wiederholtem identischem Werkzeugzyklus und Nutzerabbruch. Der Zeit-Checkpoint muss Recherche nach Ablauf beenden, eine belegte Abschlussantwort anfordern und im Chat-Job-Control protokolliert werden; der Nutzer bestaetigte fuer `b47ec23` 2.446/5 auf dem Servercheckout. Abgeschlossene alte Turns halten das Prompt-Zeichenbudget ein; alte Roh-Werkzeugausgaben werden nicht erneut injiziert. Auch waehrend eines aktiven Auftrags wird der Werkzeugkontext zwischen abgeschlossenen Runden auf ein Zeichenbudget begrenzt: neueste Runden bleiben bevorzugt vollstaendig, aeltere Belege werden markiert verdichtet; grosse Einzel-Ausgaben werden nur im Prompt gekuerzt und bleiben im Event-Store vollstaendig. Ein gekuerzter Beleg muss bei Bedarf gezielt erneut gelesen werden. Der persistente Transcript bleibt unveraendert.
 - **Blockiert von:** —
 
 ### OP-397: Hintergrundjobs und Checkpoint-Steuerung

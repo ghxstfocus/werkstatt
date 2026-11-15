@@ -828,9 +828,18 @@ def _request_loop_action(args: dict[str, Any]) -> str:
                 )
             except OSError:
                 progress_text = ""
+            completed_op_ids = parse_completed_op_ids(progress_text, status_text)
+            if op_id.upper() in completed_op_ids:
+                return json.dumps({
+                    "zustand": "already_completed",
+                    "detail": (
+                        f"{op_id} ist in PROGRESS.md als abgeschlossen "
+                        "dokumentiert. Es wurde kein neuer Run gestartet."
+                    ),
+                }, ensure_ascii=False)
             selection = select_next_op(
                 status_text,
-                completed_ids=parse_completed_op_ids(progress_text, status_text),
+                completed_ids=completed_op_ids,
                 accepted_adrs=load_accepted_adr_ids(
                     _aktives_projekt_dir() / "docs" / "adr",
                 ),

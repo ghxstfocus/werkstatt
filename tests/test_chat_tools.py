@@ -705,6 +705,39 @@ def test_loop_action_requires_startable_explicit_op(
     assert not db.exists()
 
 
+def test_loop_action_reports_completed_op_without_creating_proposal(
+    tmp_path, monkeypatch,
+) -> None:
+    import json
+
+    from werkstatt import chat_session
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "PROGRESS.md").write_text(
+        "### 2026-11-15 — OP-321 abgeschlossen\n",
+        encoding="utf-8",
+    )
+    db = tmp_path / "sessions.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db)
+
+    result = json.loads(chat_tools.execute_tool(
+        "request_loop_action", {"action": "start", "op_id": "OP-321"},
+        project_dir=tmp_path, project_name="demo", session_id="session-2",
+    ))
+
+    assert result["zustand"] == "already_completed"
+    assert "PROGRESS.md als abgeschlossen" in result["detail"]
+    assert not db.exists()
+
+
 def test_pytest_run_requires_debugger_mode_and_project_path(
     tmp_path, monkeypatch,
 ) -> None:

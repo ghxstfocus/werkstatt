@@ -1049,6 +1049,15 @@ def chat_loop(
             elif (
                 requested_op
                 and op_handoff_result is not None
+                and op_handoff_result.get("zustand") == "already_completed"
+            ):
+                antwort = str(
+                    op_handoff_result.get("detail")
+                    or f"{requested_op} ist bereits abgeschlossen dokumentiert."
+                )
+            elif (
+                requested_op
+                and op_handoff_result is not None
                 and op_handoff_result.get("zustand") != "proposal"
             ):
                 detail = str(op_handoff_result.get("detail") or "")

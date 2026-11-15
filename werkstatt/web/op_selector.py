@@ -7,11 +7,12 @@ from typing import Any
 
 _OP_HEADING = re.compile(r"^### (OP-\d+[a-z]?):\s*(.+?)\s*$", re.MULTILINE)
 _FIELD = re.compile(
-    r"^\s*-\s+\*\*([^*]+):\*\*\s*(.*?)(?=^\s*-\s+\*\*|\Z)",
+    r"^\s*(?:-\s+)?\*\*([^*]+):\*\*\s*(.*?)(?=^\s*(?:-\s+)?\*\*|\Z)",
     re.MULTILINE | re.DOTALL,
 )
 _OP_ID = re.compile(r"OP-\d+[a-z]?", re.IGNORECASE)
 _ADR_ID = re.compile(r"ADR-\d{4}", re.IGNORECASE)
+_PYTEST_COMMAND = re.compile(r"`([^`\n]*\bpytest\b[^`\n]*)`", re.IGNORECASE)
 _PLACEHOLDER = {"", "—", "-", "keine", "n/a", "nicht zutreffend"}
 _COMPLETED_OP_HEADING = re.compile(
     r"^###\s+\d{4}-\d{2}-\d{2}\s+[—-]\s+"
@@ -120,6 +121,15 @@ def select_next_op(
                 "gruende": ["OP-ID kommt mehrfach in STATUS.md vor"],
             })
             continue
+        if op["id"] in completed and not (
+            op["id"] == "OP-382" and op["status"] == "open"
+        ):
+            excluded.append({
+                "id": op["id"],
+                "titel": op["titel"],
+                "gruende": ["OP ist in PROGRESS.md bereits als abgeschlossen dokumentiert"],
+            })
+            continue
         if op["status"] != "open":
             if op["status"] == "conflict":
                 excluded.append({
@@ -132,13 +142,18 @@ def select_next_op(
         if op["status_anzahl"] != 1:
             reasons.append("Status fehlt oder ist mehrfach angegeben")
         tests = fields.get("tests")
+        acceptance = fields.get("akzeptanzkriterien", "")
+        if not _ausfuellbar(tests):
+            test_reference = _PYTEST_COMMAND.search(acceptance)
+            if test_reference:
+                tests = test_reference.group(1).strip()
         phase = fields.get("phase", "")
         if (
             re.search(r"\bphase[\s-]*3\b", phase, re.IGNORECASE)
             and not dogfooding_completed
         ):
             reasons.append("Phase-3 gesperrt bis OP-382 abgeschlossen")
-        if not _ausfuellbar(fields.get("akzeptanzkriterien")):
+        if not _ausfuellbar(acceptance):
             reasons.append("Akzeptanzkriterien fehlen")
         if not _ausfuellbar(tests):
             reasons.append("Tests oder ein pruefbarer Nachweis fehlen")

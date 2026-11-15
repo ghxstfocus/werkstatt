@@ -448,7 +448,10 @@ def test_execution_context_budget_marks_truncated_and_omitted_sections() -> None
     assert len(context) <= 12000
     assert "KONTEXTBUDGET — AUSLASSUNGEN SICHTBAR" in context
     assert "ABSCHNITT GEKUERZT" in context
-    assert metadata["truncated"][0]["section"] == "NACHRANGIG"
+    truncated = metadata.get("truncated")
+    assert isinstance(truncated, list) and truncated
+    assert isinstance(truncated[0], dict)
+    assert truncated[0].get("section") == "NACHRANGIG"
     assert metadata["omitted"] == []
 
     tiny, tiny_metadata = _budget_architect_execution_context(
@@ -686,9 +689,12 @@ def test_architect_source_retrieval_is_project_confined_and_marks_rejection(
     assert "SECRET_OUTSIDE" not in rendered
     assert "QUELLDATEIEN ABGELEHNT" in rendered
     assert manifest["included_files"] == []
-    assert [item["reason"] for item in manifest["rejected_files"]] == [
-        "unsafe_or_unsupported_path",
-        "unsafe_or_unsupported_path",
+    assert manifest["rejected_files"] == [
+        {"path": "../outside.py", "reason": "unsafe_or_unsupported_path"},
+        {
+            "path": str(tmp_path / "absolute.py").replace("\\", "/"),
+            "reason": "unsafe_or_unsupported_path",
+        },
     ]
 
 
@@ -712,4 +718,7 @@ def test_architect_scout_source_budget_marks_omissions_and_stale_hints(
 
     assert len(rendered) <= 2_000
     assert "ausserhalb der aktuellen Datei" in rendered
-    assert manifest["sources"][0]["unresolved_line_hints"] == [90]
+    sources = manifest.get("sources")
+    assert isinstance(sources, list) and sources
+    assert isinstance(sources[0], dict)
+    assert sources[0].get("unresolved_line_hints") == [90]

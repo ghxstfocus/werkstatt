@@ -822,11 +822,9 @@
         return true;
       }
       if (proposal.zustand === "needs_input") {
-        _karte(
-          "assistant",
-          "Dafür brauche ich noch eine Klärung: " +
-            (proposal.detail || JSON.stringify(proposal.auswahl || {})),
-        );
+        // The final assistant response explains this result. Rendering the
+        // tool result as another assistant card duplicates the answer on
+        // normal delivery and again when the job is replayed after reconnect.
         return true;
       }
     } catch (e) {}
