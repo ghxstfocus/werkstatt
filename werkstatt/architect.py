@@ -1733,24 +1733,17 @@ def run_architect(
         ) else ""
         if len(_arch_user_content) > 12000:
             _original_chars = len(_arch_user_content)
-            _context_marker = (
-                "\n\n[KONTEXT GEKUERZT: Architect-Limit 12000 Zeichen; "
-                "fehlende Angaben erneut lesen oder Belegluecke benennen]"
-            )
-            _arch_user_content = (
-                _arch_user_content[:12000 - len(_context_marker)]
-                + _context_marker
-            )
             audit("planner_architect_context_budget", {
                 "max_chars": 12000,
-                "chars": len(_arch_user_content),
-                "truncated": [{
-                    "section": "architect_execution_context",
-                    "original_chars": _original_chars,
-                }],
-                "omitted": [],
+                "chars": _original_chars,
+                "included": [],
+                "truncated": [],
+                "omitted": ["architect_execution_context"],
                 "defensive_limit": True,
+                "required_context_complete": False,
+                "action": "blocked",
             }, pd, pn)
+            return False
 
     _arch_sys_base = _planner_system(aufgabe, explorer_ctx, state)
     _arch_skills_block = state.architect_skills_block or ""
@@ -1766,6 +1759,9 @@ def run_architect(
             _scout_auftrag, ensure_ascii=False, sort_keys=True,
             separators=(",", ":"),
         ) if isinstance(_scout_auftrag, dict) else ""
+        _scout_report_sha256 = hashlib.sha256(
+            _scout_canonical.encode("utf-8"),
+        ).hexdigest() if _scout_canonical else None
         _scout_handoff = _format_scout_auftrag(_scout_auftrag or {})
         _request_fits = _request_chars <= ARCHITECT_PROMPT_MAX_CHARS
         audit("planner_architect_context_budget", {
@@ -1792,7 +1788,8 @@ def run_architect(
         _arch_reply = _with_spinner(
             "Architect",
             lambda _prompt=_sys_prompt, _content=_arch_user_content,
-            _attempt=_versuch, _request_chars=_request_chars: ask_llm(
+            _attempt=_versuch, _request_chars=_request_chars,
+            _scout_report_hash=_scout_report_sha256: ask_llm(
                 api_key, _prompt, _content,
                 model=_get_architect_model(),
                 temperature=0.2,
@@ -1803,6 +1800,10 @@ def run_architect(
                     "attempt": _attempt + 1,
                     "source_evidence": getattr(
                         state, "architect_scout_source_manifest", {},
+                    ),
+                    "scout_report_sha256": _scout_report_hash,
+                    "execution_context": getattr(
+                        state, "architect_execution_context_manifest", {},
                     ),
                     "request_chars": _request_chars,
                 },

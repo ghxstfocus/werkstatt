@@ -139,6 +139,9 @@ class RunState:
     # OP-396: kompakte, von Explorer-Fakten getrennte Laufhistorie fuer
     # den Architect (PROGRESS, Phase-State, Verify- und Gate-Feedback).
     architect_execution_context: str = ""
+    architect_execution_context_manifest: dict[str, Any] = field(
+        default_factory=dict,
+    )
     # Project-local Scout-selected source excerpts passed to Architect,
     # including line/hash and omission manifest for the LLM-request audit.
     architect_scout_source_manifest: dict[str, Any] = field(default_factory=dict)

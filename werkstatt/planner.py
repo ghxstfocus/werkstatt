@@ -87,7 +87,7 @@ def _budget_architect_execution_context(
     *,
     max_chars: int = ARCHITECT_EXECUTION_CONTEXT_MAX_CHARS,
 ) -> tuple[str, dict[str, object]]:
-    """Keep ordered context evidence and explicitly label any omission."""
+    """Admit whole sections in priority order and report omitted evidence."""
     normalized = [
         (title, content)
         for title, content in sections
@@ -103,63 +103,41 @@ def _budget_architect_execution_context(
             "omitted": [],
         }
 
-    # Reserve room for a visible truncation report; preserve the section order
-    # supplied by the caller as its deterministic priority order.
-    report_reserve = min(700, max(160, max_chars // 12))
+    # No section is sliced mid-content: keep a concise omission notice and
+    # preserve caller order as strict priority.
+    report_reserve = min(700, max(40, max_chars // 12))
     content_budget = max(0, max_chars - report_reserve)
     output: list[str] = []
     included: list[str] = []
-    truncated: list[dict[str, object]] = []
     omitted: list[str] = []
     used = 0
     for index, (title, content) in enumerate(normalized):
         heading = f"## {title}\n"
         separator = 2 if output else 0
-        available = content_budget - used - separator - len(heading)
-        if available <= 0:
+        section = heading + content
+        if used + separator + len(section) > content_budget:
             omitted.extend(name for name, _ in normalized[index:])
             break
-        if len(content) > available:
-            marker = "\n[ABSCHNITT GEKUERZT — Volltext bleibt im Run-Artefakt]"
-            kept = max(0, available - len(marker))
-            output.append(heading + content[:kept] + marker[:available - kept])
-            used += separator + len(output[-1])
-            truncated.append({
-                "section": title,
-                "original_chars": len(content),
-                "included_chars": kept,
-            })
-            included.append(title)
-            omitted.extend(name for name, _ in normalized[index + 1:])
-            break
-        output.append(heading + content)
+        output.append(section)
         included.append(title)
-        used += separator + len(output[-1])
+        used += separator + len(section)
 
     report = (
-        "## KONTEXTBUDGET — AUSLASSUNGEN SICHTBAR\n"
-        f"Limit: {max_chars} Zeichen. Gekuerzt: "
-        + (", ".join(
-            f"{item['section']} ({item['included_chars']}/"
-            f"{item['original_chars']} Zeichen)" for item in truncated
-        ) or "keine")
-        + ". Ausgelassen: "
-        + (", ".join(omitted) if omitted else "keine")
-        + ". Nicht enthaltene Angaben sind keine Negativbelege; vor einer davon abhaengigen Entscheidung muss die Quelle erneut gelesen oder die Belegluecke benannt werden."
+        "KONTEXT AUSGELASSEN (kein Negativbeleg): "
+        + ", ".join(omitted)
+        + ". Bei Bedarf gezielt nachladen."
     )
     used_text = "\n\n".join(output)
     report_room = max(0, max_chars - len(used_text) - (2 if output else 0))
     if len(report) > report_room:
-        marker = " [BERICHT GEKUERZT]"
-        report = (
-            report[:max(0, report_room - len(marker))] + marker
-        )[:report_room]
+        marker = "…"
+        report = (report[:max(0, report_room - len(marker))] + marker)[:report_room]
     text = "\n\n".join(output + [report])
     metadata: dict[str, object] = {
         "max_chars": max_chars,
         "chars": len(text),
         "included": included,
-        "truncated": truncated,
+        "truncated": [],
         "omitted": omitted,
     }
     return text, metadata
@@ -2605,6 +2583,7 @@ def run_planner(state: RunState) -> bool:
     ) = _budget_architect_execution_context(
         _architect_execution_sections,
     )
+    state.architect_execution_context_manifest = _architect_context_metadata
     audit(
         "planner_architect_context_budget",
         _architect_context_metadata,

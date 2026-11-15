@@ -438,7 +438,7 @@ def test_api_preflight_never_slices_source_midline_at_budget(tmp_path) -> None:
     assert metadata["omitted_files"] == ["werkstatt/safe.py"]
 
 
-def test_execution_context_budget_marks_truncated_and_omitted_sections() -> None:
+def test_execution_context_budget_keeps_sections_whole_and_reports_omissions() -> None:
     from werkstatt.planner import _budget_architect_execution_context
 
     context, metadata = _budget_architect_execution_context(
@@ -446,13 +446,12 @@ def test_execution_context_budget_marks_truncated_and_omitted_sections() -> None
     )
 
     assert len(context) <= 12000
-    assert "KONTEXTBUDGET — AUSLASSUNGEN SICHTBAR" in context
-    assert "ABSCHNITT GEKUERZT" in context
-    truncated = metadata.get("truncated")
-    assert isinstance(truncated, list) and truncated
-    assert isinstance(truncated[0], dict)
-    assert truncated[0].get("section") == "NACHRANGIG"
-    assert metadata["omitted"] == []
+    assert "KONTEXT AUSGELASSEN (kein Negativbeleg): NACHRANGIG" in context
+    assert "p" * 11000 in context
+    assert "n" * 100 not in context
+    assert metadata["included"] == ["PRIORITAET"]
+    assert metadata["truncated"] == []
+    assert metadata["omitted"] == ["NACHRANGIG"]
 
     tiny, tiny_metadata = _budget_architect_execution_context(
         [("PRIORITAET", "x" * 100)], max_chars=80,
@@ -489,10 +488,11 @@ def test_architect_defensive_context_limit_is_audited(monkeypatch, tmp_path) -> 
         architect_execution_context="x" * 13000,
     )
 
-    assert architect.run_architect(state, "Aufgabe", "nicht verwendet", "key", None)
-    assert len(captured["content"]) <= 12000
-    assert "KONTEXT GEKUERZT" in captured["content"]
-    assert any(kind == "planner_architect_context_budget" for kind, _ in audits)
+    assert not architect.run_architect(state, "Aufgabe", "nicht verwendet", "key", None)
+    assert "content" not in captured
+    blocked = [payload for kind, payload in audits if kind == "planner_architect_context_budget"]
+    assert blocked[-1]["action"] == "blocked"
+    assert blocked[-1]["required_context_complete"] is False
 
 
 def test_scout_prompt_does_not_treat_index_absence_as_proof() -> None:
@@ -563,6 +563,13 @@ def test_architect_blocks_oversized_complete_prompt_and_audits_handoff(
         docs={},
         scout_auftrag=report,
         architect_execution_context="",
+        architect_execution_context_manifest={
+            "max_chars": 12000,
+            "chars": 240,
+            "included": ["PHASE-STATE"],
+            "truncated": [],
+            "omitted": ["VORHERIGE FEHLSCHLAEGE"],
+        },
     )
     monkeypatch.setattr(architect, "ask_llm", lambda *a, **k: calls.append(a))
     monkeypatch.setattr(architect, "audit", lambda *a, **k: audits.append((a[0], a[1])))
@@ -632,6 +639,13 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
         docs={},
         scout_auftrag=report,
         architect_execution_context="",
+        architect_execution_context_manifest={
+            "max_chars": 12000,
+            "chars": 240,
+            "included": ["PHASE-STATE"],
+            "truncated": [],
+            "omitted": ["VORHERIGE FEHLSCHLAEGE"],
+        },
     )
     monkeypatch.setattr(architect, "_with_spinner", lambda _label, call: call())
     monkeypatch.setattr(architect, "ask_llm", ask_llm)
@@ -671,6 +685,8 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
     assert isinstance(manifest, dict)
     assert manifest["budget_event"] == "planner_architect_context_budget"
     assert manifest["source_evidence"] == event["source_evidence"]
+    assert manifest["scout_report_sha256"] == event["scout_source_sha256"]
+    assert manifest["execution_context"] == state.architect_execution_context_manifest
 
 
 def test_architect_source_retrieval_is_project_confined_and_marks_rejection(
