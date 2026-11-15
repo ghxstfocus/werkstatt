@@ -292,6 +292,19 @@ def test_progress(tmp_path):
     assert p["pending"] == 1
 
 
+def test_progress_does_not_count_blocked_tasks_as_pending(tmp_path):
+    ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.init_new("X", [{"id": "t1"}, {"id": "t2"}])
+    ps.mark_done("t1")
+    ps.mark_blocked("t2", grund="deps:missing")
+
+    progress = ps.progress()
+
+    assert progress["done"] == 1
+    assert progress["pending"] == 0
+    assert progress["blocked"] == 1
+
+
 def test_resume_failed_setzt_pending(tmp_path):
     """M-310c: resume_failed macht failed -> pending."""
     ps = PhaseState("testprojekt", base_dir=tmp_path)

@@ -60,7 +60,11 @@ Task-Executor: `read` geht an den Read-only-Pfad, `verify` an Verify und
 Review, `create`/`update` an den Builder. Der Run-Dispatcher gibt jeweils nur
 einen Task frei und entscheidet danach erneut, ob ein weiterer Task, die
 Aufloesung eines blockierten Graphen oder die Phase-End-Verify folgt. Nicht
-registrierte Aktionen stoppen vor einem Worker fail-closed. Task-, Kriterien-
+registrierte Aktionen stoppen vor einem Worker fail-closed. Nach der
+Graph-Aufloesung zaehlen blockierte Tasks nicht als ausfuehrbare Arbeit;
+bleiben sie am Checkpoint bestehen, stoppt der Koordinator mit einer
+begruendeten Blocked-Graph-Entscheidung statt denselben Resolver erneut
+aufzurufen. Task-, Kriterien-
 und Verify-Belege muessen zum aktiven Run passen. Verify-Evidenz nennt die
 taskbezogenen Scoping-Dateien samt aktuellem Inhalts-Hash. Aendert ein spaeterer
 Task diese Dateien, plant der Checkpoint eine Verify-/Review-only-Neupruefung

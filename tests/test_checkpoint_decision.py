@@ -217,6 +217,28 @@ def test_run_coordinator_resolves_blocked_graph_before_stale_verify(tmp_path) ->
     assert phase.get_task("t1").get("verification_pending") is not True
 
 
+def test_run_coordinator_stops_after_graph_is_already_blocked(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [{
+            "id": "t1", "action": "update", "criterion_refs": ["AC1"],
+            "dependencies": ["missing"],
+        }],
+        ["Feature works"],
+    )
+    phase.mark_blocked("t1", grund="deps:missing")
+
+    decision = _run_coordinator_action(phase, RunState())
+
+    assert decision["task_progress"]["pending"] == 0
+    assert decision["task_progress"]["blocked"] == 1
+    assert decision["decision"] == "reject_blocked_graph"
+    assert decision["coordinator_action"] == "reject_checkpoint"
+    assert decision["goal_candidate_before_final_verify"] is False
+
+
 def test_task_dispatch_returns_at_next_persisted_boundary(
     tmp_path, monkeypatch,
 ) -> None:

@@ -271,6 +271,14 @@ def _checkpoint_decision_payload(
         executor = None
         decision = "resolve_blocked_graph"
         reason = "Keine ausfuehrbare Task-Graph-Node; offene Tasks bleiben sichtbar."
+    elif task_progress.get("blocked", 0):
+        executor = None
+        decision = "reject_blocked_graph"
+        reason = (
+            "Der Graph wurde aufgeloest, enthaelt aber weiterhin blockierte "
+            "Tasks; der Checkpoint stoppt statt dieselben Tasks erneut "
+            "aufzuloesen."
+        )
     else:
         executor = "phase_end_verify"
         if task_progress.get("failed", 0):
@@ -296,6 +304,7 @@ def _checkpoint_decision_payload(
     candidate = bool(
         next_task is None
         and task_progress.get("failed", 0) == 0
+        and task_progress.get("blocked", 0) == 0
         and task_progress.get("pending", 0) == 0
         and criteria.get("tracked")
         and criteria.get("valid")

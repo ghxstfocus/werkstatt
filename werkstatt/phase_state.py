@@ -875,12 +875,26 @@ class PhaseState:
         }
 
     def progress(self) -> dict[str, int]:
-        """Gibt den Fortschritt zurueck (done/total)."""
+        """Count executable work separately from terminal blockers.
+
+        A blocked task is not pending work: counting it as pending makes the
+        coordinator try to resolve an already-resolved graph forever.
+        """
         tasks = self.data.get("tasks", [])
         total = len(tasks)
         done = sum(1 for t in tasks if t.get("status") == "done")
         failed = sum(1 for t in tasks if t.get("status") == "failed")
-        return {"total": total, "done": done, "failed": failed, "pending": total - done - failed}
+        blocked = sum(1 for t in tasks if t.get("status") == "blocked")
+        pending = sum(
+            1 for t in tasks if t.get("status") in {"pending", "running"}
+        )
+        return {
+            "total": total,
+            "done": done,
+            "failed": failed,
+            "blocked": blocked,
+            "pending": pending,
+        }
 
     def is_complete(self) -> bool:
         return self.progress()["done"] == self.progress()["total"]
