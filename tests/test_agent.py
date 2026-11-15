@@ -187,6 +187,7 @@ def test_role_request_without_budget_evidence_is_blocked(monkeypatch, tmp_path):
         "agent": "builder",
         "reason": "required_role_context_evidence_missing",
         "missing": ["context_manifest.budget_event"],
+        "expected_budget_events": ["builder_context_budget"],
         "provider_request_sent": False,
     }]
 
@@ -213,3 +214,37 @@ def test_role_request_without_run_state_is_blocked(monkeypatch):
     assert reply.ok is False
     assert reply.error == "role_context_evidence_missing; provider request was not sent"
     assert provider_calls == []
+
+
+def test_role_request_rejects_another_roles_budget_manifest(monkeypatch, tmp_path):
+    state = mk_state(project_dir=tmp_path, project_name="wrong-role-context")
+    events = []
+    provider_calls = []
+    monkeypatch.setattr(
+        agent,
+        "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests,
+        "post",
+        lambda *_args, **_kwargs: provider_calls.append(True),
+    )
+
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt="system",
+        user_content="builder task",
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="builder",
+        context_manifest={"budget_event": "scout_context_budget"},
+    )
+
+    assert reply.ok is False
+    assert reply.error == "role_context_evidence_missing; provider request was not sent"
+    assert provider_calls == []
+    blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
+    assert blocked[0]["missing"] == ["context_manifest.budget_event"]
+    assert blocked[0]["expected_budget_events"] == ["builder_context_budget"]

@@ -29,6 +29,17 @@ _EVIDENCE_REQUIRED_ROLES = frozenset({
     "architect", "builder", "explorer", "planner", "planner-split",
     "reviewer", "scout",
 })
+_ROLE_CONTEXT_BUDGET_EVENTS: dict[str, frozenset[str]] = {
+    "architect": frozenset({"planner_architect_context_budget"}),
+    "builder": frozenset({"builder_context_budget"}),
+    "explorer": frozenset({"explorer_context"}),
+    "planner": frozenset({"planner_split_context_budget"}),
+    "planner-split": frozenset({"planner_split_context_budget"}),
+    "reviewer": frozenset({
+        "reviewer_context_budget", "reviewer_phase_context",
+    }),
+    "scout": frozenset({"scout_context_budget"}),
+}
 
 _PROMPT_DUMP_DIR = Path("/tmp/werkstatt-prompts")
 
@@ -321,10 +332,15 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         missing: list[str] = []
         if state is None:
             missing.append("run_state")
+        budget_event = (
+            context_manifest.get("budget_event")
+            if isinstance(context_manifest, dict)
+            else None
+        )
+        expected_budget_events = _ROLE_CONTEXT_BUDGET_EVENTS[aufgabe]
         if (
-            not isinstance(context_manifest, dict)
-            or not isinstance(context_manifest.get("budget_event"), str)
-            or not context_manifest.get("budget_event", "").strip()
+            not isinstance(budget_event, str)
+            or budget_event not in expected_budget_events
         ):
             missing.append("context_manifest.budget_event")
         if missing:
@@ -336,6 +352,7 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                         "agent": aufgabe,
                         "reason": "required_role_context_evidence_missing",
                         "missing": missing,
+                        "expected_budget_events": sorted(expected_budget_events),
                         "provider_request_sent": False,
                     },
                     state.project_dir,
