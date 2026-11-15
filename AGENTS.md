@@ -69,6 +69,14 @@ Checkpoint ist keine reine Timeline-Anzeige. Setup und Planfreigabe bleiben im
 aktuellen Migrationsstand noch explizite Vorbereitungsaktionen; die
 vollstaendige Phasenabloesung aus ADR-0032 ist offen.
 
+Rollen-Kontextbudgets muessen die tatsaechlich uebergebene Information
+abbilden: keine stillen Vorab-Slices vor dem Budgetierer. Ganze optionale
+Belegabschnitte werden aufgenommen oder mit Quelle als ausgelassen markiert;
+unvermeidbare Auszuege nennen Quelle und tatsaechliche Ausgangsgroesse.
+Auslassungen und begrenzte Trefferlisten sind keine Negativbelege. Bei einer
+Entscheidung, die von ausgelassenem Inhalt abhaengt, muss die Rolle gezielt
+nachladen oder die Belegluecke ausweisen.
+
 ## Werkzeuge (CLI)
 
 - python3 -m werkstatt.loop --project NAME --aufgabe "TEXT"

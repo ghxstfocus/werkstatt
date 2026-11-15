@@ -996,7 +996,13 @@ def _run_scout(
             if _pf and _pv:
                 _preview_text = _pv[:8000]
                 if len(_pv) > 8000:
-                    _preview_text += "\n[QUELLTEXTAUSZUG GEKUERZT: 8000 Zeichen]"
+                    _preview_text += (
+                        "\n[QUELLTEXTAUSZUG GEKUERZT: Datei "
+                        f"{_pf}; {len(_preview_text)} von {len(_pv)} "
+                        "Zeichen dieses Explorer-Auszuges enthalten. "
+                        "Fehlender Inhalt ist unbekannt; fuer davon "
+                        "abhaengige Aussagen Quelle gezielt nachladen.]"
+                    )
                 _previews_parts.append(
                     f'<datei_inhalt datei="{_pf}">\n'
                     f'{_preview_text}\n</datei_inhalt>'
@@ -1007,7 +1013,7 @@ def _run_scout(
     for _k in ("status", "adr_index"):
         _value = _docs_state.get(_k)
         if isinstance(_value, str) and _value:
-            _context_sections.append((f"PROJEKT-DOKU: {_k}", _value[:4000]))
+            _context_sections.append((f"PROJEKT-DOKU: {_k}", _value))
     if _previews_parts:
         for _part in _previews_parts:
             _file_start = _part.split('\n', 1)[0]
@@ -1019,7 +1025,7 @@ def _run_scout(
     for _k in ("architecture", "conventions", "entry", "roadmap", "glossary"):
         _value = _docs_state.get(_k)
         if isinstance(_value, str) and _value:
-            _context_sections.append((f"PROJEKT-DOKU: {_k}", _value[:4000]))
+            _context_sections.append((f"PROJEKT-DOKU: {_k}", _value))
 
     # Fix BC 2026-10-31: Grep-Kontext bei Such-Aufgaben.
     # Der AST-Index enthaelt keine Docstrings -- "Ollama in

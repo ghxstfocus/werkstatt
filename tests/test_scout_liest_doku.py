@@ -66,3 +66,70 @@ def test_scout_offers_status_and_adr_before_optional_project_docs(
         "PROJEKT-DOKU: roadmap",
         "PROJEKT-DOKU: glossary",
     ]
+
+
+def test_scout_does_not_silently_pretruncate_project_docs(
+    monkeypatch, tmp_path,
+) -> None:
+    long_status = "S" * 5_001
+    state = mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        docs={"status": long_status},
+    )
+    prompts: list[str] = []
+    monkeypatch.setattr(scout, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(
+        scout, "ask_llm",
+        lambda _key, _system, user, **_kwargs: (
+            prompts.append(user) or SimpleNamespace(
+                ok=True,
+                content=json.dumps({
+                    "ziel": "Ziel", "relevante_dateien": [],
+                    "api_auszug": {}, "vorgeschlagene_aenderungen": [],
+                    "risiken": [], "auftrag_prosa": "Pruefe das Ziel.",
+                    "bereits_erfuellt": False,
+                }),
+            )
+        ),
+    )
+    monkeypatch.setattr(scout, "audit", lambda *_args, **_kwargs: None)
+
+    assert scout._run_scout(state, "Pruefe das Projektziel", {}, [], "key")
+    assert len(prompts) == 1
+    assert long_status in prompts[0]
+
+
+def test_scout_preview_truncation_names_source_and_original_size(
+    monkeypatch, tmp_path,
+) -> None:
+    state = mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        explorer_context={
+            "key_files": [{"file": "src/core.py", "preview": "P" * 9_001}],
+        },
+    )
+    prompts: list[str] = []
+    monkeypatch.setattr(scout, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(
+        scout, "ask_llm",
+        lambda _key, _system, user, **_kwargs: (
+            prompts.append(user) or SimpleNamespace(
+                ok=True,
+                content=json.dumps({
+                    "ziel": "Ziel", "relevante_dateien": [],
+                    "api_auszug": {}, "vorgeschlagene_aenderungen": [],
+                    "risiken": [], "auftrag_prosa": "Pruefe das Ziel.",
+                    "bereits_erfuellt": False,
+                }),
+            )
+        ),
+    )
+    monkeypatch.setattr(scout, "audit", lambda *_args, **_kwargs: None)
+
+    assert scout._run_scout(state, "Pruefe das Projektziel", {}, [], "key")
+    assert len(prompts) == 1
+    assert "QUELLTEXTAUSZUG GEKUERZT: Datei src/core.py" in prompts[0]
+    assert "8000 von 9001 Zeichen" in prompts[0]
+    assert "Fehlender Inhalt ist unbekannt" in prompts[0]

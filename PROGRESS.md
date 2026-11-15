@@ -6944,3 +6944,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung im Arbeitsbaum:** Erfolgreiche Verify-Stages duerfen Kriterien nur belegen, wenn ihr expliziter Datei-Scope den Kriteriums-Task abdeckt. Der Task-Beleg speichert Run-ID und SHA-256 der projektlokalen Taskdateien. Der Finalizer verwirft fehlende, scopefremde oder veraltete Belege; hat ein spaeterer Task eine Datei geaendert, plant der Checkpoint den erledigten Task als Verify-/Review-only-Neupruefung ein.
 - **Verifikation lokal:** Dieselbe gezielte Gruppe mit Evidenz-, Hash-, Scope- und Stale-Requeue-Regressionen: 105 bestanden; Ruff, Compileall, `git diff --check`, State-Flow, Control-Drift und strikter Doku-Drift bestanden.
 - **Grenze:** Das ist keine vollstaendige Rollen-/Informationsketten-Evaluation: tatsaechliche Prompt-Kontexte pro Rolle und unnoetige Inhalte sind damit noch nicht end-to-end gemessen. Serverlauf fuer diesen Follow-up steht aus; OP-398 bleibt offen.
+
+### Scout-Kontext vor Budgetierung nicht still kuerzen — 2026-11-15
+
+- **Befund:** Der Scout-Budgetierer markierte weggelassene Abschnitte korrekt, aber sein Aufrufer kuerzte STATUS/ADR/Doku vor dem Budgetierer auf 4.000 Zeichen, ohne Auslassungshinweis. Explorer-Dateiauszuege wurden auf 8.000 Zeichen geschnitten, ohne Quellpfad und tatsaechliche Ausgangsgroesse im Marker.
+- **Aenderung im Arbeitsbaum:** Projektdokumente gehen ungekürzt als optionale, ganze Abschnitte in die Priorisierung; passt ein Abschnitt nicht, markiert das Budget ihn als ausgelassen. Ein begrenzter Explorer-Auszug nennt Pfad, enthaltene/urspruengliche Zeichenanzahl und weist fehlenden Inhalt explizit als unbekannt aus.
+- **Verifikation lokal:** Scout-Doku-, Budget-, Ketten-, Checkpoint- und Phase-State-Gruppe: 66 bestanden; Ruff und `git diff --check` bestanden.
+- **Grenze:** Weitere vorgelagerte Auszuege (z. B. Explorer-Zeilenfenster, Planner-/Architect-Kontext und Review-/Reflection-Rollen) brauchen eine rollenuebergreifende Herkunfts-/Fundstelleninventur. Dieser Follow-up ist lokal und noch nicht auf Main oder Server; OP-405 bleibt offen.

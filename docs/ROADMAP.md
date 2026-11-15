@@ -44,13 +44,12 @@ der Verify-Beleg je Kriterium fehlt. Die PR-CI [43691263964](https://github.com/
 bestand mit 2.351 Tests; Ruff, Mypy, AST und Audit-Katalog waren gruen. Das
 belegt den PR-Stand, nicht den Produktionsserver. OP-398 bleibt offen.
 
-Main `017fcb3` bindet die Kriterien-Verify-Belege an Task und Run-ID. Fuer
+Main `1e50568` bindet Kriterien-Verify-Belege an Task und Run-ID und
+dispatcht jeweils einen Task mit erneuter Checkpoint-Entscheidung. Fuer
 `41d7f4b` wurde ein Servercheckout-Lauf mit 2.399 bestandenen und 5
-uebersprungenen Tests bestaetigt; dieser Beleg gilt nicht fuer `017fcb3`.
-Der aktuelle lokale Dispatcher-Follow-up gibt jeweils einen Task frei und
-wertet den Checkpoint vor dem naechsten Task neu aus. Er ersetzt noch nicht
-die feste Setup-/Plan-Vorbereitung und ist weder vollstaendig noch auf dem
-Server verifiziert.
+uebersprungenen Tests bestaetigt; dieser Beleg gilt nicht fuer `1e50568`.
+Die Server-Vollsuite fuer `1e50568` steht aus. Setup und Planfreigabe sind
+noch nicht Teil einer vollstaendig dynamischen Run-Dispatch-Schleife.
 
 
 ### 1. Chat und UI als Arbeitsoberflaeche
