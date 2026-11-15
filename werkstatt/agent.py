@@ -12,6 +12,7 @@ import json
 import subprocess
 import threading
 import time
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -170,27 +171,63 @@ def _safe_context_manifest(
         return None
 
     forbidden = {"content", "excerpt", "prompt", "system", "text", "user"}
+    remaining_nodes = 512
+    remaining_chars = 16_000
+    truncated = False
 
     def clean(value: Any, depth: int = 0) -> Any:
+        nonlocal remaining_nodes, remaining_chars, truncated
+        if remaining_nodes <= 0:
+            truncated = True
+            return "[manifest_node_limit]"
+        remaining_nodes -= 1
         if value is None or isinstance(value, (bool, int, float)):
             return value
         if isinstance(value, str):
-            return value[:240]
+            allowed = min(240, remaining_chars)
+            cleaned = value[:allowed]
+            remaining_chars -= len(cleaned)
+            if len(value) > len(cleaned):
+                truncated = True
+            return cleaned
         if depth >= 4:
+            truncated = True
             return "[metadata_depth_limit]"
         if isinstance(value, list):
-            return [clean(item, depth + 1) for item in value[:50]]
+            cleaned_list = []
+            for item in value[:50]:
+                if remaining_nodes <= 0 or remaining_chars <= 0:
+                    truncated = True
+                    break
+                cleaned_list.append(clean(item, depth + 1))
+            if len(value) > len(cleaned_list):
+                truncated = True
+            return cleaned_list
         if isinstance(value, dict):
-            result: dict[str, Any] = {}
-            for key, item in list(value.items())[:50]:
+            cleaned_dict: dict[str, Any] = {}
+            entries = list(islice(value.items(), 50))
+            for key, item in entries:
                 if not isinstance(key, str) or key.lower() in forbidden:
                     continue
-                result[key[:80]] = clean(item, depth + 1)
-            return result
+                if remaining_nodes <= 0 or remaining_chars <= 0:
+                    truncated = True
+                    break
+                cleaned_key = key[:80]
+                remaining_chars -= len(cleaned_key)
+                if len(key) > len(cleaned_key):
+                    truncated = True
+                cleaned_dict[cleaned_key] = clean(item, depth + 1)
+            if len(value) > len(entries):
+                truncated = True
+            return cleaned_dict
         return f"[unsupported:{type(value).__name__}]"
 
     cleaned = clean(manifest)
-    return cleaned if isinstance(cleaned, dict) else None
+    if not isinstance(cleaned, dict):
+        return None
+    if truncated:
+        cleaned["_manifest_truncated"] = True
+    return cleaned
 
 
 def _rolle_aus_aufgabe(aufgabe: str) -> str:

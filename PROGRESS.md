@@ -7122,3 +7122,15 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung lokal:** Der Chat baut den Provider-JSON-Body ueber eine gemeinsame Funktion. Vor jedem Modellaufruf erzeugt er daraus einen inhaltsneutralen Request-Fingerprint, Fingerprints/Zeichenlaengen pro Nachricht, Rollenanzahlen und Tool-Schema-Hash. Chatjobs persistieren den Beleg als `model_request`; Reflection bindet denselben Beleg ueber Projekt, Session, Task, aktuelle Evidenzhash und Run-ID an Control-Audit.
 - **Verifikation lokal:** Chat-Agent-, Chatjob-, Reflection-Chat-, Chat-Tools-, Chat-Frontend- und Live-Feed-Gruppen: 216 bestanden, 2 uebersprungen; zusaetzlich 15 Audit-Tests bestanden. Ruff, Mypy, Audit-Katalog/Control-Drift, strikter Doku-Driftcheck und `git diff --check` bestanden. Server/CI offen.
 - **Grenze / Hauptziel:** Der Nachweis belegt strukturell, was dem Provider-Adapter uebergeben wird, nicht die semantische Relevanz/Vollstaendigkeit jeder Nachricht oder die Ergebnisqualitaet. OP-396, OP-398 und OP-405 bleiben offen.
+
+
+## 2026-11-15 – Server-Vollsuite fuer Main `22e466f` bestaetigt
+- **Beleg:** Der Nutzer hat `git pull --ff-only origin main`, `git rev-parse --short HEAD` mit `22e466f` und `.venv/bin/python -m pytest -q -m 'not slow'` ausgefuehrt. Ergebnis: 2.463 bestanden, 5 uebersprungen, 0 fehlgeschlagen in 100,83 Sekunden.
+- **Aussagegrenze:** Der Lauf belegt die Vollsuite dieses Checkouts. Er belegt weder, dass der Webserver mit `22e466f` neu gestartet wurde, noch Produktionsverhalten.
+
+
+## 2026-11-15 – Rollenmanifest gegen verschachtelte Payload-Explosion begrenzen (lokal)
+- **Befund:** Das Kontextmanifest war je Feld und Tiefe begrenzt, hatte aber kein globales Knoten- oder Zeichenbudget; viele verschachtelte Container konnten trotzdem eine sehr grosse Audit-Payload erzeugen.
+- **Aenderung lokal:** Der Sanitizer begrenzt die gesamte Metadatenstruktur auf 512 Knoten und 16.000 Zeichen, liest aus Maps hoechstens 50 Eintraege und setzt `_manifest_truncated`, sobald Tiefe, Knoten, Felder oder Zeichen gekuerzt werden. Quell-/Prompttext bleibt weiterhin ausgeschlossen.
+- **Verifikation lokal:** Agent-, Builder-, Scout-, Planner-, Architect-, Explorer- und Reviewer-Evidenzgruppe: 74 bestanden, 3 uebersprungen; Ruff, Mypy, Control-Drift, strikter Doku-Drift und `git diff --check` bestanden.
+- **Grenze:** Der Nutzer bestaetigte zuvor die Server-Vollsuite fuer `22e466f` (2.463 bestanden, 5 uebersprungen); dieser lokale Folgeschritt ist darin nicht enthalten.

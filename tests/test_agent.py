@@ -107,3 +107,15 @@ def test_llm_call_binds_context_manifest_to_exact_sent_prompt(
     assert call["user_sha256"] == hashlib.sha256(
         b"user payload",
     ).hexdigest()
+
+
+def test_context_manifest_bounds_total_nested_metadata_size() -> None:
+    nested = "x" * 240
+    for _ in range(5):
+        nested = [nested] * 50
+
+    cleaned = agent._safe_context_manifest({"branch": nested})
+
+    assert cleaned is not None
+    assert cleaned["_manifest_truncated"] is True
+    assert len(json.dumps(cleaned, ensure_ascii=False)) < 32_000
