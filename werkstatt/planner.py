@@ -60,6 +60,26 @@ class TaskGraphError(ValueError):
 
 
 ARCHITECT_EXECUTION_CONTEXT_MAX_CHARS = 12000
+PLANNER_SPLIT_CONTEXT_MAX_CHARS = 60000
+
+
+def _planner_split_context_fits(
+    role: str, system: str, user: str, pd, pn,
+) -> bool:
+    """Reject oversized required planning context instead of silently slicing it."""
+    total = len(system) + len(user)
+    fits = total <= PLANNER_SPLIT_CONTEXT_MAX_CHARS
+    audit("planner_split_context_budget", {
+        "role": role,
+        "max_chars": PLANNER_SPLIT_CONTEXT_MAX_CHARS,
+        "system_chars": len(system),
+        "user_chars": len(user),
+        "total_chars": total,
+        "required_context_complete": fits,
+        "omitted": [],
+        "action": "send" if fits else "blocked",
+    }, pd, pn)
+    return fits
 
 
 def _budget_architect_execution_context(
@@ -849,19 +869,23 @@ def _llm_split_einzel_task(
     prosa: str, task: dict, api_key: str, pd, pn,
 ) -> list[dict]:
     """M-469: Zerlegt EINEN zu grossen Task in 2-3 Sub-Tasks (LLM)."""
+    _system = PLANNER_SPLIT_SINGLE_SYSTEM
     _user = (
         f"## ZU GROSSER TASK:\n"
         f"id: {task.get('id')}\n"
         f"name: {task.get('name')}\n"
         f"criterion_refs: {task.get('criterion_refs') or []}\n"
-        f"description (Laenge {len(task.get('description', ''))}):\n"
-        f"{task.get('description', '')[:3000]}\n\n"
-        f"## ARCHITECT-PROSA (Kontext):\n{prosa[:4000]}"
+        f"description (vollstaendig, Laenge "
+        f"{len(str(task.get('description', '')))}):\n"
+        f"{task.get('description', '')}\n\n"
+        f"## ARCHITECT-PROSA (vollstaendig, Laenge {len(prosa)}):\n{prosa}"
     )
+    if not _planner_split_context_fits("planner-split-single", _system, _user, pd, pn):
+        return []
     reply = _with_spinner(
         f"Split-{task.get('id', '?')}",
         lambda: ask_llm(
-            api_key, PLANNER_SPLIT_SINGLE_SYSTEM, _user,
+            api_key, _system, _user,
             model="deepseek-chat", temperature=0.2, max_tokens=4000,
             aufgabe="planner-split",
         ),
@@ -1500,11 +1524,16 @@ def _zerlege_in_sub_tasks(
     _user = (
         (f"{_skb}\n\n" if _skb else "")
         + f"{_mess_planner_block}"
-        + (f"## ORIGINALAUFTRAG:\n{_originalauftrag[:12000]}\n\n"
+        + (f"## ORIGINALAUFTRAG (vollstaendig, Laenge "
+           f"{len(_originalauftrag)}):\n{_originalauftrag}\n\n"
            if _originalauftrag else "")
         + f"## ARCHITECT-PROSA:\n{prosa}\n\n"
         + "## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files)
     )
+    if not _planner_split_context_fits(
+        "planner-split", PLANNER_SPLIT_SYSTEM, _user, pd, pn,
+    ):
+        return []
     reply = _with_spinner(
         "Planner-Split",
         lambda: ask_llm(

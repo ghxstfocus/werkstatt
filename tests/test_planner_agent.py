@@ -624,7 +624,10 @@ def test_planner_split_persistiert_abnahmekriterien_und_originalauftrag(tmp_path
     from werkstatt.planner import _zerlege_in_sub_tasks
 
     st = _state(tmp_path)
-    st.aufgabe = "OP-900: Der API-Endpunkt muss Projektisolation erzwingen."
+    st.aufgabe = (
+        "OP-900: Der API-Endpunkt muss Projektisolation erzwingen.\n"
+        + "Vollstaendige Anforderung. " * 600
+    )
     reply = MagicMock(
         ok=True,
         content=json.dumps({
@@ -664,7 +667,35 @@ def test_planner_split_persistiert_abnahmekriterien_und_originalauftrag(tmp_path
         "Fremde Projekte liefern keine Ereignisse.",
     ]
     assert "ORIGINALAUFTRAG" in captured["prompt"]
-    assert st.aufgabe in captured["prompt"]
+    assert st.aufgabe.strip() in captured["prompt"]
+
+
+def test_planner_split_blockiert_uebergrossen_auftrag_statt_vorab_zu_schneiden(
+    tmp_path,
+):
+    """Pflichtkontext muss vollstaendig ankommen oder vor dem LLM stoppen."""
+    from werkstatt.planner import _zerlege_in_sub_tasks
+
+    aufruf = "OP-999: " + ("vollstaendiger Auftrag. " * 3000)
+    llm_calls = []
+    audit_events = []
+    with patch(
+        "werkstatt.planner.ask_llm",
+        side_effect=lambda *args, **kwargs: llm_calls.append((args, kwargs)),
+    ), patch("werkstatt.planner._with_spinner", side_effect=lambda _label, fn: fn()), \
+         patch("werkstatt.planner.audit", side_effect=lambda *args: audit_events.append(args)):
+        tasks = _zerlege_in_sub_tasks(
+            "## werkstatt/demo.py\nAendere die Funktion.",
+            ["werkstatt/demo.py"], "fake", tmp_path, "demo",
+            aufgabe=aufruf,
+        )
+
+    assert tasks == []
+    assert llm_calls == []
+    budget_events = [event for event in audit_events if event[0] == "planner_split_context_budget"]
+    assert len(budget_events) == 1
+    assert budget_events[0][1]["required_context_complete"] is False
+    assert budget_events[0][1]["omitted"] == []
 
 
 def test_run_planner_behaelt_kriterien_des_planner_splits(tmp_path):
