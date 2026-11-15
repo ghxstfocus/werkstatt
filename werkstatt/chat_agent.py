@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -22,15 +23,25 @@ __all__ = ["chat_loop"]
 
 _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 _DEFAULT_MAX_ROUNDS: int | None = None
+_DEFAULT_MAX_ELAPSED_S = 120.0
 
 
 class ChatCancelled(RuntimeError):
     """Chat-Auftrag wurde kooperativ abgebrochen."""
 
 
+class ChatDeadlineExceeded(RuntimeError):
+    """Chat-Auftrag hat sein Zeitbudget fuer weitere Recherche erreicht."""
+
+
 def _check_cancel(cancel_check: Callable[[], bool] | None) -> None:
     if cancel_check is not None and cancel_check():
         raise ChatCancelled("Chat-Auftrag abgebrochen")
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise ChatDeadlineExceeded("Chat-Recherchezeitbudget erreicht")
 
 
 def _repeated_tool_cycle(
@@ -826,6 +837,9 @@ def _deepseek_chat(
     return {"choices": [{"message": inner}], "usage": usage}
 
 
+_DEFAULT_DEEPSEEK_CHAT = _deepseek_chat
+
+
 def _finalisiere_chat(
     messages: list[dict[str, Any]],
     session: ChatSession,
@@ -849,6 +863,12 @@ def _finalisiere_chat(
             " Derselbe Werkzeugaufruf hat wiederholt dasselbe Ergebnis geliefert. "
             "Wiederhole ihn nicht; erklaere den belegten Stand und den naechsten "
             "sinnvollen Schritt."
+        )
+    elif grund == "time_budget":
+        _abschluss_prompt += (
+            " Das Recherche-Zeitbudget ist erreicht. Beende jetzt mit den "
+            "bereits erhobenen Werkzeugbelegen; starte keine neue Recherche. "
+            "Kennzeichne fehlende Belege und offene Fragen klar."
         )
     else:
         _abschluss_prompt += (
@@ -898,6 +918,8 @@ def chat_loop(
     cancel_check: Callable[[], bool] | None = None,
     origin_session_id: str | None = None,
     on_llm_call: Callable[[], None] | None = None,
+    max_elapsed_s: float | None = _DEFAULT_MAX_ELAPSED_S,
+    on_research_budget: Callable[[float], None] | None = None,
 ) -> str:
     """User-Nachricht -> LLM-Loop -> Assistant-Antwort."""
     tools = tools if tools is not None else CHAT_TOOLS
@@ -941,6 +963,21 @@ def chat_loop(
 
     if max_rounds is not None and max_rounds < 0:
         raise ValueError("max_rounds darf nicht negativ sein")
+    if max_elapsed_s is not None and max_elapsed_s <= 0:
+        raise ValueError("max_elapsed_s muss positiv sein oder None")
+    deadline = (
+        None if max_elapsed_s is None else time.monotonic() + max_elapsed_s
+    )
+
+    def _finish_time_budget() -> str:
+        if on_research_budget is not None and max_elapsed_s is not None:
+            on_research_budget(max_elapsed_s)
+        return _finalisiere_chat(
+            messages, session, grund="time_budget",
+            on_chunk=on_chunk, cancel_check=cancel_check,
+            on_llm_call=on_llm_call,
+        )
+
     _rounds = 0
     _recent_tool_fingerprints: list[str] = []
     _warned_tool_cycles: set[tuple[str, ...]] = set()
@@ -949,15 +986,33 @@ def chat_loop(
     op_handoff_result: dict[str, Any] | None = None
     while max_rounds is None or _rounds < max_rounds:
         _check_cancel(cancel_check)
+        if deadline is not None and time.monotonic() >= deadline:
+            return _finish_time_budget()
         _rounds += 1
         if on_llm_call is not None:
             on_llm_call()
-        if cancel_check is None:
-            resp = _deepseek_chat(messages, tools=schemas)
-        else:
-            resp = _deepseek_chat(
-                messages, tools=schemas, cancel_check=cancel_check,
-            )
+        try:
+            if cancel_check is None and _deepseek_chat is _DEFAULT_DEEPSEEK_CHAT:
+                def _deadline_check() -> bool:
+                    _check_deadline(deadline)
+                    return False
+
+                resp = _deepseek_chat(
+                    messages, tools=schemas, cancel_check=_deadline_check,
+                )
+            elif cancel_check is None:
+                resp = _deepseek_chat(messages, tools=schemas)
+            else:
+                def _request_check() -> bool:
+                    _check_deadline(deadline)
+                    _check_cancel(cancel_check)
+                    return False
+
+                resp = _deepseek_chat(
+                    messages, tools=schemas, cancel_check=_request_check,
+                )
+        except ChatDeadlineExceeded:
+            return _finish_time_budget()
         _usage = resp.get("usage")
         if _usage and _usage.get("total_tokens"):
             session.append("token_usage", _usage)
@@ -1129,6 +1184,9 @@ def chat_loop(
                     "den vorhandenen Belegen und offenen Punkten."
                 ),
             })
+
+        if deadline is not None and time.monotonic() >= deadline:
+            return _finish_time_budget()
 
     return _finalisiere_chat(
         messages, session, grund="round_limit",

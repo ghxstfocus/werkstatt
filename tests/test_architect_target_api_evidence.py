@@ -590,12 +590,26 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
     report = {
         "auftrag_prosa": prosa,
         "api_auszug": {"pkg/target.py": [f"api_{index}" for index in range(30)]},
+        "relevante_dateien": [{
+            "pfad": "pkg/target.py",
+            "zeilen": [25],
+            "warum": "Scout hat die Zieldatei benannt",
+        }],
         "risiken": [f"Risiko {index}: " + "R" * 240 for index in range(12)],
         "api_widersprueche": [
             {"datei": "pkg/api.py", "symbol": f"missing_{index}"}
             for index in range(12)
         ],
     }
+    target = tmp_path / "pkg" / "target.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "\n".join(
+            f"line_{line}" + (" = 'live target evidence'" if line == 25 else "")
+            for line in range(1, 51)
+        ),
+        encoding="utf-8",
+    )
     captured: dict[str, str] = {}
     audits: list[tuple[str, dict]] = []
 
@@ -627,6 +641,8 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
     assert "api_29" in prompt
     assert "Risiko 11: " + "R" * 240 in prompt
     assert '"symbol": "missing_11"' in prompt
+    assert "live target evidence" in prompt
+    assert 'datei="pkg/target.py" zeilen="15-35"' in prompt
 
     canonical = json.dumps(
         report, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
@@ -641,3 +657,59 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
     assert event["scout_source_sha256"] == hashlib.sha256(
         canonical.encode("utf-8"),
     ).hexdigest()
+    source = event["source_evidence"]["sources"][0]
+    assert source["path"] == "pkg/target.py"
+    assert source["included_ranges"] == [[15, 35]]
+    assert source["source_sha256"] == hashlib.sha256(
+        target.read_bytes(),
+    ).hexdigest()
+
+
+def test_architect_source_retrieval_is_project_confined_and_marks_rejection(
+    tmp_path,
+) -> None:
+    from werkstatt.architect import _format_scout_source_evidence
+
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside.py"
+    outside.write_text("SECRET_OUTSIDE = True\n", encoding="utf-8")
+    report = {
+        "relevante_dateien": [
+            {"pfad": "../outside.py", "zeilen": [1]},
+            {"pfad": str(tmp_path / "absolute.py"), "zeilen": [1]},
+        ],
+    }
+
+    rendered, manifest = _format_scout_source_evidence(project, report)
+
+    assert "SECRET_OUTSIDE" not in rendered
+    assert "QUELLDATEIEN ABGELEHNT" in rendered
+    assert manifest["included_files"] == []
+    assert [item["reason"] for item in manifest["rejected_files"]] == [
+        "unsafe_or_unsupported_path",
+        "unsafe_or_unsupported_path",
+    ]
+
+
+def test_architect_scout_source_budget_marks_omissions_and_stale_hints(
+    tmp_path,
+) -> None:
+    from werkstatt.architect import _format_scout_source_evidence
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "target.py").write_text(
+        "def target():\n    return 'current'\n", encoding="utf-8",
+    )
+    rendered, manifest = _format_scout_source_evidence(
+        project,
+        {"relevante_dateien": [{
+            "pfad": "target.py", "zeilen": [90],
+        }]},
+        max_files=1, max_chars=2_000,
+    )
+
+    assert len(rendered) <= 2_000
+    assert "ausserhalb der aktuellen Datei" in rendered
+    assert manifest["sources"][0]["unresolved_line_hints"] == [90]

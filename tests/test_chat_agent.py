@@ -935,6 +935,34 @@ def test_chat_loop_default_laeuft_ueber_fuenf_werkzeugrunden_weiter(
     assert sum(event["kind"] == "tool_call" for event in session.load()) == 7
 
 
+def test_chat_loop_beendet_recherche_am_zeit_checkpoint(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = iter((0.0, 2.0))
+    monkeypatch.setattr(chat_agent.time, "monotonic", lambda: next(clock))
+    requests_seen: list[list[dict[str, Any]]] = []
+
+    def _fake_llm(messages, tools=None, cancel_check=None):
+        requests_seen.append(messages)
+        return {"choices": [{"message": {
+            "role": "assistant",
+            "content": "Keine Recherchebelege vorhanden; die Frage bleibt offen.",
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", _fake_llm)
+    budgets: list[float] = []
+    answer = chat_agent.chat_loop(
+        session, "Untersuche den Projektstatus", max_elapsed_s=1.0,
+        on_research_budget=budgets.append,
+    )
+
+    assert answer == "Keine Recherchebelege vorhanden; die Frage bleibt offen."
+    assert len(requests_seen) == 1
+    assert "Recherche-Zeitbudget" in requests_seen[0][-1]["content"]
+    assert budgets == [1.0]
+
+
 def test_chat_loop_abbruch_nach_werkzeugschritt_bleibt_replaybar(
     session: ChatSession,
     monkeypatch: pytest.MonkeyPatch,

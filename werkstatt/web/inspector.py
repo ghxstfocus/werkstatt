@@ -745,6 +745,7 @@ _TL_LABELS: dict[str, str] = {
     "chat_job_chunk": "Chat-Antwort",
     "chat_job_tool_call": "Chat-Tool gestartet",
     "chat_job_tool_result": "Chat-Tool abgeschlossen",
+    "chat_job_research_budget_reached": "Recherche-Zeitbudget erreicht; Chat schliesst mit vorhandenen Belegen ab",
     "chat_job_succeeded": "Chat-Antwort fertig",
     "chat_job_failed": "Chat-Antwort fehlgeschlagen",
     "chat_job_cancelled": "Chat-Antwort abgebrochen",
