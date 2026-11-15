@@ -5,6 +5,7 @@ Audit laeuft echt (conftest._isolate_audit leitet nach tmp_path).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -215,7 +216,7 @@ def test_system_len_nach_redaction(tmp_path):
 def test_audit_llm_call(tmp_path):
     s = _state(tmp_path)
     with patch("werkstatt.agent.requests.post",
-               return_value=_ok_response()):
+               return_value=_ok_response()) as post:
         _call(s, system="S" * 10, user="U" * 20)
     evs = [e for e in _audit_events(tmp_path) if e.get("kind") == "llm_call"]
     assert len(evs) == 1
@@ -225,6 +226,13 @@ def test_audit_llm_call(tmp_path):
     assert ev["model"] == "deepseek-flash"
     assert ev["system_len"] == 10
     assert ev["user_len"] == 20
+    sent = post.call_args.kwargs["json"]["messages"]
+    assert ev["system_sha256"] == hashlib.sha256(
+        sent[0]["content"].encode("utf-8")
+    ).hexdigest()
+    assert ev["user_sha256"] == hashlib.sha256(
+        sent[1]["content"].encode("utf-8")
+    ).hexdigest()
     assert ev["max_tokens"] == 1024
 
 
