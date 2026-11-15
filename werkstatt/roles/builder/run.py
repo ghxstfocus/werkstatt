@@ -28,6 +28,12 @@ from .validate import _validate_imports_in_patch
 _BUILDER_CONTEXT_MAX_CHARS = 60_000
 
 
+def _builder_failure(state: RunState, reason: str) -> bool:
+    """Store a safe, typed failure reason for checkpoint routing."""
+    state.builder_failure_reason = reason
+    return False
+
+
 def _budget_builder_context(
     required: list[tuple[str, str]],
     optional: list[tuple[str, str]],
@@ -436,6 +442,7 @@ def _build_patches_fuer_datei(
         **_context_meta,
     }, pd, pn)
     if _user is None:
+        _builder_failure(state, "required_context_over_budget")
         return []
     reply = _bglob.ask_llm(
         api_key, BUILDER_SYSTEM, _user,
@@ -446,6 +453,7 @@ def _build_patches_fuer_datei(
         progress_context={"files": [zieldatei]},
     )
     if not reply.ok:
+        _builder_failure(state, "provider_error")
         _bglob.audit("builder_architect_llm_fehler",
               {"datei": zieldatei, "fehler": reply.error}, pd, pn)
         return []
@@ -453,15 +461,18 @@ def _build_patches_fuer_datei(
     start = raw.find("{")
     end = raw.rfind("}") + 1
     if start < 0 or end <= start:
+        _builder_failure(state, "invalid_model_response")
         _bglob.audit("builder_architect_json_fehler",
               {"datei": zieldatei, "raw": raw[:200]}, pd, pn)
         return []
     try:
         parsed = _json.loads(raw[start:end])
     except _json.JSONDecodeError:
+        _builder_failure(state, "invalid_model_response")
         return []
     patches = parsed.get("patches") or []
     if not isinstance(patches, list):
+        _builder_failure(state, "invalid_patch_response")
         return []
     if not patches:
         # GOLD 2026-10-30: LLM hat geantwortet, aber keine Patches
@@ -483,6 +494,7 @@ def _build_patches_fuer_datei(
         _bglob.audit("builder_keine_patches_gold",
               {"zieldatei": zieldatei,
                "grund": "llm_keine_patches"}, pd, pn)
+        _builder_failure(state, "no_patch_proposed")
         return []
     for p in patches:
         if isinstance(p, dict):
@@ -515,6 +527,7 @@ def _build_patches_fuer_datei(
             task_files=getattr(state, "tasks", [{}])[0].get("task_files", []) if getattr(state, "tasks", None) else None,
         )
         if _fehlend:
+            _builder_failure(state, "invalid_patch_import")
             _bglob.audit("builder_patch_import_fehler",
                   {"datei": zieldatei, "fehlend": _fehlend}, pd, pn)
             _feedback_neu.append(
@@ -589,15 +602,16 @@ def run_builder(state: RunState) -> bool:
     pd = state.project_dir
     pn = state.project_name
     api_key = state.api_key
+    state.builder_failure_reason = ""
 
     if not api_key:
         _bglob.audit("builder_kein_key", {}, pd, pn)
-        return False
+        return _builder_failure(state, "missing_api_key")
 
     tasks = state.tasks
     if not tasks:
         _bglob.audit("builder_keine_tasks", {}, pd, pn)
-        return False
+        return _builder_failure(state, "missing_tasks")
 
     # M-306a: Read-only-Tasks. Wenn ALLE Tasks action="read" haben,
     # ist der Task eine Bestandsaufnahme. Builder ruft keinen LLM,
@@ -825,7 +839,7 @@ def run_builder(state: RunState) -> bool:
     _aktuelle_task = getattr(state, "aktuelle_task", None)
     if not isinstance(_aktuelle_task, dict):
         _bglob.audit("builder_keine_aktuelle_task", {}, pd, pn)
-        return False
+        return _builder_failure(state, "missing_current_task")
     _task_files = _aktuelle_task.get("task_files", []) or []
     _current_action2 = _aktuelle_task.get("action", "update")
     _is_architect = _current_action2 == "architect"
@@ -843,7 +857,7 @@ def run_builder(state: RunState) -> bool:
         _alle_dateien = [f for f in _task_files if isinstance(f, str) and f]
         if not _alle_dateien:
             _bglob.audit("builder_architect_keine_dateien", {}, pd, pn)
-            return False
+            return _builder_failure(state, "missing_target_files")
         _alle_patches: list[dict] = []
         _dateien_ok: list[str] = []
         for _zd in _alle_dateien:
@@ -861,6 +875,8 @@ def run_builder(state: RunState) -> bool:
         if not _alle_patches:
             _bglob.audit("builder_architect_keine_patches",
                   {"dateien": _alle_dateien}, pd, pn)
+            if not state.builder_failure_reason:
+                _builder_failure(state, "no_patch_proposed")
             return False
         state.patches = _alle_patches
         _bglob.audit("builder_architect_patches",
@@ -906,12 +922,12 @@ def run_builder(state: RunState) -> bool:
                 _bglob.audit("builder_zieldatei_nicht_gefunden",
                       {"task_files": _task_files, "action": _current_action2},
                       pd, pn)
-                return False
+                return _builder_failure(state, "missing_target_file")
         else:
             _bglob.audit("builder_zieldatei_nicht_gefunden",
                   {"task_files": _task_files, "action": _current_action2},
                   pd, pn)
-            return False
+            return _builder_failure(state, "missing_target_file")
 
     # Volle Zieldatei in den Prompt (nicht letzte 50 Zeilen),
     # damit old_string exakt passt.
@@ -977,9 +993,12 @@ def run_builder(state: RunState) -> bool:
         # GOLD 2026-10-30: pruefen, ob der LLM-Pfad bereits das
         # auftrag_bereits_erfuellt-Flag gesetzt hat.
         if state.auftrag_bereits_erfuellt:
+            state.builder_failure_reason = ""
             return True
         _bglob.audit("builder_keine_patches_gold",
               {"zieldatei": _zieldatei}, pd, pn)
+        if not state.builder_failure_reason:
+            _builder_failure(state, "no_patch_proposed")
         return False
 
     # GOLD 2026-10-30: no_effect-Patches filtern (old == new).
@@ -1037,7 +1056,7 @@ def run_builder(state: RunState) -> bool:
                   pd, pn)
             # NICHT als "bereits erfuellt" markieren.
             # Loop muss das als Fehler sehen (task_failed).
-            return False
+            return _builder_failure(state, "ambiguous_patch_anchor")
 
         # Ansonsten: bisheriges Verhalten — Auftrag ist bereits erfuellt.
         state.auftrag_bereits_erfuellt = True
@@ -1059,7 +1078,7 @@ def run_builder(state: RunState) -> bool:
             _bglob.audit("builder_patch_invalid",
                   {"file": _pfile, "zieldatei": _zieldatei,
                    "grund": "falsche Datei"}, pd, pn)
-            return False
+            return _builder_failure(state, "invalid_patch_scope")
         _paction = _p.get("action")
         # Fix AV-3 2026-10-31: delete als Alternative zu update akzeptieren.
         # Planner setzt bei "Datei entfernen"-Tasks action="update" (kennt
@@ -1069,11 +1088,11 @@ def run_builder(state: RunState) -> bool:
         if _current_action2 == "update" and _paction not in ("update", "delete"):
             _bglob.audit("builder_patch_invalid",
                   {"action": _paction, "expected": "update|delete"}, pd, pn)
-            return False
+            return _builder_failure(state, "invalid_patch_action")
         if _current_action2 == "create" and _paction != "create":
             _bglob.audit("builder_patch_invalid",
                   {"action": _paction, "expected": "create"}, pd, pn)
-            return False
+            return _builder_failure(state, "invalid_patch_action")
 
     # Patches in State schreiben (spaeter anwenden)
     # M-351: Patches mit identischem Inhalt (old == new) sind no_effect.
@@ -1088,7 +1107,7 @@ def run_builder(state: RunState) -> bool:
         _effective_patches.append(_p)
     if not _effective_patches:
         _bglob.audit("builder_keine_wirksamen_patches", {}, pd, pn)
-        return False
+        return _builder_failure(state, "no_effect_patch")
     state.patches = _effective_patches
     _bglob.audit("builder_patches_erstellt", {"anzahl": len(_effective_patches)}, pd, pn)
     return True

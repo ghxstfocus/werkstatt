@@ -91,29 +91,21 @@ def test_reviewer_filtert_diff_erwartung_bei_verify():
 
 
 def test_verify_setzt_kein_auftrag_bereits_erfuellt():
-    """AK (e)(iv): verify-Zweig darf state.auftrag_bereits_erfuellt NICHT setzen.
+    """Checkpoint routes verify tasks away from Builder/idempotency logic."""
+    from werkstatt.phases.tasks import _checkpoint_decision_payload
 
-    Spec-Treue: bei action='verify' laeuft kein Builder, also kann
-    der Builder auch nicht 'auftrag_bereits_erfuellt' setzen. Der
-    verify-Zweig in _phase_tasks_loop prueft nur Zustand, er
-    markiert keinen Auftrag als erfuellt.
+    class Phase:
+        def progress(self):
+            return {"pending": 1, "failed": 0, "done": 0}
 
-    Prueft per Text-Scan den verify-Block (deterministischer Spec-Test,
-    AST-sicher weil der Block klar abgegrenzt ist durch
-    '_is_verify = isinstance' und 'continue').
-    """
-    from pathlib import Path as _P
-    _src = _P(__file__).resolve().parent.parent / "werkstatt" / "phases" / "tasks.py"
-    _text = _src.read_text(encoding="utf-8")
+        def criteria_progress(self):
+            return {
+                "tracked": True, "valid": True,
+                "covered": [], "uncovered": [],
+            }
 
-    _start = _text.find("_is_verify = isinstance(task_obj")
-    assert _start >= 0, "_is_verify-Block in tasks.py nicht gefunden"
-
-    _end = _text.find("continue", _start)
-    assert _end > _start, "verify-Block hat kein abschliessendes continue"
-
-    _block = _text[_start:_end]
-    assert "auftrag_bereits_erfuellt" not in _block, (
-        "AK (e)(iv): verify-Zweig darf state.auftrag_bereits_erfuellt "
-        f"NICHT setzen. Gefunden in Block: {_block[:300]!r}"
+    decision = _checkpoint_decision_payload(
+        Phase(), {"id": "verify-1", "action": "verify"},
     )
+    assert decision["decision"] == "execute_planned_task"
+    assert decision["next_executor"] == "verify_and_review"

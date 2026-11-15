@@ -87,6 +87,20 @@ def test_checkpoint_selects_registered_executor_for_task_action(
     assert executor in decision["reason"]
 
 
+def test_builder_recovery_only_retries_typed_correctable_failures() -> None:
+    from werkstatt.phases.tasks import _builder_failure_recoverable
+
+    state = _state(Path("."))
+    state.builder_failure_reason = "invalid_patch_import"
+    assert _builder_failure_recoverable(state) == (True, "invalid_patch_import")
+
+    state.builder_failure_reason = "provider_error"
+    assert _builder_failure_recoverable(state) == (False, "provider_error")
+
+    state.builder_failure_reason = ""
+    assert _builder_failure_recoverable(state) == (False, "failure_reason_missing")
+
+
 def test_checkpoint_rejects_unregistered_task_action() -> None:
     from werkstatt.phases.tasks import _checkpoint_decision_payload
 

@@ -43,6 +43,25 @@ from ._common import (
     run_reviewer,
 )
 
+_RECOVERABLE_BUILDER_FAILURES = frozenset({
+    "invalid_model_response",
+    "invalid_patch_response",
+    "invalid_patch_import",
+    "no_patch_proposed",
+    "ambiguous_patch_anchor",
+    "invalid_patch_scope",
+    "invalid_patch_action",
+    "no_effect_patch",
+})
+
+
+def _builder_failure_recoverable(state: RunState) -> tuple[bool, str]:
+    """Retry only failures with a concrete, correctable Builder result."""
+    reason = getattr(state, "builder_failure_reason", "")
+    if not isinstance(reason, str) or not reason:
+        return False, "failure_reason_missing"
+    return reason in _RECOVERABLE_BUILDER_FAILURES, reason
+
 
 def _reflect_verify_failure(state: RunState, phase: str) -> bool:
     """Recover failing verify stages and re-run the complete phase contract."""
@@ -946,7 +965,14 @@ def _phase_tasks_loop(
             _has_failed_dependency, _failed_dependency_files = (
                 _pruefe_prior_failed_dependency(phase_state, task_id)
             )
-            if _loop_action in ("create", "update") and not _has_failed_dependency:
+            _builder_recoverable, _builder_failure_reason = (
+                _builder_failure_recoverable(state)
+            )
+            if (
+                _loop_action in ("create", "update")
+                and not _has_failed_dependency
+                and _builder_recoverable
+            ):
                 audit(
                     "loop_builder_recovery_start",
                     {"task_id": i, "action": _loop_action,
@@ -957,8 +983,9 @@ def _phase_tasks_loop(
                     state,
                     max_runden=1,
                     error_context=(
-                        "Der Builder-Aufruf ist fehlgeschlagen. Prüfe die "
-                        "aktuellen Verify-Belege und versuche eine gezielte, "
+                        "Der Builder hat einen korrigierbaren Fehler gemeldet: "
+                        f"{_builder_failure_reason}. Prüfe passende "
+                        "Quell-/Verify-Belege und versuche eine gezielte, "
                         "auf die aktuelle Aufgabe begrenzte Korrektur. "
                         "Task gilt nur bei erfolgreicher Verifikation als erledigt."
                     ),
@@ -980,6 +1007,19 @@ def _phase_tasks_loop(
                         via="single_reflection_checkpoint",
                     )
                     continue
+            elif _loop_action in ("create", "update"):
+                audit(
+                    "loop_builder_recovery_skipped",
+                    {
+                        "task_id": i,
+                        "reason": (
+                            "failed_dependency" if _has_failed_dependency
+                            else _builder_failure_reason
+                        ),
+                        "recoverable": _builder_recoverable,
+                    },
+                    pd, pn,
+                )
 
             # Idempotenz-Erkennung (nur create).
             # M-355: Loop-Idempotenz-Check entfernt. Der Builder

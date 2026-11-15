@@ -15,6 +15,7 @@
     "last_reject_reason",
     "last_verify_errors",
     "last_verify_results",
+    "llm_calls",
     "patches",
     "phasen",
     "reviewer_bugs",
@@ -30,7 +31,6 @@
   "tote": [
     "agent_docs",
     "block_id",
-    "budget",
     "start_ts"
   ]
 }

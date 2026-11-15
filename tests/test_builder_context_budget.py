@@ -9,6 +9,19 @@ from werkstatt.roles.builder.run import (
 from werkstatt.state import RunState
 
 
+def test_builder_records_missing_key_as_non_recoverable(monkeypatch, tmp_path) -> None:
+    from tests.factories import mk_state
+    from werkstatt.roles.builder import run_builder
+
+    state = mk_state(
+        project_dir=tmp_path,
+        api_key="",
+        tasks=[{"id": "t1", "action": "update"}],
+    )
+    monkeypatch.setattr("werkstatt.roles.builder._common.audit", lambda *_a, **_k: None)
+
+    assert run_builder(state) is False
+    assert state.builder_failure_reason == "missing_api_key"
 def test_builder_context_keeps_required_and_omits_optional_as_whole() -> None:
     prompt, meta = _budget_builder_context(
         [("TASK", "TASK-EVIDENCE"), ("FILE", "COMPLETE-FILE")],

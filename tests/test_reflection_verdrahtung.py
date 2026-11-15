@@ -41,10 +41,10 @@ def test_letzter_test_fehler_landet_im_prompt() -> None:
     baum = ast.parse(quelle)
     loop_body = None
     for knoten in ast.walk(baum):
-        if isinstance(knoten, ast.FunctionDef) and knoten.name == "_reflection_loop":
+        if isinstance(knoten, ast.FunctionDef) and knoten.name == "_reflection_loop_core":
             loop_body = ast.get_source_segment(quelle, knoten)
             break
-    assert loop_body is not None, "_reflection_loop nicht gefunden"
+    assert loop_body is not None, "_reflection_loop_core nicht gefunden"
     assert "format_letzter_test_fehler_block" in loop_body
 
 

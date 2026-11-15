@@ -266,6 +266,10 @@ class RunState:
     tests: list = field(default_factory=list)
     architect_prosa: str = ""
     builder_feedback: dict[str, str] = field(default_factory=dict)
+    # Structured outcome from the latest Builder call. The coordinator uses
+    # this to distinguish recoverable patch/response faults from missing
+    # prerequisites or provider failures before scheduling Reflection.
+    builder_failure_reason: str = ""
     patches: list[dict[str, Any]] = field(default_factory=list)
     patches_aktuell_runde: list[dict[str, object]] = \
         field(default_factory=list)

@@ -1,48 +1,68 @@
-"""Phase 5c — Scout liest priorisierte Projekt-Doku.
-
-Wirkungspruefung: _docs_prepend wird NACH user_content angehaengt.
-"""
+"""Scout receives prioritized project documents through its budgeted context."""
 from __future__ import annotations
 
-from pathlib import Path
+import json
+from types import SimpleNamespace
 
-SCOUT = Path("/opt/werkstatt/werkstatt/scout.py")
-
-
-def test_scout_hat_projekt_doku_sektion():
-    src = SCOUT.read_text(encoding="utf-8")
-    assert "## PROJEKT-DOKU" in src
-    assert "_DOCS_PRIO" in src
-    assert "[:4000]" in src
+from tests.factories import mk_state
+from werkstatt import scout
 
 
-def test_scout_prioritaet_reihenfolge():
-    src = SCOUT.read_text(encoding="utf-8")
-    prio_start = src.find("_DOCS_PRIO =")
-    assert prio_start > 0
-    prio_str = src[prio_start:prio_start + 250]
-    assert prio_str.find('"entry"') < prio_str.find('"status"')
-    assert prio_str.find('"status"') < prio_str.find('"roadmap"')
-    assert prio_str.find('"roadmap"') < prio_str.find('"architecture"')
+def test_scout_offers_status_and_adr_before_optional_project_docs(
+    monkeypatch, tmp_path,
+) -> None:
+    docs = {
+        name: f"Beleg aus {name}"
+        for name in (
+            "status", "adr_index", "architecture", "conventions",
+            "entry", "roadmap", "glossary",
+        )
+    }
+    state = mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        docs=docs,
+        explorer_context={
+            "key_files": [{
+                "file": "src/main.py",
+                "preview": "def main(): return 0",
+            }],
+        },
+    )
+    offered: list[str] = []
+    original_budget = scout._budget_scout_context
 
+    def capture_budget(assignment, sections, **kwargs):
+        offered.extend(title for title, _ in sections)
+        return original_budget(assignment, sections, **kwargs)
 
-def test_scout_prepend_nach_original():
-    """Append muss NACH Original-Zuweisung stehen — sonst wirkungslos."""
-    src = SCOUT.read_text(encoding="utf-8")
-    assert "_docs_prepend = \"\"" in src, "Init fehlt"
-    assert "user_content = _docs_prepend + user_content" in src, "Append fehlt"
-    idx_orig = src.find("    user_content = (")
-    idx_append = src.find("user_content = _docs_prepend + user_content")
-    assert idx_orig > 0
-    assert idx_append > idx_orig, (
-        f"Append ({idx_append}) muss nach Original ({idx_orig}) stehen"
+    monkeypatch.setattr(scout, "_budget_scout_context", capture_budget)
+    monkeypatch.setattr(scout, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(
+        scout, "ask_llm",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            ok=True,
+            content=json.dumps({
+                "ziel": "Ziel", "relevante_dateien": [],
+                "api_auszug": {}, "vorgeschlagene_aenderungen": [],
+                "risiken": [], "auftrag_prosa": "Pruefe das Ziel.",
+                "bereits_erfuellt": False,
+            }),
+        ),
+    )
+    monkeypatch.setattr(scout, "audit", lambda *_args, **_kwargs: None)
+
+    result = scout._run_scout(
+        state, "Pruefe das Projektziel", {}, [], "test-key",
     )
 
-
-def test_scout_prepend_wird_im_if_gesetzt():
-    """_docs_prepend muss im if-Block gesetzt werden, nicht ausserhalb."""
-    src = SCOUT.read_text(encoding="utf-8")
-    # Init als ""
-    assert '_docs_prepend = ""' in src
-    # Zuweisung im if
-    assert "        _docs_prepend = (" in src
+    assert result is not None
+    assert offered[:2] == ["PROJEKT-DOKU: status", "PROJEKT-DOKU: adr_index"]
+    assert offered[2].startswith("QUELLTEXT")
+    assert offered[-5:] == [
+        "PROJEKT-DOKU: architecture",
+        "PROJEKT-DOKU: conventions",
+        "PROJEKT-DOKU: entry",
+        "PROJEKT-DOKU: roadmap",
+        "PROJEKT-DOKU: glossary",
+    ]
