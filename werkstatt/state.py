@@ -217,6 +217,7 @@ class RunState:
     chat_origin_session_id: str | None = None
     reflection_chat_attempts: set[str] = field(default_factory=set)
     reflection_chat_error: str = ""
+    reflection_chat_evidence: list[dict[str, Any]] = field(default_factory=list)
     # OP-397: runtime-only assertion callback; never persisted into PhaseState.
     run_lease_check: Any = None
 

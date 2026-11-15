@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,6 +8,25 @@ from types import SimpleNamespace
 import pytest
 
 from werkstatt import chat_tools, reflection, reflection_chat
+
+
+def _source_evidence() -> list[dict[str, object]]:
+    quote = "def expected():\n    return 1"
+    return [{
+        "file": "werkstatt/sample.py",
+        "start": 0,
+        "end": len(quote),
+        "quote": quote,
+    }]
+
+
+def _verified_source_evidence(tmp_path: Path) -> list[dict[str, object]]:
+    return [{
+        **_source_evidence()[0],
+        "source_sha256": hashlib.sha256(
+            (tmp_path / "werkstatt" / "sample.py").read_bytes(),
+        ).hexdigest(),
+    }]
 
 
 @pytest.mark.parametrize(
@@ -24,6 +44,12 @@ def test_originating_chat_session_is_validated(context, expected):
 
 
 def _state(tmp_path: Path) -> SimpleNamespace:
+    source_file = tmp_path / "werkstatt" / "sample.py"
+    source_file.parent.mkdir(parents=True, exist_ok=True)
+    source_file.write_bytes(b"def expected():\n    return 1\n")
+    test_file = tmp_path / "tests" / "test_sample.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_bytes(b"def test_expected():\n    assert True\n")
     return SimpleNamespace(
         project_name="alpha",
         project_dir=tmp_path,
@@ -50,6 +76,7 @@ def _state(tmp_path: Path) -> SimpleNamespace:
         reviewer_bugs=[],
         reflection_history=[],
         reflection_chat_attempts=set(),
+        reflection_chat_evidence=[],
     )
 
 
@@ -180,6 +207,7 @@ def test_parse_task_accepts_only_authorized_files() -> None:
             "name": "Narrow type repair",
             "description": "Fix the incompatible assignment using the reported type.",
             "task_files": ["werkstatt/sample.py"],
+            "source_evidence": _source_evidence(),
         },
     })
     invalid = json.dumps({
@@ -196,9 +224,35 @@ def test_parse_task_accepts_only_authorized_files() -> None:
         "name": "Narrow type repair",
         "description": "Fix the incompatible assignment using the reported type.",
         "task_files": ["werkstatt/sample.py"],
+        "source_evidence": _source_evidence(),
     }
     assert reflection_chat._parse_task(
         invalid, ["werkstatt/sample.py", "tests/test_sample.py"],
+    ) is None
+
+
+def test_chat_source_evidence_must_match_current_authorized_excerpt(
+    tmp_path: Path,
+) -> None:
+    _state(tmp_path)
+    task = {"source_evidence": _source_evidence()}
+
+    verified = reflection_chat._verify_source_evidence(
+        task, ["werkstatt/sample.py"], tmp_path,
+    )
+
+    assert verified is not None
+    assert verified[0]["source_sha256"] == hashlib.sha256(
+        (tmp_path / "werkstatt" / "sample.py").read_bytes(),
+    ).hexdigest()
+    tampered = {"source_evidence": [{
+        **_source_evidence()[0], "quote": "fabricated source",
+    }]}
+    assert reflection_chat._verify_source_evidence(
+        tampered, ["werkstatt/sample.py"], tmp_path,
+    ) is None
+    assert reflection_chat._verify_source_evidence(
+        task, ["tests/test_sample.py"], tmp_path,
     ) is None
 
 
@@ -259,6 +313,7 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
             "name": "Narrow type repair",
             "description": "Use the expected type from the failing check.",
             "task_files": ["werkstatt/sample.py"],
+            "source_evidence": _source_evidence(),
         },
     }
 
@@ -274,7 +329,10 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     monkeypatch.setattr("werkstatt.chat_agent.chat_loop", fake_chat_loop)
     result = reflection_chat.ask_project_chat_for_builder_task(state)
 
-    assert result == expected["task"]
+    assert result == {
+        **expected["task"],
+        "source_evidence": _verified_source_evidence(tmp_path),
+    }
     assert calls["mode"] == "reflection"
     assert "request_loop_action" not in calls["tools"]
     assert "write_temp_test" not in calls["tools"]
@@ -285,6 +343,8 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     assert calls["deleted"] == calls["snapshot"]
     assert calls["job_turn"]
     assert state.llm_calls == 1
+    assert "source_evidence" in calls["message"]
+    assert "read_file-Auszug" in calls["message"]
 
 
 def test_chat_request_reuses_completed_idempotent_job_turn(
@@ -298,6 +358,7 @@ def test_chat_request_reuses_completed_idempotent_job_turn(
             "name": "Narrow type repair",
             "description": "Use the expected type from the failing check.",
             "task_files": ["werkstatt/sample.py"],
+            "source_evidence": _source_evidence(),
         },
     })
     calls: dict[str, object] = {
@@ -323,6 +384,7 @@ def test_chat_request_reuses_completed_idempotent_job_turn(
         "name": "Narrow type repair",
         "description": "Use the expected type from the failing check.",
         "task_files": ["werkstatt/sample.py"],
+        "source_evidence": _verified_source_evidence(tmp_path),
     }
 
 
@@ -335,7 +397,11 @@ def test_reflection_uses_chat_task_once_and_restores_original_task(
     calls: list[dict[str, object]] = []
 
     def fake_core(_state, **kwargs):
-        calls.append({"task": dict(_state.aktuelle_task), **kwargs})
+        calls.append({
+            "task": dict(_state.aktuelle_task),
+            "source_evidence": list(_state.reflection_chat_evidence),
+            **kwargs,
+        })
         return len(calls) == 2
 
     monkeypatch.setattr(reflection, "_reflection_loop_core", fake_core)
@@ -346,6 +412,7 @@ def test_reflection_uses_chat_task_once_and_restores_original_task(
             "name": "Narrow type repair",
             "description": "Use the expected type from the failing check.",
             "task_files": ["werkstatt/sample.py"],
+            "source_evidence": _source_evidence(),
         },
     )
     monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
@@ -354,8 +421,10 @@ def test_reflection_uses_chat_task_once_and_restores_original_task(
     assert calls[1]["task"]["name"] == "Narrow type repair"
     assert calls[1]["task"]["task_files"] == ["werkstatt/sample.py"]
     assert calls[1]["task"]["acceptance_criteria"] == ["AC-1"]
+    assert calls[1]["source_evidence"] == _source_evidence()
     assert calls[1]["max_runden"] == 1
     assert state.aktuelle_task is original
+    assert state.reflection_chat_evidence == []
 
 
 def test_reflection_does_not_ask_chat_when_run_budget_is_exhausted(
@@ -392,6 +461,7 @@ def test_phase_end_exhaustion_asks_chat_then_retries_scoped_file(
         core_calls.append({
             "task": dict(_state.aktuelle_task),
             "bugs": list(_state.reviewer_bugs),
+            "source_evidence": list(_state.reflection_chat_evidence),
         })
         return len(core_calls) == 2
 
@@ -403,6 +473,7 @@ def test_phase_end_exhaustion_asks_chat_then_retries_scoped_file(
             "name": "Repair phase-review finding",
             "description": "Correct the reported phase-review defect.",
             "task_files": ["werkstatt/sample.py"],
+            "source_evidence": _source_evidence(),
         },
     )
     monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
@@ -413,7 +484,9 @@ def test_phase_end_exhaustion_asks_chat_then_retries_scoped_file(
     assert core_calls[1]["bugs"][0]["description"] == (
         "Correct the reported phase-review defect."
     )
+    assert core_calls[1]["source_evidence"] == _source_evidence()
     assert state.aktuelle_task is original_task
+    assert state.reflection_chat_evidence == []
 
 
 def test_phase_end_does_not_expand_chat_scope_beyond_planned_files(

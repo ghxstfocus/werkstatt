@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 _ALLOWED_CHAT_TOOLS = frozenset({
@@ -203,7 +204,62 @@ def _parse_task(answer: str, allowed_files: list[str]) -> dict[str, Any] | None:
         "name": name.strip(),
         "description": description.strip(),
         "task_files": normalized,
+        "source_evidence": proposed.get("source_evidence"),
     }
+
+
+def _verify_source_evidence(
+    task: dict[str, Any],
+    allowed_files: list[str],
+    project_dir: Any,
+) -> list[dict[str, Any]] | None:
+    """Bind the recovery diagnosis to exact excerpts from current source.
+
+    Offsets follow ``read_file``'s zero-based character offsets. The worker
+    re-reads each allowed file and verifies the quote before the Builder gets
+    the proposal, then attaches a current whole-file hash.
+    """
+    raw = task.get("source_evidence")
+    if not isinstance(raw, list) or not 1 <= len(raw) <= 4:
+        return None
+    root = Path(project_dir).resolve()
+    verified: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            return None
+        path = item.get("file")
+        start = item.get("start")
+        end = item.get("end")
+        quote = item.get("quote")
+        if (
+            not isinstance(path, str)
+            or path.replace("\\", "/") not in allowed_files
+            or not isinstance(start, int) or isinstance(start, bool)
+            or not isinstance(end, int) or isinstance(end, bool)
+            or start < 0 or end <= start
+            or not isinstance(quote, str) or not quote or len(quote) > 600
+        ):
+            return None
+        normalized = path.replace("\\", "/")
+        try:
+            resolved = (root / normalized).resolve(strict=True)
+            resolved.relative_to(root)
+            if not resolved.is_file() or resolved.stat().st_size > 2_000_000:
+                return None
+            source_bytes = resolved.read_bytes()
+            source = source_bytes.decode("utf-8")
+        except (OSError, UnicodeError, RuntimeError, ValueError):
+            return None
+        if end > len(source) or source[start:end] != quote:
+            return None
+        verified.append({
+            "file": normalized,
+            "start": start,
+            "end": end,
+            "quote": quote,
+            "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        })
+    return verified
 
 
 def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
@@ -248,7 +304,12 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
         "dieses JSON zurueck: {\"decision\":\"task\",\"task\":{"
         "\"name\":\"...\",\"description\":\"konkreter naechster "
         "Builder-Schritt mit Fehlerursache und Verify-Hinweis\","
-        "\"task_files\":[\"...\"]}}. Bei fehlender belastbarer "
+        "\"task_files\":[\"...\"],\"source_evidence\":[{"
+        "\"file\":\"...\",\"start\":0,\"end\":24,"
+        "\"quote\":\"exakter read_file-Auszug\"}]}}. Jeder Beleg muss "
+        "eine tatsaechlich gelesene Fundstelle in task_files sein; start/end "
+        "sind 0-basierte Zeichen-Offsets in der vollstaendigen Datei. Bei "
+        "fehlender belastbarer "
         "Reparaturaufgabe: {\"decision\":\"cannot_solve\","
         "\"reason\":\"...\"}. Fehlende optionale Belege oder ihre Hash-/"
         "Groessenmetadaten sind keine Negativbelege. Lies benoetigte, aber "
@@ -269,7 +330,17 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
         parent = ChatSession(project, session_id)
         prior_turn = parent.get_job_turn(job_id)
         if prior_turn is not None:
-            return _parse_task(prior_turn["assistant_text"], allowed_files)
+            parsed_prior = _parse_task(prior_turn["assistant_text"], allowed_files)
+            if parsed_prior is None:
+                return None
+            verified_prior = _verify_source_evidence(
+                parsed_prior, allowed_files, state.project_dir,
+            )
+            if verified_prior is None:
+                state.reflection_chat_error = "source_evidence_unverified"
+                return None
+            parsed_prior["source_evidence"] = verified_prior
+            return parsed_prior
         # A prior process may have died with only a partial branch snapshot.
         # Rebuild it from the same immutable parent transcript before retrying.
         parent.delete_snapshot(job_id)
@@ -300,7 +371,17 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
             origin_session_id=session_id,
             on_llm_call=count_chat_call,
         )
-        parsed = _parse_task(answer, allowed_files)
+        raw_task = _parse_task(answer, allowed_files)
+        parsed = None
+        if raw_task is not None:
+            verified_evidence = _verify_source_evidence(
+                raw_task, allowed_files, state.project_dir,
+            )
+            if verified_evidence is None:
+                state.reflection_chat_error = "source_evidence_unverified"
+            else:
+                raw_task["source_evidence"] = verified_evidence
+                parsed = raw_task
         parent.append_job_turn(job_id, prompt, answer)
     except Exception as exc:  # noqa: BLE001 — Chat/API failures fail closed.
         state.reflection_chat_error = type(exc).__name__
