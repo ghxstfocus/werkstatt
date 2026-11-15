@@ -7134,3 +7134,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung lokal:** Der Sanitizer begrenzt die gesamte Metadatenstruktur auf 512 Knoten und 16.000 Zeichen, liest aus Maps hoechstens 50 Eintraege und setzt `_manifest_truncated`, sobald Tiefe, Knoten, Felder oder Zeichen gekuerzt werden. Quell-/Prompttext bleibt weiterhin ausgeschlossen.
 - **Verifikation lokal:** Agent-, Builder-, Scout-, Planner-, Architect-, Explorer- und Reviewer-Evidenzgruppe: 74 bestanden, 3 uebersprungen; Ruff, Mypy, Control-Drift, strikter Doku-Drift und `git diff --check` bestanden.
 - **Grenze:** Der Nutzer bestaetigte zuvor die Server-Vollsuite fuer `22e466f` (2.463 bestanden, 5 uebersprungen); dieser lokale Folgeschritt ist darin nicht enthalten.
+
+
+## 2026-11-15 – Chat-Request-Fingerprints bei langen Verlaeufen begrenzen (lokal)
+- **Befund:** Exakte Gesamthashes und Rollen-/Zeichenzaehlungen blieben korrekt, aber das Chat-Manifest erzeugte einen Einzel-Fingerprint pro Nachricht ohne Gesamtlimit; eine lange Session konnte die replaybare Audit-Payload vergroessern.
+- **Aenderung lokal:** Maximal 96 Einzel-Fingerprints bleiben erhalten (Systemnachricht plus juengste 95); Anzahl, Gesamtzeichen, Rollenverteilung und SHA-256 ueber den vollstaendigen Provider-Request bleiben unveraendert und binden auch die ausgelassenen Nachrichten.
+- **Verifikation lokal:** Chat-Agent-, Chatjob-, Reflection-Chat-, Chat-Tools-, Chat-Frontend- und Live-Feed-Gruppe: 217 bestanden, 2 uebersprungen; Ruff und Mypy bestanden.
+- **Grenze:** Der Serverlauf fuer `22e466f` (2.463 bestanden, 5 uebersprungen) liegt vor diesem lokalen Folgeschritt.

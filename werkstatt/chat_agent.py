@@ -24,6 +24,7 @@ __all__ = ["chat_loop"]
 _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 _DEFAULT_MAX_ROUNDS: int | None = None
 _DEFAULT_MAX_ELAPSED_S = 120.0
+_CHAT_REQUEST_MESSAGE_MANIFEST_LIMIT = 96
 
 
 class ChatCancelled(RuntimeError):
@@ -845,18 +846,32 @@ def _chat_request_manifest(
     ).encode("utf-8")
     messages = payload["messages"]
     counts: dict[str, int] = {}
+    if len(messages) > _CHAT_REQUEST_MESSAGE_MANIFEST_LIMIT:
+        keep_indexes = {
+            0,
+            *range(
+                len(messages) - _CHAT_REQUEST_MESSAGE_MANIFEST_LIMIT + 1,
+                len(messages),
+            ),
+        }
+    else:
+        keep_indexes = set(range(len(messages)))
     message_manifest = []
-    for message in messages:
+    message_chars = 0
+    for index, message in enumerate(messages):
         role = str(message.get("role", "unknown"))
         counts[role] = counts.get(role, 0) + 1
         message_text = json.dumps(
             message, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
         )
-        message_manifest.append({
-            "role": role,
-            "chars": len(message_text),
-            "sha256": hashlib.sha256(message_text.encode("utf-8")).hexdigest(),
-        })
+        message_chars += len(message_text)
+        if index in keep_indexes:
+            message_manifest.append({
+                "index": index,
+                "role": role,
+                "chars": len(message_text),
+                "sha256": hashlib.sha256(message_text.encode("utf-8")).hexdigest(),
+            })
     tools = payload.get("tools") or []
     encoded_tools = json.dumps(
         tools, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
@@ -872,9 +887,10 @@ def _chat_request_manifest(
         ).encode("utf-8")).hexdigest(),
         "tools_sha256": hashlib.sha256(encoded_tools).hexdigest(),
         "message_count": len(messages),
-        "message_chars": sum(item["chars"] for item in message_manifest),
+        "message_chars": message_chars,
         "message_roles": counts,
         "message_manifest": message_manifest,
+        "message_fingerprints_omitted": len(messages) - len(message_manifest),
         "tool_count": len(tools),
         "tool_names": [
             str(tool.get("function", {}).get("name", ""))

@@ -1100,6 +1100,32 @@ def test_chat_model_request_manifest_matches_http_json_body(
     assert "Lies den privaten Statusinhalt" not in str(manifests[0])
 
 
+def test_chat_request_manifest_caps_per_message_details_but_keeps_full_hash() -> None:
+    messages = [
+        {"role": "system", "content": "Systemhinweis"},
+        *[
+            {"role": "user", "content": f"Privater Turn {index}"}
+            for index in range(200)
+        ],
+    ]
+    payload = chat_agent._chat_provider_payload(messages, None)
+
+    manifest = chat_agent._chat_request_manifest(
+        payload, mode="read", request_id="long-history", request_number=1,
+    )
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+
+    assert manifest["request_sha256"] == hashlib.sha256(encoded).hexdigest()
+    assert manifest["message_count"] == 201
+    assert len(manifest["message_manifest"]) == (
+        chat_agent._CHAT_REQUEST_MESSAGE_MANIFEST_LIMIT
+    )
+    assert manifest["message_fingerprints_omitted"] == 105
+    assert "Privater Turn" not in str(manifest)
+
+
 def test_chat_recovery_time_checkpoint_does_not_start_an_unbounded_final_call(
     session: ChatSession,
     monkeypatch: pytest.MonkeyPatch,
