@@ -7197,3 +7197,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung lokal:** Architect, Explorer, Planner-Split, Reviewer (Task- und Phasenreview) sowie Scout uebergeben jetzt den SHA-256 ihres budgetierten User-Texts im Rollenmanifest. `ask_llm` verlangt und vergleicht den Hash fuer alle sieben evidenzpflichtigen Rollen vor dem Provideraufruf. Fehlende oder abweichende Hashes blockieren fail-closed.
 - **Verifikation lokal:** Agent-/Loop-Ask-LLM-/Builder-/Explorer-/Scout-/Reviewer-/Architect-/Planner-Gruppe: 138 bestanden, 5 uebersprungen.
 - **Grenze / Hauptziel:** Der Hash beweist Byte-Gleichheit zwischen Rollenmanifest und User-Nachricht, nicht semantische Relevanz, Vollstaendigkeit oder minimale Kontextmenge. Der Rollen-Eval und JIT-Nachladung bleiben offen; OP-405/398 bleiben offen, kein Servernachweis fuer diese Aenderung.
+
+
+## 2026-11-16 – Explorer-Inventar-Auslassungen sichtbar machen (lokal)
+- **Befund:** Der Explorer-Scan kann bis zu 200 Python-Pfade indexieren, uebergab aber nur die ersten 50 an das Modell. Das Prompt nannte die Anzahl des Indexes, kennzeichnete die 150 moeglichen Auslassungen aber nicht explizit. Ein Fehler des `find`-Scans wurde als leere Dateiliste dargestellt und konnte wie ein vollstaendiges Null-Ergebnis wirken.
+- **Aenderung lokal:** Scanstatus und Limit werden getrennt vom Pfadbestand ermittelt. Das Prompt kennzeichnet ein nicht verfuegbares/unvollstaendiges Inventar und Prompt-Auslassungen als unbekannt/keine Negativbelege; ein vollstaendiges leeres Inventar wird separat ausgewiesen. Das Requestmanifest zaehlt Indexumfang, Scanvollstaendigkeit, angebotene Pfade und Auslassungen.
+- **Verifikation lokal:** Explorer-Agent- und Explorer-Helfergruppe: 33 bestanden; Assertions decken Fehlerstatus, 200er Indexgrenze und 50er Promptgrenze ab.
+- **Grenze / Hauptziel:** Die vorhandene Begrenzung auf 50 Modellpfade bleibt; diese Aenderung macht die Belegluecke sichtbar, implementiert aber noch kein Explorer-JIT-Nachladen und beweist keine semantische Relevanz. OP-405/398 bleiben offen. Servercheckout `b78935d` bestand laut Nutzer mit 2.472/5; diese Aenderung liegt danach.

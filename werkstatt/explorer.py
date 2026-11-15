@@ -39,16 +39,69 @@ Antworte NUR mit validem JSON:
 Keine Erklaerung, nur JSON."""
 
 
-def _list_py_files(project_dir: Path, max_files: int = 200) -> list[str]:
+def _list_py_file_inventory(
+    project_dir: Path,
+    max_files: int = 200,
+) -> tuple[list[str], bool]:
+    """Return indexed Python paths and whether the inventory is complete."""
     try:
         res = subprocess.run(
             ["find", str(project_dir), "-name", "*.py", "-type", "f",
              "-not", "-path", "*/.venv/*", "-not", "-path", "*/__pycache__/*"],
             capture_output=True, text=True, timeout=30, check=False,
         )
-        return [f for f in res.stdout.split("\n") if f.strip()][:max_files]
+        paths = [f for f in res.stdout.split("\n") if f.strip()]
+        return paths[:max_files], res.returncode == 0 and len(paths) <= max_files
     except Exception:
-        return []
+        return [], False
+
+
+def _list_py_files(project_dir: Path, max_files: int = 200) -> list[str]:
+    """Compatibility wrapper returning the bounded Python path list."""
+    paths, _complete = _list_py_file_inventory(project_dir, max_files)
+    return paths
+
+
+def _python_inventory_context(
+    paths: list[str],
+    *,
+    scan_complete: bool,
+    index_cap: int = 200,
+    prompt_cap: int = 50,
+) -> tuple[str, dict[str, Any]]:
+    """Describe inventory and prompt omissions without implying absence."""
+    offered = paths[:prompt_cap]
+    prompt_omitted = max(0, len(paths) - len(offered))
+    if not scan_complete:
+        status = (
+            f"Inventar unvollstaendig oder nicht verfuegbar; Indexlimit "
+            f"{index_cap}. Fehlende Pfade sind unbekannt, kein Negativbeleg."
+        )
+    elif not paths:
+        status = "Inventar vollstaendig; keine Python-Dateien gefunden."
+    else:
+        status = "Inventar vollstaendig innerhalb des Indexlimits."
+    if prompt_omitted:
+        status += (
+            f" Prompt-Liste zeigt {len(offered)} von {len(paths)} Treffern; "
+            f"{prompt_omitted} ausgelassen. Auslassungen sind kein "
+            "Negativbeleg; bei Bedarf gezielt nachladen."
+        )
+    inventory = (
+        f"Python-Datei-Inventar: {status}\n"
+        f"Im Index beobachtet: {len(paths)}\n"
+        "Angebotene Pfade:\n"
+        + ("\n".join(offered) if offered else "(keine Pfade angeboten)")
+    )
+    manifest = {
+        "file_count": len(paths),
+        "file_scan_complete": scan_complete,
+        "file_scan_cap": index_cap,
+        "files_offered": offered,
+        "files_omitted_from_prompt": prompt_omitted,
+        "prompt_file_cap": prompt_cap,
+    }
+    return inventory, manifest
 
 
 def _extract_dateien(stdout: str) -> list[str]:
@@ -604,13 +657,15 @@ def run_explorer(state: RunState, frage: str) -> dict:
         audit("explorer_kein_key", {}, pd, pn)
         return {"findings": "", "key_files": [], "next_reads": []}
 
-    py_files = _list_py_files(Path(pd))
+    py_files, _file_scan_complete = _list_py_file_inventory(Path(pd))
+    file_inventory, inventory_manifest = _python_inventory_context(
+        py_files, scan_complete=_file_scan_complete,
+    )
     context = (
         f"Frage: {frage}\n\n"
         f"Messungen (bereits ausgefuehrt):\n"
         + (_format_findings(messungen) if messungen else "(keine)")
-        + f"\n\nPython-Dateien ({len(py_files)}):\n"
-        + "\n".join(py_files[:50])
+        + f"\n\n{file_inventory}"
     )
 
     reply = ask_llm(
@@ -621,8 +676,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
             "budget_event": "explorer_context",
             "user_sha256": hashlib.sha256(context.encode("utf-8")).hexdigest(),
             "measurement_count": len(messungen),
-            "file_count": len(py_files),
-            "files_offered": py_files[:50],
+            **inventory_manifest,
             "user_chars": len(context),
         },
     )
