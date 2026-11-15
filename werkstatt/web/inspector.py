@@ -760,11 +760,16 @@ _TL_LABELS: dict[str, str] = {
     "loop_skills_geladen": "Skills geladen",
     "builder_import_context": "Builder: Import-Kontext",
     "builder_file_context": "Builder: Datei-Kontext",
+    "builder_context_budget": "Builder: Kontextbudget",
+    "planner_architect_context_budget": "Architect: Kontextbudget",
+    "scout_context_budget": "Scout: Kontextbudget",
+    "planner_scout_context_budget_blocked": "Scout: Pflichtkontext ueber Budget",
     "builder_patches_erstellt": "Builder: Patches erstellt",
     "builder_keine_patches_gold": "Builder: keine Patches",
     "builder_patch_bereits_erfuellt": "Builder: bereits erfuellt",
     "loop_task_start": "Task startet",
     "loop_criteria_progress": "Akzeptanzkriterien: Fortschritt",
+    "loop_checkpoint_decision": "Checkpoint: naechste Aktion",
     "loop_chat_job_observed": "Parallelen Chat-Job am Checkpoint erkannt",
     "loop_chat_job_result_observed": "Ergebnis eines parallelen Chat-Jobs erkannt",
     "loop_task_ok": "Task erfolgreich",
@@ -952,6 +957,18 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
         if next_step:
             summary += f"; danach: {next_step[:120]}"
         return summary
+    if kind == "loop_checkpoint_decision":
+        decision = str(payload.get("decision") or "unbekannt")
+        executor = payload.get("next_executor")
+        task_id = payload.get("next_task_id")
+        next_step = str(executor or decision)
+        if task_id:
+            next_step += f" fuer {str(task_id)[:80]}"
+        reason = str(payload.get("reason") or "")[:180]
+        return (
+            f"Entscheidung: {decision}; naechster Schritt: {next_step}. "
+            f"{reason}"
+        ).strip()
     if kind == "loop_task_start":
         return str(payload.get("text", ""))
     if kind in ("loop_task_ok", "loop_task_failed"):

@@ -44,6 +44,7 @@ def test_builder_erstellt_patches(tmp_path):
         assert len(st.patches) == 1
         assert st.patches[0]["file"] == "a.py"
     assert mock_llm.call_args.kwargs["state"] is st
+    assert "VERFUEGBARE SKILLS" not in mock_llm.call_args.args[2]
 
 
 def test_builder_ohne_key(tmp_path):

@@ -415,6 +415,32 @@ def test_kriterienfortschritt_ist_in_timeline_menschlich_beschriftet():
     )
 
 
+def test_checkpointentscheidung_zeigt_naechsten_schritt_und_begruendung():
+    label = inspector._tl_label("loop_checkpoint_decision", {})
+    detail = inspector._tl_detail(
+        "loop_checkpoint_decision",
+        {
+            "decision": "execute_planned_task",
+            "next_executor": "builder",
+            "next_task_id": "t2",
+            "reason": "Naechster abhaengigkeitsfreier Task.",
+        },
+    )
+
+    assert label == "Checkpoint: naechste Aktion"
+    assert detail == (
+        "Entscheidung: execute_planned_task; naechster Schritt: "
+        "builder fuer t2. Naechster abhaengigkeitsfreier Task."
+    )
+
+
+def test_scout_context_budget_is_visible_in_timeline():
+    assert inspector._tl_label("scout_context_budget", {}) == "Scout: Kontextbudget"
+    assert inspector._tl_label(
+        "planner_scout_context_budget_blocked", {},
+    ) == "Scout: Pflichtkontext ueber Budget"
+
+
 def test_nicht_getrackte_kriterien_verursachen_keinen_falschen_nullfortschritt():
     detail = inspector._tl_detail(
         "loop_criteria_progress",

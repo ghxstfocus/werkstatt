@@ -390,7 +390,7 @@ def _bug_text_deutet_spec_widerspruch(bugs: list) -> bool:
     return has_forder and has_diff
 
 
-def _reflection_loop(
+def _reflection_loop_core(
     state: RunState,
     max_runden: int | None = None,
     error_context: str | None = None,
@@ -938,7 +938,166 @@ def _reflection_loop(
     return _final_verify_ok
 
 
-def _phase_end_reflection(state: RunState) -> bool:
+def _reflection_loop(
+    state: RunState,
+    max_runden: int | None = None,
+    error_context: str | None = None,
+    phase: str | None = "post_build",
+    verify_stage_ids: set[str] | None = None,
+) -> bool:
+    """Run bounded recovery, then ask the originating Chat once on exhaustion."""
+    initial_task = state.aktuelle_task
+    result = _reflection_loop_core(
+        state,
+        max_runden=max_runden,
+        error_context=error_context,
+        phase=phase,
+        verify_stage_ids=verify_stage_ids,
+    )
+    if result:
+        return True
+
+    if getattr(state, "budget_exhausted_reason", ""):
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "run_budget_exhausted"}, state.project_dir,
+            state.project_name,
+        )
+        return False
+    if not getattr(state, "api_key", ""):
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "llm_key_missing"}, state.project_dir,
+            state.project_name,
+        )
+        return False
+    if not isinstance(initial_task, dict):
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "task_context_missing"}, state.project_dir,
+            state.project_name,
+        )
+        return False
+
+    import hashlib as _hashlib
+    import json as _json
+
+    from werkstatt.reflection_chat import (
+        _readable_evidence,
+        ask_project_chat_for_builder_task,
+    )
+
+    evidence_fingerprint = _hashlib.sha256(
+        _json.dumps(
+            _readable_evidence(state), ensure_ascii=False, sort_keys=True,
+        ).encode("utf-8"),
+    ).hexdigest()
+    attempts = getattr(state, "reflection_chat_attempts", None)
+    if attempts is None:
+        state.reflection_chat_attempts = set()
+        attempts = state.reflection_chat_attempts
+    if evidence_fingerprint in attempts:
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "same_evidence_already_consulted",
+             "evidence_hash": evidence_fingerprint},
+            state.project_dir, state.project_name,
+        )
+        return False
+    attempts.add(evidence_fingerprint)
+    if not getattr(state, "chat_origin_session_id", None):
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "no_originating_chat_session",
+             "evidence_hash": evidence_fingerprint},
+            state.project_dir, state.project_name,
+        )
+        return False
+
+    audit(
+        "loop_reflection_chat_requested",
+        {
+            "task_id": str(initial_task.get("id", ""))[:160],
+            "evidence_hash": evidence_fingerprint,
+            "authorized_files": initial_task.get("task_files", [])[:30]
+            if isinstance(initial_task.get("task_files"), list) else [],
+        },
+        state.project_dir, state.project_name,
+    )
+    try:
+        proposed = ask_project_chat_for_builder_task(state)
+    except (OSError, RuntimeError, ValueError, ImportError) as exc:
+        proposed = None
+        failure = type(exc).__name__
+    else:
+        failure = (
+            getattr(state, "reflection_chat_error", "")
+            or "no_valid_scoped_task"
+        )
+    if proposed is None:
+        budget_stopped = bool(getattr(state, "budget_exhausted_reason", ""))
+        if budget_stopped:
+            audit(
+                "loop_reflection_chat_skipped",
+                {"reason": "run_budget_exhausted",
+                 "evidence_hash": evidence_fingerprint},
+                state.project_dir, state.project_name,
+            )
+        else:
+            audit(
+                "loop_reflection_chat_rejected",
+                {"reason": failure, "evidence_hash": evidence_fingerprint},
+                state.project_dir, state.project_name,
+            )
+        return False
+
+    scoped_task = {
+        **initial_task,
+        "name": proposed["name"],
+        "description": proposed["description"],
+        "task_files": proposed["task_files"],
+        "action": initial_task.get("action", "update"),
+    }
+    audit(
+        "loop_reflection_chat_task",
+        {
+            "task_id": str(initial_task.get("id", ""))[:160],
+            "evidence_hash": evidence_fingerprint,
+            "builder_task": proposed["name"],
+            "files": proposed["task_files"],
+            "description": proposed["description"][:800],
+        },
+        state.project_dir, state.project_name,
+    )
+    state.aktuelle_task = scoped_task
+    try:
+        # One bounded Builder recovery only. It cannot recursively ask Chat;
+        # another recovery requires fresh evidence and a later coordinator turn.
+        recovered = _reflection_loop_core(
+            state,
+            max_runden=1,
+            error_context=(
+                "Projektchat-Kurskorrektur: "
+                + proposed["description"][:1200]
+            ),
+            phase=phase,
+            verify_stage_ids=verify_stage_ids,
+        )
+    finally:
+        state.aktuelle_task = initial_task
+    audit(
+        "loop_reflection_chat_builder_result",
+        {
+            "task_id": str(initial_task.get("id", ""))[:160],
+            "evidence_hash": evidence_fingerprint,
+            "recovered": bool(recovered),
+        },
+        state.project_dir, state.project_name,
+    )
+    return bool(recovered)
+
+
+def _phase_end_reflection_core(state: RunState) -> bool:
     """K23d: Phase-End-Reflection. Repariert Phase-Review-Bugs pro Datei.
 
     Anders als _reflection_loop: kein aktueller Task im State.
@@ -1057,6 +1216,166 @@ def _phase_end_reflection(state: RunState) -> bool:
 
     audit("loop_phase_reflection_erschoepft", {"runden": 2}, pd, pn)
     return False
+
+
+def _phase_end_reflection(state: RunState) -> bool:
+    """After phase-review exhaustion, ask Chat for one in-scope retry."""
+    original_task = state.aktuelle_task
+    result = _phase_end_reflection_core(state)
+    if result:
+        return True
+    if getattr(state, "budget_exhausted_reason", ""):
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "run_budget_exhausted", "trigger": "phase_end"},
+            state.project_dir, state.project_name,
+        )
+        return False
+    if not getattr(state, "api_key", ""):
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "llm_key_missing", "trigger": "phase_end"},
+            state.project_dir, state.project_name,
+        )
+        return False
+    if not getattr(state, "chat_origin_session_id", None):
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "no_originating_chat_session", "trigger": "phase_end"},
+            state.project_dir, state.project_name,
+        )
+        return False
+
+    planned_files: list[str] = []
+    for planned_task in state.tasks or []:
+        if not isinstance(planned_task, dict):
+            continue
+        files = planned_task.get("task_files")
+        if isinstance(files, list):
+            planned_files.extend(
+                item for item in files if isinstance(item, str)
+            )
+    review_files = [
+        str(bug["file"])
+        for bug in (state.reviewer_bugs or [])
+        if isinstance(bug, dict) and isinstance(bug.get("file"), str)
+    ]
+    allowed_files = list(dict.fromkeys(
+        path for path in review_files if path in planned_files
+    ))
+    if not allowed_files:
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "phase_review_files_outside_plan", "trigger": "phase_end"},
+            state.project_dir, state.project_name,
+        )
+        return False
+
+    state.aktuelle_task = {
+        "id": f"phase-review-{state.run_id or state.project_name}",
+        "name": "Phase-End-Review Repair",
+        "action": "update",
+        "task_files": allowed_files,
+        "description": "; ".join(
+            str(bug.get("description", ""))[:600]
+            for bug in (state.reviewer_bugs or [])
+            if isinstance(bug, dict) and bug.get("file") in allowed_files
+        )[:1800],
+    }
+    import hashlib as _hashlib
+    import json as _json
+
+    from werkstatt.reflection_chat import (
+        _readable_evidence,
+        ask_project_chat_for_builder_task,
+    )
+
+    evidence_fingerprint = _hashlib.sha256(
+        _json.dumps(
+            _readable_evidence(state), ensure_ascii=False, sort_keys=True,
+        ).encode("utf-8"),
+    ).hexdigest()
+    attempts = getattr(state, "reflection_chat_attempts", None)
+    if attempts is None:
+        state.reflection_chat_attempts = set()
+        attempts = state.reflection_chat_attempts
+    if evidence_fingerprint in attempts:
+        state.aktuelle_task = original_task
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "same_evidence_already_consulted",
+             "trigger": "phase_end", "evidence_hash": evidence_fingerprint},
+            state.project_dir, state.project_name,
+        )
+        return False
+    attempts.add(evidence_fingerprint)
+    audit(
+        "loop_reflection_chat_requested",
+        {"trigger": "phase_end", "evidence_hash": evidence_fingerprint,
+         "authorized_files": allowed_files},
+        state.project_dir, state.project_name,
+    )
+    try:
+        proposed = ask_project_chat_for_builder_task(state)
+    except (OSError, RuntimeError, ValueError, ImportError) as exc:
+        proposed = None
+        failure = type(exc).__name__
+    else:
+        failure = (
+            getattr(state, "reflection_chat_error", "")
+            or "no_valid_scoped_task"
+        )
+    if proposed is None:
+        state.aktuelle_task = original_task
+        budget_stopped = bool(getattr(state, "budget_exhausted_reason", ""))
+        if budget_stopped:
+            audit(
+                "loop_reflection_chat_skipped",
+                {"trigger": "phase_end", "reason": "run_budget_exhausted",
+                 "evidence_hash": evidence_fingerprint},
+                state.project_dir, state.project_name,
+            )
+        else:
+            audit(
+                "loop_reflection_chat_rejected",
+                {"trigger": "phase_end", "reason": failure,
+                 "evidence_hash": evidence_fingerprint},
+                state.project_dir, state.project_name,
+            )
+        return False
+
+    state.reviewer_bugs = [
+        {
+            "file": scoped_file,
+            "severity": "high",
+            "description": proposed["description"],
+        }
+        for scoped_file in proposed["task_files"]
+    ]
+    state.aktuelle_task = {
+        **state.aktuelle_task,
+        "name": proposed["name"],
+        "description": proposed["description"],
+        "task_files": proposed["task_files"],
+    }
+    audit(
+        "loop_reflection_chat_task",
+        {"trigger": "phase_end", "evidence_hash": evidence_fingerprint,
+         "builder_task": proposed["name"], "files": proposed["task_files"],
+         "description": proposed["description"][:800]},
+        state.project_dir, state.project_name,
+    )
+    try:
+        recovered = _phase_end_reflection_core(state)
+    finally:
+        state.aktuelle_task = original_task
+    audit(
+        "loop_reflection_chat_builder_result",
+        {"trigger": "phase_end", "evidence_hash": evidence_fingerprint,
+         "recovered": bool(recovered)},
+        state.project_dir, state.project_name,
+    )
+    return bool(recovered)
 
 
 def _ruff_fix_changed(*args, **kwargs):

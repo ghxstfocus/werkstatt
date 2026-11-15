@@ -163,6 +163,94 @@ def _audit_task_ok(
     audit("loop_task_ok", payload, project_dir, project_name)
 
 
+def _checkpoint_decision_payload(
+    phase_state: Any,
+    next_task: dict[str, Any] | None,
+    *,
+    state: RunState | None = None,
+) -> dict[str, Any]:
+    """Describe the evidence-based next action at a persisted task boundary."""
+    task_progress = phase_state.progress()
+    criteria = phase_state.criteria_progress()
+    if next_task is not None:
+        action = str(next_task.get("action", "update"))
+        executor = {
+            "read": "read_only_task",
+            "verify": "verify_and_review",
+            "create": "builder",
+            "update": "builder",
+            "architect": "builder",
+        }.get(action, "planned_task_executor")
+        decision = "execute_planned_task"
+        reason = "Naechster abhaengigkeitsfreier Task aus dem freigegebenen Graph."
+    elif task_progress.get("pending", 0):
+        executor = None
+        decision = "resolve_blocked_graph"
+        reason = "Keine ausfuehrbare Task-Graph-Node; offene Tasks bleiben sichtbar."
+    else:
+        executor = "phase_end_verify"
+        if task_progress.get("failed", 0):
+            decision = "verify_with_failed_tasks"
+            reason = "Task-Graph erschoepft, aber mindestens ein Task ist fehlgeschlagen."
+        elif criteria.get("tracked") and not criteria.get("valid"):
+            decision = "verify_invalid_criteria_mapping"
+            reason = "Kriterienzuordnung ist ungueltig oder unvollstaendig."
+        elif criteria.get("tracked") and criteria.get("uncovered"):
+            decision = "verify_with_open_criteria"
+            reason = "Task-Graph erschoepft, aber Kriterienabdeckung ist unvollstaendig."
+        elif not criteria.get("tracked"):
+            decision = "verify_untracked_criteria"
+            reason = "Keine belegte Kriterienzuordnung; Abschluss darf Zielerreichung nicht behaupten."
+        else:
+            decision = "run_phase_end_verify"
+            reason = "Task-Graph abgeschlossen; finale Verify entscheidet ueber den Abschluss."
+
+    criteria_snapshot = {
+        key: criteria.get(key)
+        for key in ("tracked", "valid", "covered", "uncovered", "error")
+    }
+    candidate = bool(
+        next_task is None
+        and task_progress.get("failed", 0) == 0
+        and task_progress.get("pending", 0) == 0
+        and criteria.get("tracked")
+        and criteria.get("valid")
+        and not criteria.get("uncovered")
+    )
+    raw_verify = getattr(state, "last_verify_results", []) if state else []
+    verify_evidence = []
+    if isinstance(raw_verify, list):
+        for result in raw_verify[-50:]:
+            if not isinstance(result, dict):
+                continue
+            stage_id = result.get("stage_id")
+            if not isinstance(stage_id, str):
+                continue
+            item: dict[str, Any] = {
+                "stage_id": stage_id[:120],
+                "ok": bool(result.get("ok", False)),
+            }
+            exit_code = result.get("exit_code")
+            if isinstance(exit_code, int) and not isinstance(exit_code, bool):
+                item["exit_code"] = exit_code
+            artifact_hash = result.get("artifact_sha256")
+            if isinstance(artifact_hash, str):
+                item["artifact_sha256"] = artifact_hash[:128]
+            verify_evidence.append(item)
+    return {
+        "decision": decision,
+        "reason": reason,
+        "next_task_id": next_task.get("id") if next_task else None,
+        "next_action": next_task.get("action") if next_task else None,
+        "next_executor": executor,
+        "task_progress": task_progress,
+        "criteria_task_coverage": criteria_snapshot,
+        "last_verify_evidence": verify_evidence,
+        "goal_candidate_before_final_verify": candidate,
+        "final_verify_required": True,
+    }
+
+
 
 def _persist_run_checkpoint(
     store: EventStore,
@@ -271,7 +359,7 @@ def _persist_run_checkpoint(
     checkpoint = dict(record["checkpoint"])
     prior_followups = checkpoint.get("chat_followup_requests", [])
     if not isinstance(prior_followups, list):
-        prior_followups = []
+        raise TypeError("Follow-up-Ledger im Checkpoint ist ungueltig")
     prior_followup_seqs = {
         item.get("seq") for item in prior_followups
         if isinstance(item, dict) and isinstance(item.get("seq"), int)
@@ -316,9 +404,11 @@ def _persist_run_checkpoint(
                 f"Chat-Folgeauftrag {item.get('proposal_id')} konnte "
                 "nicht auditiert werden",
             )
-    checkpoint["chat_followup_requests"] = (
-        prior_followups + new_followups
-    )[-50:]
+    from werkstatt.run_followups import retain_followup_history
+
+    checkpoint["chat_followup_requests"] = retain_followup_history(
+        prior_followups + new_followups,
+    )
     # The legacy shared cursor could skip non-job inbox messages. Consumers
     # now keep independent cursors, so do not expose that ambiguous offset.
     checkpoint.pop("inbox_offset", None)
@@ -671,7 +761,35 @@ def _phase_tasks_loop(
             next_task = phase_state.get_next_task()
         else:
             next_task = phase_state.get_next_task()
-        if next_task is None:
+        decision_payload = _checkpoint_decision_payload(
+            phase_state, next_task, state=state,
+        )
+        if run_id:
+            checkpoint_record = store.get_run_record(pn, run_id)
+            checkpoint_version = (
+                checkpoint_record.get("checkpoint_version")
+                if checkpoint_record is not None else None
+            )
+            decision_payload["checkpoint_version"] = checkpoint_version
+            decision_payload["evidence_source"] = (
+                "PhaseState.progress + PhaseState.criteria_progress"
+            )
+            decision_payload["run_id"] = run_id
+            decision_payload["checkpoint_id"] = (
+                f"{run_id}:{checkpoint_version}"
+                if checkpoint_version is not None else run_id
+            )
+            audit_result = audit(
+                "loop_checkpoint_decision",
+                decision_payload,
+                pd,
+                pn,
+            )
+            if audit_result is False:
+                phase_state.save()
+                return 1, tasks_ok, tasks
+        decision = decision_payload["decision"]
+        if decision == "resolve_blocked_graph":
             # OP-163: unerfuellte Deps -> als blocked markieren.
             _pending_after = [
                 _t_b for _t_b in phase_state.data.get("tasks", [])
@@ -690,6 +808,21 @@ def _phase_tasks_loop(
             if _pending_after:
                 phase_state.save()
             break
+        if decision != "execute_planned_task":
+            break
+        if next_task is None:
+            audit(
+                "state_contract_violation",
+                {
+                    "invariant": "checkpoint_task_selection_consistent",
+                    "decision": decision,
+                    "reason": "execute_planned_task_without_task_node",
+                },
+                pd,
+                pn,
+            )
+            phase_state.save()
+            return 1, tasks_ok, tasks
         task_obj = next_task  # Sub-Tasks werden direkt aus PhaseState geholt.
         i += 1
         task_id = next_task.get("id", f"t{i}")

@@ -11,6 +11,7 @@ import json
 import math
 import re
 import subprocess
+import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
@@ -19,8 +20,11 @@ from typing import Any
 __all__ = [
     "DebuggerFix",
     "DebuggerFixError",
+    "cleanup_debugger_workspace",
     "create_debugger_fix",
     "debugger_fix_loop_task",
+    "debugger_workspace_path",
+    "materialize_debugger_workspace",
     "parse_debugger_fix",
     "validate_debugger_fix_checkout",
 ]
@@ -32,6 +36,7 @@ _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _CAUSE_TAG = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _PROJECT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _RUN_SUFFIX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_PROPOSAL_ID = re.compile(r"^[a-f0-9]{32}$")
 _DIFF_HEADER = re.compile(r"^diff --git a/(.+) b/(.+)$")
 _OLD_FILE = re.compile(r"^--- (?:a/(.+)|/dev/null)$")
 _NEW_FILE = re.compile(r"^\+\+\+ (?:b/(.+)|/dev/null)$")
@@ -266,6 +271,162 @@ def debugger_fix_loop_task(fix: DebuggerFix) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
+def debugger_workspace_path(
+    fix: DebuggerFix,
+    proposal_id: str,
+) -> Path:
+    """Deterministic private path for the Chat's isolated debug write."""
+    if not _PROPOSAL_ID.fullmatch(proposal_id):
+        raise DebuggerFixError("proposal_id fuer Debug-Arbeitsbaum ist ungueltig.")
+    return (
+        Path(tempfile.gettempdir())
+        / "werkstatt-debugger-workspaces"
+        / fix.project
+        / fix.run_id
+        / proposal_id
+    )
+
+
+def materialize_debugger_workspace(
+    fix: DebuggerFix,
+    project_dir: Path | str,
+    proposal_id: str,
+    *,
+    timeout_s: int = 30,
+) -> Path:
+    """Write the exact Chat-authored patch into a detached Git worktree.
+
+    The active project checkout is only read. The worktree is created at the
+    fix's pinned base commit, and the patch must apply there before it is
+    written. The caller keeps the hash-bound Loop proposal as the integration
+    contract.
+    """
+    root = Path(project_dir).expanduser().resolve()
+    workspace = debugger_workspace_path(fix, proposal_id)
+    workspace_parent = workspace.parent.resolve()
+    managed_root = (
+        Path(tempfile.gettempdir()) / "werkstatt-debugger-workspaces"
+    ).resolve()
+    if not workspace_parent.is_relative_to(managed_root):
+        raise DebuggerFixError("Debug-Arbeitsbaum liegt ausserhalb des Temp-Bereichs.")
+    if workspace.exists():
+        raise DebuggerFixError("Debug-Arbeitsbaum fuer diesen Vorschlag existiert bereits.")
+
+    added = False
+    try:
+        add = subprocess.run(
+            ["git", "worktree", "add", "--detach", str(workspace), fix.base_head],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout_s,
+        )
+        if add.returncode != 0:
+            detail = (add.stderr or add.stdout or "git worktree add fehlgeschlagen")
+            raise DebuggerFixError(detail[-2_000:])
+        added = True
+
+        check = subprocess.run(
+            ["git", "apply", "--check", "--whitespace=nowarn"],
+            cwd=workspace,
+            input=fix.diff.encode("utf-8"),
+            capture_output=True,
+            check=False,
+            timeout=timeout_s,
+        )
+        if check.returncode != 0:
+            detail = (check.stderr or check.stdout or b"Patch passt nicht auf die Basisrevision.").decode("utf-8", errors="replace")
+            raise DebuggerFixError(detail[-2_000:])
+
+        applied = subprocess.run(
+            ["git", "apply", "--whitespace=nowarn"],
+            cwd=workspace,
+            input=fix.diff.encode("utf-8"),
+            capture_output=True,
+            check=False,
+            timeout=timeout_s,
+        )
+        if applied.returncode != 0:
+            detail = (applied.stderr or applied.stdout or b"Patch konnte nicht geschrieben werden.").decode("utf-8", errors="replace")
+            raise DebuggerFixError(detail[-2_000:])
+
+        whitespace = subprocess.run(
+            ["git", "diff", "--check"],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout_s,
+        )
+        if whitespace.returncode != 0:
+            detail = whitespace.stderr or whitespace.stdout or "git diff --check fehlgeschlagen."
+            raise DebuggerFixError(detail[-2_000:])
+        return workspace
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        if added:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", str(workspace)],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout_s,
+            )
+        raise DebuggerFixError(
+            f"Isolierter Debug-Schreibvorgang fehlgeschlagen: {type(exc).__name__}",
+        ) from exc
+    except DebuggerFixError:
+        if added:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", str(workspace)],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout_s,
+            )
+        raise
+
+
+def cleanup_debugger_workspace(
+    fix: DebuggerFix,
+    project_dir: Path | str,
+    proposal_id: str,
+    *,
+    timeout_s: int = 30,
+) -> tuple[bool, str]:
+    """Remove only the deterministic managed worktree for this proposal."""
+    root = Path(project_dir).expanduser().resolve()
+    try:
+        workspace = debugger_workspace_path(fix, proposal_id)
+    except DebuggerFixError as exc:
+        return False, str(exc)
+    managed_root = (
+        Path(tempfile.gettempdir()) / "werkstatt-debugger-workspaces"
+    ).resolve()
+    resolved_workspace = workspace.resolve()
+    if not resolved_workspace.is_relative_to(managed_root):
+        return False, "Debug-Arbeitsbaum liegt ausserhalb des Temp-Bereichs."
+    if not workspace.exists():
+        return True, "Debug-Arbeitsbaum ist bereits entfernt."
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "remove", "--force", str(workspace)],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout_s,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"Debug-Arbeitsbaum konnte nicht entfernt werden: {type(exc).__name__}"
+    if result.returncode != 0:
+        detail = result.stderr or result.stdout or "git worktree remove fehlgeschlagen"
+        return False, detail[-2_000:]
+    return True, "Debug-Arbeitsbaum entfernt."
+
+
 def validate_debugger_fix_checkout(
     fix: DebuggerFix,
     project_dir: Path | str,
@@ -296,15 +457,14 @@ def validate_debugger_fix_checkout(
         check = subprocess.run(
             ["git", "apply", "--check", "--whitespace=nowarn"],
             cwd=root,
-            input=fix.diff,
+            input=fix.diff.encode("utf-8"),
             capture_output=True,
-            text=True,
             check=False,
             timeout=timeout_s,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, f"Patch-Pruefung fehlgeschlagen: {type(exc).__name__}"
     if check.returncode != 0:
-        detail = (check.stderr or check.stdout or "Patch passt nicht zum Projektstand.")
+        detail = (check.stderr or check.stdout or b"Patch passt nicht zum Projektstand.").decode("utf-8", errors="replace")
         return False, detail[-2000:]
     return True, "Patch ist fuer Projekt und aktuellen HEAD anwendbar."

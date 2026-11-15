@@ -12,6 +12,8 @@ import pytest
 
 from werkstatt.debugger_handoff import (
     DebuggerFixError,
+    cleanup_debugger_workspace,
+    materialize_debugger_workspace,
     parse_debugger_fix,
     validate_debugger_fix_checkout,
 )
@@ -99,7 +101,7 @@ def test_checkout_validation_checks_head_then_patch(tmp_path: Path) -> None:
     assert ok, detail
     assert run.call_count == 2
     assert run.call_args_list[1].args[0][:3] == ["git", "apply", "--check"]
-    assert run.call_args_list[1].kwargs["input"] == _DIFF
+    assert run.call_args_list[1].kwargs["input"] == _DIFF.encode("utf-8")
 
 
 def test_checkout_validation_fails_closed_on_changed_head(tmp_path: Path) -> None:
@@ -146,3 +148,33 @@ def test_create_debugger_fix_builds_hash_and_loop_task() -> None:
     assert payload["diff"] == _DIFF
     assert payload["approval"] == "exact_diff_hash"
     assert "Plan-/Human-Gate" in payload["instruction"]
+
+
+def test_chat_patch_is_written_only_to_detached_debug_worktree(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    subprocess.run(["git", "init", str(project)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.email", "test@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "core.autocrlf", "false"], check=True)
+    target = project / "werkstatt" / "sample.py"
+    target.parent.mkdir()
+    target.write_bytes(b"value = 1\n")
+    subprocess.run(["git", "-C", str(project), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(project), "commit", "-m", "base"], check=True, capture_output=True)
+    head = subprocess.run(
+        ["git", "-C", str(project), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    fix = parse_debugger_fix(_payload(base_head=head))
+    proposal_id = "b" * 32
+
+    workspace = materialize_debugger_workspace(fix, project, proposal_id)
+
+    assert (workspace / "werkstatt" / "sample.py").read_bytes() == b"value = 2\n"
+    assert target.read_bytes() == b"value = 1\n"
+    assert subprocess.run(
+        ["git", "-C", str(workspace), "diff", "--check"], check=False,
+    ).returncode == 0
+    assert cleanup_debugger_workspace(fix, project, proposal_id)[0]
+    assert not workspace.exists()

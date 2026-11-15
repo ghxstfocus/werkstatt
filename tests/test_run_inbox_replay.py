@@ -116,3 +116,51 @@ def test_job_notice_consumer_does_not_consume_questions_or_controls(
     assert question is not None
     assert question["seq"] == question_seq
     assert question["payload"] == {"text": "What changed?"}
+
+
+def test_checkpoint_preserves_more_than_fifty_unresolved_chat_followups(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.phases import tasks
+
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(
+        "demo", "run-many-followups", "Main objective", base_commit="a" * 40,
+    )
+    for index in range(60):
+        proposal_id = f"proposal-{index}"
+        store.enqueue_run_message(
+            "demo",
+            "run-many-followups",
+            f"chat-followup:{proposal_id}",
+            "chat_followup_request",
+            {
+                "proposal_id": proposal_id,
+                "project": "demo",
+                "session_id": "session-many",
+                "parent_run_id": "run-many-followups",
+                "base_commit": "a" * 40,
+                "request": f"Request {index}",
+            },
+        )
+    monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
+    phase_state = SimpleNamespace(data={"tasks": []})
+
+    for _ in range(3):
+        _persist_run_checkpoint(
+            store,
+            "demo",
+            "run-many-followups",
+            phase_state,
+            None,
+        )
+
+    record = store.get_run_record("demo", "run-many-followups")
+    assert record is not None
+    requests = record["checkpoint"]["chat_followup_requests"]
+    assert len(requests) == 60
+    assert {item["proposal_id"] for item in requests} == {
+        f"proposal-{index}" for index in range(60)
+    }
+    assert all(item["status"] == "received" for item in requests)

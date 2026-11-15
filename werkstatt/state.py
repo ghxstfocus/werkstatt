@@ -209,6 +209,11 @@ class RunState:
     mess_protokoll_veraltet: bool = False
     # Auflage 2183 A2: run_id fuer Korrelation.
     run_id: str = ""
+    # Originating Chat can be consulted for one bounded recovery proposal.
+    # The assistant only proposes a task; the Builder remains the sole writer.
+    chat_origin_session_id: str | None = None
+    reflection_chat_attempts: set[str] = field(default_factory=set)
+    reflection_chat_error: str = ""
     # OP-397: runtime-only assertion callback; never persisted into PhaseState.
     run_lease_check: Any = None
 

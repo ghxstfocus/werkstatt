@@ -340,6 +340,30 @@ class ChatSession:
             conn.commit()
         return bool(inserted.rowcount)
 
+    def get_job_turn(self, job_id: str) -> dict[str, str] | None:
+        """Return an already-persisted assistant job turn by its stable ID."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT payload FROM events WHERE session_id=? "
+                "AND kind='job_turn' ORDER BY seq DESC",
+                (self.session_id,),
+            ).fetchall()
+        for (raw_payload,) in row:
+            try:
+                payload = json.loads(raw_payload)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(payload, dict) or payload.get("job_id") != job_id:
+                continue
+            user_text = payload.get("user_text")
+            assistant_text = payload.get("assistant_text")
+            if isinstance(user_text, str) and isinstance(assistant_text, str):
+                return {
+                    "user_text": user_text,
+                    "assistant_text": assistant_text,
+                }
+        return None
+
 
 def list_sessions(
     project: str,

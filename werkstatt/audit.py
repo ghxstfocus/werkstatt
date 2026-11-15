@@ -79,6 +79,15 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "planner_architect_context_budget",
         "loop_explorer_required",
         "loop_explorer_skipped",
+        "loop_reflection_chat_skipped",
+        "loop_reflection_chat_requested",
+        "loop_reflection_chat_rejected",
+        "loop_reflection_chat_task",
+        "loop_reflection_chat_builder_result",
+        "builder_context_budget",
+        "loop_checkpoint_decision",
+        "scout_context_budget",
+        "planner_scout_context_budget_blocked",
     }
 )
 

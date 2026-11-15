@@ -6,6 +6,7 @@ from pathlib import Path
 from werkstatt import planner, run_followups
 from werkstatt.event_store import EventStore
 from werkstatt.phase_state import PhaseState
+from werkstatt.run_followups import retain_followup_history
 from werkstatt.state import RunState
 
 
@@ -68,6 +69,107 @@ def _patch_planning(monkeypatch, *, approved: bool = True) -> None:
 
     monkeypatch.setattr("werkstatt.gates._human_gate_plan", human_gate)
     monkeypatch.setattr("werkstatt.audit.audit", lambda *_args, **_kwargs: True)
+
+
+def test_followup_history_never_drops_unresolved_requests() -> None:
+    history = [
+        {"proposal_id": f"done-{index}", "status": "applied"}
+        for index in range(65)
+    ] + [
+        {"proposal_id": f"open-{index}", "status": "received"}
+        for index in range(60)
+    ]
+    history.append({"proposal_id": "unknown", "status": "new-state"})
+
+    retained = retain_followup_history(history, resolved_limit=50)
+
+    assert len([item for item in retained if item["status"] == "applied"]) == 50
+    assert {
+        item["proposal_id"] for item in retained
+        if item["status"] == "received"
+    } == {f"open-{index}" for index in range(60)}
+    assert any(item["proposal_id"] == "unknown" for item in retained)
+
+
+def test_checkpoint_status_update_keeps_all_pending_followups(tmp_path) -> None:
+    _state, _phase, store = _setup(tmp_path)
+    record = store.get_run_record("demo", "run-1")
+    assert record is not None
+    checkpoint = dict(record["checkpoint"])
+    checkpoint["chat_followup_requests"] = [
+        {"proposal_id": f"done-{index}", "status": "applied"}
+        for index in range(65)
+    ] + [
+        {"proposal_id": f"open-{index}", "status": "received"}
+        for index in range(60)
+    ]
+    store.update_run_checkpoint(
+        "demo", "run-1", checkpoint,
+        expected_version=record["checkpoint_version"],
+    )
+
+    run_followups._append_checkpoint_status(
+        store, "demo", "run-1", "open-0", "applied",
+    )
+
+    latest = store.get_run_record("demo", "run-1")
+    assert latest is not None
+    requests = latest["checkpoint"]["chat_followup_requests"]
+    assert {
+        item["proposal_id"] for item in requests
+        if item["status"] == "received"
+    } == {f"open-{index}" for index in range(1, 60)}
+    assert any(
+        item["proposal_id"] == "open-0" and item["status"] == "applied"
+        for item in requests
+    )
+
+
+def test_unknown_followup_status_fails_closed(tmp_path) -> None:
+    _state, phase, store = _setup(tmp_path)
+    record = store.get_run_record("demo", "run-1")
+    assert record is not None
+    checkpoint = dict(record["checkpoint"])
+    checkpoint["chat_followup_requests"] = [{
+        "proposal_id": "proposal-future",
+        "session_id": "session-1",
+        "request": "Do not discard this",
+        "status": "future-state",
+    }]
+    store.update_run_checkpoint(
+        "demo", "run-1", checkpoint,
+        expected_version=record["checkpoint_version"],
+    )
+
+    try:
+        run_followups.reconcile_chat_followups(
+            _state, phase, store, "demo", "run-1",
+        )
+    except run_followups.FollowupReconciliationError as exc:
+        assert "unbekannten Status" in str(exc)
+    else:
+        raise AssertionError("Unbekannter Follow-up-Status muss stoppen")
+
+
+def test_malformed_followup_entry_fails_closed(tmp_path) -> None:
+    state, phase, store = _setup(tmp_path)
+    record = store.get_run_record("demo", "run-1")
+    assert record is not None
+    checkpoint = dict(record["checkpoint"])
+    checkpoint["chat_followup_requests"] = [None]
+    store.update_run_checkpoint(
+        "demo", "run-1", checkpoint,
+        expected_version=record["checkpoint_version"],
+    )
+
+    try:
+        run_followups.reconcile_chat_followups(
+            state, phase, store, "demo", "run-1",
+        )
+    except run_followups.FollowupReconciliationError as exc:
+        assert "ungueltig" in str(exc)
+    else:
+        raise AssertionError("Ungueltiger Follow-up-Eintrag muss stoppen")
 
 
 def test_reconcile_approved_followup_appends_once_and_reports_chat(tmp_path, monkeypatch):

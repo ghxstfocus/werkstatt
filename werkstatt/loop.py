@@ -355,11 +355,17 @@ def _persist_run_result(
             checkpoint = dict(record["checkpoint"])
             if status == "completed":
                 followups = checkpoint.get("chat_followup_requests", [])
+                if not isinstance(followups, list) or any(
+                    not isinstance(item, dict) for item in followups
+                ):
+                    raise RunInboxPendingError(
+                        "Run kann nicht erfolgreich enden; Follow-up-Ledger "
+                        "im Checkpoint ist ungueltig.",
+                    )
                 unresolved = [
                     item for item in followups
-                    if isinstance(item, dict)
-                    and item.get("status") in {"received", "planning"}
-                ] if isinstance(followups, list) else []
+                    if item.get("status") not in {"applied", "rejected"}
+                ]
                 if unresolved:
                     raise RunInboxPendingError(
                         "Run kann nicht erfolgreich enden; bestaetigte Chat-"
@@ -435,11 +441,16 @@ def _finish_run_after_followups(
         if record is None:
             return rc
         requests = record["checkpoint"].get("chat_followup_requests", [])
+        if not isinstance(requests, list) or any(
+            not isinstance(item, dict) for item in requests
+        ):
+            raise RunInboxPendingError(
+                "Run-Abschluss blockiert; Follow-up-Ledger ist ungueltig.",
+            )
         unresolved = [
             item for item in requests
-            if isinstance(item, dict)
-            and item.get("status") in {"received", "planning"}
-        ] if isinstance(requests, list) else []
+            if item.get("status") not in {"applied", "rejected"}
+        ]
         if not unresolved:
             # Do not spin on an inbox message this coordinator cannot handle.
             # Preserve the existing fail-closed diagnostic for that condition.
@@ -485,11 +496,16 @@ def _finish_run_after_followups(
                 latest["checkpoint"].get("chat_followup_requests", [])
                 if latest is not None else []
             )
+            if not isinstance(latest_requests, list) or any(
+                not isinstance(item, dict) for item in latest_requests
+            ):
+                raise RunInboxPendingError(
+                    "Run-Abschluss blockiert; Follow-up-Ledger ist ungueltig.",
+                )
             still_unresolved = [
                 item for item in latest_requests
-                if isinstance(item, dict)
-                and item.get("status") in {"received", "planning"}
-            ] if isinstance(latest_requests, list) else []
+                if item.get("status") not in {"applied", "rejected"}
+            ]
             if still_unresolved:
                 # A timed-out human gate is a resumable wait, not success. The
                 # schema has no waiting status yet, so persist the run as
@@ -661,6 +677,21 @@ def _run_pipeline_loop_impl(
         aufgabe,
         base_commit=_git_head(state.project_dir),
     )
+    from werkstatt.reflection_chat import originating_chat_session_id
+
+    state.chat_origin_session_id = originating_chat_session_id(run_record)
+    start_context = run_record.get("start_context")
+    if (
+        isinstance(start_context, dict)
+        and start_context.get("origin") == "chat"
+        and state.chat_origin_session_id is None
+    ):
+        audit(
+            "loop_reflection_chat_skipped",
+            {"reason": "invalid_origin_session_id"},
+            state.project_dir,
+            project_name,
+        )
     # A process can die after its filesystem checkpoint was saved. On an
     # explicit, validated resume, re-open the same durable record for work.
     # Keep the checkpoint payload and CAS version intact.

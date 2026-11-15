@@ -854,8 +854,14 @@
       var task = document.createElement("pre");
       task.textContent = proposal.task_preview || proposal.arguments.aufgabe;
       card.appendChild(task);
-    }    var debuggerFix = proposal.arguments && proposal.arguments.debugger_fix;
+    }
+    var debuggerFix = proposal.arguments && proposal.arguments.debugger_fix;
     if (debuggerFix) {
+      if (proposal.debug_workspace_prepared) {
+        var workspaceNote = document.createElement("p");
+        workspaceNote.textContent = "Chat hat diesen Diff in einen isolierten Debug-Arbeitsbaum geschrieben. Bei Freigabe übernimmt der Loop denselben hashgebundenen Diff.";
+        card.appendChild(workspaceNote);
+      }
       var digest = document.createElement("code");
       digest.className = "debugger-fix-hash";
       digest.textContent = "SHA-256 · " + debuggerFix.patch_hash;

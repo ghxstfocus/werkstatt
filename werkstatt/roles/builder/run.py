@@ -25,6 +25,70 @@ from .prompt import (
 )
 from .validate import _validate_imports_in_patch
 
+_BUILDER_CONTEXT_MAX_CHARS = 60_000
+
+
+def _budget_builder_context(
+    required: list[tuple[str, str]],
+    optional: list[tuple[str, str]],
+    *,
+    max_chars: int = _BUILDER_CONTEXT_MAX_CHARS,
+) -> tuple[str | None, dict[str, object]]:
+    """Keeps required task evidence whole and admits optional sections whole.
+
+    Required sections are never truncated. If they cannot fit, return no
+    prompt so the caller can stop before spending a model call on incomplete
+    task/file evidence. Optional sections are considered in caller priority
+    order and omissions are explicit in both prompt and audit metadata.
+    """
+    required_text = "\n\n".join(text for _, text in required if text)
+    required_names = [name for name, text in required if text]
+    if len(required_text) > max_chars:
+        return None, {
+            "max_chars": max_chars,
+            "required_chars": len(required_text),
+            "required_sections": required_names,
+            "included_optional": [],
+            "omitted_optional": [name for name, text in optional if text],
+            "blocked": True,
+        }
+
+    # Reserve room for the explicit omission notice before admitting optional
+    # material; never trim a section to make it fit.
+    optional_budget = max(0, max_chars - len(required_text) - 1_024)
+    selected: list[tuple[str, str]] = []
+    omitted: list[str] = []
+    used_optional = 0
+    for name, text in optional:
+        if not text:
+            continue
+        separator_cost = 2 if required_text or selected else 0
+        if used_optional + separator_cost + len(text) <= optional_budget:
+            selected.append((name, text))
+            used_optional += separator_cost + len(text)
+        else:
+            omitted.append(name)
+
+    # Recompute the notice from the final deterministic include/omit set.
+    notice = (
+        "\n\n## NICHT GELADENE KONTEXTABSCHNITTE\n"
+        + ", ".join(omitted)
+        + "\nBei Bedarf gezielt nachladen; Auslassung ist kein Negativbeleg."
+        if omitted else ""
+    )
+    parts = [required_text, *(text for _, text in selected), notice]
+    prompt = "\n\n".join(part for part in parts if part)
+    metadata: dict[str, object] = {
+        "max_chars": max_chars,
+        "required_chars": len(required_text),
+        "required_sections": required_names,
+        "included_optional": [name for name, _ in selected],
+        "omitted_optional": omitted,
+        "prompt_chars": len(prompt),
+        "blocked": len(prompt) > max_chars,
+    }
+    return (None if metadata["blocked"] else prompt), metadata
+
 
 def _build_patches_fuer_datei(
     state: RunState,
@@ -311,10 +375,8 @@ def _build_patches_fuer_datei(
         from werkstatt.rollen import ROLLEN
         from werkstatt.skills import (
             load_all_skills,
-            skills_metadata_block,
         )
         _all_skills = load_all_skills()
-        _meta = skills_metadata_block(_all_skills)
         _akt = ROLLEN["builder"].lade_skills(
             _all_skills, task_files=[zieldatei])
         _akt_block = ""
@@ -333,29 +395,48 @@ def _build_patches_fuer_datei(
                 _merke_geladene_skills(state, _akt_names, rolle="builder")
             except Exception:
                 pass
-        if _meta or _akt_block:
-            _skills_block = (
-                _meta + _akt_block + "\n"
-            )
+        # Rollen-Kontext bleibt auf dateibezogene, aktivierte Skills
+        # begrenzt. Der globale Skill-Katalog gehoert in Explorer/Scout,
+        # nicht in jeden Builder-Aufruf.
+        if _akt_block:
+            _skills_block = _akt_block + "\n"
     except Exception:
         pass
-    _user = (
-        f"## ZIELDATEI: {zieldatei}\n\n"
-        f"{_module_hint}"
-        f"{_verbote_prefix}"
-        f"{_skills_block}"
-        f"## API-SIGNATUREN (Scout-Destillat):\n"
-        f"{_format_scout_apis_for_builder(state.scout_api_auszug)}\n\n"
-        f"## EXPLORER-FINDINGS:\n"
-        f"{_format_explorer_findings_b(state.explorer_findings)}\n\n"
-        f"{_messwerte_block_b}"
-        f"{_refl_hint}"
-        f"## TASK: {_task_name}\n"
-        f"## TASK-BESCHREIBUNG: {_task_desc}\n\n"
-        f"## ARCHITECT-BESCHREIBUNG (fuer Kontext):\n{_abschnitt}\n\n"
-        f"{_datei_block}"
-        f"{_feedback_block}"
+    _required_context = [
+        ("ZIELDATEI", f"## ZIELDATEI: {zieldatei}"),
+        ("TASK", f"## TASK: {_task_name}\n## TASK-BESCHREIBUNG: {_task_desc}"),
+        ("ARCHITECT", _verbote_prefix +
+         f"## ARCHITECT-BESCHREIBUNG (fuer Kontext):\n{_abschnitt}"),
+        ("ZIELDATEI_INHALT", _datei_block),
+    ]
+    _scout_api_context = _format_scout_apis_for_builder(
+        state.scout_api_auszug,
     )
+    _explorer_context = _format_explorer_findings_b(
+        state.explorer_findings,
+    )
+    _optional_context = [
+        ("FEEDBACK_UND_VERIFY", _feedback_block),
+        ("REPAIR_HINT_UND_BASELINE", _refl_hint),
+        ("DATEI_SKILLS", _skills_block),
+        ("MODULHINWEIS", _module_hint),
+        ("SCOUT_API_SIGNATUREN",
+         ("## API-SIGNATUREN (Scout-Destillat):\n" + _scout_api_context)
+         if _scout_api_context else ""),
+        ("EXPLORER_FINDINGS",
+         ("## EXPLORER-FINDINGS:\n" + _explorer_context)
+         if _explorer_context else ""),
+        ("MESSWERTE", _messwerte_block_b),
+    ]
+    _user, _context_meta = _budget_builder_context(
+        _required_context, _optional_context,
+    )
+    _bglob.audit("builder_context_budget", {
+        "datei": zieldatei,
+        **_context_meta,
+    }, pd, pn)
+    if _user is None:
+        return []
     reply = _bglob.ask_llm(
         api_key, BUILDER_SYSTEM, _user,
         model="deepseek-chat", temperature=0.2, max_tokens=8000,
@@ -693,7 +774,7 @@ def run_builder(state: RunState) -> bool:
             _content = _target.read_text()
             # Nur letzte 50 Zeilen (On-Demand, nicht volle Datei)
             _tail = "\n".join(_content.splitlines()[-50:])
-            _rel_str = str(_target.relative_to(pd))
+            _rel_str = _target.relative_to(pd).as_posix()
             _file_context[_rel_str] = _tail
         except OSError:
             continue
@@ -723,7 +804,7 @@ def run_builder(state: RunState) -> bool:
                     if ln.startswith(("import ", "from "))
                 ]
                 if _imports:
-                    _rel = str(_f.relative_to(pd))
+                    _rel = _f.relative_to(pd).as_posix()
                     _imports_ctx[_rel] = "\n".join(_imports)
         if _imports_ctx:
             _file_context["__projekt_imports__"] = (

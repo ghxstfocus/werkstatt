@@ -14,6 +14,36 @@ class FollowupReconciliationError(RuntimeError):
     """A confirmed follow-up could not be safely added to its run."""
 
 
+def retain_followup_history(
+    requests: list[dict[str, Any]], *, resolved_limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Keep every unresolved request and only bound resolved history.
+
+    A fixed tail slice can silently discard confirmed work when more than
+    ``resolved_limit`` requests arrive before the next reconciliation. Unknown
+    statuses are treated as unresolved so new states fail safe.
+    """
+    if resolved_limit < 0:
+        raise ValueError("resolved_limit darf nicht negativ sein")
+    if not isinstance(requests, list) or any(
+        not isinstance(item, dict) for item in requests
+    ):
+        raise FollowupReconciliationError(
+            "Follow-up-Ledger enthaelt ungueltige Eintraege",
+        )
+    resolved = [
+        item for item in requests
+        if isinstance(item, dict) and item.get("status") in {"applied", "rejected"}
+    ]
+    unresolved = [
+        item for item in requests
+        if isinstance(item, dict) and item.get("status") not in {"applied", "rejected"}
+    ]
+    retained_resolved = resolved[-resolved_limit:] if resolved_limit else []
+    keep_ids = {id(item) for item in (*unresolved, *retained_resolved)}
+    return [item for item in requests if id(item) in keep_ids]
+
+
 def _append_checkpoint_status(
     store: EventStore,
     project: str,
@@ -47,7 +77,7 @@ def _append_checkpoint_status(
             raise FollowupReconciliationError(
                 f"Follow-up {proposal_id} fehlt im Run-Checkpoint",
             )
-        checkpoint["chat_followup_requests"] = updated[-50:]
+        checkpoint["chat_followup_requests"] = retain_followup_history(updated)
         try:
             store.update_run_checkpoint(
                 project,
@@ -185,11 +215,16 @@ def reconcile_chat_followups(
     changed = False
     for item in requests:
         if not isinstance(item, dict):
-            continue
+            raise FollowupReconciliationError(
+                "Follow-up-Ledger enthaelt einen ungueltigen Eintrag",
+            )
+        status = item.get("status")
+        if status not in {"received", "planning", "pending", "applied", "rejected"}:
+            raise FollowupReconciliationError(
+                f"Follow-up hat unbekannten Status: {status!r}",
+            )
         proposal_id = item.get("proposal_id")
-        if isinstance(proposal_id, str) and item.get("status") in {
-            "applied", "rejected",
-        }:
+        if isinstance(proposal_id, str) and status in {"applied", "rejected"}:
             _append_chat_disposition(
                 item,
                 project,
@@ -206,7 +241,7 @@ def reconcile_chat_followups(
                 ),
             )
             continue
-        if item.get("status") != "received":
+        if status != "received":
             continue
         request = item.get("request")
         if (

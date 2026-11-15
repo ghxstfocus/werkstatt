@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 import subprocess
 import sys
 import uuid
@@ -240,6 +241,130 @@ def _audit_query(args: dict[str, Any]) -> str:
     except Exception as exc:
         return f"audit_query-Fehler: {exc}"
     return json.dumps(evs[:50], ensure_ascii=False)[:30_000]
+
+
+def _read_active_run(_args: dict[str, Any]) -> str:
+    """Read the active project's durable Loop state without exposing prompts."""
+    project = _PROJEKTNAME_KONTEXT.get()
+    try:
+        # Use the same persistent process registry as the web controls. Its
+        # read operation also reconciles stale process reservations safely.
+        from werkstatt.web.app import _loop_registry
+
+        registry_record = _loop_registry().read(project)
+    except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
+        return json.dumps({
+            "status": "unknown",
+            "detail": f"Loop-Registry nicht lesbar ({type(exc).__name__}).",
+        }, ensure_ascii=False)
+    store = None
+    if (
+        not isinstance(registry_record, dict)
+        or registry_record.get("state") == "idle"
+    ):
+        try:
+            from werkstatt.event_store import EventStore
+
+            store = EventStore()
+            durable_record = store.get_active_run_record(project)
+        except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
+            return json.dumps({
+                "status": "unknown",
+                "detail": f"Dauerhafter Run-Status nicht lesbar ({type(exc).__name__}).",
+            }, ensure_ascii=False)
+        if durable_record is None:
+            return json.dumps({"status": "idle", "project": project}, ensure_ascii=False)
+        registry_record = {
+            "run_id": durable_record.get("run_id"),
+            "state": "checkpoint_running_unconfirmed",
+            "updated_at": durable_record.get("updated_at"),
+        }
+
+    run_id = registry_record.get("run_id")
+    status = registry_record.get("state", "unknown")
+    result: dict[str, Any] = {
+        "project": project,
+        "status": status,
+        "run_id": run_id,
+        "updated_at": registry_record.get("updated_at"),
+    }
+    if registry_record.get("recovery_issue"):
+        result["recovery_issue"] = registry_record["recovery_issue"]
+    if not isinstance(run_id, str) or not run_id.startswith(f"{project}-"):
+        result["checkpoint_status"] = "unknown"
+        return json.dumps(result, ensure_ascii=False)
+
+    try:
+        if store is None:
+            from werkstatt.event_store import EventStore
+
+            store = EventStore()
+        record = store.get_run_record(project, run_id)
+        if record is None:
+            result["checkpoint_status"] = "missing"
+            return json.dumps(result, ensure_ascii=False)
+        checkpoint = record.get("checkpoint")
+        result["checkpoint_status"] = "available"
+        if isinstance(checkpoint, dict):
+            result["checkpoint"] = {
+                key: checkpoint[key]
+                for key in (
+                    "version", "status", "current_phase", "phase",
+                    "current_task_id", "current_task", "updated_at",
+                )
+                if key in checkpoint and isinstance(
+                    checkpoint[key], (str, int, float, bool, type(None)),
+                )
+            }
+            safe_point = checkpoint.get("safe_point")
+            if isinstance(safe_point, dict):
+                safe_summary: dict[str, Any] = {
+                    key: safe_point[key]
+                    for key in ("phase", "next_task_id")
+                    if isinstance(safe_point.get(key), (str, int, type(None)))
+                }
+                completed = safe_point.get("completed_task_ids")
+                if isinstance(completed, list):
+                    safe_summary["completed_task_ids"] = [
+                        str(item)[:120] for item in completed[:50]
+                    ]
+                result["checkpoint"]["safe_point"] = safe_summary
+            tasks = checkpoint.get("tasks")
+            if isinstance(tasks, list):
+                result["tasks"] = [
+                    {
+                        key: task[key]
+                        for key in ("id", "name", "status", "action")
+                        if key in task and isinstance(
+                            task[key], (str, int, float, bool, type(None)),
+                        )
+                    }
+                    for task in tasks[-30:]
+                    if isinstance(task, dict)
+                ]
+        # Keep only compact event metadata. Raw prompts, file contents,
+        # tool arguments, and model responses remain available via audit_query.
+        events = store.tail(run_id, limit=20, project=project)
+        result["recent_events"] = [
+            {
+                "seq": event.get("seq"),
+                "kind": event.get("kind"),
+                "phase": event.get("phase"),
+                "status": event.get("status"),
+                "ts": event.get("ts"),
+                "summary": next((
+                    str(event["payload"][key])[:400]
+                    for key in ("summary", "reason", "error", "detail")
+                    if isinstance(event.get("payload"), dict)
+                    and isinstance(event["payload"].get(key), str)
+                ), ""),
+            }
+            for event in events
+        ]
+    except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
+        result["checkpoint_status"] = "unknown"
+        result["detail"] = f"Run-Daten nicht lesbar ({type(exc).__name__})."
+    return json.dumps(result, ensure_ascii=False)
 
 
 def _pytest_collect(args: dict[str, Any]) -> str:
@@ -633,7 +758,7 @@ def _request_loop_action(args: dict[str, Any]) -> str:
 
 
 def _propose_debugger_fix(args: dict[str, Any]) -> str:
-    """Speichert einen hashgebundenen Patch-Vorschlag; schreibt keine Dateien."""
+    """Schreibt den hashgebundenen Chat-Patch in einen isolierten Worktree."""
     project = _PROJEKTNAME_KONTEXT.get()
     session_id = _CHAT_SESSION_ID_KONTEXT.get()
     run_id = str(args.get("run_id") or "").strip()
@@ -647,6 +772,7 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
     from werkstatt.debugger_handoff import (
         DebuggerFixError,
         create_debugger_fix,
+        materialize_debugger_workspace,
     )
     from werkstatt.event_store import EventStore
     from werkstatt.projection import Projector
@@ -719,12 +845,22 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
             "detail": str(exc),
         }, ensure_ascii=False)
     proposal_id = uuid.uuid4().hex
+    try:
+        materialize_debugger_workspace(
+            fix, _aktives_projekt_dir(), proposal_id,
+        )
+    except (DebuggerFixError, OSError, subprocess.TimeoutExpired) as exc:
+        return json.dumps({
+            "zustand": "error",
+            "detail": f"Isolierter Debug-Schreibvorgang fehlgeschlagen: {str(exc)[:1000]}",
+        }, ensure_ascii=False)
     from datetime import UTC, datetime, timedelta
     now = datetime.now(UTC)
     proposal = {
         "proposal_id": proposal_id,
         "action": "start",
         "arguments": {"debugger_fix": fix.to_payload()},
+        "debug_workspace_prepared": True,
         "summary": f"Debugger-Fix freigeben: {fix.signatur}",
         "task_preview": (
             f"{fix.ursache_tag} · {len(fix.betroffene_dateien)} Datei(en) · "
@@ -809,6 +945,17 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             },
         },
         "fn": _audit_query,
+        "mode": "read",
+    },
+    "loop_status": {
+        "description": (
+            "Liest den aktuellen Prozessstatus des Loops im aktiven Projekt, "
+            "den letzten dauerhaften Checkpoint und bis zu 20 kompakte "
+            "Ereigniszusammenfassungen. Keine Prompts oder Datei-Inhalte. "
+            "Nutze es bei Fragen zum laufenden Run; fuer Details audit_query."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+        "fn": _read_active_run,
         "mode": "read",
     },
     "pytest_collect": {
@@ -914,6 +1061,7 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         },
         "fn": _request_loop_action,
         "mode": "read",
+        "reflection_allowed": False,
     },
     "next_op": {
         "description": (
@@ -929,6 +1077,8 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
 
 
 def _mode_erlaubt(spec: dict[str, Any], mode: str) -> bool:
+    if mode == "reflection" and spec.get("reflection_allowed") is False:
+        return False
     want = spec.get("mode", "read")
     if want == "read":
         return True

@@ -184,6 +184,15 @@ propose_debugger_fix mit belegtem Run, vollstaendigem Git-Diff,
 Dateiliste und Ursache. Das Tool speichert nur einen Vorschlag; schreibe
 niemals Produktionsdateien. Erklaere danach Hash und Freigabeschritt."""
 
+_REFLECTION_PROMPT = """Du bist ein interner, eng begrenzter Analysehelfer fuer
+den Werkstatt-Reflexionsloop. Analysiere nur die mitgelieferten Run-Belege
+und die freigegebenen Projektdateien. Du erstellst genau eine konkrete,
+kleinere Builder-Aufgabe innerhalb der angegebenen Dateigrenzen oder lehnst
+mit decision=\"cannot_solve\" ab. Du veraenderst keine Dateien, erteilst keine
+Freigabe, steuerst keinen Loop und erweiterst keine Akzeptanzkriterien. Gib
+ausschliesslich das vom Aufrufer angeforderte JSON zurueck. Aussagen zu Ursache
+und Verifikation muessen auf Tool- oder Run-Belegen beruhen."""
+
 _SYSTEM_PROMPT = """Du bist der Chat-Agent fuer das aktuell ausgewaehlte Projekt.
 Du untersuchst das Repo mit projektgebundenen Tools und erklaerst deine Aussagen
 mit Datei-, Zeilen-, Run- oder Test-Belegen. Fuer konkrete OP-Auftraege pruefst
@@ -225,8 +234,29 @@ pruefe die Uebergabe noch einmal gezielt. Bei fehlendem oder abgelehntem
 Tool-Ergebnis sage klar, dass nichts gestartet wurde.
 
 Verfuegbare Tools: read_file, grep, git_log, git_diff, audit_query,
-pytest_collect, diagnose, read_status, next_op, request_loop_action und im
-Debug-Modus propose_debugger_fix.
+loop_status, pytest_collect, diagnose, read_status, next_op und
+request_loop_action; im Debug-Modus zusaetzlich propose_debugger_fix.
+
+Wenn der Nutzer fragt, was der Loop gerade tut, ob er haengt oder welche
+Probleme aufgetreten sind, rufe loop_status fuer den aktuellen Projekt-Run
+auf. Berichte Status und Checkpoint getrennt von den begrenzten letzten
+Ereignissen; fuer eine konkrete Ursache frage audit_query mit Run-ID und
+Sequenzbereich nach. Ein fehlender oder nicht lesbarer Checkpoint ist
+"unbekannt", niemals ein Beleg fuer idle oder Erfolg.
+
+Im normalen Schreibmodus darfst du den Auftrag verstehen, Repo und Run
+untersuchen, einen konkreten Plan bilden und die Umsetzung direkt an den
+Loop uebergeben. Schreibe Produktionsdateien nicht parallel zum Builder:
+der Loop ist der einzige Projektbaum-Schreiber und serialisiert Checkpoints
+und Nutzerauftraege. request_loop_action ist der Handoff, keine Ausfuehrung;
+die UI-Freigabe und das Loop-Plan-Gate bleiben sichtbar. Waehle keine
+Debug-Werkzeuge, wenn der Nutzer nur einen normalen Umsetzungsauftrag erteilt.
+Wenn bereits ein Run aktiv ist und der Nutzer einen weiteren Auftrag
+einschieben will, nutze den Handoff fuer diesen Auftrag; die bestaetigte
+Nachricht wird am Loop-Checkpoint eingeordnet. Behaupte weder, sie sei schon
+angenommen, noch dass sie parallel ausgefuehrt werde, bevor ein echtes
+Tool-/UI-Ergebnis das bestaetigt. Nutze loop_status, um den spaeteren Stand
+zu verfolgen.
 
 Wenn der Nutzer eine konkrete OP nennt oder bearbeiten lassen will, rufe
 zuerst read_status mit genau dieser op_id auf. Der vollstaendige OP-Abschnitt
@@ -757,6 +787,7 @@ def _finalisiere_chat(
     grund: str,
     on_chunk: Callable[[str], None] | None = None,
     cancel_check: Callable[[], bool] | None = None,
+    on_llm_call: Callable[[], None] | None = None,
 ) -> str:
     """Schliesst einen Werkzeugturn anhand belegter Ergebnisse ab."""
     _check_cancel(cancel_check)
@@ -782,6 +813,8 @@ def _finalisiere_chat(
         *messages,
         {"role": "user", "content": _abschluss_prompt},
     ]
+    if on_llm_call is not None:
+        on_llm_call()
     if cancel_check is None:
         _resp = _deepseek_chat(_abschluss_messages)
     else:
@@ -818,6 +851,7 @@ def chat_loop(
     request_id: str | None = None,
     cancel_check: Callable[[], bool] | None = None,
     origin_session_id: str | None = None,
+    on_llm_call: Callable[[], None] | None = None,
 ) -> str:
     """User-Nachricht -> LLM-Loop -> Assistant-Antwort."""
     tools = tools if tools is not None else CHAT_TOOLS
@@ -847,7 +881,7 @@ def chat_loop(
         {
             "role": "system",
             "content": (
-                _SYSTEM_PROMPT
+                (_REFLECTION_PROMPT if mode == "reflection" else _SYSTEM_PROMPT)
                 + ("\\n" + _DEBUGGER_PROMPT if mode == "debugger" else "")
                 + "\\n" + _project_context
             ),
@@ -870,6 +904,8 @@ def chat_loop(
     while max_rounds is None or _rounds < max_rounds:
         _check_cancel(cancel_check)
         _rounds += 1
+        if on_llm_call is not None:
+            on_llm_call()
         if cancel_check is None:
             resp = _deepseek_chat(messages, tools=schemas)
         else:
@@ -1035,6 +1071,7 @@ def chat_loop(
                 return _finalisiere_chat(
                     messages, session, grund="stagnation",
                     on_chunk=on_chunk, cancel_check=cancel_check,
+                    on_llm_call=on_llm_call,
                 )
             _warned_tool_cycles.add(_cycle)
             messages.append({
@@ -1050,4 +1087,5 @@ def chat_loop(
     return _finalisiere_chat(
         messages, session, grund="round_limit",
         on_chunk=on_chunk, cancel_check=cancel_check,
+        on_llm_call=on_llm_call,
     )

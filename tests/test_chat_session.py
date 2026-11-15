@@ -140,6 +140,10 @@ def test_append_job_turn_is_idempotent_and_reconstructs_history(db: Path) -> Non
         {"role": "user", "content": "Frage"},
         {"role": "assistant", "content": "Antwort"},
     ]
+    assert session.get_job_turn("job-1") == {
+        "user_text": "Frage", "assistant_text": "Antwort",
+    }
+    assert session.get_job_turn("missing") is None
 
 
 def test_derive_messages_mapping(db: Path) -> None:

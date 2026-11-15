@@ -294,6 +294,19 @@ class EventStore:
             ).fetchone()
         return self._run_record_from_row(row) if row is not None else None
 
+    def get_active_run_record(self, project: str) -> dict[str, Any] | None:
+        """Return the newest durable run not yet recorded as terminal."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT project, run_id, status, target, base_commit, "
+                "checkpoint_json, checkpoint_version, updated_at, "
+                "start_context_json FROM run_records "
+                "WHERE project=? AND status IN ('starting', 'running') "
+                "ORDER BY updated_at DESC LIMIT 1",
+                (project,),
+            ).fetchone()
+        return self._run_record_from_row(row) if row is not None else None
+
     def update_run_checkpoint(
         self,
         project: str,
@@ -757,6 +770,51 @@ class EventStore:
                 }
             )
         return ergebnis
+
+    def tail(
+        self,
+        run_id: str,
+        limit: int = 20,
+        *,
+        kind: str | None = None,
+        project: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return the latest run events in chronological order."""
+        if not 1 <= limit <= 500:
+            raise ValueError("limit muss zwischen 1 und 500 liegen")
+        sql = (
+            "SELECT seq, run_id, kind, phase, status, payload, ts, project "
+            "FROM events WHERE run_id = ?"
+        )
+        params: list[Any] = [run_id]
+        if kind is not None:
+            sql += " AND kind = ?"
+            params.append(kind)
+        if project is not None:
+            sql += " AND project = ?"
+            params.append(project)
+        sql += " ORDER BY seq DESC LIMIT ?"
+        params.append(limit)
+        with closing(self._connect()) as conn:
+            rows = conn.execute(sql, params).fetchall()
+        rows.reverse()
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                payload = json.loads(row[5])
+            except json.JSONDecodeError:
+                payload = {}
+            results.append({
+                "seq": row[0],
+                "run_id": row[1],
+                "kind": row[2],
+                "phase": row[3],
+                "status": row[4],
+                "payload": payload,
+                "ts": row[6],
+                "project": row[7],
+            })
+        return results
 
 
 class RunLeaseGuard:

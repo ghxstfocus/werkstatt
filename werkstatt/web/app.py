@@ -1926,6 +1926,20 @@ def create_app() -> FastAPI:
             and proposal.get("action") == "start"
             and decision == "confirm"
         ):
+            debugger_payload = (proposal.get("arguments") or {}).get("debugger_fix")
+            if debugger_payload is not None and state in {"rejected", "expired"}:
+                try:
+                    from werkstatt.debugger_handoff import (
+                        cleanup_debugger_workspace,
+                        parse_debugger_fix,
+                    )
+                    cleanup_debugger_workspace(
+                        parse_debugger_fix(debugger_payload),
+                        _PROJECTS_BASE / projekt,
+                        proposal_id,
+                    )
+                except (ValueError, OSError, RuntimeError):
+                    pass
             return {"proposal_id": proposal_id, "state": state, "result": prior_result}
         try:
             action = proposal.get("action")
@@ -1972,6 +1986,9 @@ def create_app() -> FastAPI:
                     result = project_start(projekt, arguments)
                 finally:
                     _WEB_START_CONTEXT.reset(start_token)
+                if debugger_payload is not None and result.get("gestartet") is True:
+                    from werkstatt.debugger_handoff import cleanup_debugger_workspace
+                    cleanup_debugger_workspace(fix, _PROJECTS_BASE / projekt, proposal_id)
                 if (
                     result.get("gestartet") is False
                     and result.get("grund") == "laeuft_bereits"
@@ -2055,6 +2072,13 @@ def create_app() -> FastAPI:
                             },
                         },
                     )
+                    if debugger_payload is not None:
+                        from werkstatt.debugger_handoff import (
+                            cleanup_debugger_workspace,
+                        )
+                        cleanup_debugger_workspace(
+                            fix, _PROJECTS_BASE / projekt, proposal_id,
+                        )
                     return {
                         "proposal_id": proposal_id,
                         "state": "queued",

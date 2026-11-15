@@ -19,10 +19,11 @@ def test_verbotene_tools_fehlen() -> None:
         assert name not in chat_tools.CHAT_TOOLS
 
 
-def test_neun_soll_tools_vorhanden() -> None:
+def test_chat_tools_registry_contains_project_actions() -> None:
     erwartet = {
         "read_file", "grep", "git_log", "git_diff",
-        "audit_query", "pytest_collect", "diagnose", "read_status", "next_op",
+        "audit_query", "loop_status", "pytest_collect", "diagnose",
+        "read_status", "next_op",
     }
     erwartet.add("request_loop_action")
     erwartet.update({"pytest_run", "write_temp_test", "propose_debugger_fix"})
@@ -41,14 +42,15 @@ def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
     assert "pytest_run" not in read_names
     assert "write_temp_test" not in read_names
     assert {"pytest_run", "write_temp_test"} <= debugger_names
-    assert len(read_names) == 10
+    assert "loop_status" in read_names
+    assert len(read_names) == 11
     assert {"pytest_run", "write_temp_test", "propose_debugger_fix"} <= debugger_names
-    assert len(debugger_names) == 13
+    assert len(debugger_names) == 14
 
 
 def test_openai_schemas_anzahl() -> None:
     schemas = chat_tools.openai_schemas()
-    assert len(schemas) == 10
+    assert len(schemas) == 11
     for s in schemas:
         assert s["type"] == "function"
         assert s["function"]["name"] in chat_tools.CHAT_TOOLS
@@ -271,14 +273,19 @@ def test_git_log_funktioniert() -> None:
     assert "Fehler" not in r[:80]
 
 
-def test_mode_write_aktiviert_write_tools_nicht() -> None:
-    """Heute gibt es keine write-Tools — Registry bleibt stabil."""
+def test_mode_write_routes_production_writes_through_loop() -> None:
+    """Write mode keeps project changes routed through the Loop handoff."""
     schemas = chat_tools.openai_schemas(mode="write")
-    assert len(schemas) == 10
+    names = {item["function"]["name"] for item in schemas}
+    assert len(schemas) == 11
+    assert {"loop_status", "request_loop_action"} <= names
+    assert "write_file" not in names
 
 
-def test_execute_tool_mit_mode_write_bei_read_tool() -> None:
-    r = chat_tools.execute_tool("diagnose", {}, mode="write")
+def test_execute_tool_mit_mode_write_bei_read_tool(tmp_path) -> None:
+    r = chat_tools.execute_tool(
+        "diagnose", {}, mode="write", project_dir=tmp_path,
+    )
     assert "bekannte_fehlerklassen" in r
 
 
@@ -308,6 +315,94 @@ def test_audit_query_rejects_other_project_run_id(tmp_path) -> None:
         project_dir=tmp_path, project_name="alpha",
     )
     assert "gehoert nicht zum aktiven Projekt" in result
+
+
+def test_loop_status_returns_idle_when_project_has_no_run(monkeypatch, tmp_path):
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import app
+
+    monkeypatch.setattr(
+        app, "_loop_registry",
+        lambda: SimpleNamespace(read=lambda project: None),
+    )
+    monkeypatch.setattr(
+        "werkstatt.event_store.EventStore",
+        lambda: EventStore(tmp_path / "events.db"),
+    )
+    result = chat_tools.execute_tool(
+        "loop_status", {}, project_dir=tmp_path, project_name="alpha",
+    )
+    assert json.loads(result) == {"status": "idle", "project": "alpha"}
+
+
+def test_loop_status_exposes_checkpoint_and_sanitized_events(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import app
+
+    monkeypatch.setattr(
+        app, "_loop_registry",
+        lambda: SimpleNamespace(read=lambda _project: {
+            "run_id": "alpha-run-1", "state": "running",
+            "updated_at": 12.5,
+        }),
+    )
+    store = EventStore(tmp_path / "events.db")
+    run = store.create_run_record(
+        project="alpha", run_id="alpha-run-1", target="test",
+        base_commit="abc", start_context={},
+    )
+    store.update_run_checkpoint(
+        "alpha", "alpha-run-1", {
+            "safe_point": {
+                "phase": "build", "next_task_id": "task-2",
+                "completed_task_ids": ["task-1"],
+            },
+            "private_prompt": "do not expose",
+        }, expected_version=run["checkpoint_version"],
+    )
+    store.append(
+        "alpha-run-1", "loop_task_started", payload={
+            "summary": "Builder laeuft", "prompt": "secret prompt",
+        }, project="alpha",
+    )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+    result = chat_tools.execute_tool(
+        "loop_status", {}, project_dir=tmp_path, project_name="alpha",
+    )
+    parsed = json.loads(result)
+    assert parsed["status"] == "running"
+    assert parsed["run_id"] == "alpha-run-1"
+    assert parsed["checkpoint_status"] == "available"
+    assert parsed["checkpoint"]["safe_point"]["next_task_id"] == "task-2"
+    assert parsed["recent_events"][0]["summary"] == "Builder laeuft"
+    assert "secret prompt" not in result
+    assert "do not expose" not in result
+
+
+def test_loop_status_falls_back_to_durable_cli_run(monkeypatch, tmp_path):
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import app
+
+    monkeypatch.setattr(
+        app, "_loop_registry",
+        lambda: SimpleNamespace(read=lambda _project: None),
+    )
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(
+        project="alpha", run_id="alpha-cli-1", target="test",
+        base_commit="abc", start_context={},
+    )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+
+    result = chat_tools.execute_tool(
+        "loop_status", {}, project_dir=tmp_path, project_name="alpha",
+    )
+
+    parsed = json.loads(result)
+    assert parsed["status"] == "checkpoint_running_unconfirmed"
+    assert parsed["run_id"] == "alpha-cli-1"
 
 
 
@@ -579,7 +674,7 @@ def test_write_temp_test_rejects_large_content(tmp_path) -> None:
 def test_propose_debugger_fix_creates_project_run_bound_proposal(
     monkeypatch: pytest.MonkeyPatch, tmp_path,
 ) -> None:
-    from werkstatt import chat_session, event_store, projection
+    from werkstatt import chat_session, debugger_handoff, event_store, projection
 
     head = "a" * 40
     run_id = "demo-run-123"
@@ -612,6 +707,11 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
     monkeypatch.setattr(event_store, "EventStore", FakeStore)
     monkeypatch.setattr(projection, "Projector", lambda: SimpleNamespace(tail=dict))
     monkeypatch.setattr(chat_session, "ChatSession", FakeSession)
+    prepared = []
+    monkeypatch.setattr(
+        debugger_handoff, "materialize_debugger_workspace",
+        lambda fix, project_dir, proposal_id: prepared.append((fix, project_dir, proposal_id)) or tmp_path / "isolated-worktree",
+    )
     monkeypatch.setattr(
         chat_tools.subprocess,
         "run",
@@ -642,6 +742,8 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
     assert saved["payload"]["arguments"]["debugger_fix"]["base_head"] == head
     assert saved["payload"]["arguments"]["debugger_fix"]["diff"] == diff
     assert saved["payload"]["arguments"]["debugger_fix"]["patch_hash"]
+    assert saved["payload"]["debug_workspace_prepared"] is True
+    assert len(prepared) == 1
 
     FakeStore.failure_present = False
     missing_evidence = json.loads(chat_tools.execute_tool(

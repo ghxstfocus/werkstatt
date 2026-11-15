@@ -66,6 +66,19 @@ def test_query_kind_filter(tmp_path: Path) -> None:
     assert store.query("run-c", kind="gibt_es_nicht") == []
 
 
+def test_tail_liefert_neueste_events_chronologisch(tmp_path: Path) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    for index in range(5):
+        store.append("run-tail", f"event-{index}", payload={"index": index})
+
+    events = store.tail("run-tail", limit=2)
+
+    assert [item["kind"] for item in events] == ["event-3", "event-4"]
+    assert [item["payload"]["index"] for item in events] == [3, 4]
+    with pytest.raises(ValueError, match="limit"):
+        store.tail("run-tail", limit=0)
+
+
 def test_query_since_seq_export(tmp_path: Path) -> None:
     store = EventStore(db_pfad=tmp_path / "events.db")
 
