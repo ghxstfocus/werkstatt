@@ -95,9 +95,19 @@ def test_builder_sends_source_hash_and_complete_current_file(tmp_path):
         args[1] for args, _ in audit.call_args_list
         if args[0] == "builder_context_budget"
     )
+    file_context_event = next(
+        args[1] for args, _ in audit.call_args_list
+        if args[0] == "builder_file_context"
+    )
     assert context_event["source_sha256"] == expected_hash
     assert context_event["source_complete"] is True
     assert context_event["source_chars"] == len(source)
+    sent_user = ask_llm.call_args.args[2]
+    sent_hash = hashlib.sha256(sent_user.encode("utf-8")).hexdigest()
+    assert context_event["user_sha256"] == sent_hash
+    assert file_context_event["user_sha256"] == sent_hash
+    assert file_context_event["files"] == ["a.py"]
+    assert file_context_event["included_in_prompt"] is True
 
 
 def test_builder_rejects_stale_chat_recovery_evidence_before_model_call(tmp_path):

@@ -3,16 +3,15 @@ from __future__ import annotations
 
 import hashlib
 import html
-import json
 import re
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 from werkstatt.state import RunState
 
 from . import _common as _bglob
-from .ast import _sammle_projekt_py_files
 from .patch import (
     _architect_abschnitt,
     _extrahiere_verbote,
@@ -547,6 +546,10 @@ def _build_patches_fuer_datei(
     _user, _context_meta = _budget_builder_context(
         _required_context, _optional_context,
     )
+    _user_sha256 = (
+        hashlib.sha256(_user.encode("utf-8")).hexdigest()
+        if _user is not None else None
+    )
     _bglob.audit("builder_context_budget", {
         "datei": zieldatei,
         "source_chars": len(_inhalt) if not _ist_neu else 0,
@@ -555,11 +558,19 @@ def _build_patches_fuer_datei(
             _source_hash if not _ist_neu else None
         ),
         "source_complete": bool(_user is not None and not _ist_neu),
+        "user_sha256": _user_sha256,
         **_context_meta,
     }, pd, pn)
     if _user is None:
         _builder_failure(state, "required_context_over_budget")
         return []
+    _bglob.audit("builder_file_context", {
+        "files": [zieldatei] if not _ist_neu else [],
+        "included_in_prompt": True,
+        "source_sha256": _source_hash if not _ist_neu else None,
+        "source_complete": not _ist_neu,
+        "user_sha256": _user_sha256,
+    }, pd, pn)
     reply = _bglob.ask_llm(
         api_key, BUILDER_SYSTEM, _user,
         model="deepseek-chat", temperature=0.2, max_tokens=8000,
@@ -818,7 +829,7 @@ def run_builder(state: RunState) -> bool:
         for _tf in _target_files:
             if _tf.suffix == ".py":
                 _res = subprocess.run(
-                    ["python3", "-m", "py_compile", str(_tf)],
+                    [sys.executable, "-m", "py_compile", str(_tf)],
                     capture_output=True, text=True, timeout=30, check=False,
                 )
                 if _res.returncode != 0:
@@ -834,120 +845,6 @@ def run_builder(state: RunState) -> bool:
                   {"files": [str(f.name) for f in _target_files]}, pd, pn)
             state.patches = []
             return True
-
-    # M-298d: On-demand Zieldatei lesen.
-    # Profi-Ansatz (Aider Repo-Map, Cline read_file): Der Builder
-    # liest nur die Dateien, die der Task betrifft — nicht die
-    # ganze Codebase. Explorer-Report (key_files) zeigt WELCHE
-    # Datei relevant ist; der Builder liest sie DANN selbst.
-    #
-    # Wir scannen den Task-Text nach Datei-Pfaden (typisch:
-    # "README.md", "core/x.py"). Der erste Treffer wird gelesen.
-    import re as _re
-    _file_pattern = _re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:md|py|yaml|yml|json|txt|toml|cfg|ini))\b')
-    _relevant_files: list[str] = []
-    for _task in tasks:
-        _text = _task if isinstance(_task, str) else str(_task)
-        for _m in _file_pattern.findall(_text):
-            if _m not in _relevant_files:
-                _relevant_files.append(_m)
-    # M-335: task_files aus aktuellem Task (M-317) PRIORISIEREN.
-    # Der Planner setzt explizite Datei-Pfade pro Task. Der Builder
-    # hat sie bisher ignoriert — deshalb sah er oft die falsche
-    # Datei (z.B. tools/port_check.py statt core/checks/).
-    _aktuelle_task = getattr(state, "aktuelle_task", None)
-    if isinstance(_aktuelle_task, dict):
-        _task_files = _aktuelle_task.get("task_files", []) or []
-        if _task_files:
-            _task_files_str = [f for f in _task_files if isinstance(f, str)]
-            if _task_files_str:
-                # M-337-b: NUR task_files. Kein Regex, kein Explorer.
-                # Der Builder soll nur die vom Planner genannten
-                # Dateien sehen — nicht 6 andere.
-                _relevant_files = list(_task_files_str)
-
-    # M-337-b: Explorer-key_files NUR als Fallback, wenn
-    # task_files leer war.
-    _hat_task_files = (
-        isinstance(_aktuelle_task, dict)
-        and bool(_aktuelle_task.get("task_files"))
-    )
-    if not _hat_task_files:
-        _expl = state.explorer_context or {}
-        for _f in _expl.get("key_files", []) or []:
-            _f_str = None
-            if isinstance(_f, str):
-                _f_str = _f
-            elif isinstance(_f, dict):
-                _f_str = _f.get("file") or _f.get("path") or _f.get("name")
-            if _f_str and _f_str not in _relevant_files:
-                _relevant_files.append(_f_str)
-
-    _file_context: dict[str, str] = {}
-    # M-336: Ordner in _relevant_files aufloesen. Der Planner
-    # setzt task_files manchmal als Ordner (z.B. "core/checks/")
-    # statt als Datei ("core/checks/__init__.py"). is_file()
-    # schlaegt dann fehl — der Builder sieht die Datei nicht.
-    _aufgeloest: list[Path] = []
-    for _rel in _relevant_files:
-        if not isinstance(_rel, str):
-            continue
-        _target = pd / _rel
-        if _target.is_dir():
-            # Ordner: alle .py-Dateien darin (max 5)
-            _aufgeloest.extend(sorted(_target.glob("*.py"))[:5])
-        elif _target.is_file():
-            _aufgeloest.append(_target)
-
-    for _target in _aufgeloest[:5]:  # max 5, kein Kontext-Ballern
-        try:
-            _content = _target.read_text()
-            # Nur letzte 50 Zeilen (On-Demand, nicht volle Datei)
-            _tail = "\n".join(_content.splitlines()[-50:])
-            _rel_str = _target.relative_to(pd).as_posix()
-            _file_context[_rel_str] = _tail
-        except OSError:
-            continue
-
-    # M-333b: Bei create-Tasks (neue Dateien) gibt es keinen
-    # _file_context (Datei existiert nicht). Wir sammeln die
-    # Imports benachbarter .py-Dateien, damit der Builder weiss,
-    # welche Module im Projekt existieren.
-    _create_tasks = [
-        t for t in tasks
-        if isinstance(t, dict) and t.get("action") == "create"
-    ]
-    if _create_tasks:
-        _imports_ctx: dict[str, str] = {}
-        # Alle .py-Dateien im Projekt (max 30). K10: Ignorier-Pfade
-        # (.venv, __pycache__, site-packages, node_modules) werden
-        # in _sammle_projekt_py_files gefiltert.
-        _py_files = _sammle_projekt_py_files(pd, limit=30)
-        for _f in _py_files:
-            if _f.is_file():
-                try:
-                    _lines = _f.read_text(encoding="utf-8").splitlines()
-                except (OSError, UnicodeDecodeError):
-                    continue
-                _imports = [
-                    ln for ln in _lines[:30]
-                    if ln.startswith(("import ", "from "))
-                ]
-                if _imports:
-                    _rel = _f.relative_to(pd).as_posix()
-                    _imports_ctx[_rel] = "\n".join(_imports)
-        if _imports_ctx:
-            _file_context["__projekt_imports__"] = (
-                "\n\n".join(
-                    f"--- {f} ---\n{imp}"
-                    for f, imp in list(_imports_ctx.items())[:15]
-                )
-            )
-            _bglob.audit("builder_import_context",
-                  {"files": list(_imports_ctx.keys())[:15]}, pd, pn)
-
-    if _file_context:
-        _bglob.audit("builder_file_context", {"files": list(_file_context.keys())}, pd, pn)
 
     # M-337: Zieldatei deterministisch bestimmen aus task_files.
     # Der Builder bekommt KEINE freie Wahl. Er MUSS diese Datei
@@ -1008,11 +905,11 @@ def run_builder(state: RunState) -> bool:
         if _target.is_dir():
             _init = _target / "__init__.py"
             if _init.exists():
-                _zieldatei = str(_init.relative_to(pd))
+                _zieldatei = _init.relative_to(pd).as_posix()
                 break
             _py = sorted(_target.glob("*.py"))
             if _py:
-                _zieldatei = str(_py[0].relative_to(pd))
+                _zieldatei = _py[0].relative_to(pd).as_posix()
                 break
         elif _target.is_file():
             _zieldatei = _tf
@@ -1044,49 +941,6 @@ def run_builder(state: RunState) -> bool:
                   {"task_files": _task_files, "action": _current_action2},
                   pd, pn)
             return _builder_failure(state, "missing_target_file")
-
-    # Volle Zieldatei in den Prompt (nicht letzte 50 Zeilen),
-    # damit old_string exakt passt.
-    _zieldatei_path = pd / _zieldatei
-    if _zieldatei_path.exists() and _zieldatei_path.is_file():
-        try:
-            _file_context[_zieldatei] = _zieldatei_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            pass
-
-    aufgabe = state.aufgabe
-
-    # Aktuellen Code lesen (vereinfacht: aus state.docs oder direkt)
-    # Fuer Phase 6 nehmen wir einen Platzhalter, spaeter wird das aus dem Repo gelesen.
-
-    # M-337: user_content mit Zieldatei + Aktion. KEINE Task-Liste
-    # (der LLM soll nicht frei entscheiden).
-    user_content = (
-        f"ZIELDATEI: {_zieldatei}\n"
-        f"AKTION: {_current_action2}\n\n"
-        f"AUFGABE: {aufgabe}\n\n"
-        f"AKTUELLER TASK: {json.dumps(_aktuelle_task, ensure_ascii=False)}"
-    )
-
-    # M-329a: Fehler-Kontext aus Reflection (_verify_patches).
-    _verify_errors = getattr(state, "last_verify_errors", None)
-    if _verify_errors:
-        _err_text = "\n".join(str(e) for e in _verify_errors)[:3000]
-        user_content += (
-            f"\n\nDer letzte Patch hat die Tests zerstoert. "
-            f"Hier ist der Fehler-Output:\n\n{_err_text}\n\n"
-            "Behebe NUR diesen Fehler. Nutze old_string/new_string. "
-            "M-383: Wenn der Fehler RUF100 (unused noqa) ist: Entferne den # noqa NICHT, wenn der Code absichtlich so ist (Negativtest, naive datetime). Behalte den # noqa. " 
-            "Wenn ein Import fehlt, ergaenze ihn in der Import-Zeile."
-        )
-
-    # M-298d: Datei-Kontext als zusaetzlicher Abschnitt (on-demand).
-    # Nur Dateien, die der Task betrifft — verhindert Token-Ballern.
-    if "_file_context" in dir() and _file_context:
-        _ctx_parts = []
-        for _f, _c in _file_context.items():
-            _ctx_parts.append(f"--- {_f} (letzte 50 Zeilen) ---\n{_c}")
-        user_content += "\n\nAktueller Datei-Kontext:\n" + "\n\n".join(_ctx_parts)
 
     # GOLD: Klassischer Pfad nutzt _build_patches_fuer_datei.
     # Vorteile: voller Datei-Inhalt, relevanter Architect-Abschnitt,

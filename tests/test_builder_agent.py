@@ -222,40 +222,40 @@ def test_builder_prompt_import_regeln():
     assert "API-Aenderungen" in BUILDER_SYSTEM or "Umbenennungen" in BUILDER_SYSTEM
 
 
-def test_builder_create_task_mit_import_kontext(tmp_path):
-    """M-333b: Bei create-Task werden Projekt-Imports gesammelt."""
+def test_builder_create_task_erhaelt_lokale_modulnamen_im_prompt(tmp_path):
+    """Create tasks receive the target directory's actual module hint."""
     from unittest.mock import patch
 
     from werkstatt.roles.builder import run_builder
 
-    # Bestehende .py-Datei mit Import
-    (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "__init__.py").write_text(
-        "from core.checks import check_port\n"
+    (tmp_path / "tests" / "unit").mkdir(parents=True)
+    (tmp_path / "tests" / "unit" / "existing.py").write_text(
+        "def existing_helper():\n    return True\n"
     )
-    # Neue Datei (existiert nicht)
     st = _state(tmp_path)
     st.tasks = [
         {"id": "t1", "name": "neue_datei.py anlegen",
-         "action": "create"},
+         "description": "Erstelle tests/unit/test_neu.py",
+         "action": "create", "task_files": ["tests/unit/test_neu.py"]},
     ]
-    # Task-Text enthaelt Pfad
-    st.tasks[0]["description"] = "Erstelle tests/unit/test_neu.py"
+    st.aktuelle_task = st.tasks[0]
+    st.architect_prosa = (
+        "## tests/unit/test_neu.py\nErstelle die benoetigte Testdatei."
+    )
 
-    _audits = []
-    def _mock_audit(kind, payload, *a, **kw):
-        _audits.append(kind)
-
-    with patch("werkstatt.roles.builder._common.audit", side_effect=_mock_audit), \
-         patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
-        mock_llm.return_value = type("R", (), {
+    prompts = []
+    def _mock_ask(*args, **kwargs):
+        prompts.append(args[2])
+        return type("R", (), {
             "ok": True, "content": '{"patches": []}', "error": ""
         })()
+
+    with patch("werkstatt.roles.builder._common.ask_llm", side_effect=_mock_ask):
         run_builder(st)
 
-    # builder_import_context sollte gefeuert haben
-    assert "builder_import_context" in _audits, \
-        f"erwartet builder_import_context, war {_audits}"
+    assert prompts
+    assert "existing" in prompts[0]
+    assert "VERFUEGBARE MODULE IM ZIELVERZEICHNIS" in prompts[0]
 
 
 def test_builder_create_ohne_imports(tmp_path):
@@ -276,8 +276,8 @@ def test_builder_create_ohne_imports(tmp_path):
     assert result in (True, False)
 
 
-def test_builder_task_files_priorisiert(tmp_path):
-    """M-335: task_files kommen zuerst in _file_context."""
+def test_builder_task_files_beleg_wird_tatsaechlich_uebergeben(tmp_path):
+    """The Builder audit describes source that reached its prompt."""
     from unittest.mock import patch
 
     from werkstatt.roles.builder import run_builder
@@ -294,11 +294,12 @@ def test_builder_task_files_priorisiert(tmp_path):
     st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
                  "task_files": ["core/checks.py"]}]
     st.aktuelle_task = st.tasks[0]
+    st.architect_prosa = "## core/checks.py\nBehebe die Syntaxstelle."
 
     _file_ctx = []
     def _mock_audit(kind, payload, *a, **kw):
         if kind == "builder_file_context":
-            _file_ctx.extend(payload.get("files", []))
+            _file_ctx.append(payload)
 
     with patch("werkstatt.roles.builder._common.audit", side_effect=_mock_audit), \
          patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
@@ -307,12 +308,16 @@ def test_builder_task_files_priorisiert(tmp_path):
         })()
         run_builder(st)
 
-    # core/checks.py muss in _file_context sein
-    assert "core/checks.py" in _file_ctx, f"erwartet core/checks.py, war {_file_ctx}"
+    assert len(_file_ctx) == 1
+    assert _file_ctx[0]["files"] == ["core/checks.py"]
+    assert _file_ctx[0]["included_in_prompt"] is True
+    assert _file_ctx[0]["source_complete"] is True
 
 
-def test_builder_task_files_leer_fallback(tmp_path):
-    """M-335: Ohne task_files bleibt altes Verhalten (Task-Text + Explorer)."""
+def test_builder_ohne_task_files_nutzt_explorerdatei_nicht_als_schreibscope(
+    tmp_path,
+):
+    """An Explorer hint alone must not authorize a Builder target."""
     from unittest.mock import patch
 
     from werkstatt.roles.builder import run_builder
@@ -325,20 +330,16 @@ def test_builder_task_files_leer_fallback(tmp_path):
     st.aktuelle_task = st.tasks[0]
     st.explorer_context = {"key_files": ["tools/port.py"]}
 
-    _file_ctx = []
+    audits = []
     def _mock_audit(kind, payload, *a, **kw):
-        if kind == "builder_file_context":
-            _file_ctx.extend(payload.get("files", []))
+        audits.append((kind, payload))
 
     with patch("werkstatt.roles.builder._common.audit", side_effect=_mock_audit), \
          patch("werkstatt.roles.builder._common.ask_llm") as mock_llm:
-        mock_llm.return_value = type("R", (), {
-            "ok": True, "content": '{"patches": []}', "error": ""
-        })()
-        run_builder(st)
+        assert run_builder(st) is False
 
-    # tools/port.py (Explorer-Fallback) ist da
-    assert "tools/port.py" in _file_ctx
+    mock_llm.assert_not_called()
+    assert not any(kind == "builder_file_context" for kind, _ in audits)
 
 
 def test_builder_task_files_nicht_str(tmp_path):
@@ -377,6 +378,9 @@ def test_builder_ordner_in_task_files(tmp_path):
     st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
                  "task_files": ["core/checks/"]}]
     st.aktuelle_task = st.tasks[0]
+    st.architect_prosa = (
+        "## core/checks/__init__.py\nBehebe die Syntaxstelle."
+    )
 
     _file_ctx = []
     def _mock_audit(kind, payload, *a, **kw):
@@ -461,6 +465,7 @@ def test_builder_patch_falsche_datei_abgelehnt(tmp_path):
     st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
                  "task_files": ["core/checks.py"]}]
     st.aktuelle_task = st.tasks[0]
+    st.architect_prosa = "## core/checks.py\nBehebe die Syntaxstelle."
 
     _audits = []
     def _mock_ask(*a, **kw):
@@ -509,8 +514,8 @@ def test_builder_patch_richtige_datei(tmp_path):
     assert st.patches[0]["file"] == "core/checks.py"
 
 
-def test_builder_task_files_nur_diese(tmp_path):
-    """M-337-b: task_files gesetzt -> NUR task_files in _file_context."""
+def test_builder_prompt_schliesst_explorerdateien_aus_task_files_aus(tmp_path):
+    """The target source is sent; unrelated Explorer hints are not."""
     from unittest.mock import patch
 
     from werkstatt.roles.builder import run_builder
@@ -524,13 +529,14 @@ def test_builder_task_files_nur_diese(tmp_path):
     st.tasks = [{"id": "t1", "name": "refactor", "action": "update",
                  "task_files": ["core/checks.py"]}]
     st.aktuelle_task = st.tasks[0]
+    st.architect_prosa = "## core/checks.py\nBehebe die Syntaxstelle."
     # Explorer-Key-Files: tools/port.py (sollte ignoriert werden)
     st.explorer_context = {"key_files": ["tools/port.py"]}
 
     _file_ctx = []
     def _mock_audit(kind, payload, *a, **kw):
         if kind == "builder_file_context":
-            _file_ctx.extend(payload.get("files", []))
+            _file_ctx.append(payload)
 
     with patch("werkstatt.roles.builder._common.ask_llm") as mock_llm, \
          patch("werkstatt.roles.builder._common.audit", side_effect=_mock_audit):
@@ -541,9 +547,11 @@ def test_builder_task_files_nur_diese(tmp_path):
         })()
         run_builder(st)
 
-    # core/checks.py muss da sein, tools/port.py NICHT
-    assert "core/checks.py" in _file_ctx, f"erwartet core/checks.py, war {_file_ctx}"
-    assert "tools/port.py" not in _file_ctx, f"tools/port.py sollte nicht da sein: {_file_ctx}"
+    assert len(_file_ctx) == 1
+    assert _file_ctx[0]["files"] == ["core/checks.py"]
+    assert _file_ctx[0]["included_in_prompt"] is True
+    assert "def broken(:" in mock_llm.call_args.args[2]
+    assert "def port(): pass" not in mock_llm.call_args.args[2]
 
 
 def test_explorer_prompt_m338():
