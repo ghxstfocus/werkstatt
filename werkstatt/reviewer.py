@@ -808,6 +808,7 @@ def run_phase_end_review(state: RunState) -> bool:
                 aufgabe="reviewer", state=state,
                 context_manifest={
                     "budget_event": "reviewer_phase_context",
+                    "user_sha256": hashlib.sha256(user.encode("utf-8")).hexdigest(),
                     "files": _phase_files,
                     "user_chars": len(user),
                 },
@@ -1348,6 +1349,7 @@ def run_reviewer(state: RunState) -> bool:
         aufgabe="reviewer", state=state,
         context_manifest={
             "budget_event": "reviewer_context_budget",
+            "user_sha256": hashlib.sha256(user_content.encode("utf-8")).hexdigest(),
             "budget": _review_context_meta,
             "task_files": _normalized_files,
             "diff_sha256": _diff_hash,

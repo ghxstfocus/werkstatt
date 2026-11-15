@@ -40,7 +40,7 @@ _ROLE_CONTEXT_BUDGET_EVENTS: dict[str, frozenset[str]] = {
     }),
     "scout": frozenset({"scout_context_budget"}),
 }
-_ROLE_CONTEXT_DIGEST_REQUIRED = frozenset({"builder"})
+_ROLE_CONTEXT_DIGEST_REQUIRED = _EVIDENCE_REQUIRED_ROLES
 
 _PROMPT_DUMP_DIR = Path("/tmp/werkstatt-prompts")
 

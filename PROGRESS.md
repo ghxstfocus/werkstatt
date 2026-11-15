@@ -7190,3 +7190,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung lokal:** Der Builder uebergibt den berechneten User-SHA-256 im Kontextmanifest. Der zentrale Adapter vergleicht ihn fuer Builder vor dem Provideraufruf mit dem tatsaechlichen User-Text; ein fehlender oder abweichender Hash blockiert und wird als fehlender Rollenbeleg auditiert. Regressionstests pruefen erfolgreiche Hashbindung und fail-closed Verhalten bei veraltetem Hash.
 - **Verifikation lokal:** Agent-/Loop-Ask-LLM-/Builder-Kontext-/Builder-Agent-/Explorer-/Scout-/Reviewer-/Architect-Gruppe: 117 bestanden, 2 uebersprungen; Ruff, Mypy fuer `agent.py`, Audit-Drift, Control-Drift, strikter Doku-Drift und Diff-Check bestanden.
 - **Grenze / Hauptziel:** Diese Integritaetspruefung beweist nicht die semantische Relevanz oder Vollstaendigkeit der Inhalte; sie deckt hier den Builder-Pfad ab, weitere Rollen-Handoffs und der gelabelte Rollen-Eval bleiben offen. OP-405/398 bleiben offen; kein Servernachweis fuer diese Aenderung.
+
+
+## 2026-11-16 – Request-Hash fuer alle Loop-Rollen erzwingen (lokal)
+- **Befund:** Die neue Hashpruefung war zunaechst nur beim Builder verpflichtend; die anderen aktiven Rollen hatten weiterhin nur Ereignisnamen und getrennte Request-Hashes ohne direkten Inhaltsgleichheitscheck.
+- **Aenderung lokal:** Architect, Explorer, Planner-Split, Reviewer (Task- und Phasenreview) sowie Scout uebergeben jetzt den SHA-256 ihres budgetierten User-Texts im Rollenmanifest. `ask_llm` verlangt und vergleicht den Hash fuer alle sieben evidenzpflichtigen Rollen vor dem Provideraufruf. Fehlende oder abweichende Hashes blockieren fail-closed.
+- **Verifikation lokal:** Agent-/Loop-Ask-LLM-/Builder-/Explorer-/Scout-/Reviewer-/Architect-/Planner-Gruppe: 138 bestanden, 5 uebersprungen.
+- **Grenze / Hauptziel:** Der Hash beweist Byte-Gleichheit zwischen Rollenmanifest und User-Nachricht, nicht semantische Relevanz, Vollstaendigkeit oder minimale Kontextmenge. Der Rollen-Eval und JIT-Nachladung bleiben offen; OP-405/398 bleiben offen, kein Servernachweis fuer diese Aenderung.

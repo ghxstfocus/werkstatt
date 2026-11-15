@@ -1797,6 +1797,7 @@ def run_architect(
                 aufgabe="architect", heartbeat=False, state=state,
                 context_manifest={
                     "budget_event": "planner_architect_context_budget",
+                    "user_sha256": hashlib.sha256(_content.encode("utf-8")).hexdigest(),
                     "attempt": _attempt + 1,
                     "source_evidence": getattr(
                         state, "architect_scout_source_manifest", {},

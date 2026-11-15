@@ -9,6 +9,7 @@ werkstatt.planner aufgeloest werden, damit Test-Patches wirken.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from html import escape
 from typing import Any
@@ -1142,6 +1143,7 @@ def _run_scout(
             aufgabe="scout", state=state,
             context_manifest={
                 "budget_event": "scout_context_budget",
+                "user_sha256": hashlib.sha256(user_content.encode("utf-8")).hexdigest(),
                 "budget": _context_meta,
                 "sections_offered": [
                     title for title, _ in _context_sections

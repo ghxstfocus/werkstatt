@@ -439,7 +439,10 @@ def test_llm_usage_hat_stabile_rolle_ohne_agent_zu_ueberschreiben(tmp_path):
             temperature=0.0,
             state=state,
             aufgabe="planner-split",
-            context_manifest={"budget_event": "planner_split_context_budget"},
+            context_manifest={
+                "budget_event": "planner_split_context_budget",
+                "user_sha256": hashlib.sha256(b"USER").hexdigest(),
+            },
         )
 
     usage = [
@@ -493,7 +496,10 @@ def test_architect_request_uses_pro_thinking_without_temperature(tmp_path):
             state=_state(tmp_path),
             aufgabe="architect",
             heartbeat=False,
-            context_manifest={"budget_event": "planner_architect_context_budget"},
+            context_manifest={
+                "budget_event": "planner_architect_context_budget",
+                "user_sha256": hashlib.sha256(b"USR").hexdigest(),
+            },
         )
 
     payload = mock_post.call_args.kwargs["json"]

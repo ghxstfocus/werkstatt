@@ -619,6 +619,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
         state=state, aufgabe="explorer",
         context_manifest={
             "budget_event": "explorer_context",
+            "user_sha256": hashlib.sha256(context.encode("utf-8")).hexdigest(),
             "measurement_count": len(messungen),
             "file_count": len(py_files),
             "files_offered": py_files[:50],
