@@ -111,6 +111,7 @@ Letzte Aktualisierung: 2026-11-15.
 - **Status:** open
 - **Typ:** debugger
 - **Betroffene Dateien:** werkstatt/debugger_handoff.py, Chat-API und Tests
+- **Teilstand nach `c15c8ef` (lokal, noch nicht serververifiziert):** Debugger-Chatjobs lesen weiter aus ihrem validierten Snapshot, legen den Patch-Worktree aber am persistenten Projektcheckout an. Vorher werden beide HEADs verglichen; ein zwischenzeitlicher Checkout-Wechsel stoppt den Vorschlag. Dadurch kann das spaetere UI-Cleanup den Worktree ueber dieselbe Git-Registrierung entfernen. Chat-/Tool-/Handoff-Gruppe: 159 bestanden, 2 uebersprungen; Ruff und Mypy bestanden.
 - **Akzeptanzkriterien:** Debug-Diagnosen referenzieren einen belegten Run-/Gate-Fehler desselben Projekts. Eine Freigabe bindet sich an Basis-HEAD und Diff-Hash und uebergibt genau diesen Patch als Auftrag an den normalen Loop. Diagnose oder Vorschlag schreibt selbst keinen Code und umgeht kein Gate.
 - **Tests:** Patch-Hash, Projekt-/Run-Isolation, Einmaligkeit und Ablehnung.
 - **Blockiert von:** OP-396

@@ -29,6 +29,9 @@ _PROJEKT_DIR = Path("/opt/werkstatt").resolve()
 _PROJEKT_DIR_KONTEXT: ContextVar[Path | None] = ContextVar(
     "werkstatt_chat_project_dir", default=None,
 )
+_DEBUGGER_WORKTREE_ROOT_KONTEXT: ContextVar[Path | None] = ContextVar(
+    "werkstatt_chat_debugger_worktree_root", default=None,
+)
 _PROJEKTNAME_KONTEXT: ContextVar[str] = ContextVar(
     "werkstatt_chat_project_name", default="werkstatt",
 )
@@ -980,24 +983,39 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
         return json.dumps({"zustand": "error", "detail": f"Run-Audit konnte nicht gelesen werden: {type(exc).__name__}"}, ensure_ascii=False)
     if not has_failure_evidence:
         return json.dumps({"zustand": "needs_input", "detail": "Fuer diesen Projekt-Run liegt kein Fehler- oder Gate-Nachweis vor."}, ensure_ascii=False)
+    snapshot_root = _aktives_projekt_dir()
+    worktree_root = _DEBUGGER_WORKTREE_ROOT_KONTEXT.get() or snapshot_root
+    heads: list[str] = []
     try:
-        head = subprocess.run(
-            ["git", "rev-parse", "--verify", "HEAD"],
-            cwd=_aktives_projekt_dir(),
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=_TIMEOUT_GIT_S,
-        )
+        for root in dict.fromkeys((snapshot_root, worktree_root)):
+            head = subprocess.run(
+                ["git", "rev-parse", "--verify", "HEAD"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=_TIMEOUT_GIT_S,
+            )
+            if head.returncode != 0 or not re.fullmatch(
+                r"(?:[0-9a-f]{40}|[0-9a-f]{64})", head.stdout.strip(),
+            ):
+                return json.dumps({
+                    "zustand": "error",
+                    "detail": "Projekt-HEAD hat keinen lesbaren Vollhash.",
+                }, ensure_ascii=False)
+            heads.append(head.stdout.strip())
     except (OSError, subprocess.TimeoutExpired) as exc:
         return json.dumps({
             "zustand": "error",
             "detail": f"Projekt-HEAD konnte nicht gelesen werden: {type(exc).__name__}",
         }, ensure_ascii=False)
-    if head.returncode != 0:
+    if len(set(heads)) != 1:
         return json.dumps({
-            "zustand": "error",
-            "detail": "Aktives Projekt hat keinen lesbaren Git-HEAD.",
+            "zustand": "needs_input",
+            "detail": (
+                "Projekt-HEAD hat sich seit dem Chat-Snapshot geaendert; "
+                "der Debugger-Vorschlag wurde nicht angelegt."
+            ),
         }, ensure_ascii=False)
     raw_files = args.get("betroffene_dateien")
     if not isinstance(raw_files, list):
@@ -1019,7 +1037,7 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
             confidence=float(raw_confidence),
             project=project,
             run_id=run_id,
-            base_head=head.stdout.strip(),
+            base_head=heads[0],
         )
     except (DebuggerFixError, TypeError) as exc:
         return json.dumps({
@@ -1029,7 +1047,7 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
     proposal_id = uuid.uuid4().hex
     try:
         materialize_debugger_workspace(
-            fix, _aktives_projekt_dir(), proposal_id,
+            fix, worktree_root, proposal_id,
         )
     except (DebuggerFixError, OSError, subprocess.TimeoutExpired) as exc:
         return json.dumps({
@@ -1322,6 +1340,7 @@ def execute_tool(
     mode: str = "read",
     *,
     project_dir: Path | str | None = None,
+    source_project_dir: Path | str | None = None,
     project_name: str | None = None,
     session_id: str | None = None,
 ) -> str:
@@ -1344,6 +1363,14 @@ def execute_tool(
     if not root.is_dir():
         return f"Fehler: Aktives Projektverzeichnis fehlt: {root}"
     root_token = _PROJEKT_DIR_KONTEXT.set(root)
+    worktree_root = (
+        Path(source_project_dir).expanduser().resolve()
+        if source_project_dir is not None else root
+    )
+    if not worktree_root.is_dir():
+        _PROJEKT_DIR_KONTEXT.reset(root_token)
+        return f"Fehler: Debugger-Projektverzeichnis fehlt: {worktree_root}"
+    worktree_token = _DEBUGGER_WORKTREE_ROOT_KONTEXT.set(worktree_root)
     name_token = _PROJEKTNAME_KONTEXT.set(project_name or "werkstatt")
     session_token = _CHAT_SESSION_ID_KONTEXT.set(session_id or "")
     try:
@@ -1353,4 +1380,5 @@ def execute_tool(
     finally:
         _CHAT_SESSION_ID_KONTEXT.reset(session_token)
         _PROJEKTNAME_KONTEXT.reset(name_token)
+        _DEBUGGER_WORKTREE_ROOT_KONTEXT.reset(worktree_token)
         _PROJEKT_DIR_KONTEXT.reset(root_token)

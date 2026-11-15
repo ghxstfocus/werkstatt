@@ -7141,3 +7141,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung lokal:** Maximal 96 Einzel-Fingerprints bleiben erhalten (Systemnachricht plus juengste 95); Anzahl, Gesamtzeichen, Rollenverteilung und SHA-256 ueber den vollstaendigen Provider-Request bleiben unveraendert und binden auch die ausgelassenen Nachrichten.
 - **Verifikation lokal:** Chat-Agent-, Chatjob-, Reflection-Chat-, Chat-Tools-, Chat-Frontend- und Live-Feed-Gruppe: 217 bestanden, 2 uebersprungen; Ruff und Mypy bestanden.
 - **Grenze:** Der Serverlauf fuer `22e466f` (2.463 bestanden, 5 uebersprungen) liegt vor diesem lokalen Folgeschritt.
+
+
+## 2026-11-15 – Debugger-Worktree an dauerhaftes Projektcheckout binden (lokal)
+- **Befund:** Chatjobs lesen im Debug-Modus aus einem validierten, temporaeren Snapshot. `propose_debugger_fix` legte den vorbereiteten Git-Worktree aber von diesem Snapshot aus an; nach dem Snapshot-Cleanup blieb dessen Worktree-Registrierung im geloeschten Clone zurueck, waehrend UI-Cleanup vom persistenten Projektcheckout auslief.
+- **Aenderung lokal:** Chatjobs reichen die persistente Projektwurzel getrennt vom gelesenen Snapshot an Toolausfuehrungen weiter. Der Debugger vergleicht beide HEADs und bricht bei Abweichung ab; der isolierte Patch-Worktree wird an der persistenten Projektwurzel registriert, sodass die bestehende UI-Freigabe und Cleanup-Strecke ihn korrekt verwalten.
+- **Verifikation lokal:** Chat-Tools-, Chatjobs-, Chat-Agent- und Debugger-Handoff-Gruppe: 159 bestanden, 2 uebersprungen; Ruff und Mypy fuer die geaenderten Module bestanden.
+- **Grenze:** Kein Server-/Produktionsnachweis fuer diesen Folgeschritt; OP-240 bleibt offen.

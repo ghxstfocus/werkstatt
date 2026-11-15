@@ -88,8 +88,10 @@ def test_run_job_uses_snapshot_and_merges_completed_turn_once(
     )
     parent.append("user", {"text": "Spaeter eingereicht"})
     gesehen: list[tuple[str, list[str]]] = []
+    source_roots: list[Path] = []
 
     def _fake_chat_loop(session, message, **_kwargs):
+        source_roots.append(Path(_kwargs["source_project_dir"]))
         _kwargs["on_model_request"]({
             "request_number": 1,
             "request_sha256": "a" * 64,
@@ -111,6 +113,7 @@ def test_run_job_uses_snapshot_and_merges_completed_turn_once(
     assert gesehen == [(
         job["job_id"], ["Vorherige Frage", "Vorherige Antwort"],
     )]
+    assert source_roots == [tmp_path.resolve()]
     assert chat_session.ChatSession(
         "demo", job["job_id"],
     ).load() == []

@@ -870,6 +870,7 @@ def _run_job(
             job["message"],
             mode=job["mode"],
             project_dir=chat_project_dir,
+            source_project_dir=project_dir,
             cancel_check=cancel_check,
             on_chunk=lambda text: event("chunk", text=text),
             on_tool_call=lambda name, args: event(

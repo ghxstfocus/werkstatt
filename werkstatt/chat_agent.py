@@ -993,6 +993,7 @@ def chat_loop(
     on_tool_result: Callable[[str, str], None] | None = None,
     max_rounds: int | None = _DEFAULT_MAX_ROUNDS,
     project_dir: Path | str | None = None,
+    source_project_dir: Path | str | None = None,
     request_id: str | None = None,
     cancel_check: Callable[[], bool] | None = None,
     origin_session_id: str | None = None,
@@ -1245,6 +1246,7 @@ def chat_loop(
                 ergebnis = execute_tool(
                     name, args, tools, mode=mode,
                     project_dir=project_dir, project_name=session.project,
+                source_project_dir=source_project_dir,
                     session_id=origin_session_id or session.session_id,
                 )
             if (

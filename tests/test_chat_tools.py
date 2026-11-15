@@ -866,6 +866,8 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
     monkeypatch.setattr(projection, "Projector", lambda: SimpleNamespace(tail=dict))
     monkeypatch.setattr(chat_session, "ChatSession", FakeSession)
     prepared = []
+    snapshot_dir = tmp_path / "chat-snapshot"
+    snapshot_dir.mkdir()
     monkeypatch.setattr(
         debugger_handoff, "materialize_debugger_workspace",
         lambda fix, project_dir, proposal_id: prepared.append((fix, project_dir, proposal_id)) or tmp_path / "isolated-worktree",
@@ -891,7 +893,8 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
     result = json.loads(chat_tools.execute_tool(
         "propose_debugger_fix", tool_args,
         mode="debugger",
-        project_dir=tmp_path,
+        project_dir=snapshot_dir,
+        source_project_dir=tmp_path,
         project_name="demo",
         session_id="b" * 32,
     ))
@@ -902,12 +905,33 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
     assert saved["payload"]["arguments"]["debugger_fix"]["patch_hash"]
     assert saved["payload"]["debug_workspace_prepared"] is True
     assert len(prepared) == 1
+    assert prepared[0][1] == tmp_path.resolve()
+
+    mismatched_heads = iter((head, "c" * 40))
+    monkeypatch.setattr(
+        chat_tools.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0, stdout=next(mismatched_heads),
+        ),
+    )
+    stale_snapshot = json.loads(chat_tools.execute_tool(
+        "propose_debugger_fix", tool_args,
+        mode="debugger",
+        project_dir=snapshot_dir,
+        source_project_dir=tmp_path,
+        project_name="demo",
+        session_id="b" * 32,
+    ))
+    assert stale_snapshot["zustand"] == "needs_input"
+    assert len(prepared) == 1
 
     FakeStore.failure_present = False
     missing_evidence = json.loads(chat_tools.execute_tool(
         "propose_debugger_fix", tool_args,
         mode="debugger",
-        project_dir=tmp_path,
+        project_dir=snapshot_dir,
+        source_project_dir=tmp_path,
         project_name="demo",
         session_id="b" * 32,
     ))
