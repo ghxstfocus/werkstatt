@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 
 from werkstatt.render import (
@@ -24,6 +25,58 @@ from ._common import (
     audit,
     run_planner,
 )
+
+_STRUCTURAL_PLAN_REJECTIONS = frozenset({
+    "DOKU_TASK", "TASK_FILE", "MIGRATIONS_KOLLISION",
+    "ACTION", "PHASE_ID", "DATEINAME_AEHNLICH", "PAYLOAD",
+})
+
+
+def _plan_reflection_feedback(
+    state: RunState,
+    seen_signatures: set[str],
+) -> tuple[dict | None, str, str | None]:
+    """Choose whether new, budgeted plan feedback warrants another attempt."""
+    info = getattr(state, "last_planner_info", None)
+    if not isinstance(info, dict) or not info:
+        return None, "planner_feedback_missing", None
+    rule = info.get("regel")
+    if isinstance(rule, str) and rule in _STRUCTURAL_PLAN_REJECTIONS:
+        return info, "structural_failure", None
+
+    signature_input = {
+        key: str(info.get(key) or "")[:2_000]
+        for key in ("regel", "fakt", "erklaerung", "details")
+    }
+    if not any(signature_input.values()):
+        return info, "planner_feedback_missing", None
+    signature = hashlib.sha256(json.dumps(
+        signature_input, ensure_ascii=False, sort_keys=True,
+    ).encode("utf-8")).hexdigest()
+    if signature in seen_signatures:
+        return info, "same_rejection_repeated", signature
+
+    budget = state.budget if isinstance(state.budget, dict) else {}
+    has_run_budget = any(
+        isinstance(budget.get(key), int)
+        and not isinstance(budget.get(key), bool)
+        and budget[key] > 0
+        for key in ("max_llm_calls", "max_minutes")
+    )
+    if not has_run_budget:
+        return info, "run_budget_missing", signature
+    from werkstatt.agent import _enforce_run_budget
+
+    if _enforce_run_budget(state):
+        return info, "run_budget_exhausted", signature
+    seen_signatures.add(signature)
+    return info, "new_budgeted_rejection", signature
+
+
+def _check_plan_gate_current(state: RunState) -> bool:
+    """Prevent stale gate feedback from authorizing a recovery attempt."""
+    state.last_planner_info = {}
+    return _plan_gate(state)
 
 
 def _phase_plan_and_preflight(
@@ -118,7 +171,7 @@ def _phase_plan_and_preflight(
                 pd,
                 pn,
             )
-    plan_ok = _plan_gate(state)
+    plan_ok = _check_plan_gate_current(state)
     # OP-381k (2026-11-09): Resume-Aufgabe-Check.
     # Ohne diesen Check wuerde ein Loop-Start mit anderer Aufgabe die
     # Tasks aus der alten PhaseState laden, Architect/Planner ueberspringen.
@@ -157,7 +210,7 @@ def _phase_plan_and_preflight(
             audit("loop_resume", {"tasks": len(state.tasks),
                                   "quelle": "phase_state"}, pd, pn)
         else:
-            plan_ok = _plan_gate(state)
+            plan_ok = _check_plan_gate_current(state)
             if plan_ok:
                 audit("loop_resume",
                       {"tasks": len(state.tasks),
@@ -287,39 +340,47 @@ def _phase_plan_and_preflight(
                         )
                     except Exception:
                         pass
-        plan_ok = _plan_gate(state)
-        # M-349c/d: Plan-Reflection. Max 3 Runden.
-        # GOLD 2026-10-30: Strukturelle Fehler NICHT wiederholen.
-        # Live-Beleg 2026-10-30 22:17-22:24: 3x Scout + Architect +
-        # Planner-Split, weil der Hook DOKU_TASK/TASK_FILE ablehnte.
-        # Ein neuer Plan hilft nicht — der Hook prueft deterministisch.
-        _STRUKTURELLE_REGELN = frozenset({
-            "DOKU_TASK", "TASK_FILE", "MIGRATIONS_KOLLISION",
-            "ACTION", "PHASE_ID", "DATEINAME_AEHNLICH", "PAYLOAD",
-        })
-        for _runde in range(3):
-            if plan_ok:
-                break
-            _info = getattr(state, "last_planner_info", None)
-            if not _info:
-                break
-            _regel = (
-                _info.get("regel", "") if isinstance(_info, dict) else ""
+        plan_ok = _check_plan_gate_current(state)
+        # Plan recovery is checkpoint-like: only a new, actionable rejection
+        # can choose another attempt. Repeating a rejection or exhausting the
+        # run budget stops; there is no fixed retry-count loop.
+        _seen_plan_rejections: set[str] = set()
+        _replan_attempt = 0
+        while not plan_ok:
+            _info, _feedback_decision, _signature = (
+                _plan_reflection_feedback(state, _seen_plan_rejections)
             )
-            if _regel in _STRUKTURELLE_REGELN:
-                audit("loop_plan_reflection_abgebrochen",
-                      {"runde": _runde + 1,
-                       "regel": _regel,
-                       "grund": "struktureller_fehler",
-                       "fakt": (_info.get("fakt", "")
-                                if isinstance(_info, dict) else "")},
-                      pd, pn)
+            if _feedback_decision != "new_budgeted_rejection":
+                audit(
+                    "loop_plan_reflection_abgebrochen",
+                    {
+                        "attempt": _replan_attempt + 1,
+                        "rule": (
+                            _info.get("regel")
+                            if isinstance(_info, dict) else None
+                        ),
+                        "reason": _feedback_decision,
+                        "evidence_signature": _signature,
+                    },
+                    pd,
+                    pn,
+                )
                 break
-            audit("loop_plan_reflection",
-                  {"runde": _runde + 1, "info": _info}, pd, pn)
+            _replan_attempt += 1
+            audit(
+                "loop_plan_reflection",
+                {
+                    "attempt": _replan_attempt,
+                    "info": _info,
+                    "evidence_signature": _signature,
+                    "route": "new_feedback_within_run_budget",
+                },
+                pd,
+                pn,
+            )
             if not run_planner(state):
                 break
-            plan_ok = _plan_gate(state)
+            plan_ok = _check_plan_gate_current(state)
         if not plan_ok:
             # FIX Z 2026-10-31: Bei Plan-Reject nicht "Tasks: 0/7"
             # melden (irrefuehrend — Tasks wurden geplant, aber
@@ -349,7 +410,7 @@ def _phase_plan_and_preflight(
 
             if _rej_ok:
                 # Revidierter Plan gebaut, nochmal pruefen
-                _plan2_ok = _plan_gate(state)
+                _plan2_ok = _check_plan_gate_current(state)
                 if _plan2_ok:
                     # Welle H v2: nach Reflection nochmal human_gate_plan
                     _rc_plan2 = _human_gate_plan(

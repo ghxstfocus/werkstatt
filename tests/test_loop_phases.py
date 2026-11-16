@@ -101,6 +101,111 @@ def test_builder_recovery_only_retries_typed_correctable_failures() -> None:
     assert _builder_failure_recoverable(state) == (False, "failure_reason_missing")
 
 
+def test_plan_recovery_requires_novel_feedback_and_configured_run_budget(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt.phases.plan import _plan_reflection_feedback
+
+    state = _state(tmp_path, budget={"max_llm_calls": 8})
+    state.last_planner_info = {
+        "regel": "ACCEPTANCE_COVERAGE",
+        "fakt": "AC2 has no task",
+    }
+    monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _s: False)
+    seen: set[str] = set()
+
+    info, decision, signature = _plan_reflection_feedback(state, seen)
+    assert info is state.last_planner_info
+    assert decision == "new_budgeted_rejection"
+    assert signature and signature in seen
+    assert _plan_reflection_feedback(state, seen)[1] == "same_rejection_repeated"
+
+    state.last_planner_info = {"regel": "TASK_FILE", "fakt": "bad scope"}
+    assert _plan_reflection_feedback(state, seen)[1] == "structural_failure"
+
+    state.budget = {}
+    state.last_planner_info = {"regel": "ACCEPTANCE_COVERAGE", "fakt": "AC3 missing"}
+    assert _plan_reflection_feedback(state, seen)[1] == "run_budget_missing"
+
+
+def test_plan_recovery_stops_when_run_budget_is_exhausted(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt.phases.plan import _plan_reflection_feedback
+
+    state = _state(tmp_path, budget={"max_llm_calls": 1})
+    state.last_planner_info = {"regel": "TASK_GRAPH", "fakt": "invalid DAG"}
+    monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _s: True)
+
+    assert _plan_reflection_feedback(state, set())[1] == "run_budget_exhausted"
+
+
+def test_plan_phase_stops_on_repeated_gate_evidence_instead_of_fixed_retries(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt.phases import plan as plan_phase
+
+    class Phase:
+        def __init__(self):
+            self.data = {}
+
+        def exists(self):
+            return False
+
+    state = _state(tmp_path, budget={"max_llm_calls": 10})
+    state.tasks = []
+    state.tests = []
+    state.akzeptanzkriterien = []
+    state.phasen = []
+    state.architect_prosa = ""
+    state.last_planner_info = {}
+    calls = {"planner": 0, "gate": 0}
+    audits = []
+
+    def planner(_state):
+        calls["planner"] += 1
+        _state.tasks = [{
+            "id": "t1", "action": "update", "task_files": ["src/a.py"],
+            "criterion_refs": ["AC1"],
+        }]
+        _state.tests = ["pytest tests/test_a.py"]
+        _state.akzeptanzkriterien = ["AC1"]
+        _state.architect_prosa = "Plan"
+        return True
+
+    def gate(_state):
+        calls["gate"] += 1
+        _state.last_planner_info = {
+            "regel": "ACCEPTANCE_COVERAGE", "fakt": "AC2 missing",
+        }
+        return False
+
+    monkeypatch.setattr(plan_phase, "group_start", lambda *_a: None)
+    monkeypatch.setattr(plan_phase, "group_end", lambda: None)
+    monkeypatch.setattr(plan_phase, "step", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        plan_phase, "audit",
+        lambda kind, payload, *_a: audits.append((kind, payload)),
+    )
+    monkeypatch.setattr("werkstatt.planner._preflight_scan", lambda _state: [])
+    monkeypatch.setattr(plan_phase, "_validate_contract_safe", lambda *_a: True)
+    monkeypatch.setattr(plan_phase, "_plan_gate", gate)
+    monkeypatch.setattr(plan_phase, "run_planner", planner)
+    monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _s: False)
+
+    result = plan_phase._phase_plan_and_preflight(
+        state, "Goal", "testproj", Phase(),
+    )
+
+    assert result == (1, False)
+    assert calls == {"planner": 2, "gate": 3}
+    stop = next(
+        payload for kind, payload in audits
+        if kind == "loop_plan_reflection_abgebrochen"
+    )
+    assert stop["reason"] == "same_rejection_repeated"
+
+
 def test_verify_failure_detail_is_current_bounded_json() -> None:
     from werkstatt.phases.tasks import _verify_failure_detail
 
