@@ -728,10 +728,29 @@ def test_recovery_builder_reserve_is_single_use_and_survives_resume(
     resumed = _state(tmp_path)
     with pytest.raises(RuntimeError, match="reserve_exhausted"):
         reflection_chat.claim_recovery_builder_call(resumed)
+    assert reflection_chat.claim_recovery_reviewer_call(resumed) == 1
+    with pytest.raises(RuntimeError, match="reviewer_reserve_exhausted"):
+        reflection_chat.claim_recovery_reviewer_call(_state(tmp_path))
 
     checkpoint = store.get_run_record("alpha", "alpha-run-1")["checkpoint"]
     assert checkpoint["reflection_chat_builder_calls"] == 1
+    assert checkpoint["reflection_chat_reviewer_calls"] == 1
     assert checkpoint["reflection_chat_builder_expires_at"]
+
+
+def test_recovery_reviewer_reserve_requires_a_claimed_builder(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    store = _install_run_store(monkeypatch, state, tmp_path)
+
+    with pytest.raises(RuntimeError, match="reviewer_before_builder"):
+        reflection_chat.claim_recovery_reviewer_call(state)
+
+    record = store.get_run_record("alpha", "alpha-run-1")
+    assert record is not None
+    assert record["checkpoint"].get("reflection_chat_reviewer_calls", 0) == 0
 
 
 def test_recovery_builder_reserve_expiry_is_durable(

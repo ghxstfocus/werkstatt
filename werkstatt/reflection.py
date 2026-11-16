@@ -998,6 +998,7 @@ def _reflection_loop(
         REFLECTION_CHAT_BUILDER_MAX_ELAPSED_S,
         REFLECTION_CHAT_MAX_CALLS,
         REFLECTION_CHAT_MAX_ELAPSED_S,
+        REFLECTION_CHAT_REVIEWER_MAX_CALLS,
         _readable_evidence,
         ask_project_chat_for_builder_task,
     )
@@ -1055,6 +1056,7 @@ def _reflection_loop(
                 "max_calls": REFLECTION_CHAT_MAX_CALLS,
                 "max_elapsed_s": REFLECTION_CHAT_MAX_ELAPSED_S,
                 "builder_max_calls": REFLECTION_CHAT_BUILDER_MAX_CALLS,
+                "reviewer_max_calls": REFLECTION_CHAT_REVIEWER_MAX_CALLS,
                 "builder_max_elapsed_s": REFLECTION_CHAT_BUILDER_MAX_ELAPSED_S,
                 "run_budget_exhausted": bool(
                     getattr(state, "budget_exhausted_reason", "")
@@ -1391,6 +1393,7 @@ def _phase_end_reflection(state: RunState) -> bool:
         REFLECTION_CHAT_BUILDER_MAX_ELAPSED_S,
         REFLECTION_CHAT_MAX_CALLS,
         REFLECTION_CHAT_MAX_ELAPSED_S,
+        REFLECTION_CHAT_REVIEWER_MAX_CALLS,
         _readable_evidence,
         ask_project_chat_for_builder_task,
     )
@@ -1446,6 +1449,7 @@ def _phase_end_reflection(state: RunState) -> bool:
              "max_calls": REFLECTION_CHAT_MAX_CALLS,
              "max_elapsed_s": REFLECTION_CHAT_MAX_ELAPSED_S,
              "builder_max_calls": REFLECTION_CHAT_BUILDER_MAX_CALLS,
+         "reviewer_max_calls": REFLECTION_CHAT_REVIEWER_MAX_CALLS,
              "builder_max_elapsed_s": REFLECTION_CHAT_BUILDER_MAX_ELAPSED_S,
              "run_budget_exhausted": bool(
                  getattr(state, "budget_exhausted_reason", "")

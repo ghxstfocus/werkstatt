@@ -304,6 +304,67 @@ def test_exhausted_budget_allows_only_checkpoint_claimed_chat_builder(
     assert s.llm_calls == 3
 
 
+def test_exhausted_chat_recovery_allows_one_reviewer_after_builder(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.event_store import EventStore
+
+    s = _state(tmp_path)
+    s.run_id = "test-run-builder-reviewer-reserve"
+    s.budget = {"max_llm_calls": 1}
+    s.llm_calls = 1
+    s.budget_exhausted_reason = "max_llm_calls"
+    s.reflection_chat_builder_reserve_active = True
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(s.project_name, s.run_id, s.aufgabe, status="running")
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+
+    def role_context(event, system, user):
+        return {
+            "budget_event": event,
+            "required_context_complete": True,
+            "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+            "user_sha256": hashlib.sha256(user.encode()).hexdigest(),
+        }
+
+    builder_system = "builder recovery system"
+    builder_user = "source-backed builder recovery task"
+    reviewer_system = "reviewer system"
+    reviewer_user = "review current recovery diff"
+    with patch(
+        "werkstatt.agent.requests.post",
+        side_effect=[_ok_response("patch"), _ok_response('{"approved": true}')],
+    ) as post:
+        builder = agent.ask_llm(
+            "sk-test", builder_system, builder_user, "deepseek-chat", 0.2,
+            state=s, aufgabe="builder", context_manifest=role_context(
+                "builder_context_budget", builder_system, builder_user,
+            ),
+        )
+        reviewer = agent.ask_llm(
+            "sk-test", reviewer_system, reviewer_user, "deepseek-chat", 0.2,
+            state=s, aufgabe="reviewer", context_manifest=role_context(
+                "reviewer_context_budget", reviewer_system, reviewer_user,
+            ),
+        )
+        reviewer_again = agent.ask_llm(
+            "sk-test", reviewer_system, reviewer_user, "deepseek-chat", 0.2,
+            state=s, aufgabe="reviewer", context_manifest=role_context(
+                "reviewer_context_budget", reviewer_system, reviewer_user,
+            ),
+        )
+
+    record = store.get_run_record(s.project_name, s.run_id)
+    assert record is not None
+    assert builder.ok is True
+    assert reviewer.ok is True
+    assert reviewer_again.ok is False
+    assert reviewer_again.error == "reflection_reviewer_reserve_exhausted"
+    assert post.call_count == 2
+    assert record["checkpoint"]["reflection_chat_builder_calls"] == 1
+    assert record["checkpoint"]["reflection_chat_reviewer_calls"] == 1
+
+
 def test_recovery_builder_context_block_keeps_durable_reserve_available(
     monkeypatch, tmp_path,
 ):

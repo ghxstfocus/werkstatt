@@ -460,21 +460,34 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     """
     route = route_for_role(rolle or aufgabe, model)
     model = route.model
-    is_scoped_recovery_builder = False
+    is_scoped_recovery_worker = False
     run_budget_exhausted = False
     if state is not None:
         run_budget_exhausted = _enforce_run_budget(state)
-        if run_budget_exhausted:
-            is_scoped_recovery_builder = bool(
-                getattr(state, "reflection_chat_builder_reserve_active", False)
-                and aufgabe == "builder"
-                and (rolle is None or rolle == "builder")
+        recovery_role = _rolle_aus_aufgabe(rolle or aufgabe)
+        recovery_builder_calls = getattr(
+            state, "reflection_chat_builder_calls", 0,
+        )
+        is_scoped_recovery_worker = bool(
+            getattr(state, "reflection_chat_builder_reserve_active", False)
+            and recovery_role in {"builder", "reviewer"}
+            and aufgabe == recovery_role
+            and (rolle is None or _rolle_aus_aufgabe(rolle) == recovery_role)
+            and (
+                recovery_role != "reviewer"
+                or (
+                    isinstance(recovery_builder_calls, int)
+                    and not isinstance(recovery_builder_calls, bool)
+                    and recovery_builder_calls > 0
+                )
             )
-            if (
-                not is_scoped_recovery_builder
-                and aufgabe not in {"scout", "architect", "planner-split"}
-            ):
-                return LLMReply(ok=False, error=state.budget_exhausted_reason)
+        )
+        if (
+            run_budget_exhausted
+            and not is_scoped_recovery_worker
+            and aufgabe not in {"scout", "architect", "planner-split"}
+        ):
+            return LLMReply(ok=False, error=state.budget_exhausted_reason)
         if not run_budget_exhausted:
             state.llm_calls += 1
     _task_role = _rolle_aus_aufgabe(aufgabe)
@@ -558,7 +571,7 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                 if (
                     state is not None
                     and run_budget_exhausted
-                    and not is_scoped_recovery_builder
+                    and not is_scoped_recovery_worker
                 )
                 else (
                     "role_context_evidence_missing; provider request was not sent"
@@ -627,7 +640,7 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                 if (
                     state is not None
                     and run_budget_exhausted
-                    and not is_scoped_recovery_builder
+                    and not is_scoped_recovery_worker
                 )
                 else (
                     "required_context_span_unverified; provider request was not sent"
@@ -751,10 +764,10 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     if (
         state is not None
         and run_budget_exhausted
-        and not is_scoped_recovery_builder
+        and not is_scoped_recovery_worker
     ):
         return LLMReply(ok=False, error=state.budget_exhausted_reason)
-    if state is not None and run_budget_exhausted and is_scoped_recovery_builder:
+    if state is not None and run_budget_exhausted and is_scoped_recovery_worker:
         state.llm_calls += 1
     if state is not None:
         audit_written = audit(
@@ -794,11 +807,17 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                 user_len=_user_len,
             )
 
-    if is_scoped_recovery_builder and state is not None:
+    if is_scoped_recovery_worker and state is not None:
         try:
-            from werkstatt.reflection_chat import claim_recovery_builder_call
+            from werkstatt.reflection_chat import (
+                claim_recovery_builder_call,
+                claim_recovery_reviewer_call,
+            )
 
-            claim_recovery_builder_call(state)
+            if recovery_role == "builder":
+                claim_recovery_builder_call(state)
+            else:
+                claim_recovery_reviewer_call(state)
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             return LLMReply(ok=False, error=str(exc))
 
@@ -815,7 +834,7 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         if state is not None else 240)
     if (
         state is not None
-        and aufgabe == "builder"
+        and is_scoped_recovery_worker
         and getattr(state, "reflection_chat_builder_reserve_active", False)
     ):
         builder_deadline = getattr(

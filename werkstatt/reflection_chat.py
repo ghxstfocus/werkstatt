@@ -19,6 +19,7 @@ REFLECTION_PROMPT_MAX_CHARS = 24_000
 REFLECTION_CHAT_MAX_CALLS = 3
 REFLECTION_CHAT_MAX_ELAPSED_S = 90
 REFLECTION_CHAT_BUILDER_MAX_CALLS = 1
+REFLECTION_CHAT_REVIEWER_MAX_CALLS = 1
 REFLECTION_CHAT_BUILDER_MAX_ELAPSED_S = 90
 
 
@@ -407,16 +408,32 @@ def _claim_recovery_chat_call(state: Any) -> int:
     raise RuntimeError("reflection_chat_checkpoint_conflict")
 
 
-def claim_recovery_builder_call(state: Any) -> int:
-    """Durably allow one short, Chat-scoped Builder call after run exhaustion."""
+def claim_recovery_worker_call(state: Any, role: str) -> int:
+    """Durably allow one Builder and then one Reviewer recovery call.
+
+    Both calls share the same expiring reserve. Reviewer cannot run until the
+    reserved Builder call has been claimed, and neither role can claim a
+    second provider request after resume.
+    """
     from datetime import UTC, datetime, timedelta
+
+    limits = {
+        "builder": REFLECTION_CHAT_BUILDER_MAX_CALLS,
+        "reviewer": REFLECTION_CHAT_REVIEWER_MAX_CALLS,
+    }
+    checkpoint_keys = {
+        "builder": "reflection_chat_builder_calls",
+        "reviewer": "reflection_chat_reviewer_calls",
+    }
+    if role not in limits:
+        raise RuntimeError("reflection_recovery_role_invalid")
 
     project = getattr(state, "project_name", None)
     run_id = getattr(state, "run_id", None)
     if not isinstance(project, str) or not project.strip() or not isinstance(
         run_id, str,
     ) or not run_id.strip():
-        raise RuntimeError("reflection_builder_run_identity_missing")
+        raise RuntimeError("reflection_recovery_run_identity_missing")
 
     from werkstatt.event_store import EventStore
 
@@ -425,30 +442,39 @@ def claim_recovery_builder_call(state: Any) -> int:
     for _ in range(5):
         record = store.get_run_record(project, run_id)
         if record is None:
-            raise RuntimeError("reflection_builder_checkpoint_missing")
+            raise RuntimeError("reflection_recovery_checkpoint_missing")
         checkpoint = record.get("checkpoint")
         if not isinstance(checkpoint, dict):
-            raise TypeError("reflection_builder_checkpoint_invalid")
-        used = checkpoint.get("reflection_chat_builder_calls", 0)
+            raise TypeError("reflection_recovery_checkpoint_invalid")
+        checkpoint_key = checkpoint_keys[role]
+        used = checkpoint.get(checkpoint_key, 0)
         if isinstance(used, bool) or not isinstance(used, int) or used < 0:
-            raise RuntimeError("reflection_builder_counter_invalid")
-        if used >= REFLECTION_CHAT_BUILDER_MAX_CALLS:
-            raise RuntimeError("reflection_builder_reserve_exhausted")
+            raise RuntimeError("reflection_recovery_counter_invalid")
+        if used >= limits[role]:
+            raise RuntimeError(f"reflection_{role}_reserve_exhausted")
+        if role == "reviewer":
+            builder_calls = checkpoint.get("reflection_chat_builder_calls", 0)
+            if (
+                isinstance(builder_calls, bool)
+                or not isinstance(builder_calls, int)
+                or builder_calls < 1
+            ):
+                raise RuntimeError("reflection_reviewer_before_builder")
         expiry = checkpoint.get("reflection_chat_builder_expires_at")
         if expiry is None:
             expiry = (now + timedelta(
                 seconds=REFLECTION_CHAT_BUILDER_MAX_ELAPSED_S,
             )).isoformat()
         if not isinstance(expiry, str):
-            raise TypeError("reflection_builder_expiry_invalid")
+            raise TypeError("reflection_recovery_expiry_invalid")
         try:
             expires_at = datetime.fromisoformat(expiry)
         except ValueError as exc:
-            raise RuntimeError("reflection_builder_expiry_invalid") from exc
+            raise RuntimeError("reflection_recovery_expiry_invalid") from exc
         if expires_at.tzinfo is None or now >= expires_at:
-            raise RuntimeError("reflection_builder_reserve_expired")
+            raise RuntimeError("reflection_recovery_reserve_expired")
         updated = dict(checkpoint)
-        updated["reflection_chat_builder_calls"] = used + 1
+        updated[checkpoint_key] = used + 1
         updated["reflection_chat_builder_expires_at"] = expiry
         try:
             store.update_run_checkpoint(
@@ -459,12 +485,25 @@ def claim_recovery_builder_call(state: Any) -> int:
             )
         except RuntimeError:
             continue
-        state.reflection_chat_builder_calls = used + 1
+        if role == "builder":
+            state.reflection_chat_builder_calls = used + 1
+        else:
+            state.reflection_chat_reviewer_calls = used + 1
         state.reflection_chat_builder_deadline_monotonic = (
             time.monotonic() + (expires_at - now).total_seconds()
         )
         return used + 1
-    raise RuntimeError("reflection_builder_checkpoint_conflict")
+    raise RuntimeError("reflection_recovery_checkpoint_conflict")
+
+
+def claim_recovery_builder_call(state: Any) -> int:
+    """Compatibility wrapper for the single scoped Builder call."""
+    return claim_recovery_worker_call(state, "builder")
+
+
+def claim_recovery_reviewer_call(state: Any) -> int:
+    """Claim the one scoped independent review after the Builder attempt."""
+    return claim_recovery_worker_call(state, "reviewer")
 
 
 def ask_project_chat_for_builder_task(
