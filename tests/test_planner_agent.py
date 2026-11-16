@@ -1,6 +1,7 @@
 """Tests fuer werkstatt/planner.py (Phase 5)."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -672,6 +673,20 @@ def test_planner_split_persistiert_abnahmekriterien_und_originalauftrag(tmp_path
     assert captured["manifest"]["budget_event"] == "planner_split_context_budget"
     assert captured["manifest"]["scope"] == "task_graph"
     assert captured["manifest"]["required_context_complete"] is True
+    sections = captured["manifest"]["sections"]
+    included = [item for item in sections if item["status"] == "included"]
+    assert {item["name"] for item in included} >= {
+        "original_request", "architect_prose", "target_files",
+    }
+    assert any(item["name"] == "planner_skills"
+               and item["status"] == "not_provided_optional" for item in sections)
+    for item in included:
+        start, end = item["prompt_start"], item["prompt_end"]
+        excerpt = captured["prompt"][start:end]
+        assert len(excerpt) == item["chars"]
+        assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == item["sha256"]
+    assert included[0]["prompt_start"] == 0
+    assert included[-1]["prompt_end"] == len(captured["prompt"])
 
 
 def test_planner_split_blockiert_uebergrossen_auftrag_statt_vorab_zu_schneiden(
@@ -892,3 +907,30 @@ def test_oversized_task_split_rejects_malformed_criterion_refs():
             Path("."),
             "demo",
         )
+
+
+def test_planner_split_blocks_missing_required_architect_prose(tmp_path):
+    from werkstatt.planner import _zerlege_in_sub_tasks
+
+    calls = []
+    audits = []
+    with patch(
+        "werkstatt.planner.ask_llm",
+        side_effect=lambda *args, **kwargs: calls.append((args, kwargs)),
+    ), patch(
+        "werkstatt.planner.audit",
+        side_effect=lambda *args: audits.append(args),
+    ):
+        tasks = _zerlege_in_sub_tasks(
+            "", ["src.py"], "fake", tmp_path, "demo", aufgabe="Update src.py",
+        )
+
+    assert tasks == []
+    assert calls == []
+    event = next(
+        payload for name, payload, *_ in audits
+        if name == "planner_split_context_budget"
+    )
+    assert event["required_context_complete"] is False
+    assert event["reason"] == "missing_required_prompt_section"
+    assert event["omitted"] == ["architect_prose"]

@@ -67,10 +67,16 @@ PLANNER_SPLIT_CONTEXT_MAX_CHARS = 60000
 def _planner_split_context_fits(
     role: str, system: str, user: str, pd, pn,
     *, source_evidence: dict | None = None,
+    section_manifest: list[dict[str, object]] | None = None,
 ) -> bool:
     """Reject oversized required planning context instead of silently slicing it."""
     total = len(system) + len(user)
-    fits = total <= PLANNER_SPLIT_CONTEXT_MAX_CHARS
+    missing_required = [
+        str(item.get("name", "unknown"))
+        for item in section_manifest or []
+        if item.get("status") == "missing_required"
+    ]
+    fits = total <= PLANNER_SPLIT_CONTEXT_MAX_CHARS and not missing_required
     audit("planner_split_context_budget", {
         "role": role,
         "max_chars": PLANNER_SPLIT_CONTEXT_MAX_CHARS,
@@ -78,11 +84,46 @@ def _planner_split_context_fits(
         "user_chars": len(user),
         "total_chars": total,
         "required_context_complete": fits,
-        "omitted": [],
+        "omitted": missing_required,
         "action": "send" if fits else "blocked",
+        "reason": "missing_required_prompt_section" if missing_required else None,
         "source_evidence": source_evidence or {},
+        "section_manifest": section_manifest or [],
     }, pd, pn)
     return fits
+
+
+def _compose_planner_prompt_sections(
+    sections: list[tuple[str, str, bool]],
+) -> tuple[str, list[dict[str, object]]]:
+    """Join exact prompt fragments and attest included/absent sections."""
+    prompt_parts: list[str] = []
+    manifest: list[dict[str, object]] = []
+    cursor = 0
+    for name, content, optional in sections:
+        if not content:
+            manifest.append({
+                "name": name,
+                "status": (
+                    "not_provided_optional" if optional else "missing_required"
+                ),
+                "chars": 0,
+                "sha256": hashlib.sha256(b"").hexdigest(),
+            })
+            continue
+        start = cursor
+        end = start + len(content)
+        prompt_parts.append(content)
+        manifest.append({
+            "name": name,
+            "status": "included",
+            "chars": len(content),
+            "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "prompt_start": start,
+            "prompt_end": end,
+        })
+        cursor = end
+    return "".join(prompt_parts), manifest
 
 
 def _budget_architect_execution_context(
@@ -883,7 +924,7 @@ def _llm_split_einzel_task(
 ) -> list[dict]:
     """M-469: Zerlegt EINEN zu grossen Task in 2-3 Sub-Tasks (LLM)."""
     _system = PLANNER_SPLIT_SINGLE_SYSTEM
-    _user = (
+    task_section = (
         f"## ZU GROSSER TASK:\n"
         f"id: {task.get('id')}\n"
         f"name: {task.get('name')}\n"
@@ -891,9 +932,18 @@ def _llm_split_einzel_task(
         f"description (vollstaendig, Laenge "
         f"{len(str(task.get('description', '')))}):\n"
         f"{task.get('description', '')}\n\n"
-        f"## ARCHITECT-PROSA (vollstaendig, Laenge {len(prosa)}):\n{prosa}"
     )
-    if not _planner_split_context_fits("planner-split-single", _system, _user, pd, pn):
+    architect_section = (
+        f"## ARCHITECT-PROSA (vollstaendig, Laenge {len(prosa)}):\n{prosa}"
+    ) if prosa.strip() else ""
+    _user, section_manifest = _compose_planner_prompt_sections([
+        ("oversized_task", task_section, False),
+        ("architect_prose", architect_section, False),
+    ])
+    if not _planner_split_context_fits(
+        "planner-split-single", _system, _user, pd, pn,
+        section_manifest=section_manifest,
+    ):
         return []
     reply = _with_spinner(
         f"Split-{task.get('id', '?')}",
@@ -910,6 +960,7 @@ def _llm_split_einzel_task(
                 "system_chars": len(_system),
                 "user_chars": len(_user),
                 "required_context_complete": True,
+                "sections": section_manifest,
             },
         ),
     )
@@ -1588,20 +1639,37 @@ def _zerlege_in_sub_tasks(
             }, pd, pn)
             return []
 
-    _user = (
-        (f"{_skb}\n\n" if _skb else "")
-        + f"{_mess_planner_block}"
-        + (f"## ORIGINALAUFTRAG (vollstaendig, Laenge "
-           f"{len(_originalauftrag)}):\n{_originalauftrag}\n\n"
-           if _originalauftrag else "")
-        + (f"## AKTUELLE QUELLBELEGE (Scout-Auswahl, erneut gelesen)\n"
-           f"{source_context}\n\n" if source_context else "")
-        + f"## ARCHITECT-PROSA:\n{prosa}\n\n"
-        + "## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files)
-    )
+    _user, section_manifest = _compose_planner_prompt_sections([
+        ("planner_skills", f"{_skb}\n\n" if _skb else "", True),
+        ("measurement_index", _mess_planner_block, True),
+        (
+            "original_request",
+            f"## ORIGINALAUFTRAG (vollstaendig, Laenge "
+            f"{len(_originalauftrag)}):\n{_originalauftrag}\n\n"
+            if _originalauftrag else "",
+            True,
+        ),
+        (
+            "scout_source_evidence",
+            f"## AKTUELLE QUELLBELEGE (Scout-Auswahl, erneut gelesen)\n"
+            f"{source_context}\n\n" if source_context else "",
+            True,
+        ),
+        (
+            "architect_prose",
+            f"## ARCHITECT-PROSA:\n{prosa}\n\n" if prosa.strip() else "",
+            False,
+        ),
+        (
+            "target_files",
+            "## DATEIEN:\n" + "\n".join(f"- {f}" for f in key_files),
+            False,
+        ),
+    ])
     if not _planner_split_context_fits(
         "planner-split", PLANNER_SPLIT_SYSTEM, _user, pd, pn,
         source_evidence=source_manifest,
+        section_manifest=section_manifest,
     ):
         return []
     reply = _with_spinner(
@@ -1623,6 +1691,7 @@ def _zerlege_in_sub_tasks(
                 "source_evidence_sha256": hashlib.sha256(
                     source_context.encode("utf-8"),
                 ).hexdigest() if source_context else None,
+                "sections": section_manifest,
             },
         ),
     )
