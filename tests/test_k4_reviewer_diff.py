@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from werkstatt import reviewer as _rv
 
 _here = Path(__file__).parent
@@ -40,7 +42,7 @@ def test_k4_ohne_task_files_nutzt_dot() -> None:
     def _fake_run(cmd, *args, **kwargs):
         calls.append(cmd)
         class _R:
-            stdout = "x\n"
+            stdout = "" if "ls-files" in cmd else "x\n"
             returncode = 0
         return _R()
 
@@ -87,7 +89,7 @@ def test_k4b_untracked_nur_task_files(tmp_path) -> None:
         calls.append(cmd)
         class _R:
             if "ls-files" in cmd:
-                stdout = "a.py\nb.py\n"
+                stdout = "a.py\0b.py\0"
             else:
                 stdout = "diff --git a/a.py b/a.py\n"
             returncode = 0
@@ -112,7 +114,7 @@ def test_k4b_ohne_task_files_alle_untracked(tmp_path) -> None:
         calls.append(cmd)
         class _R:
             if "ls-files" in cmd:
-                stdout = "a.py\nb.py\n"
+                stdout = "a.py\0b.py\0"
             else:
                 stdout = ""
             returncode = 0
@@ -124,3 +126,63 @@ def test_k4b_ohne_task_files_alle_untracked(tmp_path) -> None:
 
     assert "a.py" in diff
     assert "b.py" in diff
+
+
+def test_reviewer_diff_uebergrosse_tracked_diffs_blockieren(tmp_path) -> None:
+    fake = type("R", (), {
+        "stdout": "x" * (_rv.REVIEWER_DIFF_MAX_CHARS + 1),
+        "stderr": "",
+        "returncode": 0,
+    })()
+    with patch("werkstatt.reviewer.subprocess.run", return_value=fake), \
+            pytest.raises(RuntimeError, match="Vollstaendigkeitslimit"):
+        _rv._get_git_diff(tmp_path)
+
+
+def test_reviewer_diff_nimmt_versteckte_untracked_dateien_auf(tmp_path) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=False)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path, capture_output=True, check=False,
+    )
+    (tmp_path / ".runtime-policy").write_text("deny unsafe action\n")
+
+    diff = _rv._get_git_diff(tmp_path)
+
+    assert "+++ b/.runtime-policy" in diff
+    assert "+deny unsafe action" in diff
+
+
+def test_reviewer_diff_ls_files_fehler_blockiert(tmp_path) -> None:
+    results = [
+        type("R", (), {"stdout": "", "stderr": "", "returncode": 0})(),
+        type("R", (), {
+            "stdout": "", "stderr": "fatal: index unavailable", "returncode": 128,
+        })(),
+    ]
+    with patch("werkstatt.reviewer.subprocess.run", side_effect=results), \
+            pytest.raises(RuntimeError, match="git ls-files fehlgeschlagen"):
+        _rv._get_git_diff(tmp_path)
+
+
+def test_reviewer_diff_nutzt_gesamten_untracked_inhalt_ohne_20k_kappung(
+    tmp_path,
+) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=False)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path, capture_output=True, check=False,
+    )
+    payload = "z" * 25_000
+    (tmp_path / "large_new.py").write_text(payload)
+
+    diff = _rv._get_git_diff(tmp_path)
+
+    assert len(diff) > 20_000
+    assert f"+{payload}" in diff

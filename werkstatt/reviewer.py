@@ -21,6 +21,7 @@ from werkstatt.state import RunState
 
 REVIEWER_CONTEXT_MAX_CHARS = 90_000
 REVIEWER_OUTPUT_RESERVE_CHARS = 16_000
+REVIEWER_DIFF_MAX_CHARS = 500_000
 
 
 def extract_audit_bug_summary(bugs: list) -> list[dict]:
@@ -453,16 +454,34 @@ def _get_git_diff(
             raise RuntimeError(
                 f"git diff fehlgeschlagen (rc={_rc}): {_stderr[:300]}"
             )
-        parts = [res.stdout[:500000]] if res.stdout else []
+        tracked_diff = getattr(res, "stdout", "") or ""
+        if len(tracked_diff) > REVIEWER_DIFF_MAX_CHARS:
+            raise RuntimeError(
+                "git diff ueberschreitet das Vollstaendigkeitslimit "
+                f"({len(tracked_diff)} > {REVIEWER_DIFF_MAX_CHARS} Zeichen)"
+            )
+        parts = [tracked_diff] if tracked_diff else []
 
         # M-314: untracked-Dateien als "Neue Datei"-Block anhaengen.
         untracked = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard"],
+            ["git", "ls-files", "--others", "--exclude-standard", "-z"],
             cwd=str(pd), capture_output=True, text=True, timeout=30, check=False
         )
+        untracked_rc = getattr(untracked, "returncode", 0) or 0
+        untracked_stderr = getattr(untracked, "stderr", "") or ""
+        if untracked_rc != 0:
+            raise RuntimeError(
+                "git ls-files fehlgeschlagen "
+                f"(rc={untracked_rc}): {untracked_stderr[:300]}"
+            )
+        if "dubious" in untracked_stderr.lower():
+            raise RuntimeError(
+                "git ls-files fehlgeschlagen: "
+                f"{untracked_stderr[:300]}"
+            )
         if getattr(untracked, "stdout", ""):
-            for rel in untracked.stdout.splitlines():
-                if not rel or rel.startswith("."):
+            for rel in untracked.stdout.split("\0"):
+                if not rel:
                     continue
                 # K4b: nur untracked-Dateien der aktuellen Task.
                 if task_files and not any(
@@ -471,18 +490,54 @@ def _get_git_diff(
                 ):
                     continue
                 f = pd / rel
+                if f.is_symlink():
+                    raise RuntimeError(
+                        f"Untracked-Datei ist ein Symlink; Diff nicht sicher "
+                        f"lesbar: {rel}"
+                    )
                 if not f.is_file():
-                    continue
+                    raise RuntimeError(
+                        f"Untracked-Datei ist vor dem Reviewer-Diff verschwunden: {rel}"
+                    )
                 try:
-                    content = f.read_text(encoding="utf-8", errors="replace")
+                    current_size = sum(len(part) for part in parts) + max(
+                        0, len(parts) - 1
+                    )
+                    remaining = REVIEWER_DIFF_MAX_CHARS - current_size - 256
+                    if remaining <= 0:
+                        raise RuntimeError(
+                            "Reviewer-Diff ueberschreitet das "
+                            "Vollstaendigkeitslimit"
+                        )
+                    with f.open("r", encoding="utf-8", errors="replace") as stream:
+                        content = stream.read(remaining + 1)
+                    if len(content) > remaining:
+                        raise RuntimeError(
+                            "Untracked-Datei ueberschreitet das "
+                            "Reviewer-Diff-Vollstaendigkeitslimit: "
+                            f"{rel}"
+                        )
+                except RuntimeError:
+                    raise
                 except OSError:
-                    continue
+                    raise RuntimeError(
+                        f"Untracked-Datei kann nicht gelesen werden: {rel}"
+                    )
                 block = ["--- /dev/null", f"+++ b/{rel}", "@@ NEUE DATEI @@"]
                 for line in content.splitlines():
                     block.append(f"+{line}")
-                parts.append("\n".join(block) + "\n")
+                rendered = "\n".join(block) + "\n"
+                if (
+                    current_size + len(rendered) + (1 if parts else 0)
+                    > REVIEWER_DIFF_MAX_CHARS
+                ):
+                    raise RuntimeError(
+                        "Reviewer-Diff ueberschreitet das "
+                        "Vollstaendigkeitslimit"
+                    )
+                parts.append(rendered)
 
-        return "\n".join(parts)[:20000]
+        return "\n".join(parts)
     except (RuntimeError, subprocess.SubprocessError,
             OSError, TimeoutError) as _exc:
         # K23a: fail-closed -- Git-Fehler propagieren, nicht still leer.
