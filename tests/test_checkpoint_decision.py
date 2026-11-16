@@ -387,7 +387,9 @@ def test_recovery_replan_resume_preserves_failed_task_through_explorer_setup(
     assert decision["coordinator_action"] == "explore_setup"
     assert decision["preserve_failed_tasks_on_setup"] is True
 
-    assert phase.resume_failed(preserve_failed=True) == 0
+    assert phase.resume_failed(
+        preserve_failed=decision["preserve_failed_tasks_on_setup"],
+    ) == 0
     assert phase.get_task("failed-task")["status"] == "failed"
 
 
