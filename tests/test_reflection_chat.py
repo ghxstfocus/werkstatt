@@ -544,6 +544,46 @@ def test_recovery_chat_reserve_survives_new_runstate(
     )
 
 
+def test_recovery_builder_reserve_is_single_use_and_survives_resume(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    store = _install_run_store(monkeypatch, state, tmp_path)
+
+    assert reflection_chat.claim_recovery_builder_call(state) == 1
+    resumed = _state(tmp_path)
+    with pytest.raises(RuntimeError, match="reserve_exhausted"):
+        reflection_chat.claim_recovery_builder_call(resumed)
+
+    checkpoint = store.get_run_record("alpha", "alpha-run-1")["checkpoint"]
+    assert checkpoint["reflection_chat_builder_calls"] == 1
+    assert checkpoint["reflection_chat_builder_expires_at"]
+
+
+def test_recovery_builder_reserve_expiry_is_durable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    state = _state(tmp_path)
+    store = _install_run_store(monkeypatch, state, tmp_path)
+    record = store.get_run_record("alpha", "alpha-run-1")
+    assert record is not None
+    checkpoint = dict(record["checkpoint"])
+    checkpoint["reflection_chat_builder_expires_at"] = (
+        datetime.now(UTC) - timedelta(seconds=1)
+    ).isoformat()
+    store.update_run_checkpoint(
+        "alpha", "alpha-run-1", checkpoint,
+        expected_version=record["checkpoint_version"],
+    )
+
+    with pytest.raises(RuntimeError, match="reserve_expired"):
+        reflection_chat.claim_recovery_builder_call(_state(tmp_path))
+
+
 def test_reflection_uses_chat_task_once_and_restores_original_task(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -578,7 +618,7 @@ def test_reflection_uses_chat_task_once_and_restores_original_task(
     assert calls[1]["task"]["task_files"] == ["werkstatt/sample.py"]
     assert calls[1]["task"]["acceptance_criteria"] == ["AC-1"]
     assert calls[1]["source_evidence"] == _source_evidence()
-    assert calls[1]["max_runden"] == 1
+    assert calls[1]["max_runden"] == 2
     assert state.aktuelle_task is original
     assert state.reflection_chat_evidence == []
 

@@ -446,7 +446,19 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     model = route.model
     if state is not None:
         if _enforce_run_budget(state):
-            return LLMReply(ok=False, error=state.budget_exhausted_reason)
+            is_scoped_recovery_builder = bool(
+                getattr(state, "reflection_chat_builder_reserve_active", False)
+                and aufgabe == "builder"
+                and (rolle is None or rolle == "builder")
+            )
+            if not is_scoped_recovery_builder:
+                return LLMReply(ok=False, error=state.budget_exhausted_reason)
+            try:
+                from werkstatt.reflection_chat import claim_recovery_builder_call
+
+                claim_recovery_builder_call(state)
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                return LLMReply(ok=False, error=str(exc))
         state.llm_calls += 1
     _task_role = _rolle_aus_aufgabe(aufgabe)
     _routed_role = _rolle_aus_aufgabe(rolle) if rolle else _task_role

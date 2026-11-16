@@ -141,6 +141,71 @@ def test_run_llm_call_budget_blocks_before_network(tmp_path):
     assert s.budget_exhausted_reason == reply.error
 
 
+def test_exhausted_budget_allows_only_checkpoint_claimed_chat_builder(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.event_store import EventStore
+
+    s = _state(tmp_path)
+    s.run_id = "test-run-1"
+    s.budget = {"max_llm_calls": 1}
+    s.llm_calls = 1
+    s.budget_exhausted_reason = "max_llm_calls"
+    s.reflection_chat_builder_reserve_active = True
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(s.project_name, s.run_id, s.aufgabe, status="running")
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+    prompt = "builder prompt"
+    system = "builder system"
+    context = {
+        "budget_event": "builder_context_budget",
+        "user_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+        "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+    }
+    with patch(
+        "werkstatt.agent.requests.post", return_value=_ok_response("patch"),
+    ) as post:
+        reply = agent.ask_llm(
+            "sk-test", system, prompt, "deepseek-chat", 0.2,
+            state=s, aufgabe="builder", context_manifest=context,
+        )
+        second_reply = agent.ask_llm(
+            "sk-test", system, prompt, "deepseek-chat", 0.2,
+            state=s, aufgabe="builder", context_manifest=context,
+        )
+    assert reply.ok is True
+    assert second_reply.ok is False
+    assert second_reply.error == "reflection_builder_reserve_exhausted"
+    post.assert_called_once()
+    assert s.llm_calls == 2
+
+
+def test_exhausted_budget_does_not_reserve_chat_for_other_roles(
+    monkeypatch, tmp_path,
+):
+    from werkstatt import reflection_chat
+
+    s = _state(tmp_path)
+    s.budget = {"max_llm_calls": 1}
+    s.llm_calls = 1
+    s.budget_exhausted_reason = "max_llm_calls"
+    s.reflection_chat_builder_reserve_active = True
+    with (
+        patch.object(
+            reflection_chat, "claim_recovery_builder_call",
+        ) as reserve,
+        patch("werkstatt.agent.requests.post") as post,
+    ):
+        reply = agent.ask_llm(
+            "sk-test", "system", "user", "deepseek-chat", 0.2,
+            state=s, aufgabe="reviewer",
+        )
+    reserve.assert_not_called()
+    post.assert_not_called()
+    assert reply.ok is False
+    assert reply.error == "max_llm_calls"
+
+
 def test_run_time_budget_blocks_before_network(tmp_path):
     s = _state(tmp_path)
     s.budget = {"max_minutes": 1}

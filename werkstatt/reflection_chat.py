@@ -17,6 +17,8 @@ REFLECTION_EVIDENCE_MAX_CHARS = 18_000
 REFLECTION_PROMPT_MAX_CHARS = 24_000
 REFLECTION_CHAT_MAX_CALLS = 3
 REFLECTION_CHAT_MAX_ELAPSED_S = 90
+REFLECTION_CHAT_BUILDER_MAX_CALLS = 1
+REFLECTION_CHAT_BUILDER_MAX_ELAPSED_S = 90
 
 
 def originating_chat_session_id(run_record: Any) -> str | None:
@@ -312,6 +314,63 @@ def _claim_recovery_chat_call(state: Any) -> int:
         state.reflection_chat_calls = used + 1
         return used + 1
     raise RuntimeError("reflection_chat_checkpoint_conflict")
+
+
+def claim_recovery_builder_call(state: Any) -> int:
+    """Durably allow one short, Chat-scoped Builder call after run exhaustion."""
+    from datetime import UTC, datetime, timedelta
+
+    project = getattr(state, "project_name", None)
+    run_id = getattr(state, "run_id", None)
+    if not isinstance(project, str) or not project.strip() or not isinstance(
+        run_id, str,
+    ) or not run_id.strip():
+        raise RuntimeError("reflection_builder_run_identity_missing")
+
+    from werkstatt.event_store import EventStore
+
+    now = datetime.now(UTC)
+    store = EventStore()
+    for _ in range(5):
+        record = store.get_run_record(project, run_id)
+        if record is None:
+            raise RuntimeError("reflection_builder_checkpoint_missing")
+        checkpoint = record.get("checkpoint")
+        if not isinstance(checkpoint, dict):
+            raise TypeError("reflection_builder_checkpoint_invalid")
+        used = checkpoint.get("reflection_chat_builder_calls", 0)
+        if isinstance(used, bool) or not isinstance(used, int) or used < 0:
+            raise RuntimeError("reflection_builder_counter_invalid")
+        if used >= REFLECTION_CHAT_BUILDER_MAX_CALLS:
+            raise RuntimeError("reflection_builder_reserve_exhausted")
+        expiry = checkpoint.get("reflection_chat_builder_expires_at")
+        if expiry is None:
+            expiry = (now + timedelta(
+                seconds=REFLECTION_CHAT_BUILDER_MAX_ELAPSED_S,
+            )).isoformat()
+        if not isinstance(expiry, str):
+            raise TypeError("reflection_builder_expiry_invalid")
+        try:
+            expires_at = datetime.fromisoformat(expiry)
+        except ValueError as exc:
+            raise RuntimeError("reflection_builder_expiry_invalid") from exc
+        if expires_at.tzinfo is None or now >= expires_at:
+            raise RuntimeError("reflection_builder_reserve_expired")
+        updated = dict(checkpoint)
+        updated["reflection_chat_builder_calls"] = used + 1
+        updated["reflection_chat_builder_expires_at"] = expiry
+        try:
+            store.update_run_checkpoint(
+                project,
+                run_id,
+                updated,
+                expected_version=record["checkpoint_version"],
+            )
+        except RuntimeError:
+            continue
+        state.reflection_chat_builder_calls = used + 1
+        return used + 1
+    raise RuntimeError("reflection_builder_checkpoint_conflict")
 
 
 def ask_project_chat_for_builder_task(

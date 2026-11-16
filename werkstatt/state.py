@@ -226,6 +226,8 @@ class RunState:
     reflection_chat_evidence: list[dict[str, Any]] = field(default_factory=list)
     reflection_chat_calls: int = 0
     reflection_chat_stop_reason: str = ""
+    reflection_chat_builder_calls: int = 0
+    reflection_chat_builder_reserve_active: bool = False
     # OP-397: runtime-only assertion callback; never persisted into PhaseState.
     run_lease_check: Any = None
 
