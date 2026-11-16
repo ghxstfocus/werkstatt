@@ -415,6 +415,39 @@ def test_unique_literal_setting_skips_scout_architect_and_split(tmp_path):
     ]
 
 
+def test_explicit_same_file_literal_batch_skips_all_planning_roles(tmp_path):
+    target = tmp_path / "settings.py"
+    target.write_text("TIMEOUT = 15\nRETRIES = 2\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.aufgabe = (
+        "Setze TIMEOUT in settings.py auf 30 und setze RETRIES "
+        "in settings.py auf 5"
+    )
+    st.explorer_context = {"key_files": [{"file": "settings.py"}]}
+    role_checkpoints = []
+    st.planner_checkpoint_callback = role_checkpoints.append
+
+    with patch(
+        "werkstatt.planner._run_scout",
+        side_effect=AssertionError("Scout fuer belegten Literal-Batch unnoetig"),
+    ), patch(
+        "werkstatt.planner.run_architect",
+        side_effect=AssertionError("Architect fuer belegten Literal-Batch unnoetig"),
+    ), patch("werkstatt.planner._zerlege_in_sub_tasks") as split:
+        assert run_planner(st) is True
+
+    split.assert_not_called()
+    assert len(st.tasks) == 1
+    assert st.tasks[0]["task_files"] == ["settings.py"]
+    assert "TIMEOUT = 15` durch `TIMEOUT = 30" in st.tasks[0]["description"]
+    assert "RETRIES = 2` durch `RETRIES = 5" in st.tasks[0]["description"]
+    assert [(item["role"], item["status"]) for item in role_checkpoints] == [
+        ("scout", "skipped"),
+        ("architect", "skipped"),
+        ("planner_split", "skipped"),
+    ]
+
+
 def test_complex_single_file_request_keeps_architect_reasoning_enabled(tmp_path):
     target = tmp_path / "src" / "auth.py"
     target.parent.mkdir()

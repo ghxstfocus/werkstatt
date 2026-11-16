@@ -108,3 +108,70 @@ def test_direct_builder_route_requires_current_unique_source_edit(tmp_path) -> N
         "src/settings.py",
         tmp_path,
     ) == (False, "kein_expliziter_literalersetzungsausdruck")
+
+
+def test_direct_builder_compiles_multiple_explicit_literal_assignments(tmp_path) -> None:
+    from werkstatt.roles.builder_direct import build_direct_edit_plan
+
+    source = tmp_path / "src" / "settings.py"
+    source.parent.mkdir()
+    source.write_text(
+        "TIMEOUT = 10  # seconds\nRETRIES = 2\nENABLED = True\n",
+        encoding="utf-8",
+    )
+    task = (
+        "Setze TIMEOUT in src/settings.py auf 30 und setze RETRIES "
+        "in src/settings.py auf 5"
+    )
+
+    plan, reason = build_direct_edit_plan(task, "src/settings.py", tmp_path)
+
+    assert reason == "eindeutige_ast_literalzuweisungen"
+    assert plan is not None
+    assert plan["atomarer_plan"] is True
+    assert [item["zeile"] for item in plan["betroffene_stellen"]] == [1, 2]
+    assert [item["neu"] for item in plan["betroffene_stellen"]] == [
+        "TIMEOUT = 30  # seconds", "RETRIES = 5",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source_text", "task", "reason"),
+    [
+        (
+            "TIMEOUT = 10\nRETRIES = 2\nRETRIES = 3\n",
+            (
+                "Setze TIMEOUT in settings.py auf 30 und setze RETRIES "
+                "in settings.py auf 5"
+            ),
+            "zielvariable_nicht_eindeutig",
+        ),
+        (
+            "TIMEOUT = 10\nRETRIES = 2\n",
+            (
+                "Setze TIMEOUT in settings.py auf 30 und setze RETRIES "
+                "in settings.py auf 2"
+            ),
+            "zielzuweisung_nicht_eindeutig_oder_unveraendert",
+        ),
+        (
+            "TIMEOUT = 10\nRETRIES = 2\n",
+            (
+                "Setze TIMEOUT in settings.py auf 30 und setze RETRIES "
+                "in settings.py auf 5 und dokumentiere die Änderung"
+            ),
+            "literal_batch_enthaelt_weitere_auftragsteile",
+        ),
+    ],
+)
+def test_direct_builder_escalates_ambiguous_or_noop_batch(
+    tmp_path, source_text: str, task: str, reason: str,
+) -> None:
+    from werkstatt.roles.builder_direct import build_direct_edit_plan
+
+    source = tmp_path / "settings.py"
+    source.write_text(source_text, encoding="utf-8")
+
+    assert build_direct_edit_plan(task, "settings.py", tmp_path) == (
+        None, reason,
+    )
