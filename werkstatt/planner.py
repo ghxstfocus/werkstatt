@@ -23,6 +23,7 @@ from werkstatt.roles.builder_direct import (
 )
 from werkstatt.roles.planner_dispatch import (
     architect_reasoning_route,
+    architect_single_file_task_decision,
     choose_next_planner_role,
 )
 from werkstatt.roles.planner_dispatch import (
@@ -2575,21 +2576,6 @@ def run_planner(
             "reason": "current_inputs_or_persistence_unavailable",
         }, pd, pn)
         return False
-    _after_architect_decision = choose_next_planner_role(
-        scout_skip_path=_scout_skip_path,
-        completed_role="architect",
-        architect_output_ready=bool(_arch_prosa.strip()),
-    )
-    audit("planner_role_dispatch_decision", {
-        "next_role": _after_architect_decision.role,
-        "reason": _after_architect_decision.reason,
-        "basis": "validated_architect_output",
-        "architect_output_sha256": hashlib.sha256(
-            _arch_prosa.encode("utf-8"),
-        ).hexdigest(),
-    }, pd, pn)
-    if _after_architect_decision.role != "planner_split":
-        return False
     if (
         stop_after_role == "architect"
         or _planner_action_role in {"scout", "architect"}
@@ -2602,7 +2588,6 @@ def run_planner(
         state.planner_yielded_after_role = "architect"
         return True
 
-    # CALL 2: Planner (JSON aus Prosa)
     _key_files: list[str] = []
     if isinstance(_explorer_ctx, dict):
         for k in (_explorer_ctx.get("key_files") or []):
@@ -2610,7 +2595,88 @@ def run_planner(
                 _f = k["file"]
                 if _f not in _key_files:
                     _key_files.append(_f)
+    _single_file_task, _single_file_reason = (
+        architect_single_file_task_decision(
+            goal=aufgabe,
+            architect_prose=_arch_prosa,
+            key_files=_key_files,
+            source_manifest=getattr(
+                state, "architect_scout_source_manifest", {},
+            ),
+            project_dir=pd,
+        )
+    )
+    if _single_file_task is not None:
+        state.akzeptanzkriterien = [aufgabe.strip()]
+        try:
+            _single_file_task["criterion_refs"] = ["AC1"]
+            _single_file_tasks = _normalisiere_task_files(
+                [_single_file_task], _explorer_ctx, pd, pn,
+            )
+            if len(_single_file_tasks) != 1:
+                raise TaskGraphError(
+                    "Der Architect-Einzeldatei-Task wurde nicht eindeutig normalisiert."
+                )
+            _validate_criteria_coverage(
+                _single_file_tasks, state.akzeptanzkriterien,
+            )
+            _validate_read_task_scopes(_single_file_tasks, pd)
+        except TaskGraphError as exc:
+            _single_file_task = None
+            _single_file_reason = f"taskgraph_validation_failed:{str(exc)[:180]}"
+        else:
+            state.tasks = _single_file_tasks
+            state.phasen = []
+            state.tests = []
+            _role_decision = choose_next_planner_role(
+                scout_skip_path=_scout_skip_path,
+                completed_role="architect",
+                deterministic_task_graph_ready=True,
+            )
+            audit("planner_role_dispatch_decision", {
+                "next_role": _role_decision.role,
+                "reason": _role_decision.reason,
+                "basis": "validated_single_file_architect_task",
+                "architect_output_sha256": hashlib.sha256(
+                    _arch_prosa.encode("utf-8"),
+                ).hexdigest(),
+            }, pd, pn)
+            _publish_role_checkpoint(
+                state, "planner_split", "skipped",
+                _single_file_reason,
+                {"architect_output_sha256": hashlib.sha256(
+                    _arch_prosa.encode("utf-8"),
+                ).hexdigest()},
+                {"tasks": state.tasks, "criteria": state.akzeptanzkriterien},
+            )
+            audit("planner_plan_erstellt", {
+                "tasks": len(state.tasks),
+                "prosa_len": len(_arch_prosa),
+                "compiler": "validated_single_file_architect_task",
+            }, pd, pn)
+            return True
 
+    _after_architect_decision = choose_next_planner_role(
+        scout_skip_path=_scout_skip_path,
+        completed_role="architect",
+        architect_output_ready=bool(_arch_prosa.strip()),
+    )
+    audit("planner_role_dispatch_decision", {
+        "next_role": _after_architect_decision.role,
+        "reason": (
+            _single_file_reason
+            if _single_file_task is None
+            else _after_architect_decision.reason
+        ),
+        "basis": "validated_architect_output",
+        "architect_output_sha256": hashlib.sha256(
+            _arch_prosa.encode("utf-8"),
+        ).hexdigest(),
+    }, pd, pn)
+    if _after_architect_decision.role != "planner_split":
+        return False
+
+    # CALL 2: Planner (JSON aus Prosa)
     try:
         _publish_role_checkpoint(
             state, "planner_split", "running", "architect_handoff_ready",

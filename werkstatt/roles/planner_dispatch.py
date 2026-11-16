@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from werkstatt.roles.builder_direct import build_direct_edit_plan
 
@@ -158,6 +158,115 @@ def direct_builder_route_decision(
         return False, "kein_belegtes_einzeldateiziel"
     plan, reason = build_direct_edit_plan(task, scout_skip_path, project_dir)
     return plan is not None, reason
+
+
+def architect_single_file_task_decision(
+    *,
+    goal: str,
+    architect_prose: str,
+    key_files: list[str],
+    source_manifest: object,
+    project_dir,
+) -> tuple[dict | None, str]:
+    """Compile one Architect file block only from a complete current proof.
+
+    The Planner-Split remains necessary for multi-file, dependent, oversized,
+    or weakly sourced plans. This route avoids another model call only when
+    the Architect already supplied one complete, independent file task.
+    """
+    if not isinstance(goal, str) or not goal.strip() or len(goal) > 500:
+        return None, "ziel_fehlt_oder_uebersteigt_einzel_task_limit"
+    if re.search(
+        r"\b(?:tests?|pytest|regress\w*|unit[- ]tests?)\b",
+        goal,
+        flags=re.IGNORECASE,
+    ):
+        return None, "ziel_verlangt_weitere_testplanung"
+    if not isinstance(architect_prose, str) or len(architect_prose) > 12_000:
+        return None, "architect_prosa_fehlt_oder_zu_gross"
+    sections = list(re.finditer(
+        r"^##\s+([^\s`]+\.py)\s*$", architect_prose, re.MULTILINE,
+    ))
+    if len(sections) != 1:
+        return None, "architect_plan_hat_nicht_genau_einen_dateiblock"
+    target = sections[0].group(1)
+    relative = Path(target)
+    if (
+        relative.is_absolute()
+        or PureWindowsPath(target).is_absolute()
+        or ".." in relative.parts
+        or target.startswith("tests/")
+    ):
+        return None, "architect_zieldatei_ausserhalb_einzel_task_scope"
+    if target not in key_files:
+        return None, "architect_zieldatei_nicht_durch_explorer_bestaetigt"
+
+    from werkstatt.task_graph import (
+        _check_explicit_keine_in_prosa,
+        _parse_architect_deps_block,
+    )
+
+    found_dependencies, dependencies = _parse_architect_deps_block(
+        architect_prose,
+    )
+    explicitly_independent = (
+        dependencies == {target: []}
+        or (
+            not dependencies
+            and _check_explicit_keine_in_prosa(architect_prose)
+        )
+    )
+    if not found_dependencies or not explicitly_independent:
+        return None, "architect_abhaengigkeiten_nicht_eindeutig_unabhaengig"
+
+    if not isinstance(source_manifest, dict):
+        return None, "architect_quellmanifest_fehlt"
+    sources = source_manifest.get("sources")
+    if not isinstance(sources, list):
+        return None, "architect_quellbelege_fehlen"
+    source_record = next((
+        record for record in sources
+        if isinstance(record, dict) and record.get("path") == target
+    ), None)
+    if (
+        not isinstance(source_record, dict)
+        or source_record.get("complete") is not True
+    ):
+        return None, "architect_quellbeleg_unvollstaendig"
+    source_sha256 = source_record.get("source_sha256")
+    if (
+        not isinstance(source_sha256, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", source_sha256)
+    ):
+        return None, "architect_quellhash_ungueltig"
+    try:
+        root = Path(project_dir).resolve(strict=True)
+        source_path = (root / relative).resolve(strict=True)
+        source_path.relative_to(root)
+        source_bytes = source_path.read_bytes()
+    except (OSError, RuntimeError, ValueError, TypeError):
+        return None, "architect_quellbeleg_nicht_lesbar"
+    import hashlib
+
+    if hashlib.sha256(source_bytes).hexdigest() != source_sha256:
+        return None, "architect_quellbeleg_veraltet"
+
+    section_end = (
+        sections[1].start()
+        if len(sections) > 1 else len(architect_prose)
+    )
+    description = architect_prose[sections[0].start():section_end].strip()
+    if not description or len(description) > 12_000:
+        return None, "architect_dateiblock_fehlt_oder_zu_gross"
+    return {
+        "id": "t1",
+        "name": f"Architect: {target}",
+        "action": "update",
+        "task_files": [target],
+        "dependencies": [],
+        "criterion_refs": ["AC1"],
+        "description": description,
+    }, "einzelner_unabhaengiger_architect_dateiblock"
 
 
 def choose_next_planner_role(

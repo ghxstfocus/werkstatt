@@ -448,6 +448,60 @@ def test_explicit_same_file_literal_batch_skips_all_planning_roles(tmp_path):
     ]
 
 
+def test_architect_single_file_plan_skips_planner_split_with_current_evidence(
+    tmp_path,
+):
+    import hashlib
+
+    target = tmp_path / "src" / "module.py"
+    target.parent.mkdir()
+    content = "def update_value():\n    return 2\n"
+    target.write_text(content, encoding="utf-8")
+    st = _state(tmp_path)
+    st.aufgabe = "Aendere das Verhalten in src/module.py"
+    st.explorer_context = {"key_files": [{"file": "src/module.py"}]}
+    role_checkpoints = []
+    st.planner_checkpoint_callback = role_checkpoints.append
+    prose = (
+        "1. Problem\nDas Verhalten soll geaendert werden.\n"
+        "2. Dateien\nEine Datei.\n"
+        "3. Loesung\n## src/module.py\n"
+        "Aendere update_value so, dass 3 zurueckgegeben wird.\n"
+        "4. Tests\nPruefe den neuen Rueckgabewert.\n"
+        "5. Welche Dateien haengen voneinander ab? (PFLICHT)\n- (keine)\n"
+    )
+
+    def architect(state, *_args):
+        state.architect_prosa = prose
+        state.architect_scout_source_manifest = {
+            "sources": [{
+                "path": "src/module.py",
+                "complete": True,
+                "source_sha256": hashlib.sha256(
+                    target.read_bytes(),
+                ).hexdigest(),
+            }],
+        }
+        return True
+
+    with patch(
+        "werkstatt.planner._run_scout",
+        side_effect=AssertionError("Scout fuer Explorer-belegtes Ziel unnoetig"),
+    ), patch("werkstatt.planner.run_architect", side_effect=architect), patch(
+        "werkstatt.planner._zerlege_in_sub_tasks",
+        side_effect=AssertionError("Planner-Split fuer Einzeldatei unnoetig"),
+    ), patch("werkstatt.planner.audit"):
+        assert run_planner(st) is True
+
+    assert len(st.tasks) == 1
+    assert st.tasks[0]["task_files"] == ["src/module.py"]
+    assert st.akzeptanzkriterien == [st.aufgabe]
+    assert st.tasks[0]["criterion_refs"] == ["AC1"]
+    assert [(item["role"], item["status"]) for item in role_checkpoints][-1] == (
+        "planner_split", "skipped",
+    )
+
+
 def test_complex_single_file_request_keeps_architect_reasoning_enabled(tmp_path):
     target = tmp_path / "src" / "auth.py"
     target.parent.mkdir()

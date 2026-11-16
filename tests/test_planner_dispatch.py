@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 from werkstatt.roles.planner_dispatch import (
     architect_reasoning_route,
+    architect_single_file_task_decision,
     choose_next_planner_role,
     direct_builder_route_decision,
 )
@@ -175,3 +178,97 @@ def test_direct_builder_escalates_ambiguous_or_noop_batch(
     assert build_direct_edit_plan(task, "settings.py", tmp_path) == (
         None, reason,
     )
+
+
+def test_architect_single_file_task_requires_complete_current_evidence(
+    tmp_path,
+) -> None:
+    source = tmp_path / "src" / "module.py"
+    source.parent.mkdir()
+    content = "def update_value():\n    return 2\n"
+    source.write_text(content, encoding="utf-8")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    prose = (
+        "1. Problem\nDas Verhalten soll geaendert werden.\n"
+        "2. Dateien\nEine Datei.\n"
+        "3. Loesung\n## src/module.py\nAendere update_value so, dass 3 zurueckgegeben wird.\n"
+        "4. Tests\nPruefe den neuen Rueckgabewert.\n"
+        "5. Welche Dateien haengen voneinander ab? (PFLICHT)\n- (keine)\n"
+    )
+    manifest = {
+        "sources": [{
+            "path": "src/module.py",
+            "complete": True,
+            "source_sha256": digest,
+        }],
+    }
+
+    task, reason = architect_single_file_task_decision(
+        goal="Aendere das Verhalten in src/module.py",
+        architect_prose=prose,
+        key_files=["src/module.py"],
+        source_manifest=manifest,
+        project_dir=tmp_path,
+    )
+
+    assert reason == "einzelner_unabhaengiger_architect_dateiblock"
+    assert task is not None
+    assert task["task_files"] == ["src/module.py"]
+    assert task["criterion_refs"] == ["AC1"]
+
+    test_task, test_reason = architect_single_file_task_decision(
+        goal="Aendere src/module.py und ergaenze einen Regressionstest",
+        architect_prose=prose,
+        key_files=["src/module.py"],
+        source_manifest=manifest,
+        project_dir=tmp_path,
+    )
+    assert test_task is None
+    assert test_reason == "ziel_verlangt_weitere_testplanung"
+
+
+@pytest.mark.parametrize(
+    ("prose_suffix", "manifest_complete", "reason"),
+    [
+        (
+            "## tests/test_module.py\nTest.\n",
+            True,
+            "architect_plan_hat_nicht_genau_einen_dateiblock",
+        ),
+        (
+            "",
+            False,
+            "architect_quellbeleg_unvollstaendig",
+        ),
+    ],
+)
+def test_architect_single_file_task_escalates_without_sufficient_evidence(
+    tmp_path, prose_suffix: str, manifest_complete: bool, reason: str,
+) -> None:
+    source = tmp_path / "module.py"
+    content = "VALUE = 1\n"
+    source.write_text(content, encoding="utf-8")
+    prose = (
+        "3. Loesung\n## module.py\nAendere VALUE.\n"
+        "4. Tests\nPruefe das Verhalten.\n"
+        "5. Welche Dateien haengen voneinander ab?\n- (keine)\n"
+        + prose_suffix
+    )
+    manifest = {
+        "sources": [{
+            "path": "module.py",
+            "complete": manifest_complete,
+            "source_sha256": hashlib.sha256(content.encode()).hexdigest(),
+        }],
+    }
+
+    task, actual_reason = architect_single_file_task_decision(
+        goal="Aendere module.py",
+        architect_prose=prose,
+        key_files=["module.py"],
+        source_manifest=manifest,
+        project_dir=tmp_path,
+    )
+
+    assert task is None
+    assert actual_reason == reason
