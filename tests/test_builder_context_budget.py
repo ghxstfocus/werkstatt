@@ -127,6 +127,61 @@ def test_builder_sends_source_hash_and_complete_current_file(tmp_path):
     )
 
 
+def test_builder_api_context_has_no_silent_file_symbol_or_line_slices(tmp_path):
+    target = tmp_path / "a.py"
+    target.write_text("def update(): return True\n", encoding="utf-8")
+    state = RunState(
+        api_key="test-key",
+        project_dir=tmp_path,
+        project_name="demo",
+        architect_prosa="## a.py\nUpdate using the supplied APIs.",
+        scout_api_auszug={
+            f"module_{file_index}.py": [
+                f"symbol_{file_index}_{symbol_index}(value: int)"
+                for symbol_index in range(3)
+            ]
+            for file_index in range(12)
+        },
+        aktuelle_task={
+            "id": "t1",
+            "name": "Update a.py",
+            "description": "Use the supplied API signatures.",
+            "action": "update",
+            "task_files": ["a.py"],
+        },
+    )
+    reply = type("Reply", (), {
+        "ok": True,
+        "content": '{"patches": []}',
+        "error": "",
+    })()
+
+    with patch(
+        "werkstatt.roles.builder._common.ask_llm",
+        return_value=reply,
+    ) as ask_llm:
+        _build_patches_fuer_datei(
+            state,
+            "a.py",
+            "Update using the supplied APIs.",
+            "test-key",
+        )
+
+    prompt = ask_llm.call_args.args[2]
+    api_section = next(
+        item for item in ask_llm.call_args.kwargs["context_manifest"]
+        ["budget"]["section_manifest"]
+        if item["name"] == "SCOUT_API_SIGNATUREN"
+    )
+    assert api_section["status"] == "included_optional"
+    assert "Untrusted Projektdaten" in prompt
+    for file_index in range(12):
+        for symbol_index in range(3):
+            assert (
+                f"symbol_{file_index}_{symbol_index}(value: int)" in prompt
+            )
+
+
 def test_builder_rejects_stale_chat_recovery_evidence_before_model_call(tmp_path):
     target = tmp_path / "a.py"
     target.write_bytes(b"value = 2\n")
