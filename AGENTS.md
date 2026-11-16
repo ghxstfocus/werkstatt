@@ -73,10 +73,16 @@ alle geplanten Tasks erledigt, aber Akzeptanzkriterien wegen fehlender
 Task-Zuordnung offen, plant der Checkpoint ausschliesslich diese bestehenden
 Kriterien neu. Die Erweiterung erhaelt abgeschlossene Tasks, verlangt dieselben
 Kriterientexte und durchlaeuft erneut Plan- und Human-Gate. Andere ungueltige
-Kriterienzuordnungen bleiben fail-closed. Der Checkpoint ist keine reine
-Timeline-Anzeige. Setup und Planfreigabe bleiben im aktuellen Migrationsstand
-noch explizite Vorbereitungsaktionen; die vollstaendige Phasenabloesung aus
-ADR-0032 ist offen.
+Kriterienzuordnungen bleiben fail-closed. Sind alle Tasks terminal und
+fehlgeschlagene Tasks tragen ausschliesslich die freigegebenen korrigierbaren
+Recovery-Ursachen, darf der Checkpoint deren offene Kriterien gezielt neu
+planen. Die alten Fehler bleiben als superseded-Historie erhalten und werden
+nicht mehr als aktive Arbeit oder Kriterienbeleg gewertet. Auch diese
+Erweiterung verlangt dieselben Kriterientexte und erneut Plan- und Human-Gate;
+Blockaden, Gate-Ablehnungen und unbekannte Fehlerursachen werden nicht
+automatisch neu geplant. Der Checkpoint ist keine reine Timeline-Anzeige.
+Setup und Planfreigabe bleiben im aktuellen Migrationsstand noch explizite
+Vorbereitungsaktionen; die vollstaendige Phasenabloesung aus ADR-0032 ist offen.
 
 Rollen-Kontextbudgets muessen die tatsaechlich uebergebene Information
 abbilden: keine stillen Vorab-Slices vor dem Budgetierer. Ganze optionale

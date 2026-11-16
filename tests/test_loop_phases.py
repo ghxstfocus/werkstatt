@@ -1034,6 +1034,55 @@ def test_criterion_evidence_reports_gaps_instead_of_guessing(tmp_path):
     assert gaps == ["AC1:successful_phase_end_verify_stage_missing"]
 
 
+def test_criterion_evidence_ignores_superseded_failed_history(tmp_path):
+    from werkstatt.phases.finalize import _criterion_evidence_rows
+
+    phase_state = MagicMock()
+    phase_state.run_id = "run-replan"
+    phase_state.get_task.side_effect = lambda task_id: {
+        "status": "superseded" if task_id == "old" else "done",
+    }
+    phase_state.task_verify_evidence_is_current.side_effect = (
+        lambda task_id, _evidence: task_id == "replacement"
+    )
+    rows, gaps = _criterion_evidence_rows(
+        ["Criterion remains covered"],
+        [
+            {"id": "old", "status": "superseded", "criterion_refs": ["AC1"]},
+            {
+                "id": "replacement",
+                "status": "done",
+                "criterion_refs": ["AC1"],
+                "task_files": ["src/fixed.py"],
+                "verify_evidence": {
+                    "schema_version": 1,
+                    "task_id": "replacement",
+                    "phase": "post_build",
+                    "criterion_refs": ["AC1"],
+                    "run_id": "run-replan",
+                    "task_files": ["src/fixed.py"],
+                    "stages": [{
+                        "stage_id": "pytest_fixed",
+                        "ok": True,
+                        "exit_code": 0,
+                        "scope_files": ["src/fixed.py"],
+                    }],
+                },
+            },
+        ],
+        phase_state,
+        [{
+            "stage_id": "pytest_phase_end",
+            "ok": True,
+            "exit_code": 0,
+        }],
+    )
+
+    assert rows[0]["task_ids"] == ["replacement"]
+    assert rows[0]["task_status"] == "done"
+    assert gaps == []
+
+
 def test_criterion_evidence_does_not_reuse_unrelated_run_verify_for_task(
     tmp_path,
 ):

@@ -282,8 +282,30 @@ def _checkpoint_decision_payload(
     else:
         executor = "phase_end_verify"
         if task_progress.get("failed", 0):
-            decision = "verify_with_failed_tasks"
-            reason = "Task-Graph erschoepft, aber mindestens ein Task ist fehlgeschlagen."
+            from werkstatt.criteria_replan import eligible_failed_task_ids
+
+            replannable = (
+                criteria.get("tracked") is True
+                and criteria.get("valid") is True
+                and eligible_failed_task_ids(
+                    phase_state, criteria.get("uncovered"),
+                )
+            )
+            if replannable:
+                executor = "planner_and_plan_gate"
+                decision = "replan_failed_criteria"
+                reason = (
+                    "Alle Tasks sind terminal; fehlgeschlagene, "
+                    "kriteriumsgebundene Builder-Recovery ist erschoepft. "
+                    "Nur die dadurch offenen bestehenden Kriterien duerfen "
+                    "neu geplant und erneut freigegeben werden."
+                )
+            else:
+                decision = "verify_with_failed_tasks"
+                reason = (
+                    "Task-Graph erschoepft, aber mindestens ein Task "
+                    "ist fehlgeschlagen und nicht sicher neu planbar."
+                )
         elif (
             task_progress.get("total", 0) > 0
             and task_progress.get("done", 0) == task_progress.get("total", 0)
@@ -929,13 +951,22 @@ def _phase_tasks_loop(
             )
             phase_state.save()
             return 1, tasks_ok, tasks
-        if decision == "replan_unassigned_criteria":
+        if decision in {
+            "replan_unassigned_criteria",
+            "replan_failed_criteria",
+        }:
             from werkstatt.criteria_replan import replan_unassigned_criteria
 
             if not replan_unassigned_criteria(state, phase_state):
                 phase_state.save()
                 return 1, tasks_ok, tasks
-            tasks = state.tasks
+            tasks = [
+                task for task in state.tasks
+                if not (
+                    isinstance(task, dict)
+                    and task.get("status") == "superseded"
+                )
+            ]
             tasks_ok = phase_state.progress().get("done", 0)
             continue
         if decision == "resolve_blocked_graph":
@@ -1079,7 +1110,13 @@ def _phase_tasks_loop(
                 # Pfad unten pruefen (M-318).
                 # FIX AR 2026-10-31: continue statt return 1.
                 audit("loop_builder_failed", {"task_id": i, "action": _loop_action}, pd, pn)
-                _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="builder_failed")
+                _task_ende(
+                    state, phase_state, task_id, ok=False, name=task_name,
+                    failure="builder_failed",
+                    failure_detail=str(
+                        getattr(state, "builder_failure_reason", "") or ""
+                    )[:1200],
+                )
                 continue
 
             # A failed Builder call is a checkpoint for one bounded,
@@ -1342,7 +1379,12 @@ def _phase_tasks_loop(
                        "applied_nachher": _applied_nach_al}, pd, pn)
                 _task_ende(state, phase_state, task_id, ok=False,
                            name=task_name,
-                           failure="reflection_ohne_apply")
+                           failure="reflection_ohne_apply",
+                           failure_detail=(
+                               "Reflection meldete Erfolg, aber applied_count "
+                               f"stieg nicht ({_applied_vor_al} -> "
+                               f"{_applied_nach_al})."
+                           ))
                 audit("loop_task_failed",
                       {"task_id": i,
                        "grund": "reflection_ohne_apply"}, pd, pn)
@@ -1461,7 +1503,11 @@ def _phase_tasks_loop(
                         return 1, tasks_ok, tasks
                     _task_ende(state, phase_state, task_id,
                                ok=False, name=task_name,
-                               failure="patch_not_applied_nach_reflection")
+                               failure="patch_not_applied_nach_reflection",
+                               failure_detail=(
+                                   "Reflection war erfolgreich, der Patch "
+                                   f"wurde aber fuer {file} nicht angewendet."
+                               ))
                     break
                 # FIX N 2026-10-31: Write-Fehler fail-closed.
                 try:
@@ -1494,7 +1540,11 @@ def _phase_tasks_loop(
                     # wurde trotzdem nicht angewendet. Task fail.
                     _task_ende(state, phase_state, task_id,
                                ok=False, name=task_name,
-                               failure="patch_not_applied_nach_reflection")
+                               failure="patch_not_applied_nach_reflection",
+                               failure_detail=(
+                                   "Nach Reflection enthaelt die Zieldatei "
+                                   f"{file} die erwartete Aenderung weiterhin nicht."
+                               ))
                     break
                 # FIX AI 2026-10-31: applied_count++ erst NACH
                 # erfolgreichem Post-Verify. Vorher (Fix W) wurde

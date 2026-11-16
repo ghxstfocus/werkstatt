@@ -613,6 +613,8 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         action = "resolve_task_graph"
     elif decision.get("decision") == "replan_unassigned_criteria":
         action = "replan_unassigned_criteria"
+    elif decision.get("decision") == "replan_failed_criteria":
+        action = "replan_failed_criteria"
     elif decision.get("next_executor") == "phase_end_verify":
         action = "finalize_run"
     else:
@@ -981,6 +983,7 @@ def _run_pipeline_loop_impl(
             "execute_task_checkpoint",
             "resolve_task_graph",
             "replan_unassigned_criteria",
+            "replan_failed_criteria",
         }:
             phase_state.save()
             _persist_run_result(

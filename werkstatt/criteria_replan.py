@@ -1,4 +1,4 @@
-"""Goal-bound checkpoint replanning for criteria missing task coverage."""
+"""Goal-bound checkpoint replanning for uncovered approved criteria."""
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +8,50 @@ from typing import Any
 
 from werkstatt.phase_state import PhaseState
 from werkstatt.state import RunState
+
+_REPLANNABLE_FAILURES = {
+    "builder_failed",
+    "reflection_ohne_apply",
+    "patch_not_applied_nach_reflection",
+}
+
+
+def eligible_failed_task_ids(
+    phase_state: PhaseState,
+    uncovered: object,
+) -> list[str]:
+    """Return failed criterion tasks safe for a gated replacement plan."""
+    if not isinstance(uncovered, list) or not uncovered or any(
+        not isinstance(ref, str) for ref in uncovered
+    ):
+        return []
+    tasks = phase_state.data.get("tasks")
+    if not isinstance(tasks, list):
+        return []
+    failed = [
+        task for task in tasks
+        if isinstance(task, dict) and task.get("status") == "failed"
+    ]
+    if not failed:
+        return []
+    task_ids: list[str] = []
+    failed_refs: set[str] = set()
+    for task in failed:
+        task_id = task.get("id")
+        refs = task.get("criterion_refs")
+        if (
+            not isinstance(task_id, str)
+            or task.get("failure") not in _REPLANNABLE_FAILURES
+            or not isinstance(refs, list)
+            or not refs
+            or any(not isinstance(ref, str) for ref in refs)
+        ):
+            return []
+        task_ids.append(task_id)
+        failed_refs.update(refs)
+    if not set(uncovered).issubset(failed_refs):
+        return []
+    return sorted(task_ids)
 
 
 def _record_attempt(
@@ -37,18 +81,75 @@ def replan_unassigned_criteria(
     Existing completed task records and their evidence remain untouched. The
     candidate graph is plan-gated before it is appended to the phase checkpoint.
     """
+    records = phase_state.data.get("criteria_replans", [])
+    phase_tasks = phase_state.data.get("tasks", [])
+    if isinstance(records, list) and isinstance(phase_tasks, list):
+        for record in records:
+            if (
+                not isinstance(record, dict)
+                or record.get("status") not in {"planning", "pending", "failed"}
+            ):
+                continue
+            replan_id = record.get("replan_id")
+            if not isinstance(replan_id, str):
+                continue
+            additions = [
+                task for task in phase_tasks
+                if isinstance(task, dict)
+                and task.get("source_followup_id") == replan_id
+            ]
+            if not additions:
+                continue
+            replaced = record.get("replaced_task_ids", [])
+            if isinstance(replaced, list) and replaced:
+                phase_state.supersede_failed_tasks(
+                    replaced, replan_id=replan_id,
+                )
+            state.tasks = [
+                dict(task) for task in phase_state.data.get("tasks", [])
+                if isinstance(task, dict)
+            ]
+            state.tests = list(phase_state.data.get("tests", []))
+            state.akzeptanzkriterien = list(
+                phase_state.data.get("akzeptanzkriterien", []),
+            )
+            state.phasen = list(phase_state.data.get("phasen", []))
+            _record_attempt(
+                phase_state, replan_id, "applied_after_resume",
+                task_ids=[task.get("id") for task in additions],
+            )
+            return True
+
     progress = phase_state.criteria_progress()
     task_progress = phase_state.progress()
+    uncovered = progress.get("uncovered")
+    unassigned_case = (
+        progress.get("valid") is False
+        and progress.get("error") == "criteria_not_assigned"
+        and task_progress.get("done", 0) == task_progress.get("total", 0)
+    )
+    replaced_task_ids = (
+        eligible_failed_task_ids(phase_state, uncovered)
+        if (
+            progress.get("valid") is True
+            and task_progress.get("failed", 0) > 0
+            and task_progress.get("blocked", 0) == 0
+        )
+        else []
+    )
+    failed_case = bool(replaced_task_ids)
     if (
         progress.get("tracked") is not True
-        or progress.get("valid") is not False
-        or progress.get("error") != "criteria_not_assigned"
-        or not isinstance(progress.get("uncovered"), list)
-        or not progress.get("uncovered")
+        or not isinstance(uncovered, list)
+        or not uncovered
         or task_progress.get("total", 0) <= 0
-        or task_progress.get("done", 0) != task_progress.get("total", 0)
+        or not (unassigned_case or failed_case)
     ):
         return False
+    replan_mode = (
+        "failed_criteria_recovery" if failed_case
+        else "unassigned_criteria"
+    )
 
     criteria = phase_state.data.get("akzeptanzkriterien")
     if not isinstance(criteria, list):
@@ -63,6 +164,21 @@ def replan_unassigned_criteria(
     if len(missing_refs) != len(progress["uncovered"]):
         return False
     missing_criteria = [criteria[int(ref[2:]) - 1] for ref in missing_refs]
+    failed_task_details = [
+        {
+            "id": task.get("id"),
+            "name": str(task.get("name") or "")[:200],
+            "action": task.get("action"),
+            "task_files": [
+                str(path)[:240] for path in task.get("task_files", [])[:12]
+                if isinstance(path, str)
+            ] if isinstance(task.get("task_files"), list) else [],
+            "failure": task.get("failure"),
+            "failure_detail": str(task.get("failure_detail") or "")[:1200],
+        }
+        for task in phase_state.data.get("tasks", [])
+        if isinstance(task, dict) and task.get("id") in replaced_task_ids
+    ]
     graph_identity = [
         (task.get("id"), task.get("status"))
         for task in phase_state.data.get("tasks", [])
@@ -71,8 +187,10 @@ def replan_unassigned_criteria(
     signature = json.dumps(
         {
             "run_id": state.run_id,
+            "mode": replan_mode,
             "uncovered": list(zip(missing_refs, missing_criteria)),
             "task_graph": graph_identity,
+            "replaced_task_ids": replaced_task_ids,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -92,7 +210,17 @@ def replan_unassigned_criteria(
         if isinstance(task, dict)
         and task.get("source_followup_id") == replan_id
     ]
+    if (
+        failed_case
+        and task_progress.get("pending", 0) > 0
+        and not existing_additions
+    ):
+        return False
     if existing_additions:
+        if replaced_task_ids:
+            phase_state.supersede_failed_tasks(
+                replaced_task_ids, replan_id=replan_id,
+            )
         state.tasks = [
             dict(task) for task in phase_state.data.get("tasks", [])
             if isinstance(task, dict)
@@ -108,7 +236,10 @@ def replan_unassigned_criteria(
         return False
 
     _record_attempt(
-        phase_state, replan_id, "planning", criteria_refs=missing_refs,
+        phase_state, replan_id, "planning",
+        criteria_refs=missing_refs,
+        mode=replan_mode,
+        replaced_task_ids=replaced_task_ids,
     )
     from werkstatt.audit import audit
 
@@ -129,8 +260,19 @@ def replan_unassigned_criteria(
     addition = deepcopy(state)
     addition.aufgabe = (
         f"{state.aufgabe}\n\n"
-        "## Checkpoint-Neuplanung: nur fehlende bestehende Kriterien\n"
-        "Der freigegebene Task-Graph ist erledigt. Ergaenze ausschliesslich "
+        "## Checkpoint-Neuplanung: nur offene bestehende Kriterien\n"
+        + (
+            "Vorherige Tasks sind nach ihrer Recovery fehlgeschlagen. Nutze "
+            "die protokollierte Fehlerursache, um denselben Fehlansatz nicht "
+            "zu wiederholen; plane eine begruendete, andere oder gezieltere "
+            "Vorgehensweise und nenne benoetigte fehlende Informationen.\n"
+            "Fehlgeschlagene Task-Belege (JSON):\n"
+            + json.dumps(failed_task_details, ensure_ascii=False, sort_keys=True)
+            + "\n"
+            if failed_case else
+            "Der freigegebene Task-Graph ist erledigt.\n"
+        )
+        + "Ergaenze ausschliesslich "
         "Tasks, die die folgenden bereits freigegebenen Akzeptanzkriterien "
         "erfuellen. Aendere oder erweitere weder Nutzerziel noch Kriterien. "
         "Verwende fuer diese Kriterien ausschliesslich die exakt angegebenen "
@@ -217,6 +359,10 @@ def replan_unassigned_criteria(
             phases=phases,
             followup_id=replan_id,
         )
+        if replaced_task_ids:
+            phase_state.supersede_failed_tasks(
+                replaced_task_ids, replan_id=replan_id,
+            )
         state.tasks = [
             dict(task) for task in phase_state.data.get("tasks", [])
             if isinstance(task, dict)

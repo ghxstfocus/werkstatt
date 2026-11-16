@@ -40,6 +40,8 @@ def _criterion_evidence_rows(
         incomplete: list[str] = []
         task_verify_stages: set[str] = set()
         for task in tasks:
+            if isinstance(task, dict) and task.get("status") == "superseded":
+                continue
             refs = task.get("criterion_refs") if isinstance(task, dict) else None
             if not isinstance(refs, list) or criterion_id not in refs:
                 continue
@@ -1267,7 +1269,13 @@ def _phase_finalize(
         if isinstance(_phase_data, dict):
             _candidate = _phase_data.get("tasks")
             if isinstance(_candidate, list):
-                _records = _candidate
+                _records = [
+                    record for record in _candidate
+                    if not (
+                        isinstance(record, dict)
+                        and record.get("status") == "superseded"
+                    )
+                ]
         if not _records:
             _records = tasks or []
 

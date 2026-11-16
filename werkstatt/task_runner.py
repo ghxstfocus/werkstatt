@@ -49,6 +49,7 @@ def _task_ende(
     ok: bool,
     name: str = "",
     failure: str | None = None,
+    failure_detail: str | None = None,
     dateien: list[str] | None = None,
     human_review: bool = False,
 ) -> bool:
@@ -314,7 +315,10 @@ def _task_ende(
                 run_id=getattr(state, "run_id", None),
             )
     else:
-        phase_state.mark_failed(task_id, failure=failure or "unknown")
+        failure_kwargs = {"failure": failure or "unknown"}
+        if failure_detail:
+            failure_kwargs["detail"] = failure_detail[:1200]
+        phase_state.mark_failed(task_id, **failure_kwargs)
         # FIX AE 2026-10-31: Eigene Spur in .werkstatt/abbrueche.jsonl.
         # Ueberlebt Rollback (untracked), strukturiert durchsuchbar.
         if pd is not None:

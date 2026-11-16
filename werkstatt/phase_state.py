@@ -189,6 +189,7 @@ class PhaseState:
                     "status": "pending",
                     "decision": None,
                     "failure": None,
+                    "failure_detail": None,
                     # OP-064f: verdict strukturiert (pending|verified|vetoed).
                     # Default pending — verified bei mark_done, vetoed bei
                     # deterministischem Guard-Veto.
@@ -339,6 +340,45 @@ class PhaseState:
         self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
         self.save()
         return [str(task["id"]) for task in normalized]
+
+    def supersede_failed_tasks(
+        self, task_ids: list[str], *, replan_id: str,
+    ) -> None:
+        """Retain failed task evidence while removing replaced nodes from work."""
+        if (
+            not task_ids
+            or any(not isinstance(task_id, str) or not task_id for task_id in task_ids)
+            or not isinstance(replan_id, str)
+            or not replan_id
+        ):
+            raise ValueError("Ungueltige Task-/Replan-Identitaet")
+        by_id = {
+            task.get("id"): task
+            for task in self.data.get("tasks", [])
+            if isinstance(task, dict)
+        }
+        for task_id in task_ids:
+            task = by_id.get(task_id)
+            if not isinstance(task, dict) or task.get("status") not in {
+                "failed", "superseded",
+            }:
+                raise ValueError("Zu ersetzender Task ist nicht fehlgeschlagen")
+            if (
+                task.get("status") == "superseded"
+                and task.get("superseded_by_replan_id") != replan_id
+            ):
+                raise ValueError("Task wurde bereits durch einen anderen Plan ersetzt")
+        changed = False
+        for task_id in task_ids:
+            task = by_id[task_id]
+            if task.get("status") == "failed":
+                task["superseded_failure"] = task.get("failure")
+                task["superseded_by_replan_id"] = replan_id
+                task["status"] = "superseded"
+                changed = True
+        if changed:
+            self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+            self.save()
 
     # --- Resume ---
 
@@ -651,6 +691,7 @@ class PhaseState:
         *,
         decision: str | None = None,
         failure: str | None = None,
+        failure_detail: str | None = None,
     ) -> None:
         """Aktualisiert den Status eines Tasks."""
         task = self.get_task(task_id)
@@ -661,6 +702,8 @@ class PhaseState:
             task["decision"] = decision
         if failure is not None:
             task["failure"] = failure
+        if failure_detail is not None:
+            task["failure_detail"] = failure_detail[:1200]
         self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
         self.save()
 
@@ -774,9 +817,14 @@ class PhaseState:
                         self._propagate_failed_to_parents(parent_id)
                     break
 
-    def mark_failed(self, task_id: str, *, failure: str) -> None:
+    def mark_failed(
+        self, task_id: str, *, failure: str, detail: str | None = None,
+    ) -> None:
         """K38: mark_failed + propagation an Parents."""
-        self.update_task(task_id, "failed", failure=failure)
+        self.update_task(
+            task_id, "failed", failure=failure,
+            failure_detail=detail[:1200] if detail else None,
+        )
         task = self.get_task(task_id)
         if task is not None:
             task.pop("verification_pending", None)
@@ -844,6 +892,8 @@ class PhaseState:
                     "uncovered": sorted(expected - covered),
                     "error": "invalid_task_record",
                 }
+            if task.get("status") == "superseded":
+                continue
             refs = task.get("criterion_refs")
             if (
                 not isinstance(refs, list)
@@ -888,12 +938,16 @@ class PhaseState:
         coordinator try to resolve an already-resolved graph forever.
         """
         tasks = self.data.get("tasks", [])
-        total = len(tasks)
-        done = sum(1 for t in tasks if t.get("status") == "done")
-        failed = sum(1 for t in tasks if t.get("status") == "failed")
-        blocked = sum(1 for t in tasks if t.get("status") == "blocked")
+        active_tasks = [
+            task for task in tasks
+            if not isinstance(task, dict) or task.get("status") != "superseded"
+        ]
+        total = len(active_tasks)
+        done = sum(1 for t in active_tasks if t.get("status") == "done")
+        failed = sum(1 for t in active_tasks if t.get("status") == "failed")
+        blocked = sum(1 for t in active_tasks if t.get("status") == "blocked")
         pending = sum(
-            1 for t in tasks if t.get("status") in {"pending", "running"}
+            1 for t in active_tasks if t.get("status") in {"pending", "running"}
         )
         return {
             "total": total,

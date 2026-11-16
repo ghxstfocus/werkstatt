@@ -305,6 +305,39 @@ def test_progress_does_not_count_blocked_tasks_as_pending(tmp_path):
     assert progress["blocked"] == 1
 
 
+def test_superseded_failed_task_stays_in_history_but_not_active_progress(
+    tmp_path,
+):
+    phase = PhaseState("testprojekt", base_dir=tmp_path)
+    phase.init_new(
+        "Repair",
+        [
+            {"id": "failed", "criterion_refs": ["AC1"]},
+            {"id": "replacement", "criterion_refs": ["AC1"]},
+        ],
+        akzeptanzkriterien=["Criterion"],
+    )
+    phase.mark_failed("failed", failure="builder_failed")
+    phase.mark_done("replacement")
+
+    phase.supersede_failed_tasks(
+        ["failed"], replan_id="criteria-replan-test",
+    )
+
+    assert phase.get_task("failed")["status"] == "superseded"
+    assert phase.get_task("failed")["failure"] == "builder_failed"
+    assert phase.criteria_progress()["valid"] is True
+    assert phase.criteria_progress()["covered"] == ["AC1"]
+    assert phase.progress() == {
+        "total": 1,
+        "done": 1,
+        "failed": 0,
+        "blocked": 0,
+        "pending": 0,
+    }
+    assert phase.is_complete() is True
+
+
 def test_resume_failed_setzt_pending(tmp_path):
     """M-310c: resume_failed macht failed -> pending."""
     ps = PhaseState("testprojekt", base_dir=tmp_path)

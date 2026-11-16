@@ -27,6 +27,22 @@ def test_erster_aufruf_geht_durch(tmp_path):
     ps.mark_failed.assert_called_once_with("t1", failure="builder_failed")
 
 
+def test_task_ende_persistiert_begrenzten_fehlerkontext(tmp_path):
+    state = _run_state(tmp_path)
+    ps = MagicMock()
+    ps.get_task.return_value = None
+    detail = "konkreter Fehlerbefund"
+
+    _task_ende(
+        state, ps, "t1", ok=False, failure="builder_failed",
+        failure_detail=detail,
+    )
+
+    ps.mark_failed.assert_called_once_with(
+        "t1", failure="builder_failed", detail=detail,
+    )
+
+
 def test_zweiter_aufruf_skip_nach_failed(tmp_path):
     state = _run_state(tmp_path)
     ps = MagicMock()

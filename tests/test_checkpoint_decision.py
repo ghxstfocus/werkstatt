@@ -85,7 +85,7 @@ def test_checkpoint_does_not_claim_goal_for_untracked_criteria(tmp_path) -> None
     assert decision["goal_candidate_before_final_verify"] is False
 
 
-def test_checkpoint_calls_out_failed_task_instead_of_claiming_completion(
+def test_checkpoint_replans_eligible_failed_task_instead_of_claiming_completion(
     tmp_path,
 ) -> None:
     phase = _phase(
@@ -97,7 +97,41 @@ def test_checkpoint_calls_out_failed_task_instead_of_claiming_completion(
 
     decision = _checkpoint_decision_payload(phase, None)
 
+    assert decision["decision"] == "replan_failed_criteria"
+    assert decision["next_executor"] == "planner_and_plan_gate"
+
+
+def test_checkpoint_replans_only_eligible_failed_criterion_tasks(tmp_path) -> None:
+    phase = _phase(
+        tmp_path,
+        [
+            {"id": "done", "name": "First", "criterion_refs": ["AC1"]},
+            {"id": "failed", "name": "Second", "criterion_refs": ["AC2"]},
+        ],
+        ["First criterion", "Second criterion"],
+    )
+    phase.mark_done("done")
+    phase.mark_failed("failed", failure="builder_failed")
+
+    decision = _checkpoint_decision_payload(phase, None)
+
+    assert decision["decision"] == "replan_failed_criteria"
+    assert decision["next_executor"] == "planner_and_plan_gate"
+    assert decision["criteria_task_coverage"]["uncovered"] == ["AC2"]
+
+
+def test_checkpoint_does_not_replan_unapproved_failure_classes(tmp_path) -> None:
+    phase = _phase(
+        tmp_path,
+        [{"id": "failed", "name": "Second", "criterion_refs": ["AC1"]}],
+        ["Criterion"],
+    )
+    phase.mark_failed("failed", failure="reflection_erschoepft_rejected")
+
+    decision = _checkpoint_decision_payload(phase, None)
+
     assert decision["decision"] == "verify_with_failed_tasks"
+    assert decision["next_executor"] == "phase_end_verify"
     assert decision["goal_candidate_before_final_verify"] is False
 
 
@@ -367,6 +401,25 @@ def test_run_coordinator_dispatches_unassigned_criteria_replan(tmp_path) -> None
 
     assert decision["decision"] == "replan_unassigned_criteria"
     assert decision["coordinator_action"] == "replan_unassigned_criteria"
+    assert decision["next_executor"] == "planner_and_plan_gate"
+
+
+def test_run_coordinator_dispatches_failed_criteria_replan(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [{"id": "failed", "action": "update", "criterion_refs": ["AC1"]}],
+        ["Existing criterion"],
+    )
+    phase.mark_failed("failed", failure="builder_failed")
+
+    decision = _run_coordinator_action(
+        phase, _state_after_setup(str(phase.data["aufgabe"])),
+    )
+
+    assert decision["decision"] == "replan_failed_criteria"
+    assert decision["coordinator_action"] == "replan_failed_criteria"
     assert decision["next_executor"] == "planner_and_plan_gate"
 
 
