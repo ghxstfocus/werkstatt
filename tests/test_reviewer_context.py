@@ -204,3 +204,35 @@ def test_phase_end_review_budgets_and_proves_every_task_file(tmp_path: Path) -> 
         )
         excerpt = user[record["prompt_start"]:record["prompt_end"]]
         assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == record["sha256"]
+
+
+def test_phase_end_review_marks_missing_target_content_explicitly(
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path, ["src/deleted.py"])
+    state.tasks = [{
+        "id": "delete-file", "name": "Delete target",
+        "task_files": ["src/deleted.py"], "status": "done",
+    }]
+
+    class Approved:
+        ok = True
+        content = '{"approved":true,"bugs":[]}'
+
+    with patch.object(reviewer, "_get_git_diff", return_value="-old content\n"), \
+         patch.object(reviewer, "ask_llm", return_value=Approved()) as ask:
+        assert reviewer.run_phase_end_review(state) is True
+
+    user = ask.call_args.args[2]
+    record = next(
+        section for section in ask.call_args.kwargs["context_manifest"]["budget"]
+        ["section_manifest"]
+        if section["name"] == "VOLLE ZIELDATEI: src/deleted.py"
+    )
+    assert record["status"] == "required_included"
+    excerpt = user[record["prompt_start"]:record["prompt_end"]]
+    assert "Datei fehlt am Review-Grenzpunkt" in excerpt
+    assert "Inhalt ist unbekannt" in excerpt
+    assert ask.call_args.kwargs["context_manifest"]["target_file_state"] == {
+        "src/deleted.py": "missing_at_review_boundary",
+    }
