@@ -2819,100 +2819,13 @@ def replan_task_graph_from_architect(
     state: RunState,
     gate_feedback: dict,
 ) -> bool:
-    """Retry only Planner-Split for a fresh, repairable graph rejection.
+    """Compatibility entry point for the isolated task-graph recovery role."""
+    from werkstatt.planner_recovery import replan_task_graph_from_architect as run
 
-    Explorer, Scout, Architect prose, source evidence, and approved criteria
-    remain pinned to the current planning checkpoint. The task graph is
-    replaced only after a complete split passes its local contracts.
-    """
-    allowed_rules = {"TASK_GRAPH", "ACCEPTANCE_COVERAGE"}
-    rule = gate_feedback.get("regel") if isinstance(gate_feedback, dict) else None
-    explorer_ctx = state.explorer_context
-    criteria = list(state.akzeptanzkriterien or [])
-    if (
-        rule not in allowed_rules
-        or not state.api_key
-        or not state.architect_prosa.strip()
-        or not isinstance(explorer_ctx, dict)
-        or not criteria
-        or any(not isinstance(item, str) or not item.strip() for item in criteria)
-    ):
-        audit("loop_plan_reflection_abgebrochen", {
-            "route": "planner_split_only",
-            "reason": "required_checkpoint_evidence_missing_or_ineligible",
-            "rule": rule,
-            "architect_prose_present": bool(state.architect_prosa.strip()),
-            "explorer_context_present": isinstance(explorer_ctx, dict),
-            "criteria_count": len(criteria),
-        }, state.project_dir, state.project_name)
-        return False
-
-    key_files = [
-        item["file"]
-        for item in (explorer_ctx.get("key_files") or [])
-        if isinstance(item, dict)
-        and isinstance(item.get("file"), str)
-        and item["file"]
-    ]
-    previous_criteria = list(state.akzeptanzkriterien)
-    try:
-        tasks = _zerlege_in_sub_tasks(
-            state.architect_prosa,
-            key_files,
-            state.api_key,
-            state.project_dir,
-            state.project_name,
-            aufgabe=state.aufgabe,
-            state=state,
-            gate_feedback=gate_feedback,
-            preserve_criteria=criteria,
-        )
-    except TaskGraphError as exc:
-        state.akzeptanzkriterien = previous_criteria
-        audit("loop_plan_reflection_abgebrochen", {
-            "route": "planner_split_only",
-            "reason": "split_contract_rejected",
-            "rule": rule,
-            "error": str(exc)[:500],
-        }, state.project_dir, state.project_name)
-        return False
-
-    if not tasks or state.akzeptanzkriterien != previous_criteria:
-        state.akzeptanzkriterien = previous_criteria
-        audit("loop_plan_reflection_abgebrochen", {
-            "route": "planner_split_only",
-            "reason": "split_failed_or_criteria_changed",
-            "rule": rule,
-        }, state.project_dir, state.project_name)
-        return False
-
-    normalized = _normalisiere_task_files(
-        tasks, explorer_ctx, state.project_dir, state.project_name,
+    return run(
+        state,
+        gate_feedback,
+        compile_graph=_zerlege_in_sub_tasks,
+        normalize_task_files=_normalisiere_task_files,
+        audit_call=audit,
     )
-    if not normalized:
-        audit("loop_plan_reflection_abgebrochen", {
-            "route": "planner_split_only",
-            "reason": "normalized_task_graph_empty",
-            "rule": rule,
-        }, state.project_dir, state.project_name)
-        return False
-
-    state.tasks = normalized
-    state.phasen = []
-    state.tests = []
-    source_manifest = getattr(state, "architect_scout_source_manifest", {})
-    source_manifest_sha256 = hashlib.sha256(
-        json.dumps(
-            source_manifest if isinstance(source_manifest, dict) else {},
-            ensure_ascii=False,
-            sort_keys=True,
-        ).encode("utf-8"),
-    ).hexdigest()
-    audit("loop_plan_reflection", {
-        "route": "planner_split_only",
-        "rule": rule,
-        "preserved_criteria": criteria,
-        "task_ids": [task.get("id") for task in normalized],
-        "source_manifest_sha256": source_manifest_sha256,
-    }, state.project_dir, state.project_name)
-    return True

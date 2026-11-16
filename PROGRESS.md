@@ -7980,6 +7980,16 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation lokal:** `tests/test_reflection_chat.py tests/test_loop_ask_llm.py tests/test_explorer_retrieval_eval.py tests/test_ui_tab_persistenz.py`: 89 bestanden. Ruff, gezieltes Mypy fuer `tasks.py`, strikter Doku-Drift und `git diff --check` bestanden.
 - **Grenze:** Der Serverlauf auf `ceff4b7` belegt zwei Fehler auf diesem alten Stand. Der aktuelle Checkout und Server wurden dadurch nicht synchronisiert; kein Produktionsnachweis. OP-398/405 bleiben offen.
 
+# 2026-11-16 – Serverbeleg fuer Chat-Recovery-Reviewer aufnehmen
+- **Beleg:** Der Nutzer hat `081e8d1` auf dem Server gepullt und dieselbe gezielte Gruppe `test_reflection_chat.py test_loop_ask_llm.py test_explorer_retrieval_eval.py test_ui_tab_persistenz.py` mit 89 bestanden bestaetigt.
+- **Grenze:** Das ist ein Testnachweis fuer den Servercheckout, kein Nachweis eines Webserver-Neustarts oder Produktionslaufs.
+
+# 2026-11-16 – Plan-Graph-Recovery aus dem Planner-Kern extrahieren
+- **Befund:** Gate-Recovery des Taskgraphen lag als weiterer 100-Zeilen-Zustandspfad im 1.000-Zeilen-`run_planner`-Monolithen. Die Planphase griff dafuer mittelbar auf `planner.py` zu.
+- **Aenderung:** Die Recovery-Policy liegt jetzt in `planner_recovery.py` mit injizierbaren Compile-/Normalize-/Audit-Diensten. Der Phasenpfad ruft die Rolle direkt auf; `planner.py` behaelt nur einen Kompatibilitaetsadapter fuer bestehende Aufrufer. Kriterien und bisheriger Taskgraph werden bei Ablehnung erhalten; der neue Graph wird erst nach erfolgreicher Kompilierung und Normalisierung ersetzt.
+- **Verifikation lokal:** Recovery-/Planner-/Planphasen-Gruppe: 52 bestanden, 3 uebersprungen; Ruff, gezieltes Mypy, strikter Doku-Drift und Diff-Check bestanden.
+- **Grenze:** Diese Extraktion veraendert noch nicht die bestehenden Planner-Rollenentscheidungen oder den Architect-Compiler-Bedarf. Vollsuite und Servernachweis fuer diesen neuen Stand fehlen; OP-398/405 bleiben offen.
+
 # 2026-11-16 – Projektchat-Schreibmodus auf isolierten Workspace erweitern
 - **Befund:** Die Chat-API akzeptierte `mode=write`, aber die UI leitete nur Debug als schreibfaehigen Modus weiter. Zudem standen die sitzungsgebundenen Workspace-Tools ausschliesslich in Debug zur Verfuegung, sodass Control keine reversible Codearbeit vorbereiten konnte.
 - **Aenderung:** Control wird zu `write` geroutet. Write und Debug erhalten dieselben isolierten Workspace-Tools zum Lesen, Schreiben, Diff-Pruefen und Testen; nur Debug behaelt `pytest_run`, Temp-Tests und belegte Debugger-Fixes. Der Workspace-Patch wird erst nach ausdruecklichem Auftrag als hashgebundener Loop-Vorschlag vorbereitet und verlangt dort weiterhin eigene UI-Freigabe. Systemprompt, Chat-Leerzustand und Cache-Buster weisen auf diese Grenze hin.

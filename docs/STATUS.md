@@ -205,7 +205,8 @@ Letzte Aktualisierung: 2026-11-16.
 - **Architektur-Voraussetzung:** ADR-0030
 - **Blockiert von:** —
 
-- **Chat-Recovery-Reviewer unter begrenztem Reservebudget (lokal, noch nicht serververifiziert):** Bei erfolgreicher Chat-gesteuerter Builder-Kurskorrektur wird der verpflichtende Reviewer jetzt innerhalb der vorhandenen, dauerhaft einmalig beanspruchten Reviewer-Reserve aufgerufen. Ohne tatsaechlich beanspruchten Chat-Builder-Call wird der normale Reviewpfad nicht als Recovery ausgegeben. Recovery-/Budget-/Retrieval-/Cache-Buster-Gruppe: 89 bestanden; Ruff, gezieltes Mypy und strikter Doku-Drift bestanden. Servernachweis fehlt; OP-405 bleibt offen.
+- **Chat-Recovery-Reviewer unter begrenztem Reservebudget (Server-Test bestaetigt):** Bei erfolgreicher Chat-gesteuerter Builder-Kurskorrektur wird der verpflichtende Reviewer innerhalb der vorhandenen, dauerhaft einmalig beanspruchten Reviewer-Reserve aufgerufen. Ohne tatsaechlich beanspruchten Chat-Builder-Call wird der normale Reviewpfad nicht als Recovery ausgegeben. Recovery-/Budget-/Retrieval-/Cache-Buster-Gruppe: lokal 89 bestanden; der Nutzer bestaetigte dieselben 89 Tests auf Servercheckout `081e8d1`. Das belegt Tests auf diesem Checkout, nicht Webserver-Neustart oder Produktionsbetrieb. OP-405 bleibt offen.
+- **Plan-Graph-Recovery isolieren (lokal, noch nicht serververifiziert):** Die Fehlerbehebung eines abgelehnten Graphen liegt jetzt als eigene Planner-Recovery-Faehigkeit; die Planphase ruft sie direkt auf, `planner.py` behaelt nur einen Kompatibilitaetsadapter. Kriterien und alter Graph bleiben bei Fehlschlag erhalten. Recovery-/Planner-/Planphasen-Gruppe: 52 bestanden, 3 uebersprungen; Ruff, gezieltes Mypy und strikter Doku-Drift bestanden. Der Architekturumbau und Servernachweis bleiben offen.
 
 ### OP-401: Laufende Sessions ueber neue Chat-Arbeit informieren
 - **Status:** open

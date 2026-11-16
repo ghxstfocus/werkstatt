@@ -173,8 +173,8 @@ def run_planner(*args, **kwargs):
 
 
 def replan_task_graph_from_architect(*args, **kwargs):
-    """Late-Binding-Proxy fuer die Planner-Split-Checkpoint-Recovery."""
-    from werkstatt.planner import replan_task_graph_from_architect as _orig
+    """Late-Binding-Proxy fuer die isolierte Planner-Recovery-Rolle."""
+    from werkstatt.planner_recovery import replan_task_graph_from_architect as _orig
     return _orig(*args, **kwargs)
 
 
