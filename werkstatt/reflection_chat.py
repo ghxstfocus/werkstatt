@@ -456,7 +456,7 @@ def ask_project_chat_for_builder_task(
             if parsed_prior is None:
                 return None
             verified_prior = _verify_source_evidence(
-                parsed_prior, allowed_files, state.project_dir,
+                parsed_prior, parsed_prior["task_files"], state.project_dir,
             )
             if verified_prior is None:
                 state.reflection_chat_error = "source_evidence_unverified"
@@ -537,7 +537,7 @@ def ask_project_chat_for_builder_task(
         parsed = None
         if raw_task is not None:
             verified_evidence = _verify_source_evidence(
-                raw_task, allowed_files, state.project_dir,
+                raw_task, raw_task["task_files"], state.project_dir,
             )
             if verified_evidence is None:
                 state.reflection_chat_error = "source_evidence_unverified"

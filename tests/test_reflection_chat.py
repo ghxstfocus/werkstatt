@@ -291,6 +291,67 @@ def test_chat_source_evidence_must_match_current_authorized_excerpt(
     ) is None
 
 
+@pytest.mark.parametrize("cached", [False, True])
+def test_chat_source_evidence_must_be_inside_proposed_builder_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    cached: bool,
+) -> None:
+    state = _state(tmp_path)
+    _install_run_store(monkeypatch, state, tmp_path)
+    outside_quote = "def test_expected():\n    assert True"
+    answer = json.dumps({
+        "decision": "task",
+        "task": {
+            "name": "Repair implementation",
+            "description": "Fix the implementation using its own source evidence.",
+            "task_files": ["werkstatt/sample.py"],
+            "source_evidence": [{
+                "file": "tests/test_sample.py",
+                "start": 0,
+                "end": len(outside_quote),
+                "quote": outside_quote,
+            }],
+        },
+    })
+
+    class FakeSession:
+        def __init__(self, _project: str, _session_id: str) -> None:
+            pass
+
+        def get_job_turn(self, _job_id: str) -> dict[str, str] | None:
+            return {"assistant_text": answer, "user_text": ""} if cached else None
+
+        def delete_snapshot(self, _job_id: str) -> bool:
+            return True
+
+        def snapshot_to(
+            self, _job_id: str, *, at_seq: int | None = None,
+        ) -> object:
+            assert at_seq == 0
+            return object()
+
+        def append_job_turn(self, *_args: object) -> None:
+            pass
+
+    monkeypatch.setattr("werkstatt.chat_session.ChatSession", FakeSession)
+    monkeypatch.setattr("werkstatt.audit.audit", lambda *_args, **_kwargs: True)
+    if not cached:
+        def fake_chat_loop(_session, _message, **kwargs):
+            kwargs["on_model_request"]({
+                "request_number": 1,
+                "request_sha256": "c" * 64,
+                "message_count": 2,
+            })
+            kwargs["on_llm_call"]()
+            return answer
+
+        monkeypatch.setattr("werkstatt.chat_agent.chat_loop", fake_chat_loop)
+
+    assert reflection_chat.ask_project_chat_for_builder_task(state) is None
+    assert state.reflection_chat_error == "source_evidence_unverified"
+
+
 def test_reflection_mode_exposes_only_read_tools(tmp_path: Path) -> None:
     reflection_names = {
         item["function"]["name"]
