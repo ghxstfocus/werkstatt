@@ -23,12 +23,16 @@ from ._common import (
     _validate_contract_safe,
     _verify_patches,
     audit,
+    replan_task_graph_from_architect,
     run_planner,
 )
 
 _STRUCTURAL_PLAN_REJECTIONS = frozenset({
     "DOKU_TASK", "TASK_FILE", "MIGRATIONS_KOLLISION",
     "ACTION", "PHASE_ID", "DATEINAME_AEHNLICH", "PAYLOAD",
+})
+_REPLANNABLE_PLAN_REJECTIONS = frozenset({
+    "TASK_GRAPH", "ACCEPTANCE_COVERAGE",
 })
 
 
@@ -43,6 +47,8 @@ def _plan_reflection_feedback(
     rule = info.get("regel")
     if isinstance(rule, str) and rule in _STRUCTURAL_PLAN_REJECTIONS:
         return info, "structural_failure", None
+    if rule not in _REPLANNABLE_PLAN_REJECTIONS:
+        return info, "unsupported_gate_feedback", None
 
     signature_input = {
         key: str(info.get(key) or "")[:2_000]
@@ -378,7 +384,9 @@ def _phase_plan_and_preflight(
                 pd,
                 pn,
             )
-            if not run_planner(state):
+            if not isinstance(_info, dict) or not replan_task_graph_from_architect(
+                state, _info,
+            ):
                 break
             plan_ok = _check_plan_gate_current(state)
         if not plan_ok:

@@ -172,6 +172,12 @@ def run_planner(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
+def replan_task_graph_from_architect(*args, **kwargs):
+    """Late-Binding-Proxy fuer die Planner-Split-Checkpoint-Recovery."""
+    from werkstatt.planner import replan_task_graph_from_architect as _orig
+    return _orig(*args, **kwargs)
+
+
 def run_reviewer(*args, **kwargs):
     """Late-Binding-Proxy fuer werkstatt.loop.run_reviewer."""
     from werkstatt.loop import run_reviewer as _orig

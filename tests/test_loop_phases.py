@@ -127,6 +127,10 @@ def test_plan_recovery_requires_novel_feedback_and_configured_run_budget(
     state.last_planner_info = {"regel": "ACCEPTANCE_COVERAGE", "fakt": "AC3 missing"}
     assert _plan_reflection_feedback(state, seen)[1] == "run_budget_missing"
 
+    state.budget = {"max_llm_calls": 8}
+    state.last_planner_info = {"regel": "UNKNOWN_GATE", "fakt": "cannot route"}
+    assert _plan_reflection_feedback(state, seen)[1] == "unsupported_gate_feedback"
+
 
 def test_plan_recovery_stops_when_run_budget_is_exhausted(
     tmp_path, monkeypatch,
@@ -159,7 +163,7 @@ def test_plan_phase_stops_on_repeated_gate_evidence_instead_of_fixed_retries(
     state.phasen = []
     state.architect_prosa = ""
     state.last_planner_info = {}
-    calls = {"planner": 0, "gate": 0}
+    calls = {"planner": 0, "split_recovery": 0, "gate": 0}
     audits = []
 
     def planner(_state):
@@ -180,6 +184,11 @@ def test_plan_phase_stops_on_repeated_gate_evidence_instead_of_fixed_retries(
         }
         return False
 
+    def split_recovery(_state, feedback):
+        calls["split_recovery"] += 1
+        assert feedback["regel"] == "ACCEPTANCE_COVERAGE"
+        return True
+
     monkeypatch.setattr(plan_phase, "group_start", lambda *_a: None)
     monkeypatch.setattr(plan_phase, "group_end", lambda: None)
     monkeypatch.setattr(plan_phase, "step", lambda *_a, **_kw: None)
@@ -191,6 +200,7 @@ def test_plan_phase_stops_on_repeated_gate_evidence_instead_of_fixed_retries(
     monkeypatch.setattr(plan_phase, "_validate_contract_safe", lambda *_a: True)
     monkeypatch.setattr(plan_phase, "_plan_gate", gate)
     monkeypatch.setattr(plan_phase, "run_planner", planner)
+    monkeypatch.setattr(plan_phase, "replan_task_graph_from_architect", split_recovery)
     monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _s: False)
 
     result = plan_phase._phase_plan_and_preflight(
@@ -198,7 +208,7 @@ def test_plan_phase_stops_on_repeated_gate_evidence_instead_of_fixed_retries(
     )
 
     assert result == (1, False)
-    assert calls == {"planner": 2, "gate": 3}
+    assert calls == {"planner": 1, "split_recovery": 1, "gate": 3}
     stop = next(
         payload for kind, payload in audits
         if kind == "loop_plan_reflection_abgebrochen"

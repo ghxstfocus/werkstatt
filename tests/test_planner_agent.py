@@ -84,6 +84,69 @@ def test_planner_erstellt_plan(tmp_path):
         assert len(st.tasks) == 1
 
 
+def test_plan_gate_recovery_reuses_architect_evidence_and_preserves_criteria(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt import planner
+
+    state = _state(tmp_path)
+    state.architect_prosa = "## Plan\nAenderung in a.py"
+    state.explorer_context = {"key_files": [{"file": "a.py"}]}
+    state.akzeptanzkriterien = ["AC1: Verhalten bleibt korrekt"]
+    state.tasks = [{"id": "old", "action": "update", "task_files": ["a.py"]}]
+    captured = {}
+
+    def split(*args, **kwargs):
+        captured["prose"] = args[0]
+        captured["feedback"] = kwargs["gate_feedback"]
+        captured["criteria"] = kwargs["preserve_criteria"]
+        return [{
+            "id": "new", "action": "update", "task_files": ["a.py"],
+            "criterion_refs": ["AC1"],
+        }]
+
+    monkeypatch.setattr(planner, "_zerlege_in_sub_tasks", split)
+    monkeypatch.setattr(
+        planner, "_normalisiere_task_files", lambda tasks, *_args: tasks,
+    )
+    monkeypatch.setattr(planner, "audit", lambda *_args: None)
+
+    assert planner.replan_task_graph_from_architect(state, {
+        "regel": "ACCEPTANCE_COVERAGE", "fakt": "AC1 has no task",
+    })
+    assert captured == {
+        "prose": state.architect_prosa,
+        "feedback": {
+            "regel": "ACCEPTANCE_COVERAGE", "fakt": "AC1 has no task",
+        },
+        "criteria": ["AC1: Verhalten bleibt korrekt"],
+    }
+    assert state.akzeptanzkriterien == ["AC1: Verhalten bleibt korrekt"]
+    assert [task["id"] for task in state.tasks] == ["new"]
+
+
+def test_plan_gate_recovery_rejects_other_gate_codes_before_split(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt import planner
+
+    state = _state(tmp_path)
+    called = False
+
+    def split(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return []
+
+    monkeypatch.setattr(planner, "_zerlege_in_sub_tasks", split)
+    monkeypatch.setattr(planner, "audit", lambda *_args: None)
+
+    assert not planner.replan_task_graph_from_architect(
+        state, {"regel": "TASK_FILE", "fakt": "out of scope"},
+    )
+    assert not called
+
+
 def test_scout_skip_requires_explicit_single_file_and_explorer_evidence(tmp_path):
     from werkstatt.planner import _scout_skip_target
 
@@ -757,6 +820,86 @@ def test_planner_split_persistiert_abnahmekriterien_und_originalauftrag(tmp_path
         assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == item["sha256"]
     assert included[0]["prompt_start"] == 0
     assert included[-1]["prompt_end"] == len(captured["prompt"])
+
+
+def test_planner_split_prompt_binds_gate_feedback_and_frozen_criteria(tmp_path):
+    from werkstatt.planner import _zerlege_in_sub_tasks
+
+    state = _state(tmp_path)
+    criteria = ["Der Handler liefert fuer fremde Projekte keine Daten."]
+    feedback = {
+        "regel": "ACCEPTANCE_COVERAGE",
+        "fakt": "AC1 is not assigned to any task.",
+        "details": "Untrusted gate diagnostic." + ("x" * 900),
+    }
+    response = MagicMock(
+        ok=True,
+        content=json.dumps({
+            "akzeptanzkriterien": criteria,
+            "tasks": [{
+                "id": "t1", "name": "Projektfilter", "action": "update",
+                "task_files": ["werkstatt/web/app.py"],
+                "criterion_refs": ["AC1"],
+            }],
+        }),
+    )
+    captured = {}
+
+    def ask(_key, _system, user_content, **kwargs):
+        captured["prompt"] = user_content
+        captured["manifest"] = kwargs["context_manifest"]
+        return response
+
+    with patch("werkstatt.planner.ask_llm", side_effect=ask), \
+         patch("werkstatt.planner._with_spinner", side_effect=lambda _label, fn: fn()), \
+         patch("werkstatt.planner.audit"):
+        tasks = _zerlege_in_sub_tasks(
+            "## werkstatt/web/app.py\nFiltere fremde Projekte.",
+            ["werkstatt/web/app.py"], "fake", tmp_path, "demo",
+            aufgabe="Begrenze API-Daten auf das aktive Projekt.",
+            state=state,
+            gate_feedback=feedback,
+            preserve_criteria=criteria,
+        )
+
+    assert tasks and state.akzeptanzkriterien == criteria
+    assert "PLAN-GATE-BEFUND (untrusted Diagnose" in captured["prompt"]
+    assert "Untrusted gate diagnostic." in captured["prompt"]
+    assert "truncated_fields" in captured["prompt"]
+    assert json.dumps(criteria, ensure_ascii=False) in captured["prompt"]
+    section_status = {
+        item["name"]: item["status"]
+        for item in captured["manifest"]["sections"]
+    }
+    assert section_status["plan_gate_feedback"] == "required_included"
+    assert section_status["preserved_acceptance_criteria"] == "required_included"
+
+
+def test_planner_split_rejects_changed_frozen_criteria(tmp_path):
+    from werkstatt.planner import TaskGraphError, _zerlege_in_sub_tasks
+
+    state = _state(tmp_path)
+    original = ["Kriterium bleibt wortgleich."]
+    response = MagicMock(
+        ok=True,
+        content=json.dumps({
+            "akzeptanzkriterien": ["Aenderte Kriterien"],
+            "tasks": [{"id": "t1", "name": "Task", "criterion_refs": ["AC1"]}],
+        }),
+    )
+
+    with (
+        patch("werkstatt.planner.ask_llm", return_value=response),
+        patch("werkstatt.planner._with_spinner", side_effect=lambda _label, fn: fn()),
+        patch("werkstatt.planner.audit"),
+        pytest.raises(TaskGraphError, match="freigegebene Akzeptanzkriterien"),
+    ):
+        _zerlege_in_sub_tasks(
+            "Plan", ["werkstatt/app.py"], "fake", tmp_path, "demo",
+            state=state, gate_feedback={"regel": "TASK_GRAPH"},
+            preserve_criteria=original,
+        )
+    assert state.akzeptanzkriterien == []
 
 
 def test_planner_split_blockiert_uebergrossen_auftrag_statt_vorab_zu_schneiden(
