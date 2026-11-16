@@ -557,22 +557,9 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
     plan_goal_matches = phase_data.get("aufgabe") == state.aufgabe
     task_records = phase_data.get("tasks")
     task_count = len(task_records) if isinstance(task_records, list) else 0
-    if not state.coordinator_setup_context_ready:
-        return {
-            "decision": "prepare_project_context",
-            "coordinator_action": "explore_setup",
-            "reason": "current_process_setup_context_missing",
-            "next_executor": "explorer_and_setup",
-            "decision_basis": {
-                "setup_context_ready": False,
-                "setup_checkpoint_complete": setup_checkpoint_complete,
-                "plan_checkpoint_complete": plan_checkpoint_complete,
-                "plan_goal_matches": plan_goal_matches,
-                "task_count": task_count,
-            },
-        }
     plan_checkpoint_current = bool(
         phase_state is not None
+        and setup_checkpoint_complete
         and plan_checkpoint_complete
         and plan_goal_matches
     )
@@ -593,6 +580,40 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         if not state.phasen:
             phases = phase_state.data.get("phasen")
             state.phasen = phases if isinstance(phases, list) else []
+
+    reuse_checkpoint_context = False
+    if (
+        not state.coordinator_setup_context_ready
+        and plan_checkpoint_current
+        and phase_state is not None
+    ):
+        # A goal-matched, approved task graph carries its own scoped task
+        # descriptions. Builder rereads each target file before its call;
+        # final verification uses the persisted tests/criteria. Explorer is
+        # needed again only if the checkpoint chooses new planning work.
+        from werkstatt.phases.tasks import _checkpoint_decision_payload
+
+        checkpoint_action = _checkpoint_decision_payload(
+            phase_state, phase_state.get_next_task(), state=state,
+        )
+        reuse_checkpoint_context = checkpoint_action.get("decision") in {
+            "execute_planned_task",
+            "run_phase_end_verify",
+        }
+    if not state.coordinator_setup_context_ready and not reuse_checkpoint_context:
+        return {
+            "decision": "prepare_project_context",
+            "coordinator_action": "explore_setup",
+            "reason": "current_process_setup_context_missing",
+            "next_executor": "explorer_and_setup",
+            "decision_basis": {
+                "setup_context_ready": False,
+                "setup_checkpoint_complete": setup_checkpoint_complete,
+                "plan_checkpoint_complete": plan_checkpoint_complete,
+                "plan_goal_matches": plan_goal_matches,
+                "task_count": task_count,
+            },
+        }
     if not plan_checkpoint_current:
         return {
             "decision": "prepare_approved_work_graph",
@@ -628,6 +649,24 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
     decision = _checkpoint_decision_payload(
         phase_state, next_task, state=state,
     )
+    if reuse_checkpoint_context:
+        decision_basis = decision.get("decision_basis")
+        if not isinstance(decision_basis, dict):
+            decision_basis = {}
+            decision["decision_basis"] = decision_basis
+        decision_basis.update({
+            "setup_context_ready": False,
+            "setup_checkpoint_complete": True,
+            "plan_checkpoint_complete": True,
+            "plan_goal_matches": True,
+            "setup_context_source": "checkpointed_plan",
+            "task_count": task_count,
+        })
+        decision["reason"] = (
+            str(decision.get("reason") or "")
+            + " Aktueller Taskgraph und Task-Kontext werden aus dem "
+            "zielgleichen Plan-Checkpoint wiederverwendet."
+        ).strip()
     if decision.get("decision") == "execute_planned_task":
         action = "execute_task_checkpoint"
     elif decision.get("decision") == "resolve_blocked_graph":
@@ -658,6 +697,12 @@ def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
     ):
         if isinstance(raw.get(key), bool):
             safe[key] = raw[key]
+    context_source = raw.get("setup_context_source")
+    if (
+        isinstance(context_source, str)
+        and context_source in {"checkpointed_plan", "fresh_explorer"}
+    ):
+        safe["setup_context_source"] = context_source
     task_count = raw.get("task_count")
     if (
         isinstance(task_count, int)

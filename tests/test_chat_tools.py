@@ -691,6 +691,7 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                         "setup_checkpoint_complete": True,
                         "plan_checkpoint_complete": True,
                         "plan_goal_matches": True,
+                        "setup_context_source": "checkpointed_plan",
                         "task_count": 4,
                         "private_prompt": "never expose",
                     },
@@ -729,6 +730,7 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
         "setup_checkpoint_complete": True,
         "plan_checkpoint_complete": True,
         "plan_goal_matches": True,
+        "setup_context_source": "checkpointed_plan",
         "task_count": 4,
     }
     coverage = dispatch_evidence["criteria_task_coverage"]

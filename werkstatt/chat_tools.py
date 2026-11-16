@@ -748,6 +748,16 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                         ):
                             if isinstance(decision_basis.get(key), bool):
                                 safe_basis[key] = decision_basis[key]
+                        context_source = decision_basis.get(
+                            "setup_context_source",
+                        )
+                        if (
+                            isinstance(context_source, str)
+                            and context_source in {
+                                "checkpointed_plan", "fresh_explorer",
+                            }
+                        ):
+                            safe_basis["setup_context_source"] = context_source
                         task_count = decision_basis.get("task_count")
                         if (
                             isinstance(task_count, int)

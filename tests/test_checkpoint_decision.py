@@ -304,6 +304,63 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     assert resumed_state.tasks[0]["id"] == "task-1"
 
 
+def test_run_coordinator_resumes_approved_task_without_repeating_explorer(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [{
+            "id": "task-1",
+            "name": "Update implementation",
+            "description": "Apply the approved file scoped implementation plan.",
+            "action": "update",
+            "task_files": ["src/feature.py"],
+            "criterion_refs": ["AC1"],
+        }],
+        ["Feature works"],
+    )
+    state = RunState(aufgabe="Ziel")
+
+    decision = _run_coordinator_action(phase, state)
+
+    assert decision["coordinator_action"] == "execute_task_checkpoint"
+    assert decision["next_task_id"] == "task-1"
+    assert state.coordinator_setup_context_ready is False
+    assert state.tasks[0]["description"] == (
+        "Apply the approved file scoped implementation plan."
+    )
+    assert decision["decision_basis"]["setup_context_source"] == (
+        "checkpointed_plan"
+    )
+
+
+def test_run_coordinator_rebuilds_context_when_checkpoint_requires_replanning(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [{
+            "id": "task-1",
+            "name": "First criterion",
+            "description": "Inspect and update the first requirement.",
+            "action": "read",
+            "criterion_refs": ["AC1"],
+        }],
+        ["First criterion", "Second criterion"],
+    )
+    phase.mark_done("task-1")
+    state = RunState(aufgabe="Ziel")
+
+    decision = _run_coordinator_action(phase, state)
+
+    assert decision["coordinator_action"] == "explore_setup"
+    assert decision["decision_basis"]["setup_context_ready"] is False
+
+
 def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
     from werkstatt.event_store import EventStore
     from werkstatt.loop import _persist_run_coordinator_decision
@@ -340,6 +397,7 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
             "setup_checkpoint_complete": True,
             "plan_checkpoint_complete": True,
             "plan_goal_matches": True,
+            "setup_context_source": "checkpointed_plan",
             "task_count": 3,
             "private_prompt": "do not persist",
         },
@@ -388,6 +446,7 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
                 "setup_checkpoint_complete": True,
                 "plan_checkpoint_complete": True,
                 "plan_goal_matches": True,
+                "setup_context_source": "checkpointed_plan",
                 "task_count": 3,
             },
         },
