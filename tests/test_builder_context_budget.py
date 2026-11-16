@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from werkstatt.roles.builder.prompt import BUILDER_SYSTEM
+from werkstatt.roles.builder.prompt import (
+    BUILDER_SYSTEM,
+    _format_explorer_findings_b,
+)
 from werkstatt.roles.builder.run import (
     _budget_builder_context,
     _build_patches_fuer_datei,
@@ -180,6 +183,31 @@ def test_builder_api_context_has_no_silent_file_symbol_or_line_slices(tmp_path):
             assert (
                 f"symbol_{file_index}_{symbol_index}(value: int)" in prompt
             )
+
+
+def test_builder_explorer_findings_are_not_sliced_before_budgeting():
+    findings = {
+        f"finding_{index}": [f"detail_{index}_{item}" * 12 for item in range(6)]
+        for index in range(10)
+    }
+
+    rendered = _format_explorer_findings_b(findings)
+    prompt, manifest = _budget_builder_context(
+        [("TASK", "approved work")],
+        [("EXPLORER_FINDINGS", rendered)],
+    )
+
+    assert prompt is not None
+    assert "Untrusted Explorer-Daten" in prompt
+    for index in range(10):
+        assert f'"finding_{index}"' in rendered
+        assert f'detail_{index}_5' + f'detail_{index}_5' * 11 in rendered
+    section = next(
+        item for item in manifest["section_manifest"]
+        if item["name"] == "EXPLORER_FINDINGS"
+    )
+    start, end = section["prompt_start"], section["prompt_end"]
+    assert prompt[start:end] == rendered
 
 
 def test_builder_rejects_stale_chat_recovery_evidence_before_model_call(tmp_path):
