@@ -58,6 +58,7 @@ Keine Erklaerung, nur JSON."""
 def _list_source_file_inventory(
     project_dir: Path,
     *,
+    query: str = "",
     max_files: int = 500,
     extensions: frozenset[str] = _SOURCE_TEXT_EXTENSIONS,
 ) -> tuple[list[str], bool, bool, str]:
@@ -153,8 +154,33 @@ def _list_source_file_inventory(
         # inventory. Do not silently fall back to walking ignored runtime data.
         scan_error = True
 
-    def inventory_priority(path: str) -> tuple[int, str]:
+    query_tokens = _explorer_query_tokens(query)
+    path_parts_by_file: dict[str, tuple[set[str], set[str]]] = {}
+    path_frequencies = {token: 0 for token in query_tokens}
+    for path in paths:
         relative = Path(path).relative_to(root)
+        stem_tokens = _source_content_tokens(relative.stem)
+        parent_tokens = _source_content_tokens(
+            " ".join(relative.parts[:-1]),
+        )
+        path_parts_by_file[path] = (stem_tokens, parent_tokens)
+        for token in query_tokens:
+            if token in stem_tokens or token in parent_tokens:
+                path_frequencies[token] += 1
+    discriminative_path_tokens = {
+        token for token, frequency in path_frequencies.items()
+        if frequency > 0 and (
+            len(paths) <= 1 or frequency * 2 < len(paths)
+        )
+    }
+
+    def inventory_priority(path: str) -> tuple[int, int, str]:
+        relative = Path(path).relative_to(root)
+        stem_tokens, parent_tokens = path_parts_by_file[path]
+        path_score = sum(
+            (6 if token in stem_tokens else 2 if token in parent_tokens else 0)
+            for token in discriminative_path_tokens
+        )
         parts = {part.casefold() for part in relative.parts[:-1]}
         suffix = relative.suffix.casefold()
         is_test = bool(parts & {"test", "tests", "__tests__", "spec"}) or (
@@ -169,7 +195,7 @@ def _list_source_file_inventory(
             priority = 1
         else:
             priority = 0
-        return priority, relative.as_posix().casefold()
+        return -path_score, priority, relative.as_posix().casefold()
 
     paths.sort(key=inventory_priority)
     index_truncated = len(paths) > file_limit
@@ -307,7 +333,9 @@ def _rank_source_files(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Find query-relevant source by content with explicit index/read limits."""
     indexed, scan_succeeded, index_truncated, inventory_source = (
-        _list_source_file_inventory(project_dir, extensions=extensions)
+        _list_source_file_inventory(
+            project_dir, query=query, extensions=extensions,
+        )
     )
     query_tokens = _source_content_tokens(query)
     excluded = {item.replace("\\", "/") for item in (exclude or set())}

@@ -316,6 +316,33 @@ def test_git_inventory_excludes_ignored_runtime_files_before_source_cap(
     assert indexed == [str(relevant)]
 
 
+def test_query_matching_paths_survive_source_cap_before_content_scan(tmp_path):
+    from werkstatt.explorer import _rank_source_files
+
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    for index in range(505):
+        (source_dir / f"module_{index:03}.py").write_text(
+            "def unrelated():\n    return None\n",
+            encoding="utf-8",
+        )
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    relevant = tests_dir / "test_checkpoint_dispatch.py"
+    relevant.write_text(
+        "def checkpoint_dispatch_decision():\n    return True\n",
+        encoding="utf-8",
+    )
+
+    selected, manifest = _rank_source_files(
+        tmp_path, "checkpoint dispatch decision", limit=1,
+    )
+
+    assert manifest["index_truncated"] is True
+    assert manifest["indexed_file_count"] == 500
+    assert selected[0]["file"] == "tests/test_checkpoint_dispatch.py"
+
+
 def test_source_rank_does_not_let_progress_history_outrank_product_code(
     tmp_path,
 ):
