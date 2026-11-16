@@ -332,6 +332,39 @@ def _verify_source_evidence(
     return verified
 
 
+def _build_recovery_prompt(evidence: dict[str, Any]) -> tuple[str, str]:
+    """Serialize the exact evidence and return the complete recovery prompt."""
+    evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+    prompt = (
+        "Der Werkstatt-Loop ist bei der Reparatur des aktuellen freigegebenen "
+        "Tasks an einem Stillstandspunkt angekommen. Analysiere die "
+        "angegebenen Belege und lies bei Bedarf das Repo mit deinen "
+        "Projektwerkzeugen. Formuliere genau eine verbesserte Aufgabe fuer "
+        "den Builder oder lehne mit decision=\"cannot_solve\" ab. "
+        "Aendere weder Akzeptanzkriterien noch den Auftragsscope. "
+        "task_files muessen eine nichtleere Teilmenge der authorized_files "
+        "bleiben. Behaupte keine Tests oder Ursachen ohne Beleg. Gib nur "
+        "dieses JSON zurueck: {\"decision\":\"task\",\"task\":{"
+        "\"name\":\"...\",\"description\":\"konkreter naechster "
+        "Builder-Schritt mit Fehlerursache und Verify-Hinweis\","
+        "\"task_files\":[\"...\"],\"source_evidence\":[{"
+        "\"file\":\"...\",\"start\":0,\"end\":24,"
+        "\"quote\":\"exakter read_file-Auszug\"}]}}. Jeder Beleg muss "
+        "eine tatsaechlich gelesene Fundstelle in task_files sein; start/end "
+        "sind 0-basierte Zeichen-Offsets in der vollstaendigen Datei. Bei "
+        "fehlender belastbarer "
+        "Reparaturaufgabe: {\"decision\":\"cannot_solve\","
+        "\"reason\":\"...\"}. Fehlende optionale Belege oder ihre Hash-/"
+        "Groessenmetadaten sind keine Negativbelege. Kontextmarker zu nicht "
+        "darstellbaren Pflichtdaten sind ebenfalls keine Negativbelege. Lies "
+        "benoetigte, aber "
+        "ausgelassene Informationen mit den Projektwerkzeugen gezielt nach; "
+        "wenn das nicht belastbar gelingt, lehne ab.\n\nBELEGE:\n"
+        + evidence_json
+    )
+    return prompt, evidence_json
+
+
 def _claim_recovery_chat_call(state: Any) -> int:
     """Durably reserve one of the run's bounded Reflection-Chat calls."""
     project = getattr(state, "project_name", None)
@@ -460,39 +493,9 @@ def ask_project_chat_for_builder_task(
     if evidence.get("context_status") != "complete_required":
         state.reflection_chat_error = "required_context_over_budget"
         return None
-    evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+    prompt, evidence_json = _build_recovery_prompt(evidence)
     evidence_hash = hashlib.sha256(evidence_json.encode("utf-8")).hexdigest()
     run_id = str(getattr(state, "run_id", "") or "run")
-    job_id = "reflection-" + hashlib.sha256(
-        f"{run_id}:{task.get('id')}:{evidence_hash}".encode(),
-    ).hexdigest()[:32]
-    prompt = (
-        "Der Werkstatt-Loop ist bei der Reparatur des aktuellen freigegebenen "
-        "Tasks an einem Stillstandspunkt angekommen. Analysiere die "
-        "angegebenen Belege und lies bei Bedarf das Repo mit deinen "
-        "Projektwerkzeugen. Formuliere genau eine verbesserte Aufgabe fuer "
-        "den Builder oder lehne mit decision=\"cannot_solve\" ab. "
-        "Aendere weder Akzeptanzkriterien noch den Auftragsscope. "
-        "task_files muessen eine nichtleere Teilmenge der authorized_files "
-        "bleiben. Behaupte keine Tests oder Ursachen ohne Beleg. Gib nur "
-        "dieses JSON zurueck: {\"decision\":\"task\",\"task\":{"
-        "\"name\":\"...\",\"description\":\"konkreter naechster "
-        "Builder-Schritt mit Fehlerursache und Verify-Hinweis\","
-        "\"task_files\":[\"...\"],\"source_evidence\":[{"
-        "\"file\":\"...\",\"start\":0,\"end\":24,"
-        "\"quote\":\"exakter read_file-Auszug\"}]}}. Jeder Beleg muss "
-        "eine tatsaechlich gelesene Fundstelle in task_files sein; start/end "
-        "sind 0-basierte Zeichen-Offsets in der vollstaendigen Datei. Bei "
-        "fehlender belastbarer "
-        "Reparaturaufgabe: {\"decision\":\"cannot_solve\","
-        "\"reason\":\"...\"}. Fehlende optionale Belege oder ihre Hash-/"
-        "Groessenmetadaten sind keine Negativbelege. Kontextmarker zu nicht "
-        "darstellbaren Pflichtdaten sind ebenfalls keine Negativbelege. Lies "
-        "benoetigte, aber "
-        "ausgelassene Informationen mit den Projektwerkzeugen gezielt nach; "
-        "wenn das nicht belastbar gelingt, lehne ab.\n\nBELEGE:\n"
-        + evidence_json
-    )
     if len(prompt) > REFLECTION_PROMPT_MAX_CHARS:
         state.reflection_chat_error = "prompt_over_budget"
         return None
@@ -501,6 +504,9 @@ def ask_project_chat_for_builder_task(
         state.reflection_chat_error = "evidence_prompt_span_mismatch"
         return None
     prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    job_id = "reflection-" + hashlib.sha256(
+        f"{run_id}:{task.get('id')}:{prompt_sha256}".encode(),
+    ).hexdigest()[:32]
 
     parent = None
     worker = None
@@ -511,7 +517,12 @@ def ask_project_chat_for_builder_task(
         parent = ChatSession(project, session_id)
         prior_turn = parent.get_job_turn(job_id)
         if prior_turn is not None:
-            parsed_prior = _parse_task(prior_turn["assistant_text"], allowed_files)
+            if prior_turn.get("user_text") != prompt:
+                state.reflection_chat_error = "replay_prompt_mismatch"
+                return None
+            parsed_prior = _parse_task(
+                prior_turn["assistant_text"], allowed_files,
+            )
             if parsed_prior is None:
                 return None
             verified_prior = _verify_source_evidence(
@@ -561,6 +572,7 @@ def ask_project_chat_for_builder_task(
                     "project": project,
                     "session_id": session_id,
                     "task_id": str(task.get("id", "")),
+                    "job_id": job_id,
                     "origin_history_snapshot_seq": 0,
                     "evidence_sha256": evidence_hash,
                     "evidence_prompt_span": {

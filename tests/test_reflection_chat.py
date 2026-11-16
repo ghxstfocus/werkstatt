@@ -371,13 +371,18 @@ def test_chat_source_evidence_must_be_inside_proposed_builder_scope(
             }],
         },
     })
+    recovery_prompt, _ = reflection_chat._build_recovery_prompt(
+        reflection_chat._readable_evidence(state),
+    )
 
     class FakeSession:
         def __init__(self, _project: str, _session_id: str) -> None:
             pass
 
         def get_job_turn(self, _job_id: str) -> dict[str, str] | None:
-            return {"assistant_text": answer, "user_text": ""} if cached else None
+            return {
+                "assistant_text": answer, "user_text": recovery_prompt,
+            } if cached else None
 
         def delete_snapshot(self, _job_id: str) -> bool:
             return True
@@ -564,6 +569,13 @@ def test_chat_request_reuses_completed_idempotent_job_turn(
     tmp_path: Path,
 ) -> None:
     state = _state(tmp_path)
+    evidence = reflection_chat._readable_evidence(state)
+    expected_prompt, _evidence_json = reflection_chat._build_recovery_prompt(
+        evidence,
+    )
+    expected_job_id = "reflection-" + hashlib.sha256(
+        f"{state.run_id}:{state.aktuelle_task['id']}:{hashlib.sha256(expected_prompt.encode('utf-8')).hexdigest()}".encode(),
+    ).hexdigest()[:32]
     answer = json.dumps({
         "decision": "task",
         "task": {
@@ -574,7 +586,9 @@ def test_chat_request_reuses_completed_idempotent_job_turn(
         },
     })
     calls: dict[str, object] = {
-        "prior": {"assistant_text": answer, "user_text": "prior prompt"},
+        "prior": {
+            "assistant_text": answer, "user_text": expected_prompt,
+        },
     }
 
     class FakeSession:
@@ -582,6 +596,7 @@ def test_chat_request_reuses_completed_idempotent_job_turn(
             pass
 
         def get_job_turn(self, _job_id: str):
+            assert _job_id == expected_job_id
             return calls["prior"]
 
     monkeypatch.setattr("werkstatt.chat_session.ChatSession", FakeSession)
@@ -598,6 +613,40 @@ def test_chat_request_reuses_completed_idempotent_job_turn(
         "task_files": ["werkstatt/sample.py"],
         "source_evidence": _verified_source_evidence(tmp_path),
     }
+
+
+def test_chat_replay_rejects_a_turn_from_a_different_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    answer = json.dumps({
+        "decision": "task",
+        "task": {
+            "name": "Narrow type repair",
+            "description": "Use the expected type from the failing check.",
+            "task_files": ["werkstatt/sample.py"],
+            "source_evidence": _source_evidence(),
+        },
+    })
+
+    class FakeSession:
+        def __init__(self, _project: str, _session_id: str) -> None:
+            pass
+
+        def get_job_turn(self, _job_id: str):
+            return {"user_text": "stale prompt", "assistant_text": answer}
+
+    monkeypatch.setattr("werkstatt.chat_session.ChatSession", FakeSession)
+    monkeypatch.setattr(
+        "werkstatt.chat_agent.chat_loop",
+        lambda *_args, **_kwargs: pytest.fail(
+            "Mismatched replay must fail closed without a new Chat call",
+        ),
+    )
+
+    assert reflection_chat.ask_project_chat_for_builder_task(state) is None
+    assert state.reflection_chat_error == "replay_prompt_mismatch"
 
 
 def test_exhausted_run_chat_reserve_is_separately_bounded(
