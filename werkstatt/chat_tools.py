@@ -1252,6 +1252,92 @@ def _write_temp_test(args: dict[str, Any]) -> str:
     }, ensure_ascii=False)
 
 
+def _debug_workspace(args: dict[str, Any]) -> tuple[Path, str]:
+    session_id = _CHAT_SESSION_ID_KONTEXT.get()
+    if not session_id:
+        raise ValueError("Debug-Workspace benoetigt eine Chat-Session.")
+    from werkstatt.debug_workspace import ensure_debug_workspace
+
+    return ensure_debug_workspace(
+        _DEBUGGER_WORKTREE_ROOT_KONTEXT.get() or _aktives_projekt_dir(),
+        _aktives_projekt_dir(),
+        _PROJEKTNAME_KONTEXT.get(),
+        session_id,
+    )
+
+
+def _debug_workspace_open(_args: dict[str, Any]) -> str:
+    try:
+        _workspace, base_head = _debug_workspace({})
+        current = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=_aktives_projekt_dir(), capture_output=True, text=True,
+            check=True, timeout=_TIMEOUT_GIT_S,
+        ).stdout.strip()
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+        return json.dumps({"status": "error", "detail": str(exc)[:1000]}, ensure_ascii=False)
+    return json.dumps({
+        "status": "ready",
+        "workspace": "isolated_debug_worktree",
+        "base_head": base_head,
+        "current_project_head": current,
+        "base_is_current": base_head == current,
+        "detail": "Schreibvorgaenge bleiben in diesem sitzungsgebundenen Worktree.",
+    }, ensure_ascii=False)
+
+
+def _debug_workspace_read(args: dict[str, Any]) -> str:
+    try:
+        from werkstatt.debug_workspace import read_debug_file
+
+        workspace, _ = _debug_workspace(args)
+        return json.dumps({"status": "ok", **read_debug_file(workspace, args.get("path"))}, ensure_ascii=False)
+    except (OSError, RuntimeError, TypeError, ValueError, UnicodeError, subprocess.TimeoutExpired) as exc:
+        return json.dumps({"status": "error", "detail": str(exc)[:1000]}, ensure_ascii=False)
+
+
+def _debug_workspace_write(args: dict[str, Any]) -> str:
+    try:
+        from werkstatt.debug_workspace import write_debug_file
+
+        workspace, base_head = _debug_workspace(args)
+        result = write_debug_file(workspace, args.get("path"), args.get("content"))
+        session_id = _CHAT_SESSION_ID_KONTEXT.get()
+        if session_id:
+            from werkstatt.chat_session import ChatSession
+
+            ChatSession(_PROJEKTNAME_KONTEXT.get(), session_id).append(
+                "debug_workspace_file_written",
+                {"path": result["path"], "sha256": result["sha256"], "base_head": base_head},
+            )
+        return json.dumps({"status": "written", **result, "base_head": base_head}, ensure_ascii=False)
+    except (OSError, RuntimeError, TypeError, ValueError, UnicodeError, subprocess.TimeoutExpired) as exc:
+        return json.dumps({"status": "error", "detail": str(exc)[:1000]}, ensure_ascii=False)
+
+
+def _debug_workspace_diff(_args: dict[str, Any]) -> str:
+    try:
+        from werkstatt.debug_workspace import debug_diff
+
+        workspace, _ = _debug_workspace({})
+        return json.dumps({"status": "ok", **debug_diff(workspace)}, ensure_ascii=False)
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+        return json.dumps({"status": "error", "detail": str(exc)[:1000]}, ensure_ascii=False)
+
+
+def _debug_workspace_pytest(args: dict[str, Any]) -> str:
+    try:
+        from werkstatt.debug_workspace import run_debug_tests
+
+        workspace, _ = _debug_workspace(args)
+        result = run_debug_tests(workspace, args.get("path"), args.get("test", ""))
+        return json.dumps({"status": "completed", **result}, ensure_ascii=False)
+    except subprocess.TimeoutExpired:
+        return json.dumps({"status": "timeout", "seconds": 120}, ensure_ascii=False)
+    except (OSError, RuntimeError, TypeError, ValueError, subprocess.SubprocessError) as exc:
+        return json.dumps({"status": "error", "detail": str(exc)[:1000]}, ensure_ascii=False)
+
+
 def _diagnose(_args: dict[str, Any]) -> str:
     return json.dumps({
         "bekannte_fehlerklassen": [
@@ -2093,6 +2179,66 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["content"],
         },
         "fn": _write_temp_test,
+        "mode": "debugger",
+    },
+    "debug_workspace_open": {
+        "description": (
+            "Erstellt oder oeffnet den sitzungsgebundenen, vom Checkout "
+            "getrennten Debug-Git-Worktree auf dem aktuellen sauberen HEAD. "
+            "Der Projekt-Checkout bleibt unveraendert."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+        "fn": _debug_workspace_open,
+        "mode": "debugger",
+    },
+    "debug_workspace_read": {
+        "description": "Liest eine UTF-8-Datei aus dem isolierten Debug-Worktree (max. 1 MB).",
+        "parameters": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+        "fn": _debug_workspace_read,
+        "mode": "debugger",
+    },
+    "debug_workspace_write": {
+        "description": (
+            "Erstellt oder ersetzt im Debug-Modus eine UTF-8-Datei im "
+            "sitzungsgebundenen isolierten Worktree (max. 1 MB). Kein "
+            "Schreiben in den aktiven Projekt-Checkout; Pfade und Secrets "
+            "werden eingeschraenkt."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "content": {"type": "string"},
+            },
+            "required": ["path", "content"],
+        },
+        "fn": _debug_workspace_write,
+        "mode": "debugger",
+    },
+    "debug_workspace_diff": {
+        "description": "Liefert Hash, geaenderte Pfade und Patch des isolierten Debug-Worktrees.",
+        "parameters": {"type": "object", "properties": {}},
+        "fn": _debug_workspace_diff,
+        "mode": "debugger",
+    },
+    "debug_workspace_pytest": {
+        "description": (
+            "Fuehrt im Debug-Worktree bis zu 120 Sekunden Tests unter tests/ "
+            "aus, einschliesslich vom Chat angelegter Regressionstests."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "test": {"type": "string"},
+            },
+            "required": ["path"],
+        },
+        "fn": _debug_workspace_pytest,
         "mode": "debugger",
     },
     "propose_debugger_fix": {

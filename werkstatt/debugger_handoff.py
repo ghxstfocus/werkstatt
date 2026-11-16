@@ -106,7 +106,6 @@ def _patch_files(diff: str) -> tuple[str, ...]:
     forbidden_headers = (
         "old mode ",
         "new mode ",
-        "new file mode ",
         "deleted file mode ",
         "rename from ",
         "rename to ",
@@ -142,6 +141,22 @@ def _patch_files(diff: str) -> tuple[str, ...]:
             raise DebuggerFixError("Alter Datei-Pfad stimmt nicht mit Diff-Kopf ueberein.")
         if to_path is not None and _safe_path(to_path) != new_path:
             raise DebuggerFixError("Neuer Datei-Pfad stimmt nicht mit Diff-Kopf ueberein.")
+        new_file_modes = [
+            line for line in section_lines
+            if line.startswith("new file mode ")
+        ]
+        if new_file_modes and (
+            new_file_modes != ["new file mode 100644"]
+            or from_path is not None
+            or to_path is None
+        ):
+            raise DebuggerFixError(
+                "Nur einfache Neudateien mit Modus 100644 sind zulaessig."
+            )
+        if from_path is None and not new_file_modes:
+            raise DebuggerFixError(
+                "Neudatei-Patch braucht den expliziten Modus 100644."
+            )
         if not any(line.startswith("@@ ") for line in section_lines):
             raise DebuggerFixError("Patch-Abschnitt enthaelt keinen Text-Hunk.")
         paths.append(new_path)

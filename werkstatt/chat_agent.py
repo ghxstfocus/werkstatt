@@ -186,21 +186,20 @@ def _explicit_op_ids(message: str) -> tuple[str, ...]:
 
 
 _DEBUGGER_PROMPT = """Der Mensch hat diesen Turn im Debug-Modus gestartet.
-Du darfst Projekt-Tests mit pytest_run ausfuehren und temporaere Tests
-ausschliesslich unter .werkstatt/temp_tests/ mit write_temp_test anlegen.
-Du darfst keine Produktionsdatei im aktiven Checkout bearbeiten. Gate-Daten
-sind Kontext: du beantwortest oder bestaetigst kein Gate. Ein Patch braucht
-spaeter eine separate, einmalige Freigabe fuer den exakten Diff und bleibt
-an Projekt und Run gebunden. Wenn du einen konkreten Fix vorschlaegst, nutze
-propose_debugger_fix mit belegtem Run, vollstaendigem Git-Diff, Dateiliste
-und Ursache. Der Patch wird in einem isolierten Debug-Worktree vorbereitet.
-Fuehre danach gezielte Tests mit pytest_debugger_proposal gegen genau diesen
-Worktree aus; nutze proposal_id aus dem Vorschlag und eine unveraenderte,
-bereits im Basis-Commit versionierte Testdatei unter tests/. Neu hinzugefuegte
-oder vom Patch geaenderte Tests werden vor Freigabe nicht ausgefuehrt. Lies Testausgabe,
-Patchhash und tracked_diff_unchanged zusammen. Dies ist ein Diagnosebeleg, kein
-Loop-Verify oder Freigabe. Erklaere dem Nutzer Ergebnis, Hash und naechsten
-Freigabeschritt."""
+Du darfst Projekt-Tests mit pytest_run ausfuehren. Fuer Codearbeit oeffne
+zuerst debug_workspace_open und lies oder veraendere Dateien ausschliesslich
+mit debug_workspace_read/debug_workspace_write im sitzungsgebundenen,
+isolierten Git-Worktree. Pruefe Aenderungen mit debug_workspace_diff und
+fuehre passende Tests mit debug_workspace_pytest direkt in diesem Worktree
+aus. Der aktive Projekt-Checkout bleibt unveraendert. Temporäre Tests darfst
+du zusaetzlich mit write_temp_test unter .werkstatt/temp_tests anlegen.
+Gate-Daten sind Kontext: du beantwortest oder bestaetigst kein Gate. Eine
+Uebernahme in den aktiven Loop braucht eine separate Freigabe. Bei einem
+Loop-Fehler kann ein belegter, vollstaendiger Fix weiterhin mit
+propose_debugger_fix als exakter Diff vorgeschlagen werden. Fuehre danach
+gezielte Tests mit pytest_debugger_proposal aus und kontrolliere Testausgabe,
+Patchhash und tracked_diff_unchanged zusammen. Dies ist ein Diagnosebeleg,
+kein Loop-Verify oder Gate. Erklaere dem Nutzer Ergebnis und naechsten Schritt."""
 
 _REFLECTION_PROMPT = """Du bist ein interner, eng begrenzter Analysehelfer fuer
 den Werkstatt-Reflexionsloop. Analysiere nur die mitgelieferten Run-Belege

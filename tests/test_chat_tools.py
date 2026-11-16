@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,7 +30,9 @@ def test_chat_tools_registry_contains_project_actions() -> None:
     erwartet.add("request_loop_action")
     erwartet.update({
         "pytest_run", "write_temp_test", "propose_debugger_fix",
-        "pytest_debugger_proposal",
+        "pytest_debugger_proposal", "debug_workspace_open",
+        "debug_workspace_read", "debug_workspace_write",
+        "debug_workspace_diff", "debug_workspace_pytest",
     })
     assert set(chat_tools.CHAT_TOOLS) == erwartet
 
@@ -51,9 +54,107 @@ def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
     assert len(read_names) == 14
     assert {
         "pytest_run", "write_temp_test", "propose_debugger_fix",
-        "pytest_debugger_proposal",
+        "pytest_debugger_proposal", "debug_workspace_open",
+        "debug_workspace_read", "debug_workspace_write",
+        "debug_workspace_diff", "debug_workspace_pytest",
     } <= debugger_names
-    assert len(debugger_names) == 18
+    assert len(debugger_names) == 23
+
+
+def test_debug_chat_writes_and_tests_only_in_session_worktree(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    subprocess.run(["git", "init", str(project)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.email", "test@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "core.autocrlf", "false"], check=True)
+    (project / "sample.py").write_bytes(b"value = 1\n")
+    subprocess.run(["git", "-C", str(project), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(project), "commit", "-m", "base"], check=True, capture_output=True)
+    context = {
+        "mode": "debugger",
+        "project_dir": project,
+        "source_project_dir": project,
+        "project_name": "demo",
+        "session_id": "session-123",
+    }
+
+    denied = chat_tools.execute_tool(
+        "debug_workspace_write", {"path": "sample.py", "content": "value = 2\n"},
+        **{**context, "mode": "read"},
+    )
+    assert "erfordert mode='debugger'" in denied
+
+    opened = json.loads(chat_tools.execute_tool("debug_workspace_open", {}, **context))
+    assert opened["status"] == "ready"
+    written = json.loads(chat_tools.execute_tool(
+        "debug_workspace_write",
+        {"path": "sample.py", "content": "value = 2\n"}, **context,
+    ))
+    assert written["status"] == "written"
+    assert (project / "sample.py").read_text(encoding="utf-8") == "value = 1\n"
+    denied_path = json.loads(chat_tools.execute_tool(
+        "debug_workspace_write",
+        {"path": "../outside.py", "content": "unsafe\n"}, **context,
+    ))
+    assert denied_path["status"] == "error"
+    denied_secret = json.loads(chat_tools.execute_tool(
+        "debug_workspace_write",
+        {"path": ".env", "content": "SECRET=value\n"}, **context,
+    ))
+    assert denied_secret["status"] == "error"
+
+    regression = "def test_generated_debug_regression():\n    assert 2 + 2 == 4\n"
+    assert json.loads(chat_tools.execute_tool(
+        "debug_workspace_write",
+        {"path": "tests/test_generated_debug_regression.py", "content": regression},
+        **context,
+    ))["status"] == "written"
+    test_result = json.loads(chat_tools.execute_tool(
+        "debug_workspace_pytest",
+        {"path": "tests/test_generated_debug_regression.py"}, **context,
+    ))
+    assert test_result["exit_code"] == 0
+    diff = json.loads(chat_tools.execute_tool("debug_workspace_diff", {}, **context))
+    assert diff["status"] == "ok", diff
+    assert diff["diff_sha256"]
+    assert "sample.py" in diff["diff"]
+    assert "test_generated_debug_regression.py" in diff["diff"]
+    patch_check = subprocess.run(
+        ["git", "apply", "--check"], cwd=project,
+        input=diff["diff"].encode("utf-8"), capture_output=True, check=False,
+    )
+    assert patch_check.returncode == 0, {
+        "stderr": patch_check.stderr,
+        "diff": repr(diff["diff"][:800]),
+    }
+    from werkstatt.debugger_handoff import create_debugger_fix
+
+    accepted_diff = create_debugger_fix(
+        signatur="debug-chat-test",
+        ursache_tag="debug_workspace_test",
+        diff=diff["diff"],
+        betroffene_dateien=["sample.py", "tests/test_generated_debug_regression.py"],
+        confidence=0.95,
+        project="demo",
+        run_id="demo-debug-run",
+        base_head=diff["base_head"],
+    )
+    assert accepted_diff.betroffene_dateien == (
+        "sample.py", "tests/test_generated_debug_regression.py",
+    )
+
+    worktree_root = project.parent / ".werkstatt-chat-workspaces" / "demo"
+    matches = [
+        path for path in worktree_root.rglob("*")
+        if path.is_dir() and (path / ".git").is_file()
+    ]
+    assert len(matches) == 1
+    subprocess.run(
+        ["git", "-C", str(project), "worktree", "remove", "--force", str(matches[0])],
+        check=True, capture_output=True,
+    )
+    shutil.rmtree(worktree_root, ignore_errors=True)
 
 
 def test_openai_schemas_anzahl() -> None:
