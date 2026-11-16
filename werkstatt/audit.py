@@ -87,6 +87,7 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "loop_run_coordinator_decision",
         "planner_architect_context_budget",
         "planner_architect_reasoning_route",
+        "planner_role_dispatch_decision",
         "planner_role_artifact_persisted",
         "planner_role_artifact_rejected",
         "planner_role_artifact_reused",

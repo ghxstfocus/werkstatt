@@ -780,30 +780,38 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
             candidate_stage = phase_data.get("planner_role_stage")
             if candidate_stage in {"scout", "architect"}:
                 planner_role_stage = candidate_stage
-        scout_route_reason = None
-        if planner_role_stage is None:
-            # Reuse the Planner's current deterministic route decision at the
-            # coordinator boundary. A single explicit, Explorer-confirmed
-            # target can go directly to Architect; broad or uncertain work
-            # still starts with Scout. run_planner revalidates this route
-            # against the current repository before it skips the role.
-            from werkstatt.planner import _scout_route_decision
+        from werkstatt.roles.planner_dispatch import (
+            choose_next_planner_role,
+            scout_route_decision,
+        )
 
-            scout_skip_target, scout_route_reason = _scout_route_decision(
-                state.aufgabe, state.explorer_context, state.project_dir,
-            )
-            if scout_skip_target:
-                next_role = "architect"
-                reason = "scout_skipped:" + scout_route_reason
-            else:
-                next_role = "scout"
-                reason = "planner_scout_checkpoint_missing"
+        scout_skip_target, scout_route_reason = scout_route_decision(
+            state.aufgabe, state.explorer_context, state.project_dir,
+        )
+        planner_decision = choose_next_planner_role(
+            scout_skip_path=scout_skip_target,
+            completed_role=planner_role_stage,
+            architect_output_ready=planner_role_stage == "architect",
+        )
+        if planner_decision.role is None:
+            # A missing plan checkpoint cannot be treated as complete.
+            # Re-enter the graph compiler, which validates/recovers its own
+            # role artifact before any Plan or Human gate can pass.
+            next_role = "split"
+            reason = "planner_dispatch_missing_graph_checkpoint"
         else:
             next_role = {
-                "scout": "architect",
-                "architect": "split",
-            }[planner_role_stage]
-            reason = f"planner_{next_role}_checkpoint_missing"
+                "scout": "scout",
+                "architect": "architect",
+                "planner_split": "split",
+            }[planner_decision.role]
+            reason = (
+                "scout_skipped:" + scout_route_reason
+                if planner_role_stage is None
+                and planner_decision.role == "architect"
+                and scout_route_reason
+                else planner_decision.reason
+            )
         return {
             "decision": "prepare_approved_work_graph",
             "coordinator_action": f"planner_{next_role}",
@@ -816,6 +824,8 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 "plan_goal_matches": plan_goal_matches,
                 "task_count": task_count,
                 "planner_role_stage": planner_role_stage,
+                "planner_role_decision": planner_decision.role,
+                "planner_role_decision_reason": planner_decision.reason,
                 "scout_route_reason": scout_route_reason,
             },
         }

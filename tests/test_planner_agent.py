@@ -385,6 +385,65 @@ def test_literal_single_file_replacement_skips_scout_and_architect(tmp_path):
     ]
 
 
+def test_unique_literal_setting_skips_scout_architect_and_split(tmp_path):
+    target = tmp_path / "settings.py"
+    target.write_text("TIMEOUT = 15  # seconds\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.aufgabe = "Setze TIMEOUT in settings.py auf 30."
+    st.explorer_context = {"key_files": [{"file": "settings.py"}]}
+    role_checkpoints = []
+    st.planner_checkpoint_callback = role_checkpoints.append
+
+    with patch(
+        "werkstatt.planner._run_scout",
+        side_effect=AssertionError("Scout fuer belegte Einzelwertaenderung unnoetig"),
+    ), patch(
+        "werkstatt.planner.run_architect",
+        side_effect=AssertionError("Architect fuer belegte Einzelwertaenderung unnoetig"),
+    ), patch("werkstatt.planner.audit"):
+        assert run_planner(st) is True
+
+    assert len(st.tasks) == 1
+    assert st.tasks[0]["task_files"] == ["settings.py"]
+    assert "TIMEOUT = 15  # seconds` durch `TIMEOUT = 30  # seconds" in (
+        st.tasks[0]["description"]
+    )
+    assert [(item["role"], item["status"]) for item in role_checkpoints] == [
+        ("scout", "skipped"),
+        ("architect", "skipped"),
+        ("planner_split", "skipped"),
+    ]
+
+
+def test_complex_single_file_request_keeps_architect_reasoning_enabled(tmp_path):
+    target = tmp_path / "src" / "auth.py"
+    target.parent.mkdir()
+    target.write_text("def allowed(user):\n    return True\n", encoding="utf-8")
+    st = _state(tmp_path)
+    st.aufgabe = "Korrigiere die Berechtigungsprüfung in src/auth.py"
+    st.explorer_context = {"key_files": [{"file": "src/auth.py"}]}
+    split_tasks = [{
+        "id": "t1", "name": "Update authorization", "action": "update",
+        "task_files": ["src/auth.py"], "criterion_refs": ["AC1"],
+        "dependencies": [], "description": "Implement the approved fix.",
+    }]
+
+    def architect(state, *_args):
+        assert state.architect_reasoning_enabled is True
+        state.architect_prosa = "## src/auth.py\nKorrigiere die Berechtigungsprüfung."
+        return True
+
+    with patch(
+        "werkstatt.planner._run_scout",
+        side_effect=AssertionError("Scout ist fuer den belegten Einzeldateipfad unnoetig"),
+    ), patch("werkstatt.planner.run_architect", side_effect=architect), patch(
+        "werkstatt.planner._zerlege_in_sub_tasks", return_value=split_tasks,
+    ), patch("werkstatt.planner.audit"):
+        assert run_planner(st) is True
+
+    assert st.tasks == split_tasks
+
+
 def test_literal_replacement_with_ambiguous_or_stale_text_falls_back(tmp_path):
     from werkstatt.planner import _deterministic_literal_replace_plan
 
@@ -403,6 +462,35 @@ def test_literal_replacement_with_ambiguous_or_stale_text_falls_back(tmp_path):
     assert _deterministic_literal_replace_plan(
         "Ersetze `OLD` durch `NEW` und module.py.", "module.py", tmp_path,
     ) == (None, "zieldatei_nicht_an_ersetzung_gebunden")
+
+
+def test_unique_literal_setting_can_dispatch_directly_to_builder(tmp_path):
+    from werkstatt.planner import _deterministic_literal_replace_plan
+
+    target = tmp_path / "settings.py"
+    target.write_text("TIMEOUT = 15  # seconds\n", encoding="utf-8")
+    plan, reason = _deterministic_literal_replace_plan(
+        "Setze TIMEOUT in settings.py auf 30.", "settings.py", tmp_path,
+    )
+
+    assert reason == "eindeutige_ast_literalzuweisung"
+    assert plan is not None
+    change = plan["betroffene_stellen"][0]
+    assert change["datei"] == "settings.py"
+    assert change["zeile"] == 1
+    assert change["alt"] == "TIMEOUT = 15  # seconds"
+    assert change["neu"] == "TIMEOUT = 30  # seconds"
+
+
+def test_literal_setting_with_duplicate_assignment_stays_on_role_path(tmp_path):
+    from werkstatt.planner import _deterministic_literal_replace_plan
+
+    target = tmp_path / "settings.py"
+    target.write_text("TIMEOUT = 15\nTIMEOUT = 20\n", encoding="utf-8")
+
+    assert _deterministic_literal_replace_plan(
+        "Setze TIMEOUT in settings.py auf 30.", "settings.py", tmp_path,
+    ) == (None, "zielvariable_nicht_eindeutig")
 
 
 def test_atomic_scout_plan_requires_current_unique_evidence(tmp_path):

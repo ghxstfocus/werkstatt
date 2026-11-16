@@ -56,9 +56,10 @@ eskalieren in den normalen Scout-/Architect-Pfad.
 
 Der Run-Koordinator wertet nach Planfreigabe und nach jedem einzelnen Task
 den gespeicherten Checkpoint neu aus. `loop_checkpoint_decision` waehlt den
-Task-Executor: `read` geht an den Read-only-Pfad, `verify` an Verify und
-Review, `create`/`update` an den Builder. Der Run-Dispatcher gibt jeweils nur
-einen Task frei und entscheidet danach erneut, ob ein weiterer Task, die
+Task-Executor: `read` geht an den Read-only-Pfad, `verify` an deterministisches
+Verify-only, `create`/`update` an den Builder; Reviewer wird nach Risiko und
+Befund zugeschaltet. Der Run-Dispatcher gibt jeweils nur einen Task frei und
+entscheidet danach erneut, ob ein weiterer Task, die
 Aufloesung eines blockierten Graphen oder die Phase-End-Verify folgt. Nicht
 registrierte Aktionen stoppen vor einem Worker fail-closed. Nach der
 Graph-Aufloesung zaehlen blockierte Tasks nicht als ausfuehrbare Arbeit;

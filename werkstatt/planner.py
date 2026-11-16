@@ -17,6 +17,16 @@ from pathlib import Path, PureWindowsPath
 
 from werkstatt.agent import DEEPSEEK_API_URL, ask_llm
 from werkstatt.render import _with_spinner
+from werkstatt.roles.builder_direct import (
+    build_direct_edit_plan as _deterministic_literal_replace_plan,
+)
+from werkstatt.roles.planner_dispatch import (
+    architect_reasoning_route,
+    choose_next_planner_role,
+)
+from werkstatt.roles.planner_dispatch import (
+    scout_route_decision as _scout_route_decision,
+)
 from werkstatt.roles.planner_split import (
     PLANNER_SPLIT_SINGLE_SYSTEM,
     PLANNER_SPLIT_SYSTEM,
@@ -2320,165 +2330,6 @@ def _validate_contract_or_audit(
         return False
 
 
-def _scout_route_decision(
-    aufgabe: str, explorer_ctx: object, project_dir,
-) -> tuple[str | None, str]:
-    """Return a skip target or an auditable reason to invoke Scout."""
-    text = str(aufgabe or "").strip()
-    if not text:
-        return None, "auftrag_leer"
-    if project_dir is None or not isinstance(explorer_ctx, dict):
-        return None, "explorer_beleg_fehlt"
-
-    paths = set(re.findall(
-        r"(?<![\w.-])(?:[\w.-]+/)*[\w.-]+\.(?:py|md)",
-        text,
-    ))
-    if not paths:
-        return None, "kein_expliziter_zieldateipfad"
-    if len(paths) != 1:
-        return None, "mehrere_explizite_zieldateien"
-    target = next(iter(paths))
-    target_path = Path(target)
-    if target_path.is_absolute() or ".." in target_path.parts:
-        return None, "zieldateipfad_unsicher"
-    if target.startswith("tests/"):
-        return None, "testdatei_braucht_scout"
-
-    intent_text = text
-    for explicit_path in sorted(paths, key=len, reverse=True):
-        intent_text = re.sub(
-            re.escape(explicit_path), " ", intent_text,
-            flags=re.IGNORECASE,
-        )
-    lowered = intent_text.casefold()
-    broad_markers = (
-        ("alle", r"\balle\b"),
-        ("all", r"\ball\b"),
-        ("gesamt", r"\bgesamt\w*\b"),
-        ("mehrere", r"\bmehrere\b"),
-        ("multiple", r"\bmultiple\b"),
-        ("umfassend", r"\bumfassend\w*\b"),
-        ("architektur", r"\barchitektur\w*\b"),
-        ("architecture", r"\barchitecture\w*\b"),
-        ("schnittstelle", r"\bschnittstell\w*\b"),
-        ("interface", r"\binterface\w*\b"),
-        ("api", r"\bapi\b"),
-        ("debug", r"\bdebug\w*\b"),
-        ("fehler", r"\bfehler\w*\b"),
-        ("error", r"\berror\w*\b"),
-        ("bug", r"\bbug\b"),
-        ("ursache", r"\bursach\w*\b"),
-        ("cause", r"\bcause\b"),
-        ("analys", r"\banalys\w*\b"),
-        ("analyze", r"\banaly[sz]\w*\b"),
-        ("inspect", r"\binspect\w*\b"),
-        ("pruef", r"\bpr[uü]f\w*\b"),
-        ("check", r"\bcheck(?:s|e|ed|ing)?\b"),
-        ("review", r"\breview\w*\b"),
-        ("refactor", r"\brefactor\w*\b"),
-        ("aufraeum", r"\b(?:aufräum|aufraeum)\w*\b"),
-        ("migrier", r"\bmigrier\w*\b"),
-        ("migrate", r"\bmigrat\w*\b"),
-        ("blockiert", r"\bblockier\w*\b"),
-        ("blocked", r"\bblocked\b"),
-        ("abhaengig", r"\b(?:abhängig|abhaengig)\w*\b"),
-        ("dependent", r"\bdependen\w*\b"),
-    )
-    marker = next((
-        label for label, pattern in broad_markers
-        if re.search(pattern, lowered)
-    ), None)
-    if marker:
-        return None, f"auftrag_enthaelt_breiten_marker:{marker}"
-    edit_markers = (
-        r"\b(?:änder|aender|korrigier|ergänz|ergaenz|aktualisier|"
-        r"entfern|ersetz|füg|fueg|update|change|edit|fix|add|remove|replace)"
-        r"\w*\b"
-    )
-    if not re.search(edit_markers, lowered):
-        return None, "aenderungsabsicht_nicht_eindeutig"
-
-    explorer_files = explorer_ctx.get("key_files") or []
-    confirmed = {
-        item.get("file") for item in explorer_files
-        if isinstance(item, dict) and isinstance(item.get("file"), str)
-    }
-    if target not in confirmed:
-        return None, "explorer_bestaetigt_zieldatei_nicht"
-    try:
-        project_root = Path(project_dir).resolve(strict=True)
-        resolved_target = (project_root / target_path).resolve(strict=True)
-        resolved_target.relative_to(project_root)
-        if not resolved_target.is_file():
-            return None, "zieldatei_nicht_vorhanden"
-        if resolved_target.stat().st_size > 24_000:
-            return None, "zieldatei_uebersteigt_vollstaendigen_architect_auszug"
-        source_text = resolved_target.read_text(encoding="utf-8")
-    except (OSError, RuntimeError, UnicodeDecodeError, ValueError):
-        return None, "zieldatei_nicht_sicher_lesbar"
-    if len(source_text) > 6_000:
-        return None, "zieldatei_uebersteigt_vollstaendigen_architect_auszug"
-    return target, "explizite_einzeldatei_mit_explorer_beleg"
-
-
-def _deterministic_literal_replace_plan(
-    aufgabe: str, target: str, project_dir,
-) -> tuple[dict | None, str]:
-    """Build a one-edit plan only from an explicit, uniquely verifiable replacement.
-
-    This deliberately narrow route can avoid Scout, Architect, and task split.
-    Any ambiguity falls back to the normal reasoning path.
-    """
-    match = re.search(
-        r"(?:ersetze|replace)\s+`([^`\r\n]{1,200})`"
-        r"\s+(?:durch|with)\s+`([^`\r\n]{1,200})`",
-        aufgabe,
-        flags=re.IGNORECASE,
-    )
-    if match is None:
-        return None, "kein_expliziter_literalersetzungsausdruck"
-    target_binding = (
-        r"(?:\bin\s+(?:der\s+Datei\s+)?|\bwithin\s+)"
-        + r"\x60?" + re.escape(target) + r"\x60?(?![\w/-])"
-    )
-    if re.search(target_binding, aufgabe[match.end():], flags=re.IGNORECASE) is None:
-        return None, "zieldatei_nicht_an_ersetzung_gebunden"
-    alt, neu = match.groups()
-    if not alt.strip() or not neu.strip() or alt == neu:
-        return None, "ersetzung_leer_oder_unveraendert"
-    path = Path(target)
-    if path.is_absolute() or ".." in path.parts or path.parts[0] == "tests":
-        return None, "zieldateipfad_unsicher"
-    try:
-        root = Path(project_dir).resolve()
-        file_path = (root / path).resolve(strict=True)
-        file_path.relative_to(root)
-        if not file_path.is_file():
-            return None, "zieldatei_fehlt"
-        content = file_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError, ValueError, TypeError):
-        return None, "zieldatei_nicht_lesbar"
-    if content.count(alt) != 1:
-        return None, "alter_text_nicht_eindeutig"
-    start = content.index(alt)
-    line = content.count("\n", 0, start) + 1
-    return {
-        "ziel": aufgabe,
-        "auftrag_prosa": aufgabe,
-        "api_auszug": {},
-        "risiken": [],
-        "atomarer_plan": True,
-        "betroffene_stellen": [{
-            "datei": path.as_posix(),
-            "zeile": line,
-            "alt": alt,
-            "neu": neu,
-            "grund": "Explizite Nutzerersetzung; eindeutiger Treffer im aktuellen Dateiinhalt",
-        }],
-    }, "exakte_einzeldatei_ersetzung_aktuell_belegt"
-
-
 def _scout_skip_target(aufgabe: str, explorer_ctx: object, project_dir) -> str | None:
     """Compatibility helper returning only the selected target."""
     return _scout_route_decision(aufgabe, explorer_ctx, project_dir)[0]
@@ -2826,14 +2677,15 @@ def run_planner(
     _scout_skip_path, _scout_route_reason = _scout_route_decision(
         aufgabe, _explorer_ctx, pd,
     )
-    state.architect_reasoning_enabled = _scout_skip_path is None
+    (
+        state.architect_reasoning_enabled,
+        _architect_reasoning_reason,
+    ) = architect_reasoning_route(aufgabe, _scout_skip_path)
     audit("planner_architect_reasoning_route", {
         "thinking": state.architect_reasoning_enabled,
-        "reason": (
-            "uncertain_or_broad_request"
-            if state.architect_reasoning_enabled
-            else "explicit_explorer_confirmed_single_file_request"
-        ),
+        "reason": _architect_reasoning_reason,
+        "task_chars": len(str(aufgabe or "")),
+        "scout_skip_path": _scout_skip_path,
         "scout_route_reason": _scout_route_reason,
     }, pd, pn)
     _scout_source = "Scout"
@@ -2939,6 +2791,15 @@ def run_planner(
     # GOLD 2026-10-30: Scout kann "bereits_erfuellt" melden.
     # Dann brechen wir ab: kein Architect, kein Planner, kein Builder.
     if _scout_report and _scout_report.get("bereits_erfuellt") is True:
+        _role_decision = choose_next_planner_role(
+            scout_skip_path=_scout_skip_path,
+            scout_already_fulfilled=True,
+        )
+        audit("planner_role_dispatch_decision", {
+            "next_role": _role_decision.role,
+            "reason": _role_decision.reason,
+            "basis": "validated_scout_report",
+        }, pd, pn)
         _begr = _scout_report.get("begruendung_erfuellt", "")
         audit("auftrag_bereits_erfuellt",
               {"quelle": "scout",
@@ -3054,6 +2915,17 @@ def run_planner(
             ) if _atomar_ok else []
         )
         if _atom_tasks:
+            _role_decision = choose_next_planner_role(
+                scout_skip_path=_scout_skip_path,
+                completed_role="scout",
+                deterministic_task_graph_ready=True,
+            )
+            audit("planner_role_dispatch_decision", {
+                "next_role": _role_decision.role,
+                "reason": _role_decision.reason,
+                "basis": "validated_atomic_scout_plan",
+                "task_count": len(_atom_tasks),
+            }, pd, pn)
             _publish_role_checkpoint(
                 state, "architect", "skipped",
                 "deterministic_atomic_plan_evidence_sufficient",
@@ -3095,7 +2967,18 @@ def run_planner(
     # erzwingen. Bei Resume werden fruehere Requests nur aus dem exakt
     # gebundenen Antwortcache wiederhergestellt und ihre Parser/Gates erneut
     # ausgefuehrt.
+    _after_scout_decision = choose_next_planner_role(
+        scout_skip_path=_scout_skip_path,
+        completed_role="scout",
+    )
+    audit("planner_role_dispatch_decision", {
+        "next_role": _after_scout_decision.role,
+        "reason": _after_scout_decision.reason,
+        "basis": "validated_scout_checkpoint",
+    }, pd, pn)
     if stop_after_role == "scout":
+        if _after_scout_decision.role != "architect":
+            return False
         state.planner_step_yielded = True
         state.planner_yielded_after_role = "scout"
         return True
@@ -3234,15 +3117,29 @@ def run_planner(
             "reason": "current_inputs_or_persistence_unavailable",
         }, pd, pn)
         return False
+    _after_architect_decision = choose_next_planner_role(
+        scout_skip_path=_scout_skip_path,
+        completed_role="architect",
+        architect_output_ready=bool(_arch_prosa.strip()),
+    )
+    audit("planner_role_dispatch_decision", {
+        "next_role": _after_architect_decision.role,
+        "reason": _after_architect_decision.reason,
+        "basis": "validated_architect_output",
+        "architect_output_sha256": hashlib.sha256(
+            _arch_prosa.encode("utf-8"),
+        ).hexdigest(),
+    }, pd, pn)
+    if _after_architect_decision.role != "planner_split":
+        return False
     if (
-        _planner_action_role == "planner_split"
-        and _saved_architect is None
+        stop_after_role == "architect"
+        or _planner_action_role in {"scout", "architect"}
+        or (
+            _planner_action_role == "planner_split"
+            and _saved_architect is None
+        )
     ):
-        state.planner_step_yielded = True
-        state.planner_yielded_after_role = "architect"
-        return True
-
-    if stop_after_role == "architect":
         state.planner_step_yielded = True
         state.planner_yielded_after_role = "architect"
         return True
