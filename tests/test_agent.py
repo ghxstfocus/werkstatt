@@ -130,6 +130,23 @@ def test_context_manifest_bounds_total_nested_metadata_size() -> None:
     assert len(json.dumps(cleaned, ensure_ascii=False)) < 32_000
 
 
+def test_context_manifest_keeps_role_provenance_before_optional_metadata() -> None:
+    manifest = {
+        **{f"optional_{index}": index for index in range(60)},
+        "budget_event": "builder_context_budget",
+        "user_sha256": "a" * 64,
+        "system_sha256": "b" * 64,
+    }
+
+    cleaned = agent._safe_context_manifest(manifest)
+
+    assert cleaned is not None
+    assert cleaned["budget_event"] == "builder_context_budget"
+    assert cleaned["user_sha256"] == "a" * 64
+    assert cleaned["system_sha256"] == "b" * 64
+    assert cleaned["_manifest_truncated"] is True
+
+
 def test_llm_request_is_not_sent_when_audit_write_fails(monkeypatch, tmp_path):
     state = mk_state(project_dir=tmp_path, project_name="audit-failure")
     monkeypatch.setattr(agent, "audit", lambda *_args, **_kwargs: False)

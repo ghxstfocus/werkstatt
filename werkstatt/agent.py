@@ -186,6 +186,14 @@ def _safe_context_manifest(
     if not isinstance(manifest, dict):
         return None
 
+    # These fields are the minimum chain linking a role-budget decision to
+    # the exact messages sent. Preserve them before optional diagnostics so a
+    # large manifest cannot evict its own proof from the audit record.
+    provenance_keys = ("budget_event", "user_sha256", "system_sha256")
+    ordered_manifest = {
+        **{key: manifest[key] for key in provenance_keys if key in manifest},
+        **{key: value for key, value in manifest.items() if key not in provenance_keys},
+    }
     forbidden = {"content", "excerpt", "prompt", "system", "text", "user"}
     remaining_nodes = 512
     remaining_chars = 16_000
@@ -238,7 +246,7 @@ def _safe_context_manifest(
             return cleaned_dict
         return f"[unsupported:{type(value).__name__}]"
 
-    cleaned = clean(manifest)
+    cleaned = clean(ordered_manifest)
     if not isinstance(cleaned, dict):
         return None
     if truncated:
