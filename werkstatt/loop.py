@@ -10,6 +10,8 @@ Endzustand; der Fallback wird nach Phase >20 entfernt (M-299+).
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import signal
 import subprocess  # noqa: F401  # re-export: Tests patchen werkstatt.loop.subprocess
 import time  # noqa: F401  # re-export: Tests patchen werkstatt.loop.time
@@ -548,6 +550,152 @@ def _finish_run_after_followups(
         )
 
 
+_SETUP_CONTEXT_CHECKPOINT_VERSION = 1
+_SETUP_CONTEXT_CHECKPOINT_MAX_CHARS = 80_000
+
+
+def _is_checkpointable_deterministic_explorer_context(
+    context: object,
+) -> bool:
+    if not isinstance(context, dict):
+        return False
+    dispatch = context.get("dispatch")
+    scan = context.get("related_files_scan")
+    return bool(
+        isinstance(dispatch, dict)
+        and dispatch.get("role") == "explorer"
+        and dispatch.get("selected") == "skip"
+        and dispatch.get("evidence_kind") == "deterministic"
+        and dispatch.get("reason")
+        == "explizite_einzeldatei_mit_explorer_beleg"
+        and context.get("findings")
+        == (
+            "Explizites Einzeldatei-Ziel ist durch den deterministischen "
+            "Planner-Router bestaetigt; kein Explorer-LLM-Aufruf."
+        )
+        and isinstance(scan, dict)
+        and scan.get("status") == "complete"
+        and context.get("content_retrieval") in ({}, None)
+        and context.get("next_reads") == []
+    )
+
+
+def _deterministic_setup_context_checkpoint(
+    state: RunState,
+) -> dict[str, Any] | None:
+    """Persist only deterministic Explorer skips with current source hashes."""
+    context = state.explorer_context
+    if not _is_checkpointable_deterministic_explorer_context(context):
+        return None
+    try:
+        encoded_context = json.dumps(
+            context, ensure_ascii=False, sort_keys=True,
+        )
+    except (TypeError, ValueError):
+        return None
+    if len(encoded_context) > _SETUP_CONTEXT_CHECKPOINT_MAX_CHARS:
+        return None
+    files = context.get("key_files")
+    if not isinstance(files, list) or not files or len(files) > 8:
+        return None
+    source_manifest: list[dict[str, str]] = []
+    for item in files:
+        if not isinstance(item, dict):
+            return None
+        relative = item.get("file")
+        digest = item.get("source_sha256")
+        if not isinstance(relative, str) or not isinstance(digest, str):
+            return None
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts:
+            return None
+        source_manifest.append({"file": path.as_posix(), "sha256": digest})
+    return {
+        "version": _SETUP_CONTEXT_CHECKPOINT_VERSION,
+        "run_id": state.run_id,
+        "goal_sha256": hashlib.sha256(
+            state.aufgabe.strip().encode("utf-8"),
+        ).hexdigest(),
+        "context_sha256": hashlib.sha256(
+            encoded_context.encode("utf-8"),
+        ).hexdigest(),
+        "source_manifest": source_manifest,
+        "context": context,
+    }
+
+
+def _restore_deterministic_setup_context(
+    phase_state: PhaseState | None,
+    state: RunState,
+) -> bool:
+    """Restore the narrow cached context only when every bound fact is fresh."""
+    if phase_state is None or not isinstance(phase_state.data, dict):
+        return False
+    cached = phase_state.data.get("setup_context_checkpoint")
+    if not isinstance(cached, dict):
+        return False
+    if (
+        cached.get("version") != _SETUP_CONTEXT_CHECKPOINT_VERSION
+        or cached.get("run_id") != state.run_id
+        or cached.get("run_id") != phase_state.run_id
+        or cached.get("goal_sha256") != hashlib.sha256(
+            state.aufgabe.strip().encode("utf-8"),
+        ).hexdigest()
+    ):
+        return False
+    context = cached.get("context")
+    manifest = cached.get("source_manifest")
+    if not isinstance(context, dict) or not isinstance(manifest, list):
+        return False
+    try:
+        encoded_context = json.dumps(
+            context, ensure_ascii=False, sort_keys=True,
+        )
+    except (TypeError, ValueError):
+        return False
+    if (
+        len(encoded_context) > _SETUP_CONTEXT_CHECKPOINT_MAX_CHARS
+        or hashlib.sha256(encoded_context.encode("utf-8")).hexdigest()
+        != cached.get("context_sha256")
+    ):
+        return False
+    if not manifest or len(manifest) > 8:
+        return False
+    root = Path(state.project_dir).resolve()
+    for item in manifest:
+        if not isinstance(item, dict):
+            return False
+        relative = item.get("file")
+        expected = item.get("sha256")
+        if not isinstance(relative, str) or not isinstance(expected, str):
+            return False
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts:
+            return False
+        try:
+            source = (root / path).resolve(strict=True)
+            source.relative_to(root)
+            actual = hashlib.sha256(source.read_bytes()).hexdigest()
+        except (OSError, RuntimeError, ValueError):
+            return False
+        if actual != expected:
+            return False
+    if not _is_checkpointable_deterministic_explorer_context(context):
+        return False
+    files = context.get("key_files")
+    if not isinstance(files, list) or len(files) != len(manifest):
+        return False
+    expected_sources = [
+        {"file": item.get("file"), "sha256": item.get("source_sha256")}
+        for item in files if isinstance(item, dict)
+    ]
+    if expected_sources != manifest:
+        return False
+    state.explorer_context = context
+    state.coordinator_setup_context_ready = True
+    return True
+
+
 def _run_coordinator_action(phase_state, state: RunState) -> dict:
     """Choose one resumable run action from persisted checkpoint evidence."""
     phase_data = getattr(phase_state, "data", {})
@@ -604,6 +752,8 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
             "execute_planned_task",
             "run_phase_end_verify",
         }
+    if not state.coordinator_setup_context_ready:
+        _restore_deterministic_setup_context(phase_state, state)
     if not state.coordinator_setup_context_ready and not reuse_checkpoint_context:
         return {
             "decision": "prepare_project_context",
@@ -1187,6 +1337,15 @@ def _run_pipeline_loop_impl(
                 return 1
             phase_state.run_id = get_run_id()
             phase_state.data["setup_complete"] = True
+            setup_context_checkpoint = _deterministic_setup_context_checkpoint(
+                state,
+            )
+            if setup_context_checkpoint is None:
+                phase_state.data.pop("setup_context_checkpoint", None)
+            else:
+                phase_state.data[
+                    "setup_context_checkpoint"
+                ] = setup_context_checkpoint
             phase_state.save()
             state.coordinator_setup_context_ready = True
             continue

@@ -250,6 +250,14 @@ def _phase_explorer_and_setup(
         "key_files": [],
         "next_reads": list(_explorer_ergaenzung.get("next_reads") or []),
         "content_retrieval": _explorer_retrieval or {},
+        "dispatch": {
+            "role": "explorer",
+            "selected": "skip" if _skip_explorer else "invoke",
+            "reason": _skip_reason,
+            "evidence_kind": (
+                "deterministic" if _skip_explorer else "model_or_tool"
+            ),
+        },
         "related_files_scan": {
             "status": _related_scan_status,
             "explicit_file_count": len(_explizite_dateien),

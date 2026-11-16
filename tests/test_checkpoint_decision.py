@@ -403,6 +403,177 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     assert resumed_state.tasks[0]["id"] == "task-1"
 
 
+def _deterministic_explorer_context(tmp_path):
+    source = tmp_path / "src" / "feature.py"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("def feature():\n    return 1\n", encoding="utf-8")
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    return {
+        "findings": (
+            "Explizites Einzeldatei-Ziel ist durch den deterministischen "
+            "Planner-Router bestaetigt; kein Explorer-LLM-Aufruf."
+        ),
+        "key_files": [{
+            "file": "src/feature.py",
+            "why": "explizit in Aufgabe",
+            "confidence": "high",
+            "preview": "def feature():\n    return 1\n",
+            "source_sha256": source_hash,
+            "source_complete": True,
+        }],
+        "next_reads": [],
+        "content_retrieval": {},
+        "dispatch": {
+            "role": "explorer",
+            "selected": "skip",
+            "reason": "explizite_einzeldatei_mit_explorer_beleg",
+            "evidence_kind": "deterministic",
+        },
+        "related_files_scan": {"status": "complete"},
+    }
+
+
+def test_resume_reuses_only_fresh_deterministic_explorer_checkpoint(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import (
+        _deterministic_setup_context_checkpoint,
+        _run_coordinator_action,
+    )
+
+    phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    phase.data = {"setup_complete": True}
+    phase.run_id = "demo-run-1"
+    original_state = RunState(
+        aufgabe="Update src/feature.py",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="demo-run-1",
+        explorer_context=_deterministic_explorer_context(tmp_path),
+    )
+    checkpoint = _deterministic_setup_context_checkpoint(original_state)
+    assert checkpoint is not None
+    phase.data["setup_context_checkpoint"] = checkpoint
+    phase.save()
+
+    resumed_phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    assert resumed_phase.load()
+    resumed_state = RunState(
+        aufgabe="Update src/feature.py",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="demo-run-1",
+    )
+    decision = _run_coordinator_action(resumed_phase, resumed_state)
+
+    assert decision["coordinator_action"] == "plan_preflight"
+    assert resumed_state.coordinator_setup_context_ready is True
+    assert resumed_state.explorer_context == checkpoint["context"]
+
+
+def test_resume_rejects_stale_deterministic_explorer_source(tmp_path) -> None:
+    from werkstatt.loop import (
+        _deterministic_setup_context_checkpoint,
+        _run_coordinator_action,
+    )
+
+    phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    phase.data = {"setup_complete": True}
+    phase.run_id = "demo-run-1"
+    original_state = RunState(
+        aufgabe="Update src/feature.py",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="demo-run-1",
+        explorer_context=_deterministic_explorer_context(tmp_path),
+    )
+    checkpoint = _deterministic_setup_context_checkpoint(original_state)
+    assert checkpoint is not None
+    phase.data["setup_context_checkpoint"] = checkpoint
+    phase.save()
+    (tmp_path / "src" / "feature.py").write_text(
+        "def feature():\n    return 2\n", encoding="utf-8",
+    )
+
+    resumed_phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    assert resumed_phase.load()
+    resumed_state = RunState(
+        aufgabe="Update src/feature.py",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="demo-run-1",
+    )
+    decision = _run_coordinator_action(resumed_phase, resumed_state)
+
+    assert decision["coordinator_action"] == "explore_setup"
+    assert resumed_state.coordinator_setup_context_ready is False
+
+
+def test_resume_rejects_deterministic_context_from_another_run_or_goal(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import (
+        _deterministic_setup_context_checkpoint,
+        _run_coordinator_action,
+    )
+
+    phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    phase.data = {"setup_complete": True}
+    phase.run_id = "demo-run-1"
+    original_state = RunState(
+        aufgabe="Update src/feature.py",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="demo-run-1",
+        explorer_context=_deterministic_explorer_context(tmp_path),
+    )
+    checkpoint = _deterministic_setup_context_checkpoint(original_state)
+    assert checkpoint is not None
+    phase.data["setup_context_checkpoint"] = checkpoint
+    phase.save()
+
+    for run_id, goal in (
+        ("demo-run-2", "Update src/feature.py"),
+        ("demo-run-1", "Update another target"),
+    ):
+        resumed_phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+        assert resumed_phase.load()
+        resumed_state = RunState(
+            aufgabe=goal,
+            project_dir=tmp_path,
+            project_name="demo",
+            run_id=run_id,
+        )
+        decision = _run_coordinator_action(resumed_phase, resumed_state)
+
+        assert decision["coordinator_action"] == "explore_setup"
+        assert resumed_state.coordinator_setup_context_ready is False
+
+
+def test_non_deterministic_explorer_output_is_not_checkpointed(tmp_path) -> None:
+    from werkstatt.loop import _deterministic_setup_context_checkpoint
+
+    state = RunState(
+        aufgabe="Diagnose src/feature.py",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="demo-run-1",
+        explorer_context={
+            **_deterministic_explorer_context(tmp_path),
+            "dispatch": {
+                "role": "explorer",
+                "selected": "invoke",
+                "reason": "diagnose",
+                "evidence_kind": "model_or_tool",
+            },
+        },
+    )
+
+    assert _deterministic_setup_context_checkpoint(
+        state,
+    ) is None
+
+
 def test_run_coordinator_resumes_approved_task_without_repeating_explorer(
     tmp_path,
 ) -> None:
