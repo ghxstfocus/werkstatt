@@ -249,6 +249,65 @@ def _checkpoint_decision_payload(
     """Describe the evidence-based next action at a persisted task boundary."""
     task_progress = phase_state.progress()
     criteria = phase_state.criteria_progress()
+    evidence_check = getattr(
+        phase_state, "task_verify_evidence_is_current", None,
+    )
+    file_hash_check = getattr(phase_state, "_task_file_hashes", None)
+    verification_tasks: dict[str, list[str]] = {
+        "current": [], "reverify_possible": [], "unverifiable": [],
+    }
+    phase_data = getattr(phase_state, "data", {})
+    task_records = (
+        phase_data.get("tasks", []) if isinstance(phase_data, dict) else []
+    )
+    if isinstance(task_records, list):
+        for record in task_records:
+            if (
+                not isinstance(record, dict)
+                or record.get("status") == "superseded"
+                or not record.get("criterion_refs")
+            ):
+                continue
+            task_id = record.get("id")
+            if not isinstance(task_id, str) or not task_id.strip():
+                verification_tasks["unverifiable"].append("<missing-task-id>")
+                continue
+            try:
+                is_current = (
+                    callable(evidence_check)
+                    and evidence_check(task_id, record.get("verify_evidence"))
+                    is True
+                )
+            except (OSError, RuntimeError, TypeError, ValueError):
+                is_current = False
+            if is_current:
+                verification_tasks["current"].append(task_id[:120])
+                continue
+            try:
+                can_reverify = (
+                    callable(file_hash_check)
+                    and isinstance(file_hash_check(record.get("task_files")), dict)
+                )
+            except (OSError, RuntimeError, TypeError, ValueError):
+                can_reverify = False
+            bucket = "reverify_possible" if can_reverify else "unverifiable"
+            verification_tasks[bucket].append(task_id[:120])
+    verify_total = sum(len(items) for items in verification_tasks.values())
+    verification_snapshot: dict[str, Any] = {
+        "required_task_count": verify_total,
+        "current_count": len(verification_tasks["current"]),
+        "reverify_possible_count": len(verification_tasks["reverify_possible"]),
+        "unverifiable_count": len(verification_tasks["unverifiable"]),
+    }
+    for name, task_ids in verification_tasks.items():
+        verification_snapshot[name] = task_ids[:20]
+        verification_snapshot[f"{name}_omitted_count"] = max(
+            0, len(task_ids) - 20,
+        )
+    verification_complete = (
+        bool(verification_snapshot["required_task_count"])
+        and verification_snapshot["current_count"] == verify_total
+    )
     if next_task is not None:
         raw_action = next_task.get("action", "update")
         action = str("update" if raw_action is None else raw_action)
@@ -326,6 +385,20 @@ def _checkpoint_decision_payload(
         elif criteria.get("tracked") and criteria.get("uncovered"):
             decision = "verify_with_open_criteria"
             reason = "Task-Graph erschoepft, aber Kriterienabdeckung ist unvollstaendig."
+        elif (
+            criteria.get("tracked") is True
+            and criteria.get("valid") is True
+            and not criteria.get("uncovered")
+            and verification_snapshot["unverifiable_count"]
+        ):
+            executor = None
+            decision = "reject_criteria_verify_scope_missing"
+            reason = (
+                "Kriterien und Taskstatus sind vollstaendig, aber fuer "
+                f"{verification_snapshot['unverifiable_count']} kriteriumsgebundene "
+                "Tasks fehlt ein aktueller Dateiscope fuer taskgebundene "
+                "Verify-Belege. Phase-End-Verify wird nicht als Ersatz gewertet."
+            )
         elif not criteria.get("tracked"):
             decision = "verify_untracked_criteria"
             reason = "Keine belegte Kriterienzuordnung; Abschluss darf Zielerreichung nicht behaupten."
@@ -377,8 +450,9 @@ def _checkpoint_decision_payload(
         "next_executor": executor,
         "task_progress": task_progress,
         "criteria_task_coverage": criteria_snapshot,
+        "criteria_task_verification": verification_snapshot,
         "last_verify_evidence": verify_evidence,
-        "goal_candidate_before_final_verify": candidate,
+        "goal_candidate_before_final_verify": candidate and verification_complete,
         "final_verify_required": True,
     }
 

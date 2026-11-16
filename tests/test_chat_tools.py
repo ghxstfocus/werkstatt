@@ -673,6 +673,19 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                         "error": "SECRET prompt content must not leak",
                         "private_prompt": "never expose",
                     },
+                    "criteria_task_verification": {
+                        "required_task_count": 23,
+                        "current_count": 10,
+                        "reverify_possible_count": 12,
+                        "unverifiable_count": 1,
+                        "current": [f"task-{n}" for n in range(10)],
+                        "current_omitted_count": 0,
+                        "reverify_possible": [f"task-{n}" for n in range(10, 22)],
+                        "reverify_possible_omitted_count": 0,
+                        "unverifiable": ["task-22"],
+                        "unverifiable_omitted_count": 0,
+                        "private_prompt": "never expose",
+                    },
                 },
                 "private_prompt": "never expose",
             },
@@ -707,6 +720,9 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
     assert coverage["uncovered_count"] == 23
     assert coverage["uncovered_omitted_count"] == 3
     assert "error" not in coverage
+    task_verification = dispatch_evidence["criteria_task_verification"]
+    assert task_verification["unverifiable_count"] == 1
+    assert task_verification["required_task_count"] == 23
     assert "private_prompt" not in json.dumps(dispatch_evidence)
     assert "private_prompt" not in result
     assert "never expose" not in result

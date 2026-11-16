@@ -138,10 +138,30 @@ def test_checkpoint_does_not_replan_unapproved_failure_classes(tmp_path) -> None
 def test_checkpoint_marks_complete_graph_as_only_candidate_before_verify(
     tmp_path,
 ) -> None:
-    phase = _phase(
-        tmp_path,
-        [{"id": "t1", "name": "Implement", "criterion_refs": ["AC1"]}],
-        ["Feature works"],
+    from werkstatt.phase_state import PhaseState
+
+    project = tmp_path
+    (project / ".werkstatt").mkdir()
+    (project / "src").mkdir()
+    (project / "src" / "feature.py").write_text("value = 1\n", encoding="utf-8")
+    phase = PhaseState("demo", base_dir=project / ".werkstatt")
+    phase.init_new(
+        "Feature works",
+        [{
+            "id": "t1", "name": "Implement", "criterion_refs": ["AC1"],
+            "task_files": ["src/feature.py"],
+        }],
+        akzeptanzkriterien=["Feature works"],
+    )
+    phase.run_id = "demo-run-1"
+    phase.save()
+    assert phase.record_task_verify_evidence(
+        "t1",
+        [{
+            "stage_id": "pytest_changed", "ok": True, "exit_code": 0,
+            "scope_files": ["src/feature.py"],
+        }],
+        phase="post_build",
     )
     phase.mark_done("t1")
 
@@ -149,6 +169,7 @@ def test_checkpoint_marks_complete_graph_as_only_candidate_before_verify(
 
     assert decision["decision"] == "run_phase_end_verify"
     assert decision["goal_candidate_before_final_verify"] is True
+    assert decision["criteria_task_verification"]["current_count"] == 1
     assert decision["final_verify_required"] is True
 
 
@@ -181,8 +202,10 @@ def test_run_coordinator_dispatches_one_task_at_a_time(tmp_path) -> None:
 
     phase.mark_done("t2")
     final = _run_coordinator_action(phase, state)
-    assert final["coordinator_action"] == "finalize_run"
-    assert final["next_executor"] == "phase_end_verify"
+    assert final["decision"] == "reject_criteria_verify_scope_missing"
+    assert final["coordinator_action"] == "reject_checkpoint"
+    assert final["goal_candidate_before_final_verify"] is False
+    assert final["next_executor"] is None
 
 
 def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
@@ -253,6 +276,16 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
             "covered": ["AC1"], "uncovered": [f"AC{n}" for n in range(2, 27)],
             "error": "invalid_criterion_refs:SECRET prompt text",
         },
+        "criteria_task_verification": {
+            "required_task_count": 23,
+            "current_count": 1, "reverify_possible_count": 1,
+            "unverifiable_count": 1,
+            "current": ["task-1"], "reverify_possible": ["task-2"],
+            "unverifiable": ["task-3"],
+            "current_omitted_count": 0,
+            "reverify_possible_omitted_count": 0,
+            "unverifiable_omitted_count": 0,
+        },
     }
 
     _persist_run_coordinator_decision(
@@ -281,6 +314,17 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
                 "uncovered": [f"AC{n}" for n in range(2, 22)],
                 "uncovered_omitted_count": 5,
                 "error": "invalid_criterion_refs",
+            },
+            "criteria_task_verification": {
+                "required_task_count": 23,
+                "current_count": 1,
+                "reverify_possible_count": 1,
+                "unverifiable_count": 1,
+                "current": ["task-1"], "current_omitted_count": 0,
+                "reverify_possible": ["task-2"],
+                "reverify_possible_omitted_count": 0,
+                "unverifiable": ["task-3"],
+                "unverifiable_omitted_count": 0,
             },
         },
     }
@@ -602,5 +646,6 @@ def test_task_loop_persists_auditable_checkpoint_decision(tmp_path, monkeypatch)
     assert result[0] == 0
     event = next(args for args in audit_events if args[0] == "loop_checkpoint_decision")
     assert event[1]["checkpoint_id"] == "demo-run-1:7"
-    assert event[1]["decision"] == "run_phase_end_verify"
-    assert event[1]["goal_candidate_before_final_verify"] is True
+    assert event[1]["decision"] == "reject_criteria_verify_scope_missing"
+    assert event[1]["criteria_task_verification"]["unverifiable_count"] == 1
+    assert event[1]["goal_candidate_before_final_verify"] is False

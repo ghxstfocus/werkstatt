@@ -782,6 +782,43 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                         evidence_summary[
                             "criteria_task_coverage"
                         ] = safe_coverage
+                    verification = evidence.get("criteria_task_verification")
+                    if isinstance(verification, dict):
+                        safe_verification: dict[str, Any] = {}
+                        for key in (
+                            "required_task_count", "current_count",
+                            "reverify_possible_count", "unverifiable_count",
+                        ):
+                            value = verification.get(key)
+                            if (
+                                isinstance(value, int)
+                                and not isinstance(value, bool)
+                                and value >= 0
+                            ):
+                                safe_verification[key] = value
+                        for key in (
+                            "current", "reverify_possible", "unverifiable",
+                        ):
+                            values = verification.get(key)
+                            if isinstance(values, list) and all(
+                                isinstance(value, str) for value in values
+                            ):
+                                safe_verification[key] = values[:20]
+                                omitted = verification.get(
+                                    f"{key}_omitted_count",
+                                )
+                                if (
+                                    isinstance(omitted, int)
+                                    and not isinstance(omitted, bool)
+                                    and omitted >= 0
+                                ):
+                                    safe_verification[
+                                        f"{key}_omitted_count"
+                                    ] = omitted
+                        if safe_verification:
+                            evidence_summary[
+                                "criteria_task_verification"
+                            ] = safe_verification
                     if evidence_summary:
                         dispatch_summary["evidence"] = evidence_summary
                 result["checkpoint"]["coordinator_decision"] = dispatch_summary

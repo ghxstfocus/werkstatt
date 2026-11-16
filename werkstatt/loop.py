@@ -694,6 +694,35 @@ def _persist_run_coordinator_decision(
                 "task_progress": progress,
                 "criteria_task_coverage": coverage,
             }
+        raw_verification = decision.get("criteria_task_verification")
+        if isinstance(raw_verification, dict):
+            verification: dict[str, Any] = {}
+            for key in (
+                "required_task_count", "current_count",
+                "reverify_possible_count", "unverifiable_count",
+            ):
+                value = raw_verification.get(key)
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    verification[key] = value
+            for key in ("current", "reverify_possible", "unverifiable"):
+                values = raw_verification.get(key)
+                if isinstance(values, list) and all(
+                    isinstance(value, str) for value in values
+                ):
+                    verification[key] = values[:20]
+                    omitted = raw_verification.get(f"{key}_omitted_count")
+                    if (
+                        isinstance(omitted, int)
+                        and not isinstance(omitted, bool)
+                        and omitted >= 0
+                    ):
+                        verification[f"{key}_omitted_count"] = omitted
+            if verification:
+                evidence = persisted_decision.get("evidence")
+                if not isinstance(evidence, dict):
+                    evidence = {}
+                evidence["criteria_task_verification"] = verification
+                persisted_decision["evidence"] = evidence
         checkpoint["coordinator_decision"] = persisted_decision
         try:
             store.update_run_checkpoint(
