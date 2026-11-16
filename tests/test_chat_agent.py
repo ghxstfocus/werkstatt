@@ -1252,7 +1252,7 @@ def test_chat_history_omits_old_tool_traces_but_keeps_current_evidence() -> None
 
 
 def test_chat_history_truncation_obeys_character_budget(monkeypatch) -> None:
-    monkeypatch.setattr(chat_agent, "_CHAT_HISTORY_CHAR_BUDGET", 80)
+    monkeypatch.setattr(chat_agent, "_CHAT_HISTORY_CHAR_BUDGET", 500)
     events = [
         {"kind": "user", "payload": {"text": "U" * 500}},
         {"kind": "assistant", "payload": {"text": "A" * 500}},
@@ -1262,7 +1262,16 @@ def test_chat_history_truncation_obeys_character_budget(monkeypatch) -> None:
     messages = chat_agent._baue_messages(events)
     prior = [message for message in messages[:-1] if message.get("role") != "system"]
 
-    assert sum(len(str(message.get("content") or "")) for message in prior) <= 80
+    assert sum(len(str(message.get("content") or "")) for message in prior) <= 500
+    assert any(
+        "\n[… gekuerzt; vollstaendig im Chatverlauf …]\n"
+        in str(message.get("content") or "")
+        for message in prior
+    )
+    assert all(
+        "\\n[… gekuerzt" not in str(message.get("content") or "")
+        for message in prior
+    )
     assert messages[-1] == {"role": "user", "content": "aktuelle Aufgabe"}
     assert chat_agent._CHAT_HISTORY_COMPACT_NOTE in messages[0]["content"]
 

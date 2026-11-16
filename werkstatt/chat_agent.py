@@ -524,7 +524,7 @@ def _kuerze_turn(turn: list[dict[str, Any]], budget: int) -> list[dict[str, Any]
         item = dict(message)
         content = str(item.get("content") or "")
         if len(content) > anteil:
-            marker = "\\n[… gekuerzt; vollstaendig im Chatverlauf …]\\n"
+            marker = "\n[… gekuerzt; vollstaendig im Chatverlauf …]\n"
             if anteil <= len(marker):
                 item["content"] = content[:anteil]
             else:

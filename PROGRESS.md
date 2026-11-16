@@ -7355,3 +7355,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Audit und Regressionstest binden nun Zeichenbereich, Unicode-Codepoint-Einheit, exakten Belegblockhash sowie Groesse und Hash des vollstaendigen Chatprompts. Der Test schneidet den Belegbereich aus dem an chat_loop uebergebenen Prompt aus und berechnet beide Hashes erneut.
 - **Verifikation lokal:** Reflection-/Builder-/Chat-Agent-/Tool-/Job-Gruppe: 189 bestanden, 2 uebersprungen; Ruff, gezieltes Mypy fuer reflection_chat.py mit Linux-Plattformtypisierung sowie Audit-, Control-, Doku-Drift und Diff-Check bestanden. Keine Serververifikation.
 - **Grenze / Hauptziel:** Bytegenaue Zuordnung fuer diesen Handoff ist belegt; semantische Suffizienz/Relevanz, andere Rollen und Produktionsbetrieb bleiben offen. OP-405/398 bleiben offen.
+# 2026-11-16 – Gekuerzte Chat-Historie sauber markieren (lokal)
+- **Befund:** Der Kuerzungsmarker fuer alte Chatturns enthielt sichtbare Backslash-n-Zeichen statt echter Zeilenumbrueche.
+- **Aenderung:** Der Marker wird als Zeilentrennung uebergeben. Der Regressionstest prueft, dass der gebaute Historiekontext innerhalb des Budgets bleibt und die Kuerzung explizit und lesbar markiert ist.
+- **Verifikation lokal:** Chat-Agent-Gruppe: 73 Tests bestanden; Ruff sowie Audit-, Control-, Doku-Drift und Diff-Check bestanden. Keine Serververifikation.
+- **Grenze / Hauptziel:** Die Markierung macht eine Kontextauslassung sichtbar, beweist aber nicht, dass ein weggelassener frueherer Turn fuer die aktuelle Frage irrelevant ist. Gezielte Nachladung und semantische Kontextqualitaetsevaluation bleiben offen; OP-405/398 bleiben offen.
