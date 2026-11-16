@@ -55,6 +55,54 @@ def _state_after_setup(goal: str = "Ziel") -> RunState:
     return state
 
 
+def test_narrow_direct_builder_can_skip_setup_and_checkpoint_its_source(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import (
+        _deterministic_setup_context_checkpoint,
+        _run_coordinator_action,
+    )
+
+    source = tmp_path / "src" / "feature.py"
+    source.parent.mkdir()
+    source.write_text("def feature():\n    return 1\n", encoding="utf-8")
+    goal = "Korrigiere den Rueckgabewert von feature in src/feature.py"
+    phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    phase.run_id = "direct-run-1"
+    state = RunState(
+        aufgabe=goal,
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="direct-run-1",
+    )
+
+    decision = _run_coordinator_action(phase, state)
+
+    assert decision["coordinator_action"] == "planner_direct"
+    assert decision["decision_basis"]["setup_context_source"] == (
+        "direct_current_source_tool"
+    )
+    assert state.explorer_context["dispatch"]["selected"] == "direct_builder"
+    checkpoint = _deterministic_setup_context_checkpoint(state)
+    assert checkpoint is not None
+    phase.data["setup_context_checkpoint"] = checkpoint
+    phase.save()
+
+    resumed_phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    assert resumed_phase.load()
+    resumed_state = RunState(
+        aufgabe=goal,
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="direct-run-1",
+    )
+    resumed = _run_coordinator_action(resumed_phase, resumed_state)
+
+    assert resumed["coordinator_action"] == "planner_direct"
+    assert resumed_state.coordinator_setup_context_ready is True
+    assert resumed_state.explorer_context == checkpoint["context"]
+
+
 def test_checkpoint_routes_next_planned_task_and_keeps_open_criteria_visible(
     tmp_path,
 ) -> None:
@@ -527,16 +575,14 @@ def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(
     phase.save()
     state.aufgabe = focused_goal
     focused_decision = _run_coordinator_action(phase, state)
-    assert focused_decision["coordinator_action"] == "planner_architect"
+    assert focused_decision["coordinator_action"] == "planner_direct"
     assert focused_decision["decision_basis"]["scout_route_reason"] == (
         "explizite_einzeldatei_mit_explorer_beleg"
     )
     assert focused_decision["reason"] == (
-        "scout_skipped:explizite_einzeldatei_mit_explorer_beleg"
+        "unique_source_bound_edit_ready"
     )
-    assert focused_decision["decision_basis"][
-        "planner_role_missing_evidence"
-    ] == ["architect_plan"]
+    assert focused_decision["decision_basis"]["direct_builder_ready"] is True
 
     source = tmp_path / "src" / "feature.py"
     source.write_text("TIMEOUT = 10\n", encoding="utf-8")
@@ -663,7 +709,7 @@ def test_resume_reuses_only_fresh_deterministic_explorer_checkpoint(
     )
     decision = _run_coordinator_action(resumed_phase, resumed_state)
 
-    assert decision["coordinator_action"] == "planner_architect"
+    assert decision["coordinator_action"] == "planner_direct"
     assert resumed_state.coordinator_setup_context_ready is True
     assert resumed_state.explorer_context == checkpoint["context"]
     assert decision["decision_basis"]["scout_route_reason"] == (
@@ -705,8 +751,13 @@ def test_resume_rejects_stale_deterministic_explorer_source(tmp_path) -> None:
     )
     decision = _run_coordinator_action(resumed_phase, resumed_state)
 
-    assert decision["coordinator_action"] == "explore_setup"
-    assert resumed_state.coordinator_setup_context_ready is False
+    assert decision["coordinator_action"] == "planner_direct"
+    assert resumed_state.coordinator_setup_context_ready is True
+    assert resumed_state.explorer_context["key_files"][0]["source_sha256"] == (
+        hashlib.sha256(
+            (tmp_path / "src" / "feature.py").read_bytes(),
+        ).hexdigest()
+    )
 
 
 def test_resume_rejects_deterministic_context_from_another_run_or_goal(
@@ -732,9 +783,9 @@ def test_resume_rejects_deterministic_context_from_another_run_or_goal(
     phase.data["setup_context_checkpoint"] = checkpoint
     phase.save()
 
-    for run_id, goal in (
-        ("demo-run-2", "Update src/feature.py"),
-        ("demo-run-1", "Update another target"),
+    for run_id, goal, expected_action in (
+        ("demo-run-2", "Update src/feature.py", "planner_direct"),
+        ("demo-run-1", "Update another target", "explore_setup"),
     ):
         resumed_phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
         assert resumed_phase.load()
@@ -746,8 +797,10 @@ def test_resume_rejects_deterministic_context_from_another_run_or_goal(
         )
         decision = _run_coordinator_action(resumed_phase, resumed_state)
 
-        assert decision["coordinator_action"] == "explore_setup"
-        assert resumed_state.coordinator_setup_context_ready is False
+        assert decision["coordinator_action"] == expected_action
+        assert resumed_state.coordinator_setup_context_ready is (
+            expected_action == "planner_direct"
+        )
 
 
 def test_non_deterministic_explorer_output_is_not_checkpointed(tmp_path) -> None:

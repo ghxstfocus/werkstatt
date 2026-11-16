@@ -201,17 +201,114 @@ def test_direct_builder_route_requires_current_unique_source_edit(tmp_path) -> N
     source = tmp_path / "src" / "settings.py"
     source.parent.mkdir()
     source.write_text("TIMEOUT = 10\n", encoding="utf-8")
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    explorer_context = {"key_files": [{
+        "file": "src/settings.py",
+        "source_complete": True,
+        "source_sha256": source_hash,
+    }]}
 
     assert direct_builder_route_decision(
         "Setze TIMEOUT in src/settings.py auf 30",
         "src/settings.py",
         tmp_path,
+        explorer_context=explorer_context,
     ) == (True, "eindeutige_ast_literalzuweisung")
     assert direct_builder_route_decision(
         "Pruefe src/settings.py und erklaere die Ursache",
         "src/settings.py",
         tmp_path,
+        explorer_context=explorer_context,
     ) == (False, "kein_expliziter_literalersetzungsausdruck")
+
+
+def test_direct_builder_selected_for_narrow_single_file_edit(tmp_path) -> None:
+    from werkstatt.roles.planner_dispatch import (
+        build_direct_single_file_task,
+    )
+
+    source = tmp_path / "src" / "settings.py"
+    source.parent.mkdir()
+    source.write_text("def timeout():\n    return 10\n", encoding="utf-8")
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    explorer_context = {"key_files": [{
+        "file": "src/settings.py",
+        "source_complete": True,
+        "source_sha256": source_hash,
+    }]}
+    goal = "Korrigiere den Rückgabewert von timeout in src/settings.py"
+
+    ready, reason = direct_builder_route_decision(
+        goal, "src/settings.py", tmp_path,
+        explorer_context=explorer_context,
+    )
+    task, task_reason, source_sha256 = build_direct_single_file_task(
+        goal, "src/settings.py", tmp_path,
+    )
+
+    assert ready is True
+    assert reason == "eindeutige_explorer_datei_niedriges_risiko"
+    assert task_reason == reason
+    assert source_sha256 is not None and len(source_sha256) == 64
+    assert task == {
+        "id": "t1",
+        "name": "Builder direkt: src/settings.py",
+        "description": (
+            "Fuehre ausschliesslich diesen freizugebenden Nutzerauftrag aus: "
+            + goal
+        ),
+        "action": "update",
+        "task_files": ["src/settings.py"],
+        "dependencies": [],
+        "criterion_refs": ["AC1"],
+    }
+
+
+def test_direct_builder_rejects_missing_or_stale_explorer_hash(tmp_path) -> None:
+    source = tmp_path / "settings.py"
+    source.write_text("def timeout():\n    return 10\n", encoding="utf-8")
+    goal = "Korrigiere den Rueckgabewert in settings.py"
+
+    assert direct_builder_route_decision(
+        goal, "settings.py", tmp_path, explorer_context={"key_files": []},
+    ) == (False, "explorer_quellhash_fehlt_oder_unvollstaendig")
+
+    stale_context = {"key_files": [{
+        "file": "settings.py",
+        "source_complete": True,
+        "source_sha256": "0" * 64,
+    }]}
+    assert direct_builder_route_decision(
+        goal, "settings.py", tmp_path, explorer_context=stale_context,
+    ) == (False, "explorer_quellbeleg_veraltet")
+
+
+@pytest.mark.parametrize(
+    "goal",
+    [
+        "Korrigiere src/settings.py und fuege Tests hinzu",
+        "Aendere das Berechtigungsverhalten in src/settings.py",
+        "Refaktoriere src/settings.py",
+    ],
+)
+def test_direct_builder_escalates_complex_single_file_edits(
+    tmp_path, goal: str,
+) -> None:
+    source = tmp_path / "settings.py"
+    source.write_text("def timeout():\n    return 10\n", encoding="utf-8")
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    explorer_context = {"key_files": [{
+        "file": "settings.py",
+        "source_complete": True,
+        "source_sha256": source_hash,
+    }]}
+
+    ready, _reason = direct_builder_route_decision(
+        goal, "settings.py", tmp_path,
+        explorer_context=explorer_context,
+    )
+
+    assert ready is False
 
 
 def test_direct_builder_compiles_multiple_explicit_literal_assignments(tmp_path) -> None:

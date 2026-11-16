@@ -25,7 +25,10 @@ from werkstatt.roles.planner_dispatch import (
     architect_independent_file_tasks_decision,
     architect_reasoning_route,
     architect_single_file_task_decision,
+    build_direct_single_file_task,
     choose_next_planner_role,
+    current_direct_source_sha256,
+    explorer_source_sha256,
 )
 from werkstatt.roles.planner_dispatch import (
     scout_route_decision as _scout_route_decision,
@@ -2122,19 +2125,119 @@ def run_planner(
                 if _kf not in _key_files_scan:
                     _key_files_scan.append(_kf)
 
+    # A checkpoint-selected low-risk, explicit one-file edit is already a
+    # complete Builder task. Do not manufacture Scout -> Architect -> Split
+    # calls just to restate the user's approved scope.
+    if getattr(state, "planner_action_role", None) == "builder_direct":
+        _direct_target, _ = _scout_route_decision(
+            aufgabe, _explorer_ctx, pd,
+        )
+        _expected_source_sha256 = (
+            explorer_source_sha256(_explorer_ctx, _direct_target)
+            if _direct_target else None
+        )
+        _current_source_sha256 = (
+            current_direct_source_sha256(_direct_target, pd)
+            if _direct_target else None
+        )
+        if (
+            not _expected_source_sha256
+            or _current_source_sha256 != _expected_source_sha256
+        ):
+            audit("planner_role_dispatch_decision", {
+                "next_role": None,
+                "reason": "direct_builder_source_evidence_changed",
+                "basis": "revalidated_explorer_source_hash",
+            }, pd, pn)
+            return False
+        _literal_plan, _literal_reason = (
+            _deterministic_literal_replace_plan(
+                aufgabe, _direct_target, pd,
+            ) if _direct_target else (None, "kein_belegtes_einzeldateiziel")
+        )
+        if _literal_plan is None and _direct_target:
+            _direct_task, _direct_reason, _direct_source_sha256 = (
+                build_direct_single_file_task(
+                    aufgabe,
+                    _direct_target,
+                    pd,
+                    expected_source_sha256=_expected_source_sha256,
+                )
+            )
+            if (
+                _direct_task is not None
+                and _direct_target in _key_files_scan
+                and _expected_source_sha256 is not None
+                and _direct_source_sha256
+            ):
+                state.tasks = [_direct_task]
+                state.tests = [
+                    (
+                        "Die fuer geaenderte Dateien konfigurierte Verify-Suite "
+                        "muss erfolgreich sein."
+                    ),
+                ]
+                state.akzeptanzkriterien = [aufgabe]
+                state.phasen = []
+                state.architect_prosa = ""
+                state.architect_reasoning_enabled = False
+                state.architect_required_source_files = [_direct_target]
+                _publish_role_checkpoint(
+                    state, "scout", "skipped",
+                    "builder_direct_current_explorer_source",
+                    {"goal": aufgabe, "source_sha256": _direct_source_sha256},
+                    {"target": _direct_target},
+                )
+                _publish_role_checkpoint(
+                    state, "architect", "skipped",
+                    "single_file_low_risk_goal_needs_no_design_plan",
+                    {"goal": aufgabe, "source_sha256": _direct_source_sha256},
+                    {"task_id": "t1"},
+                )
+                _publish_role_checkpoint(
+                    state, "planner_split", "skipped",
+                    "single_builder_task_needs_no_graph_split",
+                    {"goal": aufgabe, "source_sha256": _direct_source_sha256},
+                    {"task_id": "t1"},
+                )
+                audit("planner_role_dispatch_decision", {
+                    "next_role": "builder_direct",
+                    "reason": _direct_reason,
+                    "basis": "current_explorer_file_and_narrow_goal",
+                    "source_sha256": _direct_source_sha256,
+                    "skipped_roles": ["scout", "architect", "planner_split"],
+                }, pd, pn)
+                return True
+            audit("planner_role_dispatch_decision", {
+                "next_role": None,
+                "reason": _direct_reason,
+                "basis": "direct_builder_revalidation_failed",
+            }, pd, pn)
+            return False
+
     from werkstatt.roles.scout_execution import (
         ScoutRoleServices,
         run_scout_checkpoint,
     )
 
+    _scout_skip_path, _scout_route_reason = _scout_route_decision(
+        aufgabe, _explorer_ctx, pd,
+    )
+    _scout_route_payload = {"grund": _scout_route_reason}
+    if _scout_skip_path:
+        _scout_route_payload["datei"] = _scout_skip_path
+        audit("planner_scout_skipped", _scout_route_payload, pd, pn)
+    else:
+        audit("planner_scout_required", _scout_route_payload, pd, pn)
     _role_artifacts = getattr(state, "planner_role_artifacts", {})
     _scout_result = run_scout_checkpoint(
         state,
         goal=aufgabe,
         api_key=api_key,
         key_files=_key_files_scan,
+        skip_path=_scout_skip_path,
+        route_reason=_scout_route_reason,
         services=ScoutRoleServices(
-            route=_scout_route_decision,
             direct_plan=_deterministic_literal_replace_plan,
             build_index=_baue_api_index,
             input_fingerprint=_scout_input_fingerprint,

@@ -18,14 +18,13 @@ def _state(**overrides):
     return SimpleNamespace(**values)
 
 
-def _services(*, route=(None, "broad_goal"), direct_plan=(None, "not_applicable"),
+def _services(*, direct_plan=(None, "not_applicable"),
               fingerprint="input-hash", artifact=None, scout_report=None):
     calls = {"index": Mock(return_value={"app.py": "symbols"}),
              "scout": Mock(return_value=scout_report),
              "validate": Mock(return_value=artifact),
              "checkpoint": Mock(), "audit": Mock()}
     services = ScoutRoleServices(
-        route=Mock(return_value=route),
         direct_plan=Mock(return_value=direct_plan),
         build_index=calls["index"],
         input_fingerprint=Mock(return_value=fingerprint),
@@ -41,12 +40,12 @@ def test_explicit_single_file_route_skips_scout():
     state = _state()
     report = {"ziel": "edit"}
     services, calls = _services(
-        route=("app.py", "explorer_confirmed_single_file"),
         direct_plan=(report, "literal_replacement"),
     )
 
     result = run_scout_checkpoint(
         state, goal="edit", api_key="key", key_files=["app.py"],
+        skip_path="app.py", route_reason="explorer_confirmed_single_file",
         services=services,
     )
 
@@ -61,12 +60,12 @@ def test_explicit_single_file_route_skips_scout():
 def test_direct_builder_route_fails_closed_when_source_evidence_changed():
     state = _state(planner_action_role="builder_direct")
     services, calls = _services(
-        route=("app.py", "explorer_confirmed_single_file"),
         direct_plan=(None, "target_changed"),
     )
 
     result = run_scout_checkpoint(
         state, goal="edit", api_key="key", key_files=["app.py"],
+        skip_path="app.py", route_reason="explorer_confirmed_single_file",
         services=services,
     )
 
@@ -84,6 +83,7 @@ def test_reuses_only_matching_scout_artifact():
 
     result = run_scout_checkpoint(
         state, goal="edit", api_key="key", key_files=["app.py"],
+        skip_path=None, route_reason="broad_goal",
         services=services,
     )
 
@@ -103,6 +103,7 @@ def test_calls_scout_for_current_inputs_and_rejects_missing_report():
 
     result = run_scout_checkpoint(
         state, goal="diagnose", api_key="key", key_files=["app.py"],
+        skip_path=None, route_reason="broad_goal",
         services=services,
     )
 
