@@ -1038,8 +1038,8 @@ def chat_loop(
             "role": "system",
             "content": (
                 (_REFLECTION_PROMPT if mode == "reflection" else _SYSTEM_PROMPT)
-                + ("\\n" + _DEBUGGER_PROMPT if mode == "debugger" else "")
-                + "\\n" + _project_context
+                + ("\n" + _DEBUGGER_PROMPT if mode == "debugger" else "")
+                + "\n" + _project_context
             ),
         },
         *_baue_messages(session.load()),

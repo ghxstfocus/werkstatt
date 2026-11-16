@@ -1054,6 +1054,36 @@ def test_chat_model_request_manifest_matches_adapter_payload_without_content(
     assert "function" not in str(manifest)
 
 
+def test_chat_system_prompt_uses_real_newlines_for_debugger_and_project_context(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen: list[list[dict[str, Any]]] = []
+
+    def fake_chat(messages, tools=None, cancel_check=None):
+        seen.append(messages)
+        return {"choices": [{"message": {
+            "role": "assistant", "content": "Antwort",
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
+
+    answer = chat_agent.chat_loop(
+        session,
+        "Untersuche den Fehler",
+        mode="debugger",
+        project_dir=tmp_path,
+    )
+
+    assert answer == "Antwort"
+    system_prompt = seen[0][0]["content"]
+    assert "\n" + chat_agent._DEBUGGER_PROMPT in system_prompt
+    assert f"\nAktives Projekt: {session.project}." in system_prompt
+    assert f"Projektwurzel: {tmp_path.resolve()}." in system_prompt
+    assert "\\nDer Mensch" not in system_prompt
+
+
 def test_chat_model_request_manifest_matches_http_json_body(
     session: ChatSession,
     monkeypatch: pytest.MonkeyPatch,
