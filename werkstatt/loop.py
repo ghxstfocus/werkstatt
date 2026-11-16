@@ -1093,12 +1093,15 @@ def _run_pipeline_loop_impl(
         action = decision.get("coordinator_action")
         if action == "explore_setup":
             check_run_lease(state)
-            _rc_exp, phase_state = _phase_explorer_and_setup(
-                state, aufgabe, project_name, phase_state,
-                preserve_failed_tasks=(
-                    decision.get("preserve_failed_tasks_on_setup") is True
-                ),
-            )
+            if decision.get("preserve_failed_tasks_on_setup") is True:
+                _rc_exp, phase_state = _phase_explorer_and_setup(
+                    state, aufgabe, project_name, phase_state,
+                    preserve_failed_tasks=True,
+                )
+            else:
+                _rc_exp, phase_state = _phase_explorer_and_setup(
+                    state, aufgabe, project_name, phase_state,
+                )
             if _rc_exp != 0 or phase_state is None:
                 rc = _rc_exp or 1
                 _persist_run_result(
