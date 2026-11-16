@@ -152,6 +152,16 @@ def test_builder_patch_bereits_erfuellt(
         reflection_fn=_refl,
     )
 
+    def _verify_with_success_evidence(_state, *, phase=None):
+        _state.last_verify_results = [{
+            "stage_id": "pytest_full",
+            "exit_code": 0,
+            "ok": True,
+        }]
+        return True
+
+    monkeypatch.setattr(loop_mod, "_verify_patches", _verify_with_success_evidence)
+
     rc = loop_mod.run_pipeline_loop("p", "a", [st])
     via = [p for k, p in _audits
            if k == "loop_task_ok" and isinstance(p, dict)

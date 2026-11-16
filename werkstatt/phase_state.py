@@ -24,6 +24,35 @@ from werkstatt.paths import projects_dir as _pd
 PHASE_DIR = _pd()
 
 
+def phase_end_verify_evidence(
+    results: object,
+) -> tuple[str | None, list[str]]:
+    """Return a stable digest and stages only for complete successful results."""
+    if not isinstance(results, list) or not results:
+        return None, []
+    if any(
+        not isinstance(item, dict)
+        or item.get("ok") is not True
+        or item.get("exit_code") != 0
+        or not isinstance(item.get("stage_id"), str)
+        or not item.get("stage_id")
+        for item in results
+    ):
+        return None, []
+    try:
+        encoded = json.dumps(
+            results,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        return None, []
+    return hashlib.sha256(encoded).hexdigest(), list(dict.fromkeys(
+        str(item["stage_id"]) for item in results
+    ))
+
+
 class PhaseState:
     """Verwaltet den Phase-State eines Projekts (YAML)."""
 
@@ -267,6 +296,66 @@ class PhaseState:
             and self.approved_plan_is_current()
         )
 
+    def record_phase_end_verify(
+        self,
+        *,
+        worktree_fingerprint: str,
+        evidence_sha256: str,
+        stage_ids: list[str],
+    ) -> None:
+        """Persist successful full-verify evidence for this approved tree."""
+        plan_fingerprint = self.approved_plan_fingerprint()
+        valid_hashes = (worktree_fingerprint, evidence_sha256)
+        if (
+            not self.run_id
+            or plan_fingerprint is None
+            or not self.approved_plan_is_current()
+            or any(
+                len(value) != 64
+                or any(char not in "0123456789abcdef" for char in value)
+                for value in valid_hashes
+            )
+            or not isinstance(stage_ids, list)
+            or not stage_ids
+            or any(not isinstance(stage_id, str) or not stage_id for stage_id in stage_ids)
+        ):
+            raise ValueError("Phase-End-Verify kann nicht sicher gebunden werden")
+        self.data["phase_end_verify_checkpoint"] = {
+            "schema_version": 1,
+            "run_id": self.run_id,
+            "plan_sha256": plan_fingerprint,
+            "worktree_sha256": worktree_fingerprint,
+            "evidence_sha256": evidence_sha256,
+            "stage_ids": list(dict.fromkeys(stage_ids)),
+            "status": "passed",
+        }
+        self.save()
+
+    def phase_end_verify_is_current(
+        self,
+        *,
+        worktree_fingerprint: str | None,
+        evidence_sha256: str | None,
+    ) -> bool:
+        """Check successful verify evidence against the current plan and tree."""
+        checkpoint = self.data.get("phase_end_verify_checkpoint")
+        plan_fingerprint = self.approved_plan_fingerprint()
+        stage_ids = checkpoint.get("stage_ids") if isinstance(checkpoint, dict) else None
+        return bool(
+            isinstance(checkpoint, dict)
+            and checkpoint.get("schema_version") == 1
+            and checkpoint.get("status") == "passed"
+            and checkpoint.get("run_id") == self.run_id
+            and checkpoint.get("plan_sha256") == plan_fingerprint
+            and checkpoint.get("worktree_sha256") == worktree_fingerprint
+            and checkpoint.get("evidence_sha256") == evidence_sha256
+            and isinstance(worktree_fingerprint, str)
+            and isinstance(evidence_sha256, str)
+            and isinstance(stage_ids, list)
+            and bool(stage_ids)
+            and self.approved_plan_is_current()
+        )
+
     def init_new(
         self,
         aufgabe: str,
@@ -479,6 +568,8 @@ class PhaseState:
         self.data["phasen"] = current_phases + phases
         self.data.pop("phase_end_review_checkpoint", None)
         self.data.pop("human_gate_checkpoint", None)
+        self.data.pop("phase_end_verify_checkpoint", None)
+        self.data.pop("phase_end_verify_pending_run_id", None)
         self.data["criteria_tracking"] = bool(
             self.data.get("criteria_tracking")
             or any(task.get("criterion_refs") for task in normalized)

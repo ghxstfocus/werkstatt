@@ -876,129 +876,34 @@ def _phase_human_gate_action(state: RunState) -> tuple[int, bool]:
     return gate_rc, gate_rc == 2
 
 
-def _phase_finalize(
+def _phase_end_verify_action(
     state: RunState,
     tasks_ok: int,
     tasks: list,
     project_name: str,
     phase_state,
     *,
-    phase_review_checkpointed: bool = False,
-    human_gate_checkpointed: bool = False,
+    checkpointed: bool = False,
 ) -> int:
-    """Phase 4+5: Phase-End-Review, Human-Gate, Verify, Commit, PROGRESS.
-
-    Rueckgabe: rc (0 = Erfolg, 1 = Abbruch).
-    """
+    """Run full phase-end verification and bounded evidence-based recovery."""
     pd = state.project_dir
     pn = state.project_name
-
-    # 4. (M-476) Phase-End Verify NACH human_gate.
-
-    # Review can be a persisted coordinator action. Legacy direct callers keep
-    # their previous behavior; coordinator callers must present a current,
-    # plan- and worktree-bound checkpoint.
-    if phase_review_checkpointed:
-        from werkstatt.failure_record import _worktree_fingerprint
-
-        review_fingerprint = _worktree_fingerprint(Path(pd))
-        if not phase_state.phase_end_review_is_current(
-            worktree_fingerprint=review_fingerprint,
-        ):
-            audit(
-                "loop_phase",
-                {
-                    "phase": "phase_end_review",
-                    "status": "checkpoint_stale",
-                    "reason": "worktree_or_plan_changed_before_finalize",
-                },
-                pd,
-                pn,
-            )
-            return 3
-    elif _phase_end_review_action(state, tasks_ok, phase_state) != 0:
-        return 1
-
-    if human_gate_checkpointed:
-        from werkstatt.failure_record import _worktree_fingerprint
-
-        gate_fingerprint = _worktree_fingerprint(Path(pd))
-        if (
-            not phase_state.human_gate_is_current(
-                worktree_fingerprint=gate_fingerprint,
-            )
-            or not phase_state.phase_end_review_is_current(
-                worktree_fingerprint=gate_fingerprint,
-            )
-        ):
-            audit(
-                "loop_phase",
-                {
-                    "phase": "human_gate",
-                    "status": "checkpoint_stale",
-                    "reason": "worktree_or_plan_changed_before_finalize",
-                },
-                pd,
-                pn,
-            )
-            return 3
-        gate_checkpoint = phase_state.data["human_gate_checkpoint"]
-        _commit_requested = bool(gate_checkpoint["commit_requested"])
-        rc = 0
-    else:
-        _gate_rc, _commit_requested = _phase_human_gate_action(state)
-        # 2 means an explicit commit approval; commit remains after Verify.
-        rc = 0 if _commit_requested else _gate_rc
-
-    if phase_review_checkpointed:
-        from werkstatt.failure_record import _worktree_fingerprint
-
-        review_fingerprint = _worktree_fingerprint(Path(pd))
-        if not phase_state.phase_end_review_is_current(
-            worktree_fingerprint=review_fingerprint,
-        ):
-            audit(
-                "loop_phase",
-                {
-                    "phase": "phase_end_review",
-                    "status": "checkpoint_stale",
-                    "reason": "worktree_or_plan_changed_during_human_gate",
-                },
-                pd,
-                pn,
-            )
-            return 3
-
-    if human_gate_checkpointed:
-        from werkstatt.failure_record import _worktree_fingerprint
-
-        gate_fingerprint = _worktree_fingerprint(Path(pd))
-        if not phase_state.human_gate_is_current(
-            worktree_fingerprint=gate_fingerprint,
-        ):
-            audit(
-                "loop_phase",
-                {
-                    "phase": "human_gate",
-                    "status": "checkpoint_stale",
-                    "reason": "worktree_changed_during_human_gate",
-                },
-                pd,
-                pn,
-            )
-            return 3
-
-    # OP-060b: human_review-Tasks offen + Mensch approved -> rc=2.
-    if rc == 0 and _hat_human_review_tasks(phase_state):
-        audit("loop_human_review_offen",
-              {"phase": "human_gate"}, pd, pn)
-        rc = 2
-
+    rc = 0
     # M-476: Phase-End Verify (Vollsuite) nach human_gate.
     # Die harte Doku-Pruefung laeuft auf dem aktuellen Worktree. Schreibe
     # deshalb vor ihr einen wahrheitsgetreuen Eintrag: die Arbeit ist
     # abgeschlossen und wartet auf Endpruefung. Das Endergebnis folgt danach.
-    if rc == 0 and not state.progress_written_at_commit:
+    pending_for_run = phase_state.data.get(
+        "phase_end_verify_pending_run_id",
+    )
+    if (
+        rc == 0
+        and not state.progress_written_at_commit
+        and (
+            not phase_state.run_id
+            or pending_for_run != phase_state.run_id
+        )
+    ):
         from werkstatt import progress as _progress
         _progress.append(
             pd,
@@ -1007,7 +912,49 @@ def _phase_finalize(
             info=f"tasks_ok={tasks_ok}/{len(tasks)}",
             run_id=getattr(state, "run_id", None),
         )
-    if rc == 0 and not _verify_patches(state, phase="phase_end"):
+        if phase_state.run_id:
+            phase_state.data["phase_end_verify_pending_run_id"] = phase_state.run_id
+            phase_state.save()
+        if checkpointed:
+            from werkstatt.failure_record import _worktree_fingerprint
+
+            pending_fingerprint = (
+                _worktree_fingerprint(Path(pd)) if pd else None
+            )
+            if pending_fingerprint != phase_state.data.get(
+                "human_gate_checkpoint", {},
+            ).get("worktree_sha256"):
+                audit(
+                    "loop_phase",
+                    {
+                        "phase": "phase_end_verify",
+                        "status": "checkpoint_stale",
+                        "reason": "verify_pending_progress_changed_worktree",
+                    },
+                    pd,
+                    pn,
+                )
+                return 3
+
+    def _verify_phase_end_tree() -> bool:
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        before = _worktree_fingerprint(Path(pd)) if pd else None
+        verify_ok = _verify_patches(state, phase="phase_end")
+        after = _worktree_fingerprint(Path(pd)) if pd else None
+        stable = before is not None and before == after
+        results = getattr(state, "last_verify_results", None)
+        if (
+            verify_ok
+            and isinstance(results, list)
+            and results
+            and isinstance(results[0], dict)
+        ):
+            results[0]["phase_end_tree_sha256"] = before
+            results[0]["phase_end_tree_stable"] = stable
+        return bool(verify_ok and stable)
+
+    if rc == 0 and not _verify_phase_end_tree():
         failure_record = create_failure_record(state, stage="phase_end")
         seen_failures: set[
             tuple[str, tuple[tuple[str, str, str], ...]]
@@ -1226,7 +1173,7 @@ def _phase_finalize(
                 failure_record = final_failure_record
                 break
 
-            if _verify_patches(state, phase="phase_end"):
+            if _verify_phase_end_tree():
                 audit(
                     "loop_verify_recovered",
                     {
@@ -1265,6 +1212,185 @@ def _phase_finalize(
             )
             if not recovery_succeeded:
                 rc = 1
+
+    verify_results = getattr(state, "last_verify_results", None)
+    verify_tree_changed = bool(
+        isinstance(verify_results, list)
+        and verify_results
+        and isinstance(verify_results[0], dict)
+        and verify_results[0].get("phase_end_tree_stable") is False
+    )
+    if checkpointed and verify_tree_changed:
+        audit(
+            "loop_phase",
+            {
+                "phase": "phase_end_verify",
+                "status": "checkpoint_stale",
+                "reason": "worktree_changed_during_verify",
+            },
+            pd,
+            pn,
+        )
+        return 3
+
+    return rc
+
+
+def _phase_finalize(
+    state: RunState,
+    tasks_ok: int,
+    tasks: list,
+    project_name: str,
+    phase_state,
+    *,
+    phase_review_checkpointed: bool = False,
+    human_gate_checkpointed: bool = False,
+    phase_end_verify_checkpointed: bool = False,
+) -> int:
+    """Phase 4+5: Phase-End-Review, Human-Gate, Verify, Commit, PROGRESS.
+
+    Rueckgabe: rc (0 = Erfolg, 1 = Abbruch).
+    """
+    pd = state.project_dir
+    pn = state.project_name
+
+    # 4. (M-476) Phase-End Verify NACH human_gate.
+
+    # Review can be a persisted coordinator action. Legacy direct callers keep
+    # their previous behavior; coordinator callers must present a current,
+    # plan- and worktree-bound checkpoint.
+    if phase_review_checkpointed:
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        review_fingerprint = _worktree_fingerprint(Path(pd))
+        if not phase_state.phase_end_review_is_current(
+            worktree_fingerprint=review_fingerprint,
+        ):
+            audit(
+                "loop_phase",
+                {
+                    "phase": "phase_end_review",
+                    "status": "checkpoint_stale",
+                    "reason": "worktree_or_plan_changed_before_finalize",
+                },
+                pd,
+                pn,
+            )
+            return 3
+    elif _phase_end_review_action(state, tasks_ok, phase_state) != 0:
+        return 1
+
+    if human_gate_checkpointed:
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        gate_fingerprint = _worktree_fingerprint(Path(pd))
+        if (
+            not phase_state.human_gate_is_current(
+                worktree_fingerprint=gate_fingerprint,
+            )
+            or not phase_state.phase_end_review_is_current(
+                worktree_fingerprint=gate_fingerprint,
+            )
+        ):
+            audit(
+                "loop_phase",
+                {
+                    "phase": "human_gate",
+                    "status": "checkpoint_stale",
+                    "reason": "worktree_or_plan_changed_before_finalize",
+                },
+                pd,
+                pn,
+            )
+            return 3
+        gate_checkpoint = phase_state.data["human_gate_checkpoint"]
+        _commit_requested = bool(gate_checkpoint["commit_requested"])
+        rc = 0
+    else:
+        _gate_rc, _commit_requested = _phase_human_gate_action(state)
+        # 2 means an explicit commit approval; commit remains after Verify.
+        rc = 0 if _commit_requested else _gate_rc
+
+    if phase_end_verify_checkpointed:
+        from werkstatt.failure_record import _worktree_fingerprint
+        from werkstatt.phase_state import phase_end_verify_evidence
+
+        verify_fingerprint = _worktree_fingerprint(Path(pd))
+        evidence_sha256, _stage_ids = phase_end_verify_evidence(
+            getattr(state, "last_verify_results", None),
+        )
+        if (
+            not phase_state.phase_end_verify_is_current(
+                worktree_fingerprint=verify_fingerprint,
+                evidence_sha256=evidence_sha256,
+            )
+            or not phase_state.human_gate_is_current(
+                worktree_fingerprint=verify_fingerprint,
+            )
+            or not phase_state.phase_end_review_is_current(
+                worktree_fingerprint=verify_fingerprint,
+            )
+        ):
+            audit(
+                "loop_phase",
+                {
+                    "phase": "phase_end_verify",
+                    "status": "checkpoint_stale",
+                    "reason": "worktree_plan_or_evidence_changed_before_finalize",
+                },
+                pd,
+                pn,
+            )
+            return 3
+
+    if phase_review_checkpointed:
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        review_fingerprint = _worktree_fingerprint(Path(pd))
+        if not phase_state.phase_end_review_is_current(
+            worktree_fingerprint=review_fingerprint,
+        ):
+            audit(
+                "loop_phase",
+                {
+                    "phase": "phase_end_review",
+                    "status": "checkpoint_stale",
+                    "reason": "worktree_or_plan_changed_during_human_gate",
+                },
+                pd,
+                pn,
+            )
+            return 3
+
+    if human_gate_checkpointed:
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        gate_fingerprint = _worktree_fingerprint(Path(pd))
+        if not phase_state.human_gate_is_current(
+            worktree_fingerprint=gate_fingerprint,
+        ):
+            audit(
+                "loop_phase",
+                {
+                    "phase": "human_gate",
+                    "status": "checkpoint_stale",
+                    "reason": "worktree_changed_during_human_gate",
+                },
+                pd,
+                pn,
+            )
+            return 3
+
+    # OP-060b: human_review-Tasks offen + Mensch approved -> rc=2.
+    if rc == 0 and _hat_human_review_tasks(phase_state):
+        audit("loop_human_review_offen",
+              {"phase": "human_gate"}, pd, pn)
+        rc = 2
+
+    if rc == 0 and not phase_end_verify_checkpointed:
+        rc = _phase_end_verify_action(
+            state, tasks_ok, tasks, project_name, phase_state,
+        )
 
     # Commit erst nach bestandenem Phase-End-Verify. Bei rotem Verify oder
     # offenen human_review-Tasks bleibt der Working Tree uncommitted.

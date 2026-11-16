@@ -516,6 +516,25 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
         commit_requested=True,
     )
     decision = _run_coordinator_action(final_phase, state)
+    assert decision["coordinator_action"] == "phase_end_verify"
+
+    from werkstatt.phase_state import phase_end_verify_evidence
+
+    state.last_verify_results = [{
+        "stage_id": "pytest_full",
+        "exit_code": 0,
+        "ok": True,
+    }]
+    evidence_sha256, stage_ids = phase_end_verify_evidence(
+        state.last_verify_results,
+    )
+    assert evidence_sha256 is not None
+    final_phase.record_phase_end_verify(
+        worktree_fingerprint=worktree_fingerprint,
+        evidence_sha256=evidence_sha256,
+        stage_ids=stage_ids,
+    )
+    decision = _run_coordinator_action(final_phase, state)
     assert decision["coordinator_action"] == "finalize_run"
 
     monkeypatch.setattr(
@@ -661,6 +680,108 @@ def test_human_gate_checkpoint_rejects_worktree_change_during_gate(
 
     assert _run_human_gate_checkpoint(state, phase, "demo") == 3
     assert "human_gate_checkpoint" not in phase.data
+
+
+def test_phase_end_verify_action_persists_current_evidence_checkpoint(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt.loop import _run_phase_end_verify_checkpoint
+
+    phase = _phase(tmp_path, [{"id": "t1", "name": "Inspect"}], [])
+    phase.run_id = "run-phase-verify"
+    phase.bind_approved_plan()
+    fingerprint = "e" * 64
+    phase.record_phase_end_review(worktree_fingerprint=fingerprint)
+    phase.record_human_gate(
+        worktree_fingerprint=fingerprint,
+        commit_requested=True,
+    )
+    state = RunState(
+        aufgabe="Ziel",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-phase-verify",
+    )
+    state.tasks = [{"id": "t1", "name": "Inspect"}]
+
+    def verify(_state, *_args, **_kwargs):
+        _state.last_verify_results = [{
+            "stage_id": "pytest_full",
+            "exit_code": 0,
+            "ok": True,
+            "phase_end_tree_sha256": fingerprint,
+            "phase_end_tree_stable": True,
+        }]
+        return 0
+
+    monkeypatch.setattr(
+        "werkstatt.loop._phase_end_verify_action", verify,
+    )
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _path: fingerprint,
+    )
+    monkeypatch.setattr("werkstatt.loop.check_run_lease", lambda _state: None)
+
+    assert _run_phase_end_verify_checkpoint(state, phase, "demo") == 0
+    from werkstatt.phase_state import phase_end_verify_evidence
+
+    evidence_sha256, stage_ids = phase_end_verify_evidence(
+        state.last_verify_results,
+    )
+    assert phase.phase_end_verify_is_current(
+        worktree_fingerprint=fingerprint,
+        evidence_sha256=evidence_sha256,
+    )
+    assert phase.data["phase_end_verify_checkpoint"]["stage_ids"] == stage_ids
+
+
+def test_phase_end_verify_action_retries_if_worktree_changes_during_verify(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt.loop import _run_phase_end_verify_checkpoint
+
+    phase = _phase(tmp_path, [{"id": "t1", "name": "Inspect"}], [])
+    phase.run_id = "run-phase-verify-race"
+    phase.bind_approved_plan()
+    before = "1" * 64
+    after = "2" * 64
+    phase.record_phase_end_review(worktree_fingerprint=before)
+    phase.record_human_gate(
+        worktree_fingerprint=before,
+        commit_requested=True,
+    )
+    state = RunState(
+        aufgabe="Ziel",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-phase-verify-race",
+    )
+    state.tasks = [{"id": "t1", "name": "Inspect"}]
+    fingerprint = [before]
+
+    def verify(_state, *_args, **_kwargs):
+        _state.last_verify_results = [{
+            "stage_id": "pytest_full",
+            "exit_code": 0,
+            "ok": True,
+            "phase_end_tree_sha256": before,
+            "phase_end_tree_stable": True,
+        }]
+        fingerprint[0] = after
+        return 0
+
+    monkeypatch.setattr(
+        "werkstatt.loop._phase_end_verify_action", verify,
+    )
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _path: fingerprint[0],
+    )
+    monkeypatch.setattr("werkstatt.loop.check_run_lease", lambda _state: None)
+
+    assert _run_phase_end_verify_checkpoint(state, phase, "demo") == 3
+    assert "phase_end_verify_checkpoint" not in phase.data
 
 
 def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(
