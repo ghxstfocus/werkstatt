@@ -7637,3 +7637,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Das Ereignis enthaelt jetzt den Replan-Modus, die ersetzten fehlgeschlagenen Task-IDs und den zum Pfad passenden Grund `failed_task_recovery_exhausted` oder `finished_graph_left_approved_criteria_unassigned`.
 - **Verifikation lokal:** `tests/test_criteria_replan.py`: 4 bestanden; neue Regression prueft Modus, Grund und ersetzte Task-IDs im emittierten Startaudit. Ruff, Mypy mit `--follow-imports=silent` fuer `criteria_replan.py` und `git diff --check` bestanden.
 - **Grenze / Hauptziel:** Korrigiert die Kontrollspur einer spezifischen Checkpoint-Neuplanung; evaluiert nicht deren inhaltliche Qualitaet oder alle Control-Projektionen. Repo-Drift- und Doku-Checks sowie Servernachweis stehen noch aus; OP-398 bleibt offen.
+
+# 2026-11-16 – Rollen-Retrieval-Evaluation auf alle aktiven Rollenpfade erweitern (lokal)
+- **Befund:** Die kuratierte OP-405-Stichprobe deckte bisher nur vier Handoffs ab; fuer Explorer, Architect, Planner, Reviewer und Reflection gab es keine explizite Pflichtquellenmessung.
+- **Aenderung:** Die getrennte Retrieval-Fixture enthaelt nun zusaetzliche Query-/Golddatei-Faelle fuer Explorer, Scout, Architect, Planner, Builder, Reviewer, Verify, Reflection und Chat. Pflichtquellen muessen in den Top 5 liegen, der Index muss erfolgreich sein und Hash/Bytezahl jedes Treffers muessen mit aktuellen Quelldateien uebereinstimmen.
+- **Verifikation lokal:** `tests/test_explorer_retrieval_eval.py`: 2 bestanden; die Rollen-Fixture enthaelt 13 kuratierte Faelle. Alle Pflichtdateien lagen in den Top 5.
+- **Grenze / Hauptziel:** Kuratierte lexikalische Top-5-Evaluation, kein End-to-End-Messwert fuer semantische Suffizienz, Irrelevanzanteil in realen Providerprompts, Rollen-Erfolgsrate oder beliebige Projekte. Noch nicht serververifiziert; OP-405 und der adaptive Dispatcher-Umbau bleiben offen.
