@@ -9,6 +9,35 @@ from tests.factories import mk_state
 from werkstatt import scout
 
 
+def test_scout_api_index_marks_symbol_omissions_and_includes_constants():
+    info = {
+        "all": [f"public_{index}" for index in range(10)],
+        "classes": [{
+            "name": f"Class{index}",
+            "methods": [{"name": f"method_{index}_{method}"}
+                        for method in range(10)],
+        } for index in range(6)],
+        "functions": [{
+            "name": f"function_{index}",
+            "args": [],
+            "return": "",
+        } for index in range(8)],
+        "constants": [f"CONST_{index}" for index in range(22)],
+        "imports": [{"import": f"package_{index}"} for index in range(21)],
+    }
+
+    rendered = scout._format_api_index_for_prompt({"pkg/module.py": info})
+
+    assert "2 weitere Eintraege ausgelassen" in rendered
+    assert "1 weitere Klassen ausgelassen" in rendered
+    assert "2 weitere Methoden ausgelassen" in rendered
+    assert "3 weitere Funktionen ausgelassen" in rendered
+    assert "Konstanten: CONST_0" in rendered
+    assert "2 weitere Konstanten ausgelassen" in rendered
+    assert '"import": "package_0"' in rendered
+    assert "1 weitere Imports ausgelassen" in rendered
+
+
 def test_scout_offers_status_and_adr_before_optional_project_docs(
     monkeypatch, tmp_path,
 ) -> None:

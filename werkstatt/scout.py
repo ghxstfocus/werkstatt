@@ -764,14 +764,49 @@ def _format_api_index_for_prompt(index: dict, max_files: int = 40) -> str:
             break
         _parts = []
         if info.get("all"):
-            _parts.append(f"__all__: {', '.join(info['all'][:8])}")
-        for _c in info.get("classes", [])[:5]:
-            _methods = ", ".join(m["name"] for m in _c["methods"][:8])
+            _all = info["all"]
+            _parts.append(f"__all__: {', '.join(_all[:8])}")
+            if len(_all) > 8:
+                _parts.append(f"__all__: {len(_all) - 8} weitere Eintraege ausgelassen")
+        _classes = info.get("classes", [])
+        for _c in _classes[:5]:
+            _methods_all = _c.get("methods", [])
+            _methods = ", ".join(m["name"] for m in _methods_all[:8])
             _parts.append(f"class {_c['name']}({_methods})")
-        for _fn in info.get("functions", [])[:5]:
+            if len(_methods_all) > 8:
+                _parts.append(
+                    f"class {_c['name']}: {len(_methods_all) - 8} weitere "
+                    "Methoden ausgelassen",
+                )
+        if len(_classes) > 5:
+            _parts.append(f"{len(_classes) - 5} weitere Klassen ausgelassen")
+        _functions = info.get("functions", [])
+        for _fn in _functions[:5]:
             _args = ", ".join(_fn["args"])
             _ret = f" -> {_fn['return']}" if _fn["return"] else ""
             _parts.append(f"def {_fn['name']}({_args}){_ret}")
+        if len(_functions) > 5:
+            _parts.append(
+                f"{len(_functions) - 5} weitere Funktionen ausgelassen",
+            )
+        _constants = info.get("constants", [])
+        if _constants:
+            _parts.append(f"Konstanten: {', '.join(_constants[:20])}")
+            if len(_constants) > 20:
+                _parts.append(
+                    f"{len(_constants) - 20} weitere Konstanten ausgelassen",
+                )
+        _imports = info.get("imports", [])
+        if _imports:
+            _parts.append(
+                "Imports: " + json.dumps(
+                    _imports[:20], ensure_ascii=False, sort_keys=True,
+                ),
+            )
+            if len(_imports) > 20:
+                _parts.append(
+                    f"{len(_imports) - 20} weitere Imports ausgelassen",
+                )
         _sig = " | ".join(_parts) if _parts else "(kein oeffentliches API)"
         lines.append(f"- {f}: {_sig}")
     return "\n".join(lines)
