@@ -485,10 +485,35 @@ beobachteten Werkstatt-Fehlern:
 - [DORA 2024](https://dora.dev/research/2024/dora-report/): KI-Nutzung
   ersetzt keine stabilen Delivery-Grundlagen. Kleine Aenderungen, belastbare
   Tests, klare Prioritaeten und Betriebsnachweise bleiben Teil des Designs.
+- [OpenAI Agents SDK: Manager-Orchestrierung und Handoffs](https://openai.github.io/openai-agents-python/multi_agent/): Ein zentraler Manager, der Spezialisten als begrenzte Werkzeuge aufruft, passt dazu, wenn derselbe Ansprechpartner die Nutzerkommunikation und Zusammenfuehrung behaelt; direkter Handoff passt, wenn ein Spezialist die Interaktion uebernehmen soll. Die getrennte Handoff-Dokumentation weist darauf hin, dass ohne Eingabefilter standardmaessig der ganze Verlauf weitergereicht wird und Filter/Nesting verschiedene Datenpfade haben. Fuer Werkstatt folgt: Chat bleibt Projektkoordinator; Rollen erhalten explizite, gepruefte Evidenzpakete, nicht automatisch den gesamten Chat-/Toolverlauf.
+- [LangGraph Persistence](https://docs.langchain.com/oss/python/langgraph/persistence) und [interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts): Checkpoints sind gespeicherter Graphzustand, auf dem Ausfuehrung nach Unterbrechung fortgesetzt werden kann; ein angezeigter Statusmarker allein ist noch keine wiederaufnehmbare Grenze. Fuer Werkstatt muss jeder Rollenabschluss daher mit dem zugehoerigen validierten Ergebnis und seinen Eingabe-/Umgebungsbelegen gekoppelt werden.
+- [AgentRewind (arXiv, 2026)](https://arxiv.org/abs/2608.14380): Das vorgeschlagene Recovery-Modell richtet Agentkontext und kontrollierten Umgebungszustand in einem Checkpoint aufeinander aus und bewertet Fortschritt auf Aufgaben mit mehreren Anforderungen. Die Ergebnisse sind benchmarkabhaengig und kein Produktionsnachweis fuer Werkstatt; sie bestaerken dennoch, bei Resume sowohl Kontext-/Quellenhashes als auch den Task-/Dateizustand zu pruefen, statt nur den letzten Rollennamen wiederherzustellen.
 
 Die Forschung stuetzt Feedback, messbare Grenzen und Werkzeugdesign. Die
 konkreten OPs, Rollenentscheidungen und UI-Vertraege oben sind daraus
 abgeleitete Architekturentscheidungen fuer dieses Repository.
+
+### Forschungsabgleich 2026-11-16
+
+Der neue Rollenstatus-Checkpoint in Main `6dd2fb2` speichert aktuell Rollenname,
+Status und Beleg-Hashes und macht sie ueber `loop_status` abfragbar. Er speichert
+noch nicht den validierten Rollenoutput samt exakt wiederherstellbarem
+Umgebungssnapshot. Entsprechend zaehlt er als Live-Observability, nicht als
+Rollen-Replay oder Wiederaufnahmebeleg. Der naechste Umbau muss das Ergebnis
+gegen identische Eingaben und aktuelle Quell-/Run-Basis binden, oder die Rolle
+nach einem Resume sicher erneut ausfuehren. Diese Grenze ist bewusst explizit,
+bis ein Rollenartefakt-Replay durch gezielte Crash-/Resume-Tests belegt ist.
+
+Lokaler Folgeschritt (noch nicht serververifiziert): Erfolgreiche Scout-,
+Architect- und Planner-Split-Antworten werden jetzt im Phase-State nur fuer
+denselben Run und dasselbe Ziel gespeichert. Ein Replay prueft den exakten
+post-redaction Providerpayload (einschliesslich Modellparametern und
+Kontextmanifesthash) sowie den Antworthash; die normalen Parser, Contracts und
+Gates laufen danach erneut. Das schliesst die Wiederholung ab persistiertem
+Response-Cache, nicht das kleine Crashfenster zwischen Providerantwort und
+Cache-Schreiben. Die Rollen sind weiterhin Teil der gebuendelten
+`plan_preflight`-Aktion; echte adaptive Rollen-Dispatch-Entscheidungen und
+Worker-Neustarttests bleiben erforderlich.
 
 ## Konsequenzen
 

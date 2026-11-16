@@ -1147,6 +1147,32 @@ def _persist_run_planner_role_checkpoint(
     raise RuntimeError("Planner-Rollencheckpoint konnte nicht CAS-persistiert werden")
 
 
+def _persist_planning_response_cache(
+    phase_state: PhaseState,
+    entry: dict[str, Any],
+    *,
+    run_id: str,
+    goal: str,
+) -> None:
+    """Persist one bounded successful planning response in its phase file."""
+    if (
+        phase_state.run_id != run_id
+        or phase_state.data.get("aufgabe") != goal
+    ):
+        raise RuntimeError(
+            "Planner-Antwortcache ist nicht an diesen Run gebunden",
+        )
+    from werkstatt.planner_replay import add_response_entry
+
+    phase_state.data["planner_response_cache"] = add_response_entry(
+        phase_state.data.get("planner_response_cache"),
+        entry,
+        run_id=run_id,
+        goal=goal,
+    )
+    phase_state.save()
+
+
 def _select_loop_run_id(
     project_name: str,
     state: RunState,
@@ -1333,6 +1359,23 @@ def _run_pipeline_loop_impl(
 
     # 0. Aufgabe in State setzen (fuer Planner)
     state.aufgabe = aufgabe
+    if phase_state is not None:
+        from werkstatt.planner_replay import load_response_cache
+
+        phase_run_id = (
+            phase_state.run_id or phase_state.data.get("run_id")
+        )
+        if (
+            phase_run_id == get_run_id()
+            and phase_state.data.get("aufgabe") == aufgabe
+        ):
+            state.planning_response_cache = load_response_cache(
+                phase_state.data.get("planner_response_cache"),
+                run_id=get_run_id(),
+                goal=aufgabe,
+            )
+        else:
+            state.planning_response_cache = {}
 
     # ADR-0032 M2: Setup, Plan, Task und Verify sind einzelne Checkpoint-
     # Aktionen. Der Persistenzmarker entscheidet nach Resume erneut, was fehlt.
@@ -1429,12 +1472,26 @@ def _run_pipeline_loop_impl(
                     run_state=state,
                 )
             )
+            def persist_planning_response_cache(
+                entry: dict[str, Any],
+                _phase_state: PhaseState = phase_state,
+                _run_id: str = get_run_id(),
+                _goal: str = aufgabe,
+            ) -> None:
+                _persist_planning_response_cache(
+                    _phase_state, entry, run_id=_run_id, goal=_goal,
+                )
+
+            state.planning_response_cache_callback = (
+                persist_planning_response_cache
+            )
             try:
                 _rc_plan, _done = _phase_plan_and_preflight(
                     state, aufgabe, project_name, phase_state,
                 )
             finally:
                 state.planner_checkpoint_callback = None
+                state.planning_response_cache_callback = None
             if _done or _rc_plan != 0:
                 check_run_lease(state)
                 _persist_run_result(

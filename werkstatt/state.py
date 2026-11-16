@@ -54,6 +54,10 @@ class LLMReply:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    # Exact request identity for safe planning-role replay; populated only
+    # for allowlisted pure planning roles.
+    request_sha256: str = ""
+    replayed: bool = False
 
 
 class SolverDiagnose(Enum):
@@ -161,6 +165,12 @@ class RunState:
     # Runtime hook used by the Run coordinator to persist role boundaries
     # while the planning phase is executing. Never serialized into PhaseState.
     planner_checkpoint_callback: Any = None
+    # Exact-prompt response cache for resumable planning calls. Run-scoped
+    # entries are persisted in PhaseState, never in the shared RunRecord.
+    planning_response_cache: dict[str, dict[str, Any]] = field(
+        default_factory=dict,
+    )
+    planning_response_cache_callback: Any = None
 
     # M-WelleE (2026-11-02): strukturierte Explorer-Findings.
     # Fliesst in Architect- und Builder-Prompt. Format:

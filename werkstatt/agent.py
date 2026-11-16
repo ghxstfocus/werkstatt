@@ -461,16 +461,22 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     route = route_for_role(rolle or aufgabe, model)
     model = route.model
     is_scoped_recovery_builder = False
+    run_budget_exhausted = False
     if state is not None:
-        if _enforce_run_budget(state):
+        run_budget_exhausted = _enforce_run_budget(state)
+        if run_budget_exhausted:
             is_scoped_recovery_builder = bool(
                 getattr(state, "reflection_chat_builder_reserve_active", False)
                 and aufgabe == "builder"
                 and (rolle is None or rolle == "builder")
             )
-            if not is_scoped_recovery_builder:
+            if (
+                not is_scoped_recovery_builder
+                and aufgabe not in {"scout", "architect", "planner-split"}
+            ):
                 return LLMReply(ok=False, error=state.budget_exhausted_reason)
-        state.llm_calls += 1
+        if not run_budget_exhausted:
+            state.llm_calls += 1
     _task_role = _rolle_aus_aufgabe(aufgabe)
     _routed_role = _rolle_aus_aufgabe(rolle) if rolle else _task_role
     _evidence_roles = {
@@ -547,12 +553,21 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                 if state is not None and audit_written is False
                 else ""
             )
-            return LLMReply(
-                ok=False,
-                error=(
+            error = (
+                state.budget_exhausted_reason
+                if (
+                    state is not None
+                    and run_budget_exhausted
+                    and not is_scoped_recovery_builder
+                )
+                else (
                     "role_context_evidence_missing; provider request was not sent"
                     f"{audit_status}"
-                ),
+                )
+            )
+            return LLMReply(
+                ok=False,
+                error=error,
             )
     # Redaction: vor dem Senden anwenden
     # Auflage 2113: max_len=100_000, damit Block-Auftraege
@@ -607,12 +622,21 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                 if state is not None and audit_written is False
                 else ""
             )
-            return LLMReply(
-                ok=False,
-                error=(
+            error = (
+                state.budget_exhausted_reason
+                if (
+                    state is not None
+                    and run_budget_exhausted
+                    and not is_scoped_recovery_builder
+                )
+                else (
                     "required_context_span_unverified; provider request was not sent"
                     f"{audit_status}"
-                ),
+                )
+            )
+            return LLMReply(
+                ok=False,
+                error=error,
             )
         # These top-level hashes describe the exact bytes crossing the model
         # boundary. Keep pre-redaction identity separately for traceability.
@@ -647,6 +671,91 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         _context_manifest, ensure_ascii=False, sort_keys=True,
         separators=(",", ":"),
     ) if _context_manifest is not None else ""
+    request_sha256 = ""
+    replay_role = aufgabe if aufgabe in {
+        "scout", "architect", "planner-split",
+    } else ""
+    if replay_role:
+        request_identity = json.dumps({
+            "schema": "planning_llm_request_v1",
+            "role": replay_role,
+            "endpoint": DEEPSEEK_API_URL,
+            "model": model,
+            "redact": redact,
+            "payload": payload,
+            "context_manifest_sha256": (
+                hashlib.sha256(_manifest_json.encode("utf-8")).hexdigest()
+                if _manifest_json else None
+            ),
+        }, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        request_sha256 = hashlib.sha256(
+            request_identity.encode("utf-8"),
+        ).hexdigest()
+        if state is not None:
+            from werkstatt.planner_replay import valid_response_entry
+
+            cache = getattr(state, "planning_response_cache", {})
+            candidate = cache.get(request_sha256) if isinstance(cache, dict) else None
+            cached = valid_response_entry(
+                candidate,
+                request_sha256=request_sha256,
+                role=replay_role,
+                run_id=state.run_id,
+                goal=state.aufgabe,
+            )
+            if cached is not None:
+                audit_written = audit(
+                    "llm_call",
+                    {
+                        "agent": aufgabe,
+                        "model": model,
+                        "context_manifest": _context_manifest,
+                        "context_manifest_sha256": (
+                            hashlib.sha256(_manifest_json.encode("utf-8"))
+                            .hexdigest() if _manifest_json else None
+                        ),
+                        "system_len": _system_len,
+                        "user_len": _user_len,
+                        "system_sha256": hashlib.sha256(
+                            system_prompt.encode("utf-8"),
+                        ).hexdigest(),
+                        "user_sha256": hashlib.sha256(
+                            user_content.encode("utf-8"),
+                        ).hexdigest(),
+                        "max_tokens": max_tokens,
+                        "request_sha256": request_sha256,
+                        "replayed": True,
+                        "provider_request_sent": False,
+                    },
+                    state.project_dir,
+                    state.project_name,
+                    run_id=state.run_id,
+                )
+                if audit_written is False:
+                    return LLMReply(
+                        ok=False,
+                        error=(
+                            "llm_replay_audit_failed; cached response was not used"
+                        ),
+                    )
+                if not run_budget_exhausted and state.llm_calls > 0:
+                    state.llm_calls -= 1
+                return LLMReply(
+                    ok=True,
+                    content=cached["content"],
+                    system_len=_system_len,
+                    user_len=_user_len,
+                    request_sha256=request_sha256,
+                    replayed=True,
+                )
+    if (
+        state is not None
+        and run_budget_exhausted
+        and not is_scoped_recovery_builder
+    ):
+        return LLMReply(ok=False, error=state.budget_exhausted_reason)
+    if state is not None and run_budget_exhausted and is_scoped_recovery_builder:
+        state.llm_calls += 1
     if state is not None:
         audit_written = audit(
             "llm_call",
@@ -669,6 +778,9 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                     user_content.encode("utf-8")
                 ).hexdigest(),
                 "max_tokens": max_tokens,
+                "request_sha256": request_sha256 or None,
+                "replayed": False,
+                "provider_request_sent": True,
             },
             state.project_dir,
             state.project_name,
@@ -872,7 +984,8 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                         user_len=_user_len,
                         prompt_tokens=_pt,
                         completion_tokens=_ct,
-                        total_tokens=_tt)
+                        total_tokens=_tt,
+                        request_sha256=request_sha256)
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         return LLMReply(ok=False, error=f"Parsing: {exc}",
                         system_len=_system_len,
@@ -1278,6 +1391,44 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
     except Exception as exc:
         _emit_progress(_label, "response_failed", str(exc)[:80])
         raise
+    replay_cache_persisted: bool | None = None
+    if (
+        reply.ok
+        and not reply.replayed
+        and reply.request_sha256
+        and state is not None
+    ):
+        from werkstatt.planner_replay import (
+            add_response_entry,
+            goal_sha256,
+        )
+
+        content = reply.content or ""
+        entry = {
+            "role": aufgabe,
+            "request_sha256": reply.request_sha256,
+            "content": content,
+            "content_sha256": hashlib.sha256(
+                content.encode("utf-8"),
+            ).hexdigest(),
+            "run_id": state.run_id,
+            "goal_sha256": goal_sha256(state.aufgabe),
+        }
+        state.planning_response_cache = add_response_entry(
+            state.planning_response_cache,
+            entry,
+            run_id=state.run_id,
+            goal=state.aufgabe,
+        )
+        callback = getattr(
+            state, "planning_response_cache_callback", None,
+        )
+        if callable(callback):
+            try:
+                callback(entry)
+                replay_cache_persisted = True
+            except Exception:
+                replay_cache_persisted = False
     _elapsed = time.monotonic() - _t0
     if reply.ok:
         _emit_progress(_label, "response_received", f"{_elapsed:.1f}s")
@@ -1287,6 +1438,9 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
         audit("llm_call_end",
               {"agent": aufgabe, "model": model,
                "ok": bool(reply.ok),
+               "replayed": reply.replayed,
+               "request_sha256": reply.request_sha256 or None,
+               "replay_cache_persisted": replay_cache_persisted,
                "elapsed_s": round(_elapsed, 2),
                "content_len": len(reply.content or ""),
                **_context,

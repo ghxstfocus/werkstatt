@@ -141,6 +141,87 @@ def test_run_llm_call_budget_blocks_before_network(tmp_path):
     assert s.budget_exhausted_reason == reply.error
 
 
+def test_planning_response_replay_uses_exact_request_and_not_llm_budget(
+    tmp_path,
+):
+    state = _state(tmp_path)
+    state.run_id = "test-run-1"
+    state.budget = {"max_llm_calls": 1}
+    context_manifest = {
+        "budget_event": "scout_context_budget",
+        "required_context_complete": True,
+        "user_sha256": hashlib.sha256(b"user prompt").hexdigest(),
+        "system_sha256": hashlib.sha256(b"system prompt").hexdigest(),
+    }
+    with patch(
+        "werkstatt.agent.requests.post",
+        return_value=_ok_response('{"ziel":"plan"}'),
+    ) as post:
+        first = agent.ask_llm(
+            "sk-test", "system prompt", "user prompt", "deepseek-chat", 0.2,
+            state=state, aufgabe="scout", context_manifest=context_manifest,
+        )
+        second = agent.ask_llm(
+            "sk-test", "system prompt", "user prompt", "deepseek-chat", 0.2,
+            state=state, aufgabe="scout", context_manifest=context_manifest,
+        )
+
+    assert first.ok and not first.replayed
+    assert second.ok and second.replayed
+    assert second.content == first.content
+    assert second.request_sha256 == first.request_sha256
+    post.assert_called_once()
+    assert state.llm_calls == 1
+
+
+def test_planning_response_replay_rejects_changed_prompt_and_bad_output_hash(
+    tmp_path,
+):
+    state = _state(tmp_path)
+    state.run_id = "test-run-1"
+    state.budget = {"max_llm_calls": 4}
+
+    def manifest(system: str, user: str) -> dict:
+        return {
+            "budget_event": "scout_context_budget",
+            "required_context_complete": True,
+            "user_sha256": hashlib.sha256(user.encode()).hexdigest(),
+            "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+        }
+
+    with patch(
+        "werkstatt.agent.requests.post",
+        side_effect=[
+            _ok_response("first"),
+            _ok_response("repaired-cache"),
+            _ok_response("changed-prompt"),
+        ],
+    ) as post:
+        first = agent.ask_llm(
+            "sk-test", "system", "user one", "deepseek-chat", 0.2,
+            state=state, aufgabe="scout",
+            context_manifest=manifest("system", "user one"),
+        )
+        key = first.request_sha256
+        state.planning_response_cache[key]["content"] = "tampered"
+        tampered = agent.ask_llm(
+            "sk-test", "system", "user one", "deepseek-chat", 0.2,
+            state=state, aufgabe="scout",
+            context_manifest=manifest("system", "user one"),
+        )
+        changed = agent.ask_llm(
+            "sk-test", "system", "user two", "deepseek-chat", 0.2,
+            state=state, aufgabe="scout",
+            context_manifest=manifest("system", "user two"),
+        )
+
+    assert first.ok and tampered.ok and changed.ok
+    assert not tampered.replayed and not changed.replayed
+    assert tampered.content == "repaired-cache"
+    assert changed.content == "changed-prompt"
+    assert post.call_count == 3
+
+
 def test_exhausted_budget_allows_only_checkpoint_claimed_chat_builder(
     monkeypatch, tmp_path,
 ):
