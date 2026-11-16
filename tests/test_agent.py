@@ -545,6 +545,58 @@ def test_planner_required_sections_are_span_verified_at_model_boundary(
     }]
 
 
+def test_role_request_rejects_unverified_optional_included_span(
+    monkeypatch, tmp_path,
+):
+    state = mk_state(project_dir=tmp_path, project_name="optional-span-test")
+    events = []
+    provider_calls = []
+    user = "task plus optional evidence"
+    system = "system"
+    monkeypatch.setattr(
+        agent, "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests, "post",
+        lambda *_args, **_kwargs: provider_calls.append(True),
+    )
+
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt=system,
+        user_content=user,
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="planner-split",
+        context_manifest={
+            "budget_event": "planner_split_context_budget",
+            "required_context_complete": True,
+            "user_sha256": hashlib.sha256(user.encode()).hexdigest(),
+            "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+            "sections": [{
+                "name": "optional_history",
+                "status": "optional_included",
+                "sha256": hashlib.sha256(b"wrong content").hexdigest(),
+                "prompt_start": 0,
+                "prompt_end": 4,
+            }],
+        },
+    )
+
+    assert not reply.ok
+    assert reply.error == (
+        "required_context_span_unverified; provider request was not sent"
+    )
+    assert provider_calls == []
+    blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
+    assert blocked[0]["spans"] == [{
+        "section": "optional_history",
+        "status": "source_digest_mismatch",
+    }]
+
+
 def test_role_request_rejects_another_roles_budget_manifest(monkeypatch, tmp_path):
     state = mk_state(project_dir=tmp_path, project_name="wrong-role-context")
     events = []

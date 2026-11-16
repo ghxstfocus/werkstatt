@@ -329,7 +329,7 @@ def _bind_manifest_spans_to_sent_text(
 def _unverified_required_spans(
     manifest: dict[str, Any] | None,
 ) -> list[dict[str, str]]:
-    """Return required included spans without an exact provider mapping."""
+    """Return required or declared-included spans without an exact mapping."""
     if not isinstance(manifest, dict):
         return []
     failures: list[dict[str, str]] = []
@@ -344,9 +344,12 @@ def _unverified_required_spans(
                     "omitted_required", "truncated_required",
                 }
             )
-            required_section = (
+            included_section = (
                 isinstance(status, str)
-                and status in {"required", "required_included"}
+                and status in {
+                    "required", "required_included", "included",
+                    "optional_included", "included_optional",
+                }
             )
             architect_source = (
                 "system_start" in node and "system_end" in node
@@ -360,7 +363,7 @@ def _unverified_required_spans(
                     "status": str(status)[:80],
                 })
             elif (
-                (required_section or architect_source)
+                (included_section or architect_source)
                 and node.get("sent_status") != "verified"
             ):
                 identifier = node.get("name") or node.get("path") or "unnamed"

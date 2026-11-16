@@ -124,6 +124,8 @@ Letzte Aktualisierung: 2026-11-16.
 
 - **Planner-Pflichtspannen am Modellgrenzwert (lokal, noch nicht serververifiziert):** Planner-Taskgraph-Handoffs markierten Architect-Prosa und Zielfiles als generisches `included`, obwohl der Builder sie als Pflichtteile deklariert hatte. Diese Abschnitte wurden damit nicht von der zentralen exakten Provider-Spanpruefung erfasst. Der Manifeststatus unterscheidet jetzt `required_included` und `optional_included`; ein Adapter-Regressionstest entfernt eine Pflichtspanne und bestaetigt, dass der Provideraufruf vor Versand blockiert wird. Planner-/Agent-/Architect-Evidenzgruppe: 80 bestanden, 3 uebersprungen; zusaetzlich Status-/Progress-Konsistenz: 10 bestanden. Ruff, Mypy fuer `planner.py` mit `--follow-imports=silent`, Audit-Drift, Control-Drift, strikter Doku-Drift und `git diff --check` bestanden. Servernachweis fehlt; OP-398/405 bleiben offen.
 
+- **Alle deklariert enthaltenen Promptspannen am Adapter pruefen (lokal, noch nicht serververifiziert):** Die zentrale Spanpruefung lehnte Pflichtspannen ohne exakte Providerabbildung ab, liess aber fehlerhafte Spannen bei `included`-/`optional_included`-Abschnitten durch. Der Validator bindet nun auch diese tatsaechlich enthaltenen optionalen/neutralen Abschnitte bytegenau an den Providertext; nicht enthaltene optionale Abschnitte werden nicht blockiert. Regression stellt einen Hash-Widerspruch her und bestaetigt Blockade vor Provideraufruf. Rollen-/Adaptergruppe ueber Explorer, Scout, Reviewer, Builder, Planner und Architect: 121 bestanden, 3 uebersprungen. Servernachweis fehlt; OP-398/405 bleiben offen.
+
 ### OP-399: Projekt-Hub fuer GitHub- und lokale Quellen
 - **Status:** open
 - **Typ:** project-platform
