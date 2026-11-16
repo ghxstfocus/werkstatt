@@ -16,6 +16,8 @@ from werkstatt.state import RunState
             ["verify-task"],
         ),
         ("verify", "verify_failed", "", []),
+        ("verify", "verify_failed", "[]", []),
+        ("verify", "verify_failed", "null", []),
         (
             "verify", "verify_failed",
             json.dumps({"source": "builder", "errors": ["tests: failed"]}),

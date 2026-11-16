@@ -30,7 +30,9 @@ def _has_replan_evidence(task: dict[str, Any]) -> bool:
         evidence = json.loads(detail)
     except (TypeError, json.JSONDecodeError):
         return False
-    errors = evidence.get("errors") if isinstance(evidence, dict) else None
+    if not isinstance(evidence, dict):
+        return False
+    errors = evidence.get("errors")
     return (
         evidence.get("source") == "verify"
         and isinstance(errors, list)
