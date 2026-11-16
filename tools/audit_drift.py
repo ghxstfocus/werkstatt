@@ -125,10 +125,22 @@ def finde_code_kinds() -> set[str]:
             _audit_namen = frozenset({"audit", "audit_safe"})
             _ist_name = isinstance(func, ast.Name) and func.id in _audit_namen
             _ist_attr = isinstance(func, ast.Attribute) and func.attr in _audit_namen
+            _ist_audit_callback = (
+                isinstance(func, ast.Name) and func.id == "audit_call"
+            ) or (
+                isinstance(func, ast.Attribute) and func.attr == "audit_call"
+            )
             # Klassischer audit("kind", ...)-Aufruf
             if _ist_name or _ist_attr:
                 if not node.args:
                     continue
+                first = node.args[0]
+                if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                    kinds.add(first.value)
+                continue
+            # Role workers receive a project-scoped audit callback as a
+            # service. Its literal first argument is still the event kind.
+            if _ist_audit_callback and node.args:
                 first = node.args[0]
                 if isinstance(first, ast.Constant) and isinstance(first.value, str):
                     kinds.add(first.value)
