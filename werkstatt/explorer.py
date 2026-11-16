@@ -11,6 +11,7 @@ import json
 import math
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -59,47 +60,101 @@ def _list_source_file_inventory(
     *,
     max_files: int = 500,
     extensions: frozenset[str] = _SOURCE_TEXT_EXTENSIONS,
-) -> tuple[list[str], bool, bool]:
+) -> tuple[list[str], bool, bool, str]:
     """List bounded project-local text/source paths deterministically."""
     paths: list[str] = []
     scan_error = False
+    inventory_source = "filesystem_walk"
+    root = Path(project_dir).resolve()
+    file_limit = max(max_files, 0)
 
-    def record_scan_error(_error: OSError) -> None:
-        nonlocal scan_error
-        scan_error = True
-
-    ignored_dirs = {
-        ".git", ".venv", "__pycache__", ".mypy_cache", ".pytest_cache",
-        ".ruff_cache", "node_modules", "dist", "build", ".next",
-        ".nuxt", "coverage", ".tox", ".nox", ".cache", "venv",
-        "site-packages", "target",
-    }
-    scan_limit = max(max_files, 0) * 20
-    candidate_limit_reached = False
+    # In a Git project, use Git's standard ignore rules so generated state,
+    # logs, virtual environments, and other ignored artifacts never consume
+    # the bounded source index ahead of real project files. Include tracked
+    # files and non-ignored untracked work so active user edits remain visible.
     try:
-        for directory, subdirs, filenames in os.walk(
-            project_dir,
-            topdown=True,
-            onerror=record_scan_error,
-            followlinks=False,
-        ):
-            subdirs[:] = sorted(
-                name for name in subdirs if name not in ignored_dirs
+        git_root = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except FileNotFoundError:
+        git_root = None
+    except subprocess.SubprocessError:
+        scan_error = True
+        git_root = None
+    if git_root is not None and git_root.returncode == 0:
+        inventory_source = "git_tracked_and_nonignored_untracked"
+        try:
+            result = subprocess.run(
+                [
+                    "git", "-C", str(root), "ls-files", "--cached",
+                    "--others", "--exclude-standard", "-z",
+                ],
+                capture_output=True,
+                timeout=20,
+                check=False,
             )
-            for filename in sorted(filenames):
-                if Path(filename).suffix.casefold() not in extensions:
-                    continue
-                paths.append(str(Path(directory) / filename))
-                if len(paths) > scan_limit:
-                    candidate_limit_reached = True
-                    break
-            if candidate_limit_reached:
-                break
-    except OSError:
+        except (OSError, subprocess.SubprocessError):
+            scan_error = True
+        else:
+            if result.returncode != 0:
+                scan_error = True
+            else:
+                for raw_path in result.stdout.split(b"\0"):
+                    if not raw_path:
+                        continue
+                    relative = Path(os.fsdecode(raw_path))
+                    if (
+                        relative.is_absolute()
+                        or ".." in relative.parts
+                        or relative.suffix.casefold() not in extensions
+                    ):
+                        continue
+                    paths.append(str(root / relative))
+    elif (
+        (git_root is None and not scan_error)
+        or (
+            git_root is not None
+            and git_root.returncode == 128
+            and not (root / ".git").exists()
+        )
+    ):
+        # Non-Git project folders remain supported for read-only exploration.
+        ignored_dirs = {
+            ".git", ".venv", "__pycache__", ".mypy_cache", ".pytest_cache",
+            ".ruff_cache", "node_modules", "dist", "build", ".next",
+            ".nuxt", "coverage", ".tox", ".nox", ".cache", "venv",
+            "site-packages", "target",
+        }
+
+        def record_scan_error(_error: OSError) -> None:
+            nonlocal scan_error
+            scan_error = True
+
+        try:
+            for directory, subdirs, filenames in os.walk(
+                root,
+                topdown=True,
+                onerror=record_scan_error,
+                followlinks=False,
+            ):
+                subdirs[:] = sorted(
+                    name for name in subdirs if name not in ignored_dirs
+                )
+                for filename in sorted(filenames):
+                    if Path(filename).suffix.casefold() in extensions:
+                        paths.append(str(Path(directory) / filename))
+        except OSError:
+            scan_error = True
+    else:
+        # A Git-looking project that Git cannot inspect is not a complete
+        # inventory. Do not silently fall back to walking ignored runtime data.
         scan_error = True
 
     def inventory_priority(path: str) -> tuple[int, str]:
-        relative = Path(path).relative_to(project_dir)
+        relative = Path(path).relative_to(root)
         parts = {part.casefold() for part in relative.parts[:-1]}
         suffix = relative.suffix.casefold()
         is_test = bool(parts & {"test", "tests", "__tests__", "spec"}) or (
@@ -117,10 +172,8 @@ def _list_source_file_inventory(
         return priority, relative.as_posix().casefold()
 
     paths.sort(key=inventory_priority)
-    index_truncated = (
-        len(paths) > max_files or candidate_limit_reached
-    )
-    return paths[:max_files], not scan_error, index_truncated
+    index_truncated = len(paths) > file_limit
+    return paths[:file_limit], not scan_error, index_truncated, inventory_source
 
 
 def _list_py_file_inventory(
@@ -253,9 +306,8 @@ def _rank_source_files(
     extensions: frozenset[str] = _SOURCE_TEXT_EXTENSIONS,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Find query-relevant source by content with explicit index/read limits."""
-    indexed, scan_succeeded, index_truncated = _list_source_file_inventory(
-        project_dir,
-        extensions=extensions,
+    indexed, scan_succeeded, index_truncated, inventory_source = (
+        _list_source_file_inventory(project_dir, extensions=extensions)
     )
     query_tokens = _source_content_tokens(query)
     excluded = {item.replace("\\", "/") for item in (exclude or set())}
@@ -366,6 +418,7 @@ def _rank_source_files(
             "des Projekts"
         ),
         "indexed_extensions": sorted(extensions),
+        "inventory_source": inventory_source,
         "query_token_count": len(query_tokens),
         "discriminative_token_count": len(discriminative),
         "common_or_unmatched_tokens_ignored": len(query_tokens - discriminative),
@@ -1079,7 +1132,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
         audit("explorer_kein_key", {}, pd, pn)
         return {"findings": "", "key_files": [], "next_reads": []}
 
-    source_files, _scan_succeeded, _index_truncated = (
+    source_files, _scan_succeeded, _index_truncated, _inventory_source = (
         _list_source_file_inventory(Path(pd))
     )
     project_root = Path(pd).absolute()

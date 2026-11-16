@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -263,8 +264,8 @@ def test_source_inventory_prioritizes_product_code_before_history_and_tests(
     product_file = source / "core.py"
     product_file.write_text("def core(): pass", encoding="utf-8")
 
-    indexed, scan_succeeded, truncated = _list_source_file_inventory(
-        tmp_path, max_files=2,
+    indexed, scan_succeeded, truncated, _source = (
+        _list_source_file_inventory(tmp_path, max_files=2)
     )
 
     assert [
@@ -273,6 +274,46 @@ def test_source_inventory_prioritizes_product_code_before_history_and_tests(
     ] == [str(product_file)]
     assert scan_succeeded is True
     assert truncated is True
+
+
+def test_git_inventory_excludes_ignored_runtime_files_before_source_cap(
+    tmp_path,
+):
+    subprocess.run(
+        ["git", "init", "--quiet", str(tmp_path)],
+        check=True,
+        capture_output=True,
+    )
+    (tmp_path / ".gitignore").write_text(
+        "runtime-state/\n", encoding="utf-8",
+    )
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    relevant = source_dir / "checkpoint.py"
+    relevant.write_text(
+        "def checkpoint_dispatch():\n    return True\n",
+        encoding="utf-8",
+    )
+    runtime_dir = tmp_path / "runtime-state"
+    runtime_dir.mkdir()
+    for index in range(50):
+        (runtime_dir / f"state-{index:03}.json").write_text(
+            '{"checkpoint": "runtime"}', encoding="utf-8",
+        )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "add", ".gitignore", "src"],
+        check=True,
+        capture_output=True,
+    )
+
+    indexed, scan_succeeded, truncated, inventory_source = (
+        _list_source_file_inventory(tmp_path, max_files=1)
+    )
+
+    assert scan_succeeded is True
+    assert truncated is False
+    assert inventory_source == "git_tracked_and_nonignored_untracked"
+    assert indexed == [str(relevant)]
 
 
 def test_source_rank_does_not_let_progress_history_outrank_product_code(

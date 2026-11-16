@@ -220,6 +220,8 @@ Letzte Aktualisierung: 2026-11-16.
 - **Tests:** Reihenfolge, Dauer, fehlende Zeitstempel und Trennung Cockpit/Control.
 - **Blockiert von:** —
 
+**Server-Retrieval-Fehleranalyse (lokal, noch nicht serververifiziert):** Der Nutzer meldete fuer `bbc9df6` 2.573 bestanden, 5 uebersprungen und einen Fehler: die drei kuratierten Explorer-Faelle lieferten alle Precision@5 = 0. Der vorherige Diagnosetest zeigte weder ausgewählte Pfade noch Indexmanifest; der jetzt verfuegbare Diagnosetest wird diese Werte nach einem Pull anzeigen. Zusaetzliche Codeanalyse ergab, dass der Explorer bisher `os.walk` ohne Git-Ignore-Regeln verwendete, sodass ignorierte Runtime-Dateien das begrenzte 500-Datei-Inventar vor Produktquellen belegen konnten. Git-Projekte verwenden deshalb jetzt `git ls-files --cached --others --exclude-standard`; nicht ignorierte untracked Dateien bleiben sichtbar. Bei Git-Inventarfehlern wird fail-closed gemeldet; Nicht-Git-Ordner behalten den Dateisystemscan. Regression deckt 50 ignorierte Runtime-Dateien vor einer relevanten Quelle ab. Das ist eine plausible Fehlerursache, kein bestaetigter Produktionsnachweis. OP-405 bleibt offen.
+
 ## Sub-OPs
 
 Keine separat startbaren Sub-OPs. Zerlegung erfolgt projektbezogen im Plan-Gate.

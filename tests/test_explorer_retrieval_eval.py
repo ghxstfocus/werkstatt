@@ -42,6 +42,7 @@ def test_repository_retrieval_recall_and_first_relevant_rank() -> None:
                 "content_scanned_file_count"
             ),
             "index_truncated": manifest.get("index_truncated"),
+            "inventory_source": manifest.get("inventory_source"),
             "read_failures": manifest.get("read_failures"),
             "discriminative_token_count": manifest.get(
                 "discriminative_token_count"
