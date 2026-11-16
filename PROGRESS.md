@@ -7808,3 +7808,13 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** `ask_llm` bildet fuer Scout, Architect und Planner-Split eine Identitaet aus exaktem post-redaction Providerpayload, Rollenname, Endpoint, Modellparametern und Kontextmanifesthash. Erfolgreiche Antworten werden mit Antwort-SHA-256, Run-ID und Auftrags-Hash im Projekt-Phase-State gesichert. Resume akzeptiert Treffer nur nach erneuter Pruefung aller Bindungen; geaenderte Ausgabe, Aufgabe, Run oder Prompt fuehrt zu neuem Modellaufruf. Cache-Treffer senden keinen Providerrequest und verbrauchen kein Modellaufrufbudget. Builder-/Reviewer-Antworten werden nicht gecacht.
 - **Verifikation lokal:** `tests/test_loop_ask_llm.py tests/test_planner_replay.py tests/test_checkpoint_decision.py tests/test_planner_agent.py tests/test_chat_tools.py`: 172 bestanden, 5 uebersprungen. Regressionen pruefen exakt gleiche Requests auch bei erschoepftem Modellbudget, geaenderte Prompts, manipulierte Antworten, Run-/Zielabweichung und YAML-Persistenz/Reload. Ruff, gezieltes Mypy, Audit-/Control-/State-Flow-Drift, strikter Doku-Drift und `git diff --check` bestanden.
 - **Grenze / Hauptziel:** Prozessabbruch zwischen Providerantwort und lokalem Cache-Schreiben kann den Modellaufruf weiterhin wiederholen. Die Planung bleibt eine `plan_preflight`-Aktion, auch wenn ihre Modellantworten jetzt einzeln replayfaehig sind. Kein Servernachweis fuer diese Aenderung; OP-398/405 bleiben offen.
+
+# 2026-11-16 – Server-Vollsuite fuer Planungsantwort-Replay bestaetigt
+- **Nachweis:** Der Nutzer bestaetigte den Fast-Forward auf `9a780b6` und die Vollsuite mit 2.639 bestanden, 5 uebersprungen, 0 fehlgeschlagen.
+- **Grenze:** Das bestaetigt den Checkout-Test fuer den begrenzten Antwortcache. Produktionsbetrieb und ein realer Prozessabbruch/Resume-Lauf sind damit nicht belegt.
+
+# 2026-11-16 – Replay bei geaenderter Quellenbasis verwerfen
+- **Befund:** Die Replay-Tests prueften bereits abweichende Prompts und manipulierte Antwort-Hashes, aber nicht explizit einen gleichbleibenden Prompt mit veraendertem Quellenmanifest.
+- **Aenderung:** Neue Adapterregression aendert ausschliesslich den Quelldatei-SHA-256 im Quellenmanifest. Der alte Treffer darf nicht wiederverwendet werden; der aktuelle Provideraufruf muss eine frische Antwort liefern.
+- **Verifikation lokal:** Rollen-/Checkpoint-/Chat-Tool-Gruppe: 173 bestanden, 5 uebersprungen. Ruff, Audit-Drift, Control-Drift (UTF-8), State-Flow-Drift (29 Multi-Writer), strikter Doku-Drift und Diff-Check bestanden.
+- **Grenze:** Test belegt die Hashbindung des Manifests, keine semantische Suffizienz oder Irrelevanzmessung fuer alle Rollen. Noch nicht serververifiziert; OP-398/405 bleiben offen.

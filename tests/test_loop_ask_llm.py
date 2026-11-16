@@ -222,6 +222,48 @@ def test_planning_response_replay_rejects_changed_prompt_and_bad_output_hash(
     assert post.call_count == 3
 
 
+def test_planning_response_replay_rejects_changed_evidence_manifest(
+    tmp_path,
+):
+    state = _state(tmp_path)
+    state.run_id = "test-run-1"
+    state.budget = {"max_llm_calls": 4}
+
+    def manifest(source_sha256: str) -> dict:
+        return {
+            "budget_event": "scout_context_budget",
+            "required_context_complete": True,
+            "user_sha256": hashlib.sha256(b"user prompt").hexdigest(),
+            "system_sha256": hashlib.sha256(b"system prompt").hexdigest(),
+            "source_manifest": [{
+                "file": "src/target.py",
+                "source_sha256": source_sha256,
+            }],
+        }
+
+    with patch(
+        "werkstatt.agent.requests.post",
+        side_effect=[
+            _ok_response("based-on-old-source"),
+            _ok_response("based-on-current-source"),
+        ],
+    ) as post:
+        first = agent.ask_llm(
+            "sk-test", "system prompt", "user prompt", "deepseek-chat", 0.2,
+            state=state, aufgabe="scout", context_manifest=manifest("a" * 64),
+        )
+        current = agent.ask_llm(
+            "sk-test", "system prompt", "user prompt", "deepseek-chat", 0.2,
+            state=state, aufgabe="scout", context_manifest=manifest("b" * 64),
+        )
+
+    assert first.ok and current.ok
+    assert not first.replayed and not current.replayed
+    assert current.content == "based-on-current-source"
+    assert first.request_sha256 != current.request_sha256
+    assert post.call_count == 2
+
+
 def test_exhausted_budget_allows_only_checkpoint_claimed_chat_builder(
     monkeypatch, tmp_path,
 ):
