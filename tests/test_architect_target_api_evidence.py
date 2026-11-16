@@ -711,6 +711,13 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
     assert source["source_sha256"] == hashlib.sha256(
         target.read_bytes(),
     ).hexdigest()
+    system_start, system_end = source["system_start"], source["system_end"]
+    system_excerpt = captured["system"][system_start:system_end]
+    assert system_excerpt.startswith('<source datei="pkg/target.py"')
+    assert system_excerpt.endswith("</source>")
+    assert hashlib.sha256(system_excerpt.encode("utf-8")).hexdigest() == (
+        source["excerpt_sha256"]
+    )
     manifest = captured["manifest"]
     assert isinstance(manifest, dict)
     assert manifest["budget_event"] == "planner_architect_context_budget"

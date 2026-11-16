@@ -1282,6 +1282,8 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
     Information — sie stehen VOR PLANNER_SYSTEM.
     """
     parts: list[str] = []
+    scout_source_text = ""
+    scout_source_part_index: int | None = None
 
     # OP-385: Wenn scout_auftrag gesetzt ist, ist das die EINZIGE
     # Quelle fuer den Architect. Explorer-Rohdaten (AST-Block,
@@ -1369,6 +1371,8 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
             )
             state.architect_scout_source_manifest = _source_manifest
             if _source_text:
+                scout_source_text = _source_text
+                scout_source_part_index = len(parts)
                 parts.append(_source_text)
         _sa_str = _format_scout_auftrag(state.scout_auftrag)
         if _sa_str:
@@ -1541,7 +1545,25 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
     # werden VOR ARCHITECT_SYSTEM gefuehrt. Sonst bleibt K32/M-376/M-405
     # toter Code.
     parts.append(ARCHITECT_SYSTEM)
-    return "\n\n".join(parts)
+    system_prompt = "\n\n".join(parts)
+    if scout_source_text and scout_source_part_index is not None:
+        source_offset = sum(
+            len(part) + 2 for part in parts[:scout_source_part_index]
+        )
+        source_records = _source_manifest.get("sources", [])
+        if isinstance(source_records, list):
+            for item in source_records:
+                if not isinstance(item, dict):
+                    continue
+                context_start = item.get("context_start")
+                context_end = item.get("context_end")
+                if not isinstance(context_start, int) or not isinstance(context_end, int):
+                    continue
+                item["system_start"] = source_offset + context_start
+                item["system_end"] = source_offset + context_end
+        if state is not None:
+            state.architect_scout_source_manifest = _source_manifest
+    return system_prompt
 
 
 
