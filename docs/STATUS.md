@@ -205,6 +205,8 @@ Letzte Aktualisierung: 2026-11-16.
 - **Architektur-Voraussetzung:** ADR-0030
 - **Blockiert von:** —
 
+- **Chat-Recovery-Reviewer unter begrenztem Reservebudget (lokal, noch nicht serververifiziert):** Bei erfolgreicher Chat-gesteuerter Builder-Kurskorrektur wird der verpflichtende Reviewer jetzt innerhalb der vorhandenen, dauerhaft einmalig beanspruchten Reviewer-Reserve aufgerufen. Ohne tatsaechlich beanspruchten Chat-Builder-Call wird der normale Reviewpfad nicht als Recovery ausgegeben. Recovery-/Budget-/Retrieval-/Cache-Buster-Gruppe: 89 bestanden; Ruff, gezieltes Mypy und strikter Doku-Drift bestanden. Servernachweis fehlt; OP-405 bleibt offen.
+
 ### OP-401: Laufende Sessions ueber neue Chat-Arbeit informieren
 - **Status:** open
 - **Typ:** task-coordination

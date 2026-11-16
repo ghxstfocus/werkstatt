@@ -1005,6 +1005,20 @@ def _persist_run_checkpoint(
         )
 
 
+def _run_chat_recovery_reviewer(state) -> bool:
+    """Spend the single durable Reviewer call paired with Chat recovery."""
+    previous = bool(getattr(
+        state, "reflection_chat_builder_reserve_active", False,
+    ))
+    state.reflection_chat_builder_reserve_active = True
+    try:
+        from werkstatt.reviewer import run_reviewer
+
+        return bool(run_reviewer(state))
+    finally:
+        state.reflection_chat_builder_reserve_active = previous
+
+
 def _phase_tasks_loop(
     state: RunState,
     phase_state,
@@ -1539,6 +1553,9 @@ def _phase_tasks_loop(
                 and not _has_failed_dependency
                 and (_builder_recoverable or _run_budget_recovery)
             ):
+                _chat_builder_calls_before = int(
+                    getattr(state, "reflection_chat_builder_calls", 0),
+                )
                 audit(
                     "loop_builder_recovery_start",
                     {"task_id": i, "action": _loop_action,
@@ -1575,7 +1592,15 @@ def _phase_tasks_loop(
                     {"task_id": i, "recovered": _recovered}, pd, pn,
                 )
                 if _recovered:
-                    _review_recovered = bool(run_reviewer(state))
+                    _chat_builder_recovery_used = (
+                        int(getattr(
+                            state, "reflection_chat_builder_calls", 0,
+                        )) > _chat_builder_calls_before
+                    )
+                    if _chat_builder_recovery_used:
+                        _review_recovered = _run_chat_recovery_reviewer(state)
+                    else:
+                        _review_recovered = bool(run_reviewer(state))
                     check_run_lease(state)
                     _evidence_recovered = (
                         _record_task_verify_evidence(
