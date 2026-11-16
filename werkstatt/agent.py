@@ -281,8 +281,12 @@ def _bind_manifest_spans_to_sent_text(
 
     def visit(node: Any) -> None:
         if isinstance(node, dict):
+            has_start = f"{offset_key}_start" in node
+            has_end = f"{offset_key}_end" in node
             start = node.get(f"{offset_key}_start")
             end = node.get(f"{offset_key}_end")
+            if has_start or has_end:
+                node["sent_status"] = "invalid_source_range"
             if (
                 isinstance(start, int) and not isinstance(start, bool)
                 and isinstance(end, int) and not isinstance(end, bool)
@@ -320,6 +324,45 @@ def _bind_manifest_spans_to_sent_text(
                 visit(child)
 
     visit(manifest)
+
+
+def _unverified_required_spans(
+    manifest: dict[str, Any] | None,
+) -> list[dict[str, str]]:
+    """Return required included spans without an exact provider mapping."""
+    if not isinstance(manifest, dict):
+        return []
+    failures: list[dict[str, str]] = []
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            status = node.get("status")
+            required_section = (
+                isinstance(status, str)
+                and status in {"required", "required_included"}
+            )
+            architect_source = (
+                "system_start" in node and "system_end" in node
+                and isinstance(node.get("path"), str)
+                and isinstance(node.get("source_sha256"), str)
+            )
+            if (
+                (required_section or architect_source)
+                and node.get("sent_status") != "verified"
+            ):
+                identifier = node.get("name") or node.get("path") or "unnamed"
+                failures.append({
+                    "section": str(identifier)[:160],
+                    "status": str(node.get("sent_status") or "span_not_mapped")[:80],
+                })
+            for child in node.values():
+                visit(child)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    visit(manifest)
+    return failures[:20]
 
 
 def _rolle_aus_aufgabe(aufgabe: str) -> str:
@@ -515,6 +558,34 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             context_manifest, source_system_prompt, system_prompt,
             offset_key="system", digest_key="excerpt_sha256", redact=redact,
         )
+        unverified_required = _unverified_required_spans(context_manifest)
+        if unverified_required:
+            audit_written = False
+            if state is not None:
+                audit_written = audit(
+                    "llm_context_blocked",
+                    {
+                        "agent": aufgabe,
+                        "reason": "required_context_span_not_bound_to_provider_text",
+                        "spans": unverified_required,
+                        "provider_request_sent": False,
+                    },
+                    state.project_dir,
+                    state.project_name,
+                    run_id=state.run_id,
+                )
+            audit_status = (
+                "; block audit write failed"
+                if state is not None and audit_written is False
+                else ""
+            )
+            return LLMReply(
+                ok=False,
+                error=(
+                    "required_context_span_unverified; provider request was not sent"
+                    f"{audit_status}"
+                ),
+            )
         # These top-level hashes describe the exact bytes crossing the model
         # boundary. Keep pre-redaction identity separately for traceability.
         context_manifest["user_sha256"] = hashlib.sha256(

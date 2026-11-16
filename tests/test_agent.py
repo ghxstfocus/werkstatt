@@ -139,22 +139,33 @@ def test_redaction_rebinds_role_section_span_to_exact_provider_text(
     monkeypatch.setattr(agent.redaction, "redact_all", fake_redact)
     state = mk_state(project_dir=tmp_path, project_name="redacted-span")
     source = "task\n\nprivate-token\n\nending"
+    system = "system preface\n<source>private-token</source>\npolicy"
     start = source.index("private-token")
     end = start + len("private-token")
+    system_start = system.index("<source>")
+    system_end = system.index("</source>") + len("</source>")
     manifest = {
         "budget_event": "builder_context_budget",
         "user_sha256": hashlib.sha256(source.encode()).hexdigest(),
-        "system_sha256": hashlib.sha256(b"system").hexdigest(),
+        "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
         "section_manifest": [{
             "name": "SOURCE",
             "sha256": hashlib.sha256(b"private-token").hexdigest(),
             "prompt_start": start,
             "prompt_end": end,
         }],
+        "source_evidence": {"sources": [{
+            "path": "src/example.py",
+            "excerpt_sha256": hashlib.sha256(
+                system[system_start:system_end].encode(),
+            ).hexdigest(),
+            "system_start": system_start,
+            "system_end": system_end,
+        }]},
     }
 
     reply = agent.ask_llm(
-        api_key="x", system_prompt="system", user_content=source,
+        api_key="x", system_prompt=system, user_content=source,
         model="m", temperature=0.0, state=state, aufgabe="builder",
         context_manifest=manifest,
     )
@@ -162,6 +173,7 @@ def test_redaction_rebinds_role_section_span_to_exact_provider_text(
     assert reply.ok
     sent_user = requests[0]["messages"][1]["content"]
     assert sent_user == "task\n\n[REDACTED]\n\nending"
+    sent_system = requests[0]["messages"][0]["content"]
     call = next(payload for kind, payload in events if kind == "llm_call")
     section = call["context_manifest"]["section_manifest"][0]
     sent_start = section["sent_start"]
@@ -171,11 +183,71 @@ def test_redaction_rebinds_role_section_span_to_exact_provider_text(
     assert section["sent_sha256"] == hashlib.sha256(
         b"[REDACTED]",
     ).hexdigest()
+    source_evidence = call["context_manifest"]["source_evidence"]["sources"][0]
+    sent_system_excerpt = sent_system[
+        source_evidence["sent_start"]:source_evidence["sent_end"]
+    ]
+    assert source_evidence["sent_status"] == "verified"
+    assert sent_system_excerpt == "<source>[REDACTED]</source>"
+    assert source_evidence["sent_sha256"] == hashlib.sha256(
+        sent_system_excerpt.encode(),
+    ).hexdigest()
     assert call["context_manifest"]["source_user_sha256"] == hashlib.sha256(
         source.encode(),
     ).hexdigest()
     assert call["context_manifest"]["user_sha256"] == call["user_sha256"]
     assert manifest["section_manifest"][0].get("sent_status") is None
+
+
+def test_unverified_required_span_blocks_provider_request(monkeypatch, tmp_path) -> None:
+    events = []
+    requests = []
+    monkeypatch.setattr(
+        agent, "audit",
+        lambda kind, payload, *_a, **_kw: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests, "post",
+        lambda *_a, **_kw: requests.append(True),
+    )
+    monkeypatch.setattr(
+        agent.redaction, "redact_all", lambda text, **_kw: (text, []),
+    )
+    state = mk_state(project_dir=tmp_path, project_name="bad-required-span")
+    user = "required text"
+    manifest = {
+        "budget_event": "builder_context_budget",
+        "user_sha256": hashlib.sha256(user.encode()).hexdigest(),
+        "system_sha256": hashlib.sha256(b"system").hexdigest(),
+        "section_manifest": [{
+            "name": "TASK",
+            "status": "required",
+            "sha256": hashlib.sha256(b"stale section").hexdigest(),
+            "prompt_start": 0,
+            "prompt_end": len(user),
+        }],
+    }
+
+    reply = agent.ask_llm(
+        api_key="x", system_prompt="system", user_content=user,
+        model="m", temperature=0.0, state=state, aufgabe="builder",
+        context_manifest=manifest,
+    )
+
+    assert not reply.ok
+    assert reply.error == (
+        "required_context_span_unverified; provider request was not sent"
+    )
+    assert requests == []
+    blocked = [
+        payload for kind, payload in events if kind == "llm_context_blocked"
+    ]
+    assert blocked == [{
+        "agent": "builder",
+        "reason": "required_context_span_not_bound_to_provider_text",
+        "spans": [{"section": "TASK", "status": "source_digest_mismatch"}],
+        "provider_request_sent": False,
+    }]
 
 
 def test_context_manifest_bounds_total_nested_metadata_size() -> None:
