@@ -101,6 +101,22 @@ def test_builder_recovery_only_retries_typed_correctable_failures() -> None:
     assert _builder_failure_recoverable(state) == (False, "failure_reason_missing")
 
 
+def test_verify_failure_detail_is_current_bounded_json() -> None:
+    from werkstatt.phases.tasks import _verify_failure_detail
+
+    state = _state(Path("."))
+    state.last_verify_errors = [f"stage-{index}: " + "x" * 500 for index in range(8)]
+    detail = _verify_failure_detail(state)
+
+    assert detail is not None
+    assert len(detail) <= 1200
+    evidence = json.loads(detail)
+    assert evidence["source"] == "verify"
+    assert evidence["errors"]
+    assert len(evidence["errors"]) <= 4
+    assert _verify_failure_detail(_state(Path("."))) is None
+
+
 def test_task_checkpoint_persists_only_successful_verify_evidence(tmp_path) -> None:
     from werkstatt.phase_state import PhaseState
     from werkstatt.phases.tasks import _record_task_verify_evidence

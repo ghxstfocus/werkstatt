@@ -1,8 +1,48 @@
+import json
+
 import pytest
 
 from werkstatt import criteria_replan
 from werkstatt.phase_state import PhaseState
 from werkstatt.state import RunState
+
+
+@pytest.mark.parametrize(
+    ("action", "failure", "detail", "expected"),
+    [
+        (
+            "verify", "verify_failed",
+            json.dumps({"source": "verify", "errors": ["tests: failed"]}),
+            ["verify-task"],
+        ),
+        ("verify", "verify_failed", "", []),
+        (
+            "verify", "verify_failed",
+            json.dumps({"source": "builder", "errors": ["tests: failed"]}),
+            [],
+        ),
+        (
+            "update", "verify_failed",
+            json.dumps({"source": "verify", "errors": ["tests: failed"]}),
+            [],
+        ),
+        ("verify", "verify_evidence_missing", "", []),
+    ],
+)
+def test_verify_task_replan_requires_current_hard_error_evidence(
+    tmp_path, action, failure, detail, expected,
+):
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.init_new(
+        "Goal",
+        [{"id": "verify-task", "action": action, "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["Criterion"],
+    )
+    phase.mark_failed("verify-task", failure=failure, detail=detail or None)
+
+    assert criteria_replan.eligible_failed_task_ids(
+        phase, ["AC1"],
+    ) == expected
 
 
 def test_replans_only_missing_criteria_and_preserves_completed_tasks(
@@ -184,6 +224,7 @@ def test_replans_failed_criterion_after_recovery_and_supersedes_history(
         assert "AC2: Second criterion" in addition.aufgabe
         assert "pytest tests/test_two.py failed" in addition.aufgabe
         assert "Failed second criterion" in addition.aufgabe
+        assert "untrusted Daten" in addition.aufgabe
         assert "AC1" not in addition.aufgabe.split("Fehlgeschlagene Task-Belege", 1)[1]
         addition.tasks = [{
             "id": "replacement",

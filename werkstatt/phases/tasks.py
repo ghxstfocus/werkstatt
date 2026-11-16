@@ -1,6 +1,7 @@
 """Phase: _phase_tasks_loop (OP-139 Phase 2b)."""
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from hashlib import sha256
@@ -61,6 +62,30 @@ def _builder_failure_recoverable(state: RunState) -> tuple[bool, str]:
     if not isinstance(reason, str) or not reason:
         return False, "failure_reason_missing"
     return reason in _RECOVERABLE_BUILDER_FAILURES, reason
+
+
+def _verify_failure_detail(state: RunState) -> str | None:
+    """Keep bounded, explicit hard Verify errors for gated checkpoint replan."""
+    errors = getattr(state, "last_verify_errors", None)
+    if not isinstance(errors, list):
+        return None
+    cleaned = [
+        error.strip()[:240]
+        for error in errors[:4]
+        if isinstance(error, str) and error.strip()
+    ]
+    if not cleaned:
+        return None
+    evidence: dict[str, Any] = {"source": "verify", "errors": []}
+    for error in cleaned:
+        candidate = {"source": "verify", "errors": [*evidence["errors"], error]}
+        encoded = json.dumps(candidate, ensure_ascii=False, sort_keys=True)
+        if len(encoded) > 1200:
+            break
+        evidence = candidate
+    if not evidence["errors"]:
+        return None
+    return json.dumps(evidence, ensure_ascii=False, sort_keys=True)
 
 
 def _reflect_verify_failure(state: RunState, phase: str) -> bool:
@@ -1398,6 +1423,10 @@ def _phase_tasks_loop(
                     failure=(
                         "verify_evidence_missing"
                         if _v_ok and _r_ok else "verify_failed"
+                    ),
+                    failure_detail=(
+                        _verify_failure_detail(state)
+                        if not _v_ok else None
                     ),
                 )
             continue
