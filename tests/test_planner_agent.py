@@ -1072,3 +1072,36 @@ def test_planner_split_blocks_missing_required_architect_prose(tmp_path):
     assert event["required_context_complete"] is False
     assert event["reason"] == "missing_required_prompt_section"
     assert event["omitted"] == ["architect_prose"]
+
+
+@pytest.mark.parametrize(
+    ("files", "message"),
+    [
+        ([], "keinen konkreten task_files-Scope"),
+        (["missing.py"], "keine gueltige Projektdatei"),
+        (["../outside.py"], "ausserhalb des Projekt-Scopes"),
+        (["src.py", "src.py"], "doppelt"),
+    ],
+)
+def test_planner_rejects_unscoped_or_invalid_read_tasks(tmp_path, files, message):
+    from werkstatt.planner import TaskGraphError, _validate_read_task_scopes
+
+    (tmp_path / "src.py").write_text("VALUE = 1\n", encoding="utf-8")
+    with pytest.raises(TaskGraphError, match=message):
+        _validate_read_task_scopes(
+            [{"id": "read-1", "action": "read", "task_files": files}],
+            tmp_path,
+        )
+
+
+def test_planner_accepts_scoped_read_task_and_ignores_non_read(tmp_path):
+    from werkstatt.planner import _validate_read_task_scopes
+
+    (tmp_path / "src.py").write_text("VALUE = 1\n", encoding="utf-8")
+    _validate_read_task_scopes(
+        [
+            {"id": "read-1", "action": "read", "task_files": ["src.py"]},
+            {"id": "write-1", "action": "update", "task_files": []},
+        ],
+        tmp_path,
+    )

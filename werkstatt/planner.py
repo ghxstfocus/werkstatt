@@ -13,7 +13,7 @@ import hashlib
 import json
 import os
 import re
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from werkstatt.agent import ask_llm
 from werkstatt.render import _with_spinner
@@ -58,6 +58,53 @@ from werkstatt.state import RunState
 
 class TaskGraphError(ValueError):
     """A generated task graph is structurally unsafe to execute."""
+
+
+def _validate_read_task_scopes(tasks: list[dict], project_dir) -> None:
+    """Require every planned read task to name current, project-local files."""
+    root = Path(project_dir).resolve(strict=True)
+    for task in tasks:
+        if task.get("action") != "read":
+            continue
+        task_id = str(task.get("id") or "?")
+        files = task.get("task_files")
+        if not isinstance(files, list) or not files:
+            raise TaskGraphError(
+                f"Read-Task {task_id} hat keinen konkreten task_files-Scope."
+            )
+        if len(files) > 50:
+            raise TaskGraphError(f"Read-Task {task_id} hat mehr als 50 Quelldateien.")
+        seen: set[str] = set()
+        for raw_path in files:
+            if not isinstance(raw_path, str) or not raw_path.strip() or len(raw_path) > 500:
+                raise TaskGraphError(f"Read-Task {task_id} hat einen ungueltigen Dateipfad.")
+            relative = Path(raw_path)
+            if (
+                relative.is_absolute()
+                or PureWindowsPath(raw_path).is_absolute()
+                or ".." in relative.parts
+                or "\\" in raw_path
+            ):
+                raise TaskGraphError(
+                    f"Read-Task {task_id} verweist ausserhalb des Projekt-Scopes: {raw_path}"
+                )
+            try:
+                target = (root / relative).resolve(strict=True)
+                target.relative_to(root)
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise TaskGraphError(
+                    f"Read-Task {task_id} hat keine gueltige Projektdatei: {raw_path}"
+                ) from exc
+            if not target.is_file():
+                raise TaskGraphError(
+                    f"Read-Task {task_id} Quelle ist keine Datei: {raw_path}"
+                )
+            normalized = target.relative_to(root).as_posix()
+            if normalized in seen:
+                raise TaskGraphError(
+                    f"Read-Task {task_id} nennt eine Quelldatei doppelt: {raw_path}"
+                )
+            seen.add(normalized)
 
 
 ARCHITECT_EXECUTION_CONTEXT_MAX_CHARS = 12000
@@ -1859,6 +1906,7 @@ def _zerlege_in_sub_tasks(
     ]}, pd, pn)
     _checked = _doku_post_check(_final, prosa, pd, pn, aufgabe)
     _validate_criteria_coverage(_checked, criteria)
+    _validate_read_task_scopes(_checked, pd)
     return _checked
 
 
