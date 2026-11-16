@@ -7606,8 +7606,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation lokal:** `tests/test_chat_tools.py`: 55 bestanden, 2 uebersprungen; Ruff/Mypy/Driftchecks stehen noch aus.
 - **Grenze / Hauptziel:** Verbessert den on-demand-Runstatus fuer genau diesen Recovery-Checkpoint. Allgemeine aktive Run-Koordination und OP-396/397/398/405 bleiben offen; kein Server-/Produktionsnachweis.
 
-# 2026-11-16 – Letzten terminalen Run im Idle-Chatstatus zeigen (lokal)
+# 2026-11-16 – Letzten terminalen Run im Idle-Chatstatus zeigen (Servercheckout verifiziert)
 - **Befund:** `loop_status` las bei fehlendem Prozess-Registry-Eintrag nur den aktiven RunRecord. War kein Run aktiv, gab es sofort `idle`; der letzte abgeschlossene/fehlgeschlagene Run samt Ziel, Checkpoint und Ereignissen war im Projektchat nicht abrufbar.
 - **Aenderung:** `EventStore` bietet jetzt einen projektgefilterten neuesten RunRecord. Bei Idle holt `loop_status` den letzten terminalen Run und liefert `status=idle` plus `last_run_status` und die bestehende allowlistete Run-/Checkpoint-/Timeline-Projektion. Existiert kein gespeicherter Run, bleibt die kompakte Idle-Antwort unveraendert; ein waehrend der Abfrage neu entstehender aktiver Record wird als unbestaetigter aktiver Zustand behandelt.
-- **Verifikation lokal:** `tests/test_chat_tools.py`: 56 bestanden, 2 uebersprungen. Ruff, Mypy, Audit-/Control-/Doku-Drift stehen noch aus.
-- **Grenze / Hauptziel:** Verbessert die on-demand-Diagnose nach Run-Ende; deckt nicht den aktiven Live-Prozess-/WebSocket-Betrieb oder alle Chat-/Run-Interleavings ab. OP-396/397/398/405 bleiben offen; kein Produktionsnachweis.
+- **Verifikation lokal:** `tests/test_chat_tools.py tests/test_event_store.py`: 89 bestanden, 2 uebersprungen; Ruff, Mypy, Audit-/Control-Drift, strikter Doku-Drift und `git diff --check` bestanden.
+- **Servercheckout-Nachweis:** Der Nutzer bestaetigte `git pull --ff-only origin main`, den Checkout-Pin `6cb4aa5` und dieselben beiden Testdateien: 91 bestanden, 0 uebersprungen.
+- **Grenze / Hauptziel:** Verbessert die on-demand-Diagnose nach Run-Ende; deckt nicht den aktiven Live-Prozess-/WebSocket-Betrieb oder alle Chat-/Run-Interleavings ab. Gezielter Servertest belegt keinen Webserver-Neustart oder Produktionsbetrieb. OP-396/397/398/405 bleiben offen.
