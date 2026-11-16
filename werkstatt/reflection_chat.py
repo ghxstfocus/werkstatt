@@ -68,13 +68,21 @@ def _compact_items(value: Any, keys: tuple[str, ...]) -> list[Any]:
     return compacted
 
 
-def _readable_evidence(state: Any) -> dict[str, Any]:
+def _readable_evidence(
+    state: Any, *, failure_context: str | None = None,
+) -> dict[str, Any]:
     """Pack full required recovery evidence and whole optional sections."""
     task = state.aktuelle_task if isinstance(state.aktuelle_task, dict) else {}
     required = {
         "run_id": str(getattr(state, "run_id", "")),
         "phase": str(getattr(state, "phase_id", "") or "reflection"),
         "goal": str(getattr(state, "aufgabe", "")),
+        "recovery_failure": {
+            "reflection_error_context": str(failure_context or ""),
+            "builder_failure_reason": str(
+                getattr(state, "builder_failure_reason", "") or ""
+            ),
+        },
         "task": {
             "id": str(task.get("id", "")),
             "name": str(task.get("name", "")),
@@ -306,7 +314,9 @@ def _claim_recovery_chat_call(state: Any) -> int:
     raise RuntimeError("reflection_chat_checkpoint_conflict")
 
 
-def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
+def ask_project_chat_for_builder_task(
+    state: Any, *, failure_context: str | None = None,
+) -> dict[str, Any] | None:
     """Ask the run's originating Chat for a single in-scope repair task.
 
     The chat turn runs in a disposable snapshot with read-only project tools.
@@ -326,7 +336,7 @@ def ask_project_chat_for_builder_task(state: Any) -> dict[str, Any] | None:
     if not allowed_files:
         return None
 
-    evidence = _readable_evidence(state)
+    evidence = _readable_evidence(state, failure_context=failure_context)
     if evidence.get("context_status") != "complete_required":
         state.reflection_chat_error = "required_context_over_budget"
         return None

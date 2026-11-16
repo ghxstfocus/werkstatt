@@ -983,7 +983,7 @@ def _reflection_loop(
         ask_project_chat_for_builder_task,
     )
 
-    evidence = _readable_evidence(state)
+    evidence = _readable_evidence(state, failure_context=error_context)
     context_budget = evidence.get("context_budget")
     if not isinstance(context_budget, dict):
         context_budget = {
@@ -1045,7 +1045,9 @@ def _reflection_loop(
         state.project_dir, state.project_name,
     )
     try:
-        proposed = ask_project_chat_for_builder_task(state)
+        proposed = ask_project_chat_for_builder_task(
+            state, failure_context=error_context,
+        )
     except (OSError, RuntimeError, ValueError, ImportError) as exc:
         proposed = None
         failure = type(exc).__name__
@@ -1329,7 +1331,14 @@ def _phase_end_reflection(state: RunState) -> bool:
         ask_project_chat_for_builder_task,
     )
 
-    evidence = _readable_evidence(state)
+    _phase_failure_context = (
+        "Phase-End-Review blieb nach den begrenzten Reflection-Runden "
+        "abgelehnt; die konkreten Reviewer-Befunde stehen separat im "
+        "Pflichtfeld reviewer_bugs."
+    )
+    evidence = _readable_evidence(
+        state, failure_context=_phase_failure_context,
+    )
     context_budget = evidence.get("context_budget")
     if not isinstance(context_budget, dict):
         context_budget = {
@@ -1380,7 +1389,9 @@ def _phase_end_reflection(state: RunState) -> bool:
         state.project_dir, state.project_name,
     )
     try:
-        proposed = ask_project_chat_for_builder_task(state)
+        proposed = ask_project_chat_for_builder_task(
+            state, failure_context=_phase_failure_context,
+        )
     except (OSError, RuntimeError, ValueError, ImportError) as exc:
         proposed = None
         failure = type(exc).__name__

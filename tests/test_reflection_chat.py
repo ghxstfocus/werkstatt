@@ -123,6 +123,27 @@ def test_reflection_evidence_keeps_required_sources_whole_and_marks_optional_omi
     assert evidence["context_budget"]["sources"]["architect_constraints"]["sha256"]
 
 
+def test_reflection_handoff_includes_exact_recovery_failure_context(
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    state.builder_failure_reason = "pytest failed: expected 2, got 1"
+
+    evidence = reflection_chat._readable_evidence(
+        state, failure_context="Reflection exhausted after stale patch",
+    )
+
+    assert evidence["recovery_failure"] == {
+        "reflection_error_context": "Reflection exhausted after stale patch",
+        "builder_failure_reason": "pytest failed: expected 2, got 1",
+    }
+    source = evidence["context_budget"]["sources"]["recovery_failure"]
+    assert source["sha256"] == hashlib.sha256(
+        json.dumps(evidence["recovery_failure"], ensure_ascii=False, sort_keys=True)
+        .encode("utf-8"),
+    ).hexdigest()
+
+
 def test_reflection_chat_refuses_required_context_over_budget_before_session(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -150,7 +171,7 @@ def test_reflection_context_budget_block_is_audited_with_source_manifest(
     monkeypatch.setattr(reflection, "_reflection_loop_core", lambda *_a, **_k: False)
     monkeypatch.setattr(
         reflection_chat, "_readable_evidence",
-        lambda _state: {
+        lambda _state, **_kwargs: {
             "context_status": "blocked_required_context_over_budget",
             "required_chars": 50_000,
             "max_chars": 18_000,
@@ -196,8 +217,10 @@ def test_phase_end_handoff_preserves_full_reviewer_finding(
     captured: dict[str, object] = {}
     monkeypatch.setattr(reflection, "_phase_end_reflection_core", lambda _s: False)
 
-    def capture(_state):
-        captured["evidence"] = reflection_chat._readable_evidence(_state)
+    def capture(_state, *, failure_context=None):
+        captured["evidence"] = reflection_chat._readable_evidence(
+            _state, failure_context=failure_context,
+        )
 
     monkeypatch.setattr(
         reflection_chat, "ask_project_chat_for_builder_task", capture,
@@ -360,7 +383,10 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
         return json.dumps(expected)
 
     monkeypatch.setattr("werkstatt.chat_agent.chat_loop", fake_chat_loop)
-    result = reflection_chat.ask_project_chat_for_builder_task(state)
+    state.builder_failure_reason = "pytest reported expected 2, got 1"
+    result = reflection_chat.ask_project_chat_for_builder_task(
+        state, failure_context="Reflection stopped after a stale patch.",
+    )
 
     assert result == {
         **expected["task"],
@@ -370,6 +396,8 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     assert "request_loop_action" not in calls["tools"]
     assert "write_temp_test" not in calls["tools"]
     assert "mypy: sample.py:10 incompatible type" in calls["message"]
+    assert "Reflection stopped after a stale patch." in calls["message"]
+    assert "pytest reported expected 2, got 1" in calls["message"]
     assert "AC-1" in calls["message"]
     assert "test_expected" in calls["message"]
     assert "Keep the public API stable" in calls["message"]
@@ -519,7 +547,7 @@ def test_reflection_uses_chat_task_once_and_restores_original_task(
     monkeypatch.setattr(
         reflection_chat,
         "ask_project_chat_for_builder_task",
-        lambda _state: {
+        lambda _state, **_kwargs: {
             "name": "Narrow type repair",
             "description": "Use the expected type from the failing check.",
             "task_files": ["werkstatt/sample.py"],
@@ -555,11 +583,11 @@ def test_reflection_asks_chat_from_bounded_reserve_when_run_budget_is_exhausted(
     )
     monkeypatch.setattr(
         reflection_chat, "_readable_evidence",
-        lambda _state: {"context_status": "complete_required"},
+        lambda _state, **_kwargs: {"context_status": "complete_required"},
     )
     monkeypatch.setattr(
         reflection_chat, "ask_project_chat_for_builder_task",
-        lambda _state: {
+        lambda _state, **_kwargs: {
             "name": "Bounded repair",
             "description": "Fix the proven failure in the scoped file.",
             "task_files": ["werkstatt/sample.py"],
@@ -599,7 +627,7 @@ def test_phase_end_exhaustion_asks_chat_then_retries_scoped_file(
     monkeypatch.setattr(
         reflection_chat,
         "ask_project_chat_for_builder_task",
-        lambda _state: {
+        lambda _state, **_kwargs: {
             "name": "Repair phase-review finding",
             "description": "Correct the reported phase-review defect.",
             "task_files": ["werkstatt/sample.py"],
@@ -633,7 +661,7 @@ def test_phase_end_does_not_expand_chat_scope_beyond_planned_files(
     monkeypatch.setattr(reflection, "_phase_end_reflection_core", lambda _s: False)
     monkeypatch.setattr(
         reflection_chat, "ask_project_chat_for_builder_task",
-        lambda _state: pytest.fail("Chat must not receive out-of-plan file scope"),
+        lambda _state, **_kwargs: pytest.fail("Chat must not receive out-of-plan file scope"),
     )
     monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
 
@@ -655,7 +683,7 @@ def test_chat_recovery_cannot_override_declined_phase_review_gate(
     )
     monkeypatch.setattr(
         reflection_chat, "ask_project_chat_for_builder_task",
-        lambda _state: pytest.fail("Chat must not override a declined gate"),
+        lambda _state, **_kwargs: pytest.fail("Chat must not override a declined gate"),
     )
     monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
 
