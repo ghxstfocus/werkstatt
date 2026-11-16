@@ -172,6 +172,13 @@ def test_replans_failed_criterion_after_recovery_and_supersedes_history(
         akzeptanzkriterien=list(phase.data["akzeptanzkriterien"]),
         budget={"max_llm_calls": 20},
     )
+    audit_events = []
+    monkeypatch.setattr(
+        "werkstatt.audit.audit",
+        lambda kind, payload, *_args, **_kwargs: audit_events.append(
+            (kind, payload),
+        ) or True,
+    )
 
     def fake_planner(addition):
         assert "AC2: Second criterion" in addition.aufgabe
@@ -203,6 +210,16 @@ def test_replans_failed_criterion_after_recovery_and_supersedes_history(
     )
 
     assert criteria_replan.replan_unassigned_criteria(state, phase) is True
+
+    start_event = next(
+        payload for kind, payload in audit_events
+        if kind == "loop_phase"
+        and payload.get("phase") == "criteria_replan"
+        and payload.get("status") == "start"
+    )
+    assert start_event["mode"] == "failed_criteria_recovery"
+    assert start_event["reason"] == "failed_task_recovery_exhausted"
+    assert start_event["replaced_task_ids"] == ["failed"]
 
     failed = phase.get_task("failed")
     assert failed["status"] == "superseded"

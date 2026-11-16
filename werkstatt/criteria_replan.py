@@ -250,7 +250,13 @@ def replan_unassigned_criteria(
             "status": "start",
             "replan_id": replan_id,
             "criteria_refs": missing_refs,
-            "reason": "finished_graph_left_approved_criteria_unassigned",
+            "mode": replan_mode,
+            "replaced_task_ids": replaced_task_ids,
+            "reason": (
+                "failed_task_recovery_exhausted"
+                if failed_case else
+                "finished_graph_left_approved_criteria_unassigned"
+            ),
         },
         state.project_dir,
         state.project_name,
