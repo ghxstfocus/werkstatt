@@ -57,7 +57,16 @@ def test_repository_retrieval_recall_and_first_relevant_rank() -> None:
         reciprocal_ranks.append(1 / first_rank if first_rank else 0.0)
 
     assert min(precisions) == 1.0, case_diagnostics
-    assert min(recalls) == 1.0, case_diagnostics
+    # A query may have more gold-relevant sources than the context top-k.
+    # Require the maximum recall that this bounded result can provide.
+    capacity_recall = [
+        min(1.0, 5 / len(expected_relevant))
+        for _, expected_relevant in cases
+    ]
+    assert all(
+        recall == attainable
+        for recall, attainable in zip(recalls, capacity_recall, strict=True)
+    ), case_diagnostics
     assert min(reciprocal_ranks) == 1.0, case_diagnostics
 
 

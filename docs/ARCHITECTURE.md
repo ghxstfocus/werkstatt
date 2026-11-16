@@ -98,16 +98,23 @@ Der Planner kann den Scout bei einem einzelnen, expliziten und im
 Projekt belegten Dateiziel ueberspringen; der Explorer liefert weiterhin den
 Projektkontext.
 
-### 2.2 Architect (werkstatt/planner.py, Prosa-Modus)
+### 2.2 Architect (werkstatt/architect.py, Prosa-Modus)
 
 deepseek-v4-pro mit Thinking/high. Keine Skills, keine Tools (M-446).
 Produziert Prosa mit nummerierten Schritten. Max 16000 Tokens.
 
-### 2.3 Planner-Split (werkstatt/planner.py, JSON-Modus)
+### 2.3 Planner-Split (werkstatt/roles/planner_split.py, JSON-Modus)
 
 deepseek-flash mit Thinking aus. Zerlegt die Architect-Prosa in Tasks mit
 architect_start/architect_ende (woertliche Marker, M-461).
 Rekursiv, max 2 Ebenen (M-469/M-470/M-471).
+
+Der Planner-Orchestrator bleibt in `werkstatt/planner.py`; deterministische
+Taskgraph-Validierung und -Sortierung liegt in `werkstatt/task_graph.py`.
+`werkstatt/roles/planner_dispatch.py` entscheidet anhand aktueller Checkpoint-
+Belege, welche Planner-Rolle benoetigt wird. Die Extraktion dieser Module
+loest die verbleibende lineare Run-Phasenfolge noch nicht vollstaendig ab;
+ADR-0032 beschreibt das Zielverhalten.
 
 ### 2.4 Builder (werkstatt/roles/builder/run.py)
 
