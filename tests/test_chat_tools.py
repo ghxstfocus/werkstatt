@@ -480,6 +480,101 @@ def test_audit_query_rejects_other_project_run_id(tmp_path) -> None:
     assert "gehoert nicht zum aktiven Projekt" in result
 
 
+def test_audit_query_pages_project_filtered_events_with_cursor(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from werkstatt.event_store import EventStore
+
+    store = EventStore(tmp_path / "events.db")
+    first = store.append(
+        "alpha-run-1", "loop_started", payload={"text": "alpha first"},
+        project="alpha",
+    )
+    store.append(
+        "alpha-run-1", "foreign_event", payload={"text": "beta secret"},
+        project="beta",
+    )
+    second = store.append(
+        "alpha-run-1", "loop_checkpoint_decision",
+        payload={"text": "alpha second"}, project="alpha",
+    )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+
+    page_one = json.loads(chat_tools.execute_tool(
+        "audit_query", {"run_id": "alpha-run-1", "limit": 1},
+        project_dir=tmp_path, project_name="alpha",
+    ))
+    assert page_one["status"] == "events_page"
+    assert [event["seq"] for event in page_one["events"]] == [first]
+    assert page_one["has_more"] is True
+    assert page_one["next_since"] == first
+    assert "beta secret" not in json.dumps(page_one)
+
+    page_two = json.loads(chat_tools.execute_tool(
+        "audit_query", {
+            "run_id": "alpha-run-1", "limit": 1,
+            "since": page_one["next_since"],
+        },
+        project_dir=tmp_path, project_name="alpha",
+    ))
+    assert [event["seq"] for event in page_two["events"]] == [second]
+    assert page_two["has_more"] is False
+    assert page_two["events"][0]["payload"]["text"] == "alpha second"
+
+
+def test_audit_query_large_payload_is_hash_bound_and_chunk_readable(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    import hashlib
+
+    from werkstatt.event_store import EventStore
+
+    store = EventStore(tmp_path / "events.db")
+    payload = {"log": "Beleg-😀\n" * 6_000}
+    event_seq = store.append(
+        "alpha-run-1", "loop_verify_failed", payload=payload, project="alpha",
+    )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+
+    page = json.loads(chat_tools.execute_tool(
+        "audit_query", {"run_id": "alpha-run-1"},
+        project_dir=tmp_path, project_name="alpha",
+    ))
+    stub = page["events"][0]
+    assert page["has_more"] is False
+    assert stub["payload_omitted"] is True
+    assert stub["seq"] == event_seq
+    assert page["omitted_payload_seqs"] == [event_seq]
+
+    chunks: list[str] = []
+    start = 0
+    while True:
+        chunk = json.loads(chat_tools.execute_tool(
+            "audit_query", {
+                "run_id": "alpha-run-1", "event_seq": event_seq,
+                "payload_start": start,
+            },
+            project_dir=tmp_path, project_name="alpha",
+        ))
+        assert chunk["event"]["seq"] == event_seq
+        assert chunk["payload_range"]["unit"] == "unicode_codepoints"
+        assert chunk["payload_range"]["start"] == start
+        chunks.append(chunk["payload_json"])
+        assert len(json.dumps(chunk, ensure_ascii=False)) < 28_000
+        if chunk["complete"]:
+            assert chunk["next_payload_start"] is None
+            break
+        next_start = chunk["next_payload_start"]
+        assert isinstance(next_start, int) and next_start > start
+        start = next_start
+
+    full_payload = "".join(chunks)
+    assert hashlib.sha256(full_payload.encode("utf-8")).hexdigest() == (
+        stub["payload_sha256"]
+    )
+    assert json.loads(full_payload) == payload
+
+
 def test_loop_status_returns_idle_when_project_has_no_run(monkeypatch, tmp_path):
     from werkstatt.event_store import EventStore
     from werkstatt.web import app

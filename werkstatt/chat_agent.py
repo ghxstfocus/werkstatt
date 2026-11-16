@@ -299,7 +299,12 @@ Wenn der Nutzer fragt, was der Loop gerade tut, ob er haengt oder welche
 Probleme aufgetreten sind, rufe loop_status fuer den aktuellen Projekt-Run
 auf. Berichte Status und Checkpoint getrennt von den begrenzten letzten
 Ereignissen; fuer eine konkrete Ursache frage audit_query mit Run-ID und
-Sequenzbereich nach. Ein fehlender oder nicht lesbarer Checkpoint ist
+Sequenzbereich nach. Blaettere mit since/next_since, bis das fragliche Event
+belegt oder die Ereignisfolge erschoepft ist. Bei payload_omitted lade die
+Payload fuer event_seq in payload_start/payload_end-Chunks nach und pruefe,
+dass die Bereiche lueckenlos sind und denselben payload_sha256 tragen. Eine
+Eventseite mit has_more=true ist keine vollstaendige Historie. Ein fehlender
+oder nicht lesbarer Checkpoint ist
 "unbekannt", niemals ein Beleg fuer idle oder Erfolg.
 
 Bei Fragen zum Server des aktuell ausgewaehlten Projekts, Listener,

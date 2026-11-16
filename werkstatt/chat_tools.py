@@ -401,16 +401,168 @@ def _audit_query(args: dict[str, Any]) -> str:
     if not run_id.startswith(f"{projekt}-"):
         return "audit_query: run_id gehoert nicht zum aktiven Projekt"
     kind = args.get("kind")
-    since = args.get("since")
+    if kind is not None and not isinstance(kind, str):
+        return "audit_query: kind muss Text sein"
+    since = args.get("since", 0)
+    limit = args.get("limit", 50)
+    event_seq = args.get("event_seq")
+    payload_start = args.get("payload_start", 0)
+    payload_end = args.get("payload_end")
+    for name, value, minimum in (
+        ("since", since, 0), ("limit", limit, 1),
+        ("event_seq", event_seq, 1), ("payload_start", payload_start, 0),
+        ("payload_end", payload_end, 0),
+    ):
+        if value is None and name in {"event_seq", "payload_end"}:
+            continue
+        if (
+            not isinstance(value, int) or isinstance(value, bool)
+            or value < minimum
+        ):
+            return f"audit_query: {name} muss eine ganze Zahl >= {minimum} sein"
+    if limit > 50:
+        return "audit_query: limit darf hoechstens 50 sein"
+
+    max_response_chars = 28_000
+    payload_page_chars = 18_000
     try:
-        evs = EventStore().query(
+        store = EventStore()
+        if event_seq is not None:
+            evs = store.query(
+                run_id,
+                since_seq=int(event_seq) - 1,
+                limit=1,
+                kind=kind,
+                project=projekt,
+            )
+            if not evs or evs[0].get("seq") != event_seq:
+                return json.dumps({
+                    "status": "event_not_found",
+                    "run_id": run_id,
+                    "event_seq": event_seq,
+                    "project": projekt,
+                }, ensure_ascii=False)
+            event = evs[0]
+            payload_json = json.dumps(
+                event.get("payload", {}), ensure_ascii=False,
+                sort_keys=True, separators=(",", ":"), default=str,
+            )
+            start = int(payload_start)
+            end = (
+                min(len(payload_json), start + payload_page_chars)
+                if payload_end is None else int(payload_end)
+            )
+            if start > len(payload_json) or end > len(payload_json):
+                return json.dumps({
+                    "status": "invalid_payload_range",
+                    "payload_chars": len(payload_json),
+                    "payload_start": start,
+                    "payload_end": end,
+                }, ensure_ascii=False)
+            if end < start or end - start > payload_page_chars:
+                return json.dumps({
+                    "status": "invalid_payload_range",
+                    "max_chunk_chars": payload_page_chars,
+                    "payload_start": start,
+                    "payload_end": end,
+                }, ensure_ascii=False)
+            return json.dumps({
+                "status": "event_payload_chunk",
+                "event": {
+                    key: event.get(key)
+                    for key in ("seq", "run_id", "kind", "phase", "status", "ts", "project")
+                },
+                "payload_json": payload_json[start:end],
+                "payload_chars": len(payload_json),
+                "payload_sha256": hashlib.sha256(
+                    payload_json.encode("utf-8"),
+                ).hexdigest(),
+                "payload_range": {
+                    "unit": "unicode_codepoints",
+                    "start": start,
+                    "end": end,
+                },
+                "complete": end == len(payload_json),
+                "next_payload_start": end if end < len(payload_json) else None,
+            }, ensure_ascii=False)
+
+        events = store.query(
             run_id,
-            kind=str(kind) if kind else None,
-            since_seq=int(since) if since is not None else None,
+            kind=kind,
+            since_seq=since,
+            limit=limit + 1,
+            project=projekt,
         )
     except Exception as exc:
         return f"audit_query-Fehler: {exc}"
-    return json.dumps(evs[:50], ensure_ascii=False)[:30_000]
+
+    result: dict[str, Any] = {
+        "status": "events_page",
+        "project": projekt,
+        "run_id": run_id,
+        "kind": kind,
+        "since": since,
+        "events": [],
+        "returned_count": 0,
+        "next_since": since,
+        "has_more": False,
+        "omitted_payload_seqs": [],
+    }
+    selected: list[dict[str, Any]] = []
+    stopped_for_budget = False
+    for event in events[:limit]:
+        payload_json = json.dumps(
+            event.get("payload", {}), ensure_ascii=False,
+            sort_keys=True, separators=(",", ":"), default=str,
+        )
+        record = dict(event)
+        if len(payload_json) > payload_page_chars:
+            record.pop("payload", None)
+            record.update({
+                "payload_omitted": True,
+                "payload_chars": len(payload_json),
+                "payload_sha256": hashlib.sha256(
+                    payload_json.encode("utf-8"),
+                ).hexdigest(),
+                "payload_fetch": {
+                    "event_seq": event.get("seq"),
+                    "payload_start": 0,
+                    "payload_end": min(len(payload_json), payload_page_chars),
+                },
+            })
+        candidate = [*selected, record]
+        candidate_omissions = list(result["omitted_payload_seqs"])
+        if record.get("payload_omitted") is True:
+            candidate_omissions.append(event.get("seq"))
+        result["events"] = candidate
+        result["omitted_payload_seqs"] = candidate_omissions
+        result["returned_count"] = len(candidate)
+        result["next_since"] = event.get("seq", since)
+        encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+        if len(encoded) > max_response_chars:
+            result["events"] = selected
+            result["returned_count"] = len(selected)
+            result["next_since"] = (
+                selected[-1].get("seq", since) if selected else since
+            )
+            result["omitted_payload_seqs"] = [
+                item.get("seq") for item in selected
+                if item.get("payload_omitted") is True
+            ]
+            stopped_for_budget = True
+            break
+        selected = candidate
+
+    result["events"] = selected
+    result["returned_count"] = len(selected)
+    if selected:
+        result["next_since"] = selected[-1].get("seq", since)
+    result["has_more"] = stopped_for_budget or len(events) > len(selected)
+    if stopped_for_budget:
+        result["page_note"] = (
+            "Zeichenbudget erreicht; mit since=next_since fortsetzen."
+        )
+    return json.dumps(result, ensure_ascii=False, separators=(",", ":"))
 
 
 def _read_active_run(_args: dict[str, Any]) -> str:
@@ -1716,13 +1868,23 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         "mode": "read",
     },
     "audit_query": {
-        "description": "Audit-Events einer run_id filtern (kind, since).",
+        "description": (
+            "Liest projektgefilterte Audit-Events seitenweise. Nutze since "
+            "und next_since bis zum relevanten Ereignis; has_more zeigt, ob "
+            "weitere Events folgen. payload_omitted ist kein leerer Beleg: "
+            "hole den Inhalt mit event_seq und payload_start/payload_end in "
+            "Chunks ab und pruefe payload_sha256 sowie payload_range."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "kind": {"type": "string"},
-                "since": {"type": "integer"},
+                "since": {"type": "integer", "minimum": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                 "run_id": {"type": "string"},
+                "event_seq": {"type": "integer", "minimum": 1},
+                "payload_start": {"type": "integer", "minimum": 0},
+                "payload_end": {"type": "integer", "minimum": 0},
             },
         },
         "fn": _audit_query,
