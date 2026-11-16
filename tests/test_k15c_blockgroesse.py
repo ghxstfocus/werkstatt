@@ -1,4 +1,4 @@
-"""K15c: Block-Groesse 2500 statt 800/2000."""
+"""Planner keeps complete Architect sections for later task splitting."""
 from werkstatt.planner import _extrahiere_prosa_abschnitt
 
 
@@ -22,13 +22,14 @@ def test_2500_zeichen_block_bleibt() -> None:
     assert len(out) > 2400, f"Block zu kurz: {len(out)} Zeichen"
 
 
-def test_ueber_2500_wird_gekuerzt() -> None:
+def test_ueber_2500_bleibt_vollstaendig_fuer_on_demand_split() -> None:
     start = "Start"
     body = "z" * 3000 + "."
     ende = "Ende"
     prosa = f"{start}\n{body}\n{ende}"
     out = _extrahiere_prosa_abschnitt(prosa, start, ende)
-    assert len(out) <= 2600, f"Block zu lang: {len(out)} Zeichen"
+    assert len(out) == len(start) + len(body) + len(ende) + 2
+    assert out.endswith(ende)
 
 
 def test_kleiner_block_unveraendert() -> None:

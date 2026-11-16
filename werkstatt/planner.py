@@ -764,16 +764,6 @@ def _extrahiere_prosa_abschnitt(
         if i_ende < 0:
             return prosa[i_start:]
     _result = prosa[i_start:i_ende + len(ende)]
-    # K15c: Laengen-Begrenzung an Block-Format angepasst.
-    # M-466 hatte 800 Zeichen (Mini-Task-Zeitalter). K15/K15b
-    # produzieren ganze Funktions-Bloecke; 800 schnitt den
-    # Konstruktor ab. 2500 = ~150-200 Zeilen Code.
-    if len(_result) > 2500:
-        _cut = _result.rfind(".", 0, 2500)
-        if _cut > 0:
-            _result = _result[:_cut + 1]
-        else:
-            _result = _result[:2500]
     return _result
 
 
@@ -986,10 +976,6 @@ def _llm_split_einzel_task(
             _name = t.get("name") or ""
             _desc = t.get("description") or ""
             _abschnitt = f"## TASK: {_name}\n{_desc}" if _desc else _name
-        # K19b: 2500 statt 800 -- konsistent mit K15c-Extraktor.
-        if len(_abschnitt) > 2500:
-            _cut = _abschnitt.rfind(".", 0, 2500)
-            _abschnitt = _abschnitt[:_cut + 1] if _cut > 0 else _abschnitt[:2500]
         _refs = t.get("criterion_refs")
         if _refs is None or _refs == []:
             _refs = task.get("criterion_refs") or []
@@ -1729,11 +1715,12 @@ def _zerlege_in_sub_tasks(
     criteria_raw = parsed.get("akzeptanzkriterien", [])
     if not isinstance(criteria_raw, list):
         raise TaskGraphError("Akzeptanzkriterien muessen eine Liste sein.")
-    criteria = list(dict.fromkeys(
-        str(item).strip()[:500]
-        for item in criteria_raw
-        if isinstance(item, str) and item.strip()
-    ))[:30]
+    if any(not isinstance(item, str) or not item.strip() for item in criteria_raw):
+        raise TaskGraphError(
+            "Akzeptanzkriterien muessen nichtleere Texte sein; "
+            "ungueltige Kriterien werden nicht verworfen."
+        )
+    criteria = list(dict.fromkeys(item.strip() for item in criteria_raw))
     if not criteria:
         raise TaskGraphError("Der Planner-Split lieferte keine Akzeptanzkriterien.")
     if state is not None:
@@ -1764,13 +1751,6 @@ def _zerlege_in_sub_tasks(
             _name = t.get("name") or ""
             _desc = t.get("description") or ""
             _abschnitt = f"## TASK: {_name}\n{_desc}" if _desc else _name
-        # K19b: Fallback 2500 statt 800 -- K15c-Konsistenz.
-        if len(_abschnitt) > 2500:
-            _cut = _abschnitt.rfind(".", 0, 2500)
-            if _cut > 0:
-                _abschnitt = _abschnitt[:_cut + 1]
-            else:
-                _abschnitt = _abschnitt[:2500]
         tasks.append({
             "id": t.get("id") or f"t{i}",
             "name": t.get("name") or f"Sub-Task {i}",

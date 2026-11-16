@@ -932,6 +932,78 @@ def test_oversized_task_split_rejects_malformed_criterion_refs():
         )
 
 
+def test_oversized_task_split_preserves_full_architect_subsection():
+    from werkstatt.planner import _llm_split_einzel_task
+
+    start = "## werkstatt/demo.py"
+    tail = "ARCHITECT_SECTION_TAIL_SENTINEL"
+    prose = f"{start}\n" + "x" * 3_000 + f"\n{tail}"
+    reply = MagicMock(ok=True, content=json.dumps({"tasks": [{
+        "id": "t1_a",
+        "name": "Repair the target file",
+        "architect_start": start,
+        "architect_ende": tail,
+        "criterion_refs": ["AC1"],
+        "task_files": ["werkstatt/demo.py"],
+    }]}))
+
+    with (
+        patch("werkstatt.planner.ask_llm", return_value=reply),
+        patch(
+            "werkstatt.planner._with_spinner",
+            side_effect=lambda _label, fn: fn(),
+        ),
+    ):
+        tasks = _llm_split_einzel_task(
+            prose,
+            {
+                "id": "t1", "criterion_refs": ["AC1"],
+                "task_files": ["werkstatt/demo.py"],
+                "description": "x" * 2_600,
+            },
+            "fake", Path("."), "demo",
+        )
+
+    assert len(tasks) == 1
+    assert tasks[0]["description"].endswith(tail)
+    assert "x" * 3_000 in tasks[0]["description"]
+    assert len(tasks[0]["description"]) > 3_000
+
+
+def test_planner_keeps_all_acceptance_criteria_without_length_caps(tmp_path):
+    from werkstatt.planner import _zerlege_in_sub_tasks
+
+    (tmp_path / "src.py").write_text("VALUE = 1\n", encoding="utf-8")
+    criteria = [f"Criterion {index}" for index in range(1, 31)]
+    criteria[-1] = "Long criterion " + "x" * 650
+    reply = MagicMock(ok=True, content=json.dumps({
+        "akzeptanzkriterien": criteria,
+        "tasks": [{
+            "id": "t1", "name": "Update source", "task_files": ["src.py"],
+            "description": "Use the complete acceptance criteria.",
+        }],
+    }))
+    state = _state(tmp_path)
+
+    with (
+        patch("werkstatt.planner.ask_llm", return_value=reply),
+        patch(
+            "werkstatt.planner._with_spinner",
+            side_effect=lambda _label, fn: fn(),
+        ),
+        patch("werkstatt.planner.audit"),
+    ):
+        tasks = _zerlege_in_sub_tasks(
+            "## src.py\nUpdate the source.", ["src.py"], "fake",
+            tmp_path, "demo", state=state,
+        )
+
+    assert state.akzeptanzkriterien == criteria
+    assert len(state.akzeptanzkriterien) == 30
+    assert state.akzeptanzkriterien[-1].endswith("x" * 650)
+    assert tasks[0]["criterion_refs"] == [f"AC{index}" for index in range(1, 31)]
+
+
 def test_planner_split_blocks_missing_required_architect_prose(tmp_path):
     from werkstatt.planner import _zerlege_in_sub_tasks
 
