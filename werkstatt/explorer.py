@@ -18,6 +18,8 @@ from werkstatt.agent import ask_llm
 from werkstatt.audit import audit
 from werkstatt.skills import load_all_skills
 from werkstatt.state import RunState
+
+EXPLORER_REQUEST_MAX_CHARS = 60_000
 from werkstatt.tools import run_readonly
 
 EXPLORER_SYSTEM = """Du bist ein read-only Codebase-Explorer.
@@ -308,12 +310,40 @@ def _python_inventory_context(
             "lexikalisch und wurden nicht angeboten; das ist kein "
             "Negativbeleg und kein Vollstaendigkeitsbeweis."
         )
-    inventory = (
+    inventory_prefix = (
         f"Python-Datei-Inventar: {status}\n"
         f"Im Index beobachtet: {len(paths)}\n"
         "Angebotene Pfade:\n"
-        + ("\n".join(offered) if offered else "(keine Pfade angeboten)")
     )
+    offered_text = "\n".join(offered) if offered else "(keine Pfade angeboten)"
+    inventory = inventory_prefix + offered_text
+    path_manifest: list[dict[str, object]] = []
+    offered_offsets: dict[str, tuple[int, int]] = {}
+    cursor = len(inventory_prefix)
+    for path in offered:
+        offered_start = cursor
+        offered_end = offered_start + len(path)
+        offered_offsets[path] = (offered_start, offered_end)
+        cursor = offered_end + 1
+    for path in paths:
+        prompt_start: int | None = None
+        prompt_end: int | None = None
+        if path in offered_offsets:
+            prompt_start, prompt_end = offered_offsets[path]
+            status = "included"
+        else:
+            status = (
+                "omitted_prompt_cap" if path in ranked[prompt_cap:]
+                else "not_selected_by_query"
+            )
+        path_manifest.append({
+            "path": path,
+            "status": status,
+            "chars": len(path),
+            "sha256": hashlib.sha256(path.encode("utf-8")).hexdigest(),
+            **({"prompt_start": prompt_start, "prompt_end": prompt_end}
+               if prompt_start is not None and prompt_end is not None else {}),
+        })
     manifest = {
         "file_count": len(paths),
         "file_scan_succeeded": scan_succeeded,
@@ -331,6 +361,7 @@ def _python_inventory_context(
         "files_offered": offered,
         "files_omitted_from_prompt": prompt_omitted,
         "prompt_file_cap": prompt_cap,
+        "path_manifest": path_manifest,
     }
     return inventory, manifest
 
@@ -762,6 +793,7 @@ def _emittiere_explorer_result(
     project_name: str,
     findings: str,
     key_files: list[dict],
+    context_budget: dict[str, object] | None = None,
 ) -> None:
     """Emittiert genau ein explorer_result-Audit-Event."""
     audit("explorer_result", {
@@ -771,6 +803,7 @@ def _emittiere_explorer_result(
             for k in (key_files or [])
             if isinstance(k, dict)
         ],
+        **({"context_budget": context_budget} if context_budget else {}),
     }, project_dir, project_name)
 
 
@@ -892,20 +925,90 @@ def run_explorer(state: RunState, frage: str) -> dict:
     py_files, _scan_succeeded, _index_truncated = _list_py_file_inventory(
         Path(pd),
     )
+    project_root = Path(pd).absolute()
+    project_paths: list[str] = []
+    path_normalization_failures = 0
+    for candidate in py_files:
+        try:
+            project_paths.append(
+                Path(candidate).absolute().relative_to(project_root).as_posix(),
+            )
+        except ValueError:
+            path_normalization_failures += 1
     file_inventory, inventory_manifest = _python_inventory_context(
-        py_files,
-        scan_succeeded=_scan_succeeded,
+        project_paths,
+        scan_succeeded=_scan_succeeded and path_normalization_failures == 0,
         index_truncated=_index_truncated,
         query=frage,
     )
-    context = (
-        f"Frage: {frage}\n\n"
-        f"Messungen (bereits ausgefuehrt):\n"
-        + (_format_findings(messungen) if messungen else "(keine)")
-        + f"\n\n{file_inventory}"
-    )
+    inventory_manifest["path_normalization_failures"] = path_normalization_failures
+    context_sections = [
+        ("question", f"Frage: {frage}"),
+        (
+            "measurements",
+            "Messungen (bereits ausgefuehrt):\n"
+            + (_format_findings(messungen) if messungen else "(keine)"),
+        ),
+        ("file_inventory", file_inventory),
+    ]
+    context = "\n\n".join(content for _name, content in context_sections)
+    context_section_manifest: list[dict[str, object]] = []
+    cursor = 0
+    section_offsets: dict[str, int] = {}
+    for name, content in context_sections:
+        start = context.find(content, cursor)
+        if start < 0:
+            raise ValueError(f"Explorer-Kontextabschnitt {name!r} fehlt.")
+        end = start + len(content)
+        section_offsets[name] = start
+        context_section_manifest.append({
+            "name": name,
+            "status": "included",
+            "chars": len(content),
+            "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "prompt_start": start,
+            "prompt_end": end,
+        })
+        cursor = end + 2
+    for path_record in inventory_manifest["path_manifest"]:
+        if not isinstance(path_record, dict) or path_record.get("status") != "included":
+            continue
+        inventory_start = section_offsets["file_inventory"]
+        path_start = path_record.get("prompt_start")
+        path_end = path_record.get("prompt_end")
+        if isinstance(path_start, int) and isinstance(path_end, int):
+            path_record["prompt_start"] = inventory_start + path_start
+            path_record["prompt_end"] = inventory_start + path_end
 
     system_prompt = _explorer_system()
+    request_chars = len(system_prompt) + len(context)
+    context_budget = {
+        "max_request_chars": EXPLORER_REQUEST_MAX_CHARS,
+        "request_chars": request_chars,
+        "system_chars": len(system_prompt),
+        "user_chars": len(context),
+        "required_context_complete": request_chars <= EXPLORER_REQUEST_MAX_CHARS,
+        "action": (
+            "send" if request_chars <= EXPLORER_REQUEST_MAX_CHARS else "blocked"
+        ),
+        "sections": context_section_manifest,
+        "path_manifest": inventory_manifest["path_manifest"],
+    }
+    if request_chars > EXPLORER_REQUEST_MAX_CHARS:
+        reason = (
+            "Explorer-Modellaufruf blockiert: Frage und Inventar ueberschreiten "
+            f"das Requestbudget ({request_chars}/{EXPLORER_REQUEST_MAX_CHARS} Zeichen). "
+            "Der Scan ist damit nicht als vollstaendige Antwort zu werten."
+        )
+        _emittiere_explorer_result(
+            pd, pn, reason, [], context_budget=context_budget,
+        )
+        return {
+            "findings": reason,
+            "key_files": [],
+            "next_reads": [],
+            "context_budget": context_budget,
+        }
     reply = ask_llm(
         api_key, system_prompt, context,
         model="deepseek-chat", temperature=0.0, max_tokens=3000,
@@ -917,6 +1020,10 @@ def run_explorer(state: RunState, frage: str) -> dict:
             "measurement_count": len(messungen),
             **inventory_manifest,
             "user_chars": len(context),
+            "sections": context_section_manifest,
+            "request_chars": request_chars,
+            "max_request_chars": EXPLORER_REQUEST_MAX_CHARS,
+            "required_context_complete": True,
         },
     )
     if not reply.ok:
@@ -940,6 +1047,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
         pd, pn,
         result.get("findings", ""),
         result.get("key_files", []),
+        context_budget=context_budget,
     )
     try:
         state.explorer_findings = {

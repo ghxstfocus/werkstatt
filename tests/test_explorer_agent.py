@@ -1,6 +1,7 @@
 """Tests fuer werkstatt/explorer.py (Phase 14)."""
 from __future__ import annotations
 
+import hashlib
 from unittest.mock import patch
 
 from werkstatt.explorer import (
@@ -46,9 +47,19 @@ def test_explorer_liefert_json(tmp_path):
     assert manifest["file_scan_complete"] is True
     assert manifest["files_offered"] == []
     assert manifest["files_omitted_from_prompt"] == 0
+    assert manifest["required_context_complete"] is True
+    assert manifest["request_chars"] <= manifest["max_request_chars"]
     assert "Inventar vollstaendig; keine Python-Dateien gefunden" in ask.call_args.args[2]
     assert "Scan fehlgeschlagen oder teilweise" not in ask.call_args.args[2]
     assert manifest["user_chars"] == len(ask.call_args.args[2])
+    for section in manifest["sections"]:
+        excerpt = ask.call_args.args[2][
+            section["prompt_start"]:section["prompt_end"]
+        ]
+        assert len(excerpt) == section["chars"]
+        assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == (
+            section["sha256"]
+        )
 
 
 def test_python_inventory_marks_prompt_omissions_and_scan_limit():
@@ -61,7 +72,10 @@ def test_python_inventory_marks_prompt_omissions_and_scan_limit():
         paths, scan_succeeded=True, index_truncated=True, query="target",
     )
 
-    assert manifest == {
+    assert {
+        key: value for key, value in manifest.items()
+        if key != "path_manifest"
+    } == {
         "file_count": 200,
         "file_scan_succeeded": True,
         "file_index_truncated": True,
@@ -77,11 +91,64 @@ def test_python_inventory_marks_prompt_omissions_and_scan_limit():
         "files_omitted_from_prompt": 150,
         "prompt_file_cap": 50,
     }
+    paths_by_name = {item["path"]: item for item in manifest["path_manifest"]}
+    included = paths_by_name[paths[0]]
+    assert context[included["prompt_start"]:included["prompt_end"]] == paths[0]
+    assert included["status"] == "included"
+    assert paths_by_name[paths[50]]["status"] == "omitted_prompt_cap"
+    assert "prompt_start" not in paths_by_name[paths[50]]
+    assert paths_by_name[paths[-1]]["status"] == "not_selected_by_query"
     assert "Indexlimit 200 erreicht" in context
     assert "mindestens" not in context
     assert "25 passende Pfade" in context
     assert "kein Negativbeleg" in context
     assert paths[50] not in context
+
+
+def test_explorer_file_path_offsets_bind_to_actual_request(tmp_path):
+    source = tmp_path / "src" / "target.py"
+    source.parent.mkdir()
+    source.write_text("def target():\n    return True\n", encoding="utf-8")
+    state = _state(tmp_path)
+
+    class FakeReply:
+        ok = True
+        content = '{"findings":"target file found","key_files":[],"next_reads":[]}'
+
+    with patch("werkstatt.explorer.ask_llm", return_value=FakeReply()) as ask:
+        run_explorer(state, "Explain the target")
+
+    user = ask.call_args.args[2]
+    manifest = ask.call_args.kwargs["context_manifest"]
+    record = next(
+        item for item in manifest["path_manifest"]
+        if item["path"] == "src/target.py"
+    )
+    assert record["status"] == "included"
+    excerpt = user[record["prompt_start"]:record["prompt_end"]]
+    assert excerpt == "src/target.py"
+    assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == record["sha256"]
+
+
+def test_explorer_blocks_oversized_context_before_model_call(tmp_path):
+    state = _state(tmp_path)
+    events = []
+    with patch("werkstatt.explorer.EXPLORER_REQUEST_MAX_CHARS", 1), \
+         patch("werkstatt.explorer.ask_llm") as ask, \
+         patch(
+             "werkstatt.explorer.audit",
+             side_effect=lambda *args: events.append(args),
+         ):
+        result = run_explorer(state, "A sufficiently long question")
+
+    ask.assert_not_called()
+    assert result["context_budget"]["action"] == "blocked"
+    assert result["context_budget"]["required_context_complete"] is False
+    assert "nicht als vollstaendige Antwort" in result["findings"]
+    event = next(
+        payload for name, payload, *_ in events if name == "explorer_result"
+    )
+    assert event["context_budget"]["action"] == "blocked"
 
 
 def test_python_inventory_scan_limit_is_visible(tmp_path):
