@@ -169,12 +169,20 @@ class RunState:
     # and choose the next required role. These are transient dispatch fields.
     planner_stop_after_role: str | None = None
     planner_step_yielded: bool = False
+    planner_action_role: str | None = None
+    planner_yielded_after_role: str | None = None
     # Exact-prompt response cache for resumable planning calls. Run-scoped
     # entries are persisted in PhaseState, never in the shared RunRecord.
     planning_response_cache: dict[str, dict[str, Any]] = field(
         default_factory=dict,
     )
     planning_response_cache_callback: Any = None
+    # Validated planner outputs persisted in PhaseState for the next role
+    # checkpoint. Runtime callbacks are never serialized into RunRecord.
+    planner_role_artifacts: dict[str, dict[str, Any]] = field(
+        default_factory=dict,
+    )
+    planner_role_artifact_callback: Any = None
 
     # M-WelleE (2026-11-02): strukturierte Explorer-Findings.
     # Fliesst in Architect- und Builder-Prompt. Format:

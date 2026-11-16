@@ -246,16 +246,19 @@ def _phase_plan_and_preflight(
                     },
                     pd, pn,
                 )
-        if state.planner_stop_after_role is not None:
+        planner_stop_after_role = getattr(
+            state, "planner_stop_after_role", None,
+        )
+        if planner_stop_after_role is not None:
             planner_ok = run_planner(
-                state, stop_after_role=state.planner_stop_after_role,
+                state, stop_after_role=planner_stop_after_role,
             )
         else:
             planner_ok = run_planner(state)
         if not planner_ok:
             audit("loop_planner_failed", {}, pd, pn)
             return 1, False
-        if state.planner_step_yielded:
+        if getattr(state, "planner_step_yielded", False):
             audit(
                 "loop_phase",
                 {

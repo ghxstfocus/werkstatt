@@ -88,6 +88,21 @@ def test_planner_can_yield_after_each_required_role(tmp_path, monkeypatch):
     from werkstatt import planner
 
     state = _state(tmp_path)
+    state.run_id = "run-1"
+    state.planner_action_role = "scout"
+    state.planner_role_artifacts = {}
+    state.planner_role_artifact_callback = lambda artifact: (
+        state.planner_role_artifacts.__setitem__(artifact["role"], artifact)
+    )
+    scout_fingerprints = []
+    original_scout_fingerprint = planner._scout_input_fingerprint
+    monkeypatch.setattr(
+        planner,
+        "_scout_input_fingerprint",
+        lambda *args: scout_fingerprints.append(
+            original_scout_fingerprint(*args),
+        ) or scout_fingerprints[-1],
+    )
     report = {
         "ziel": "Baue Feature X",
         "relevante_dateien": [{"pfad": "feature.py", "warum": "Ziel"}],
@@ -121,12 +136,20 @@ def test_planner_can_yield_after_each_required_role(tmp_path, monkeypatch):
 
     def architect(*_args):
         calls["architect"] += 1
-        state.architect_prosa = "## Plan\nImplementiere feature.py."
+        state.architect_prosa = (
+            "## Plan\nImplementiere Feature X in feature.py mit Tests "
+            "und dokumentiere die aktuelle Schnittstelle."
+        )
         return True
 
     def split(*_args, **_kwargs):
         calls["split"] += 1
-        raise AssertionError("Planner-Split darf vor seinem Checkpoint nicht laufen")
+        state.akzeptanzkriterien = ["Feature X ist implementiert"]
+        return [{
+            "id": "t1", "name": "Feature X",
+            "action": "update", "task_files": ["feature.py"],
+            "criterion_refs": ["AC1"],
+        }]
 
     monkeypatch.setattr(planner, "run_architect", architect)
     monkeypatch.setattr(planner, "_zerlege_in_sub_tasks", split)
@@ -136,9 +159,44 @@ def test_planner_can_yield_after_each_required_role(tmp_path, monkeypatch):
     assert state.planner_step_yielded is True
     assert calls == {"scout": 1, "architect": 0, "split": 0}
 
+    state.planner_action_role = "architect"
     assert planner.run_planner(state, stop_after_role="architect") is True
     assert state.planner_step_yielded is True
-    assert calls == {"scout": 2, "architect": 1, "split": 0}
+    assert calls == {"scout": 1, "architect": 1, "split": 0}
+
+    state.planner_action_role = "planner_split"
+    assert planner.run_planner(state) is True
+    assert state.planner_step_yielded is False
+    assert len(set(scout_fingerprints[:3])) == 1
+    assert calls == {"scout": 1, "architect": 1, "split": 1}
+
+    from werkstatt import architect as architect_module
+
+    monkeypatch.setattr(
+        architect_module, "_get_architect_model", lambda: "changed-model",
+    )
+    assert planner.run_planner(state) is True
+    assert state.planner_yielded_after_role == "architect"
+    assert calls == {"scout": 1, "architect": 2, "split": 1}
+
+    # A changed candidate source invalidates the cached role output and
+    # re-runs Scout before Architect can consume it.
+    state.docs["a"] = "changed project evidence"
+    assert planner.run_planner(state) is True
+    assert state.planner_step_yielded is True
+    assert state.planner_yielded_after_role == "scout"
+    assert calls == {"scout": 2, "architect": 2, "split": 1}
+
+    state.planner_action_role = "architect"
+    assert planner.run_planner(state, stop_after_role="architect") is True
+    assert state.planner_yielded_after_role == "architect"
+    assert calls == {"scout": 2, "architect": 3, "split": 1}
+
+    state.planner_role_artifact_callback = None
+    state.docs["a"] = "a further changed source"
+    state.planner_action_role = "planner_split"
+    assert planner.run_planner(state) is False
+    assert calls == {"scout": 3, "architect": 3, "split": 1}
 
 
 def test_plan_gate_recovery_reuses_architect_evidence_and_preserves_criteria(

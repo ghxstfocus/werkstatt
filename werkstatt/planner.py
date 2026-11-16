@@ -15,7 +15,7 @@ import os
 import re
 from pathlib import Path, PureWindowsPath
 
-from werkstatt.agent import ask_llm
+from werkstatt.agent import DEEPSEEK_API_URL, ask_llm
 from werkstatt.render import _with_spinner
 
 
@@ -74,8 +74,11 @@ from werkstatt.scout import (  # noqa: F401
     _baue_api_index,
     _finde_api,
     _format_api_index_for_prompt,
+    _grep_projekt,
     _pruefe_api_widerspruch,
     _run_scout,
+    _scout_ist_suchaufgabe,
+    _scout_suchbegriffe,
     _scout_system_with_nachfolger,
 )
 from werkstatt.state import RunState
@@ -83,6 +86,105 @@ from werkstatt.state import RunState
 
 class TaskGraphError(ValueError):
     """A generated task graph is structurally unsafe to execute."""
+
+
+def _scout_input_fingerprint(
+    state: RunState,
+    goal: str,
+    code_index: dict,
+    key_files: list[str],
+) -> str | None:
+    """Fingerprint every current input source used to build Scout context.
+
+    This intentionally hashes full candidate inputs, including sections that
+    may later be omitted by the Scout budgeter. A changed source therefore
+    invalidates reuse conservatively instead of treating a truncated context
+    as proof that the omitted material is irrelevant.
+    """
+    from werkstatt.planner_artifacts import value_sha256
+
+    grep_hits: list[dict] = []
+    if _scout_ist_suchaufgabe(goal):
+        grep_hits = _grep_projekt(
+            state.project_dir, _scout_suchbegriffe(goal),
+        )
+    system_prompt = _scout_system_with_nachfolger(state)
+    return value_sha256({
+        "context_builder": "scout_context_v1",
+        "goal": goal,
+        "system_prompt_sha256": hashlib.sha256(
+            system_prompt.encode("utf-8"),
+        ).hexdigest(),
+        "endpoint": DEEPSEEK_API_URL,
+        "model": "deepseek-chat",
+        "temperature": 0.2,
+        "max_tokens": 4000,
+        "explorer_context": state.explorer_context,
+        "project_docs": state.docs or {},
+        "code_index": code_index,
+        "key_files": key_files,
+        "grep_hits": grep_hits,
+    })
+
+
+def _architect_input_fingerprint(
+    state: RunState,
+    goal: str,
+    user_content: str,
+    explorer_context: dict | None,
+    scout_input_sha256: str | None,
+) -> str | None:
+    """Bind Architect replay to its rebuilt prompt and current source proofs."""
+    from werkstatt.architect import (
+        ARCHITECT_MAX_TOKENS,
+        ARCHITECT_PROMPT_MAX_CHARS,
+        _get_architect_model,
+        _required_source_evidence_issue,
+    )
+    from werkstatt.planner_artifacts import value_sha256
+
+    system_prompt = (
+        _planner_system(goal, explorer_context, state)
+        + "\n\n" + _BUILDER_SCHNITTSTELLE
+    )
+    source_manifest = getattr(
+        state, "architect_scout_source_manifest", {},
+    )
+    source_issue = _required_source_evidence_issue(
+        system_prompt,
+        source_manifest,
+        getattr(state, "architect_required_source_files", []),
+    )
+    if source_issue:
+        return None
+    scout_report = getattr(state, "scout_auftrag", None)
+    architect_user_content = user_content
+    if scout_report:
+        execution_context = getattr(state, "architect_execution_context", "")
+        if not isinstance(execution_context, str) or len(execution_context) > 12_000:
+            return None
+        architect_user_content = execution_context
+    if len(system_prompt) + len(architect_user_content) > ARCHITECT_PROMPT_MAX_CHARS:
+        return None
+    return value_sha256({
+        "context_builder": "architect_context_v1",
+        "goal": goal,
+        "system_prompt": system_prompt,
+        "user_content": architect_user_content,
+        "scout_report": scout_report,
+        "upstream_scout_input_sha256": scout_input_sha256,
+        "source_manifest": source_manifest,
+        "project_docs_manifest": getattr(
+            state, "architect_project_docs_manifest", {},
+        ),
+        "execution_context_manifest": getattr(
+            state, "architect_execution_context_manifest", {},
+        ),
+        "model": _get_architect_model(),
+        "endpoint": DEEPSEEK_API_URL,
+        "temperature": 0.2,
+        "max_tokens": ARCHITECT_MAX_TOKENS,
+    })
 
 
 def _validate_read_task_scopes(tasks: list[dict], project_dir) -> None:
@@ -2624,10 +2726,15 @@ def run_planner(
     if stop_after_role not in {None, "scout", "architect"}:
         raise ValueError("ungueltiger Planner-Rollengrenzpunkt")
     state.planner_step_yielded = False
+    state.planner_yielded_after_role = None
     pd = state.project_dir
     pn = state.project_name
     api_key = state.api_key
     state.architect_required_source_files = []
+    from werkstatt.planner_artifacts import (
+        make_role_artifact,
+        validate_role_artifact,
+    )
     
     if not api_key:
         audit("planner_kein_key", {}, pd, pn)
@@ -2954,6 +3061,10 @@ def run_planner(
     )
     _scout_source = "Scout"
     _code_index: dict = {}
+    _scout_input_sha256: str | None = None
+    _scout_reused_artifact = False
+    _scout_artifact_persisted = False
+    _role_artifacts = getattr(state, "planner_role_artifacts", {})
     if _scout_skip_path:
         _direct_report, _direct_reason = _deterministic_literal_replace_plan(
             aufgabe, _scout_skip_path, pd,
@@ -2996,14 +3107,40 @@ def run_planner(
         audit("planner_scout_required", {
             "grund": _scout_route_reason,
         }, pd, pn)
-        _publish_role_checkpoint(
-            state, "scout", "running", _scout_route_reason,
-            {"goal": aufgabe, "explorer": _explorer_ctx},
-        )
         _code_index = _baue_api_index(pd)
-        _scout_report = _run_scout(
-            state, aufgabe, _code_index, _key_files_scan, api_key,
+        _scout_input_sha256 = _scout_input_fingerprint(
+            state, aufgabe, _code_index, _key_files_scan,
         )
+        _saved_scout = None
+        if _scout_input_sha256 and isinstance(_role_artifacts, dict):
+            _saved_scout = validate_role_artifact(
+                _role_artifacts.get("scout"),
+                role="scout",
+                run_id=getattr(state, "run_id", "") or "",
+                goal=aufgabe,
+                input_sha256=_scout_input_sha256,
+            )
+        if _saved_scout is not None:
+            _scout_reused_artifact = True
+            _scout_report = _saved_scout["output"]
+            audit("planner_role_artifact_reused", {
+                "role": "scout",
+                "input_sha256": _scout_input_sha256,
+                "output_sha256": _saved_scout["output_sha256"],
+            }, pd, pn)
+            _publish_role_checkpoint(
+                state, "scout", "completed", "validated_checkpoint_artifact",
+                {"input_sha256": _scout_input_sha256}, _scout_report,
+            )
+        else:
+            _publish_role_checkpoint(
+                state, "scout", "running", _scout_route_reason,
+                {"goal": aufgabe, "explorer": _explorer_ctx,
+                 "input_sha256": _scout_input_sha256},
+            )
+            _scout_report = _run_scout(
+                state, aufgabe, _code_index, _key_files_scan, api_key,
+            )
     if not isinstance(_scout_report, dict):
         _publish_role_checkpoint(
             state, "scout", "failed", "structured_report_missing",
@@ -3014,7 +3151,11 @@ def run_planner(
         return False
     if not _scout_skip_path:
         _publish_role_checkpoint(
-            state, "scout", "completed", "structured_report_received",
+            state, "scout", "completed",
+            (
+                "validated_checkpoint_artifact"
+                if _scout_reused_artifact else "structured_report_received"
+            ),
             {"goal": aufgabe, "explorer": _explorer_ctx}, _scout_report,
         )
 
@@ -3035,6 +3176,54 @@ def run_planner(
         audit("planner_scout_json_fehler",
               {"grund": "auftrag_prosa_fehlt"}, pd, pn)
         return False
+
+    if (
+        not _scout_skip_path
+        and _scout_input_sha256
+        and getattr(state, "run_id", None)
+    ):
+        _scout_artifact = make_role_artifact(
+            "scout",
+            _scout_report,
+            run_id=state.run_id,
+            goal=aufgabe,
+            input_sha256=_scout_input_sha256,
+        )
+        _artifact_callback = getattr(
+            state, "planner_role_artifact_callback", None,
+        )
+        if _scout_artifact is not None and callable(_artifact_callback):
+            _artifact_callback(_scout_artifact)
+            _scout_artifact_persisted = True
+            _role_artifacts = dict(_role_artifacts or {})
+            _role_artifacts["scout"] = _scout_artifact
+            state.planner_role_artifacts = _role_artifacts
+            audit("planner_role_artifact_persisted", {
+                "role": "scout",
+                "input_sha256": _scout_input_sha256,
+                "output_sha256": _scout_artifact["output_sha256"],
+            }, pd, pn)
+
+    _planner_action_role = getattr(state, "planner_action_role", None)
+    if (
+        not _scout_skip_path
+        and not _scout_reused_artifact
+        and _planner_action_role in {"scout", "architect", "planner_split"}
+        and not _scout_artifact_persisted
+    ):
+        audit("planner_role_artifact_unbound", {
+            "role": "scout",
+            "reason": "current_inputs_or_persistence_unavailable",
+        }, pd, pn)
+        return False
+    if (
+        not _scout_skip_path
+        and not _scout_reused_artifact
+        and _planner_action_role in {"architect", "planner_split"}
+    ):
+        state.planner_step_yielded = True
+        state.planner_yielded_after_role = "scout"
+        return True
 
     # SCOUT_BOX_RENDER (2026-11-02): Scout-Prosa + API-Auszug sichtbar machen
     if _scout_report:
@@ -3131,6 +3320,7 @@ def run_planner(
     # ausgefuehrt.
     if stop_after_role == "scout":
         state.planner_step_yielded = True
+        state.planner_yielded_after_role = "scout"
         return True
 
     # 2026-11-05: Selbst-Check-Block ENTFERNT.
@@ -3143,29 +3333,84 @@ def run_planner(
 
     # CALL 1: Architect (Fix AZ Stufe 10: ausgelagert nach architect.py)
     # OP-136b: Contract-Validierung scout->architect.
-    _publish_role_checkpoint(
-        state, "architect", "running", "scout_handoff_ready",
-        {"goal": aufgabe, "user_context": user_content,
-         "scout_report": _scout_report},
-    )
     if not _validate_contract_or_audit("scout", "architect", state, pd, pn):
         _publish_role_checkpoint(
             state, "architect", "failed", "scout_contract_rejected",
             _scout_report,
         )
         return False
-    if not run_architect(state, aufgabe, user_content, api_key, _explorer_ctx):
-        _publish_role_checkpoint(
-            state, "architect", "failed", "architect_call_failed",
-            _scout_report,
-        )
-        return False
-    _arch_prosa = state.architect_prosa
-    _publish_role_checkpoint(
-        state, "architect", "completed", "architect_prose_received",
-        {"goal": aufgabe, "user_context": user_content,
-         "scout_report": _scout_report}, _arch_prosa,
+    if not getattr(state, "api_index_cache", None):
+        state.api_index_cache = _code_index or _baue_api_index(pd)
+    # Architect currently has no role skills; match its own input reset before
+    # rebuilding the prompt fingerprint used to validate a saved handoff.
+    state.architect_skills_block = ""
+    _architect_input_sha256 = _architect_input_fingerprint(
+        state, aufgabe, user_content, _explorer_ctx,
+        _scout_input_sha256,
     )
+    _saved_architect = None
+    if _architect_input_sha256 and isinstance(_role_artifacts, dict):
+        _saved_architect = validate_role_artifact(
+            _role_artifacts.get("architect"),
+            role="architect",
+            run_id=getattr(state, "run_id", "") or "",
+            goal=aufgabe,
+            input_sha256=_architect_input_sha256,
+        )
+    if _saved_architect is not None:
+        from werkstatt.architect import _pruefe_architect_api_referenzen
+
+        _cached_architect_output = _saved_architect["output"]
+        _cached_api_findings = _pruefe_architect_api_referenzen(
+            _cached_architect_output,
+            getattr(state, "api_index_cache", {}) or {},
+        )
+        if (
+            len(_cached_architect_output.strip()) < 50
+            or _cached_api_findings
+        ):
+            audit("planner_role_artifact_rejected", {
+                "role": "architect",
+                "reason": (
+                    "architect_output_too_short"
+                    if len(_cached_architect_output.strip()) < 50
+                    else "current_api_preflight_failed"
+                ),
+                "finding_count": len(_cached_api_findings),
+            }, pd, pn)
+            _saved_architect = None
+    if _saved_architect is not None:
+        _arch_prosa = _saved_architect["output"]
+        state.architect_prosa = _arch_prosa
+        audit("planner_role_artifact_reused", {
+            "role": "architect",
+            "input_sha256": _architect_input_sha256,
+            "output_sha256": _saved_architect["output_sha256"],
+        }, pd, pn)
+        _publish_role_checkpoint(
+            state, "architect", "completed", "validated_checkpoint_artifact",
+            {"input_sha256": _architect_input_sha256}, _arch_prosa,
+        )
+    else:
+        _publish_role_checkpoint(
+            state, "architect", "running", "scout_handoff_ready",
+            {"goal": aufgabe, "user_context": user_content,
+             "scout_report": _scout_report},
+        )
+        if not run_architect(
+            state, aufgabe, user_content, api_key, _explorer_ctx,
+        ):
+            _publish_role_checkpoint(
+                state, "architect", "failed", "architect_call_failed",
+                _scout_report,
+            )
+            return False
+        _arch_prosa = state.architect_prosa
+        _publish_role_checkpoint(
+            state, "architect", "completed", "architect_prose_received",
+            {"goal": aufgabe, "user_context": user_content,
+             "scout_report": _scout_report}, _arch_prosa,
+        )
     # OP-136b: Contract-Validierung architect->planner.
     if not _validate_contract_or_audit("architect", "planner", state, pd, pn):
         _publish_role_checkpoint(
@@ -3174,8 +3419,55 @@ def run_planner(
         )
         return False
 
+    _architect_artifact_persisted = False
+    if (
+        _saved_architect is None
+        and _architect_input_sha256
+        and getattr(state, "run_id", None)
+    ):
+        _architect_artifact = make_role_artifact(
+            "architect",
+            _arch_prosa,
+            run_id=state.run_id,
+            goal=aufgabe,
+            input_sha256=_architect_input_sha256,
+        )
+        _artifact_callback = getattr(
+            state, "planner_role_artifact_callback", None,
+        )
+        if _architect_artifact is not None and callable(_artifact_callback):
+            _artifact_callback(_architect_artifact)
+            _architect_artifact_persisted = True
+            _role_artifacts = dict(_role_artifacts or {})
+            _role_artifacts["architect"] = _architect_artifact
+            state.planner_role_artifacts = _role_artifacts
+            audit("planner_role_artifact_persisted", {
+                "role": "architect",
+                "input_sha256": _architect_input_sha256,
+                "output_sha256": _architect_artifact["output_sha256"],
+            }, pd, pn)
+
+    if (
+        _planner_action_role in {"architect", "planner_split"}
+        and _saved_architect is None
+        and not _architect_artifact_persisted
+    ):
+        audit("planner_role_artifact_unbound", {
+            "role": "architect",
+            "reason": "current_inputs_or_persistence_unavailable",
+        }, pd, pn)
+        return False
+    if (
+        _planner_action_role == "planner_split"
+        and _saved_architect is None
+    ):
+        state.planner_step_yielded = True
+        state.planner_yielded_after_role = "architect"
+        return True
+
     if stop_after_role == "architect":
         state.planner_step_yielded = True
+        state.planner_yielded_after_role = "architect"
         return True
 
     # CALL 2: Planner (JSON aus Prosa)

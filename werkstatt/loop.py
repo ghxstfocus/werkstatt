@@ -1192,6 +1192,29 @@ def _persist_planning_response_cache(
     phase_state.save()
 
 
+def _persist_planner_role_artifact(
+    phase_state: PhaseState,
+    artifact: dict[str, Any],
+    *,
+    run_id: str,
+    goal: str,
+) -> None:
+    """Persist a bounded, exact-input-bound role output in PhaseState."""
+    if phase_state.run_id != run_id:
+        raise RuntimeError(
+            "Planner-Rollenartefakt ist nicht an diesen Run gebunden",
+        )
+    from werkstatt.planner_artifacts import add_role_artifact
+
+    phase_state.data["planner_role_artifacts"] = add_role_artifact(
+        phase_state.data.get("planner_role_artifacts"),
+        artifact,
+        run_id=run_id,
+        goal=goal,
+    )
+    phase_state.save()
+
+
 def _persist_planner_role_stage(
     phase_state: PhaseState,
     role: str,
@@ -1401,11 +1424,20 @@ def _run_pipeline_loop_impl(
     # 0. Aufgabe in State setzen (fuer Planner)
     state.aufgabe = aufgabe
     if phase_state is not None:
+        from werkstatt.planner_artifacts import load_role_artifacts
         from werkstatt.planner_replay import load_response_cache
 
         phase_run_id = (
             phase_state.run_id or phase_state.data.get("run_id")
         )
+        if phase_run_id == get_run_id():
+            state.planner_role_artifacts = load_role_artifacts(
+                phase_state.data.get("planner_role_artifacts"),
+                run_id=get_run_id(),
+                goal=aufgabe,
+            )
+        else:
+            state.planner_role_artifacts = {}
         if (
             phase_run_id == get_run_id()
             and phase_state.data.get("aufgabe") == aufgabe
@@ -1529,21 +1561,45 @@ def _run_pipeline_loop_impl(
             state.planning_response_cache_callback = (
                 persist_planning_response_cache
             )
+            def persist_planner_role_artifact(
+                artifact: dict[str, Any],
+                _phase_state: PhaseState = phase_state,
+                _run_id: str = get_run_id(),
+                _goal: str = aufgabe,
+            ) -> None:
+                _persist_planner_role_artifact(
+                    _phase_state, artifact, run_id=_run_id, goal=_goal,
+                )
+
+            state.planner_role_artifact_callback = (
+                persist_planner_role_artifact
+            )
             stop_after_role = {
                 "planner_scout": "scout",
                 "planner_architect": "architect",
             }.get(action)
             state.planner_stop_after_role = stop_after_role
+            state.planner_action_role = {
+                "planner_scout": "scout",
+                "planner_architect": "architect",
+                "planner_split": "planner_split",
+            }.get(action)
+            state.planner_yielded_after_role = None
             try:
                 _rc_plan, _done = _phase_plan_and_preflight(
                     state, aufgabe, project_name, phase_state,
                 )
             finally:
+                yielded_after_role = state.planner_yielded_after_role
                 state.planner_checkpoint_callback = None
                 state.planning_response_cache_callback = None
+                state.planner_role_artifact_callback = None
                 state.planner_stop_after_role = None
+                state.planner_action_role = None
+                state.planner_yielded_after_role = None
             if state.planner_step_yielded:
-                if stop_after_role not in {"scout", "architect"}:
+                completed_role = yielded_after_role or stop_after_role
+                if completed_role not in {"scout", "architect"}:
                     _persist_run_result(
                         EventStore(), project_name, get_run_id(), 1,
                         run_state=state, phase_state=phase_state,
@@ -1552,7 +1608,7 @@ def _run_pipeline_loop_impl(
                 try:
                     _persist_planner_role_stage(
                         phase_state,
-                        stop_after_role,
+                        completed_role,
                         run_id=get_run_id(),
                         goal=aufgabe,
                     )
@@ -1561,7 +1617,7 @@ def _run_pipeline_loop_impl(
                         "loop_failed",
                         {
                             "reason": "planner_role_stage_persist_failed",
-                            "role": stop_after_role,
+                            "role": completed_role,
                             "error": str(exc)[:300],
                         },
                         state.project_dir,
@@ -1575,9 +1631,9 @@ def _run_pipeline_loop_impl(
                 audit(
                     "loop_phase",
                     {
-                        "phase": f"planner_{stop_after_role}",
+                        "phase": f"planner_{completed_role}",
                         "status": "checkpoint",
-                        "role": stop_after_role,
+                        "role": completed_role,
                     },
                     state.project_dir,
                     project_name,

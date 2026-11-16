@@ -385,7 +385,7 @@ def test_loop_preflight_vor_planner(tmp_path):
         call_order.append("preflight")
         return [{"klasse": "syntax", "stage_id": "py_compile", "datei": None, "text": "SyntaxError"}]
 
-    def _mock_planner(state):
+    def _mock_planner(state, **_kwargs):
         call_order.append("planner")
         state.tasks = [{"id": "t1", "name": "Task 1"}]
         state.tests = ["Test 1"]

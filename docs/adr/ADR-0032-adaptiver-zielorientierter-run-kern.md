@@ -522,9 +522,25 @@ gebunden. Nach Resume werden fruehere Rollenantworten aus dem exakten
 Providerrequest-Cache rekonstruiert und ihre Parser/Contracts erneut
 ausgefuehrt. Das trennt Kontroll- und Freigabegrenzen, aber noch nicht die
 gemeinsame Planner-Kontextaufbereitung oder die Rollenimplementierungen in
-unabhaengige Worker. Der naechste Umbau muss validierte, aktuelle
-Rollenartefakte als direkte Eingabe des jeweils naechsten Executors verwenden,
-damit eine spaetere Rollenaktion vorherige Rollen nicht erneut ausfuehrt.
+unabhaengige Worker.
+
+Lokaler Folgeschritt (noch nicht serververifiziert): Scout-Report und
+Architect-Prosa werden nach erfolgreicher Rollen-/Contract-Pruefung als
+begrenzte Artefakte im Phase-State gesichert. Run, exaktes Ziel, Ausgabehash
+und aktuelle Eingabe-Fingerprints binden den Handoff. Scout umfasst Explorer-
+Kontext, Projektdokumente, aktuellen AST-Index, Dateiliste, Suchtreffer,
+Systemprompt, Modell und Endpoint. Architect umfasst den frisch aufgebauten
+System-/Userprompt, Scout-Ausgabe und deren Quellenfingerprint, aktuelle
+Quellbeleg-Manifeste, Modell und Endpoint. Architect und Planner-Split
+koennen so ohne erneute Ausfuehrung vorheriger Rollen fortsetzen. Geaenderte
+Eingaben verwerfen den Handoff und dispatchen genau die stale Rolle erneut;
+nach Speicherung ihres Outputs waehlt der Koordinator am neuen Checkpoint
+erneut. Ein nicht sicher bindbarer Handoff blockiert fail-closed. Parser,
+API-Widerspruchspruefung, Contracts und Gates laufen weiter. Das reduziert
+Rollenwiederholung, ist aber weder
+eine semantische Relevanz-Evaluation noch eine Aufloesung der gemeinsamen
+Planner-Kontextaufbereitung. Chat-Inbox-Unterbrechbarkeit, unabhaengige
+Rollenworker und der Gesamtumbau bleiben offen.
 
 ## Konsequenzen
 
