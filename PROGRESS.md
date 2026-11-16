@@ -7540,3 +7540,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Wissenschaftliche Grundlage:** Liu et al., *Lost in the Middle*, TACL 2023, berichten positionsabhaengige Retrieval-/QA-Leistung in langen Kontexten. Das begruendet den Positionsversuch, nicht die Annahme eines Werkstatt-spezifischen Erfolgsgewinns: https://arxiv.org/abs/2307.03172
 - **Verifikation lokal:** Builder-Kontext-/Agent-/Loop-Ask-LLM-Gruppe: 64 bestanden; Ruff fuer Builder/Test, Mypy fuer `roles/builder/run.py` bestanden.
 - **Grenze / Hauptziel:** Das ordnet deklarierte Pflichtbelege gezielter, beweist jedoch weder ihre semantische Suffizienz noch einen besseren Reparaturerfolg. Server-/Produktionsnachweis fehlt; OP-405 bleibt offen.
+
+# 2026-11-16 – Reflection-Builder-Reserve erst nach bestandenem Local Gate beanspruchen (lokal)
+- **Befund:** `ask_llm` beanspruchte den persistenten einmaligen Chat-Recovery-Builderplatz vor Rollen- und Kontextpruefungen. Ein wegen unvollstaendiger Pflichtbelege blockierter Request sendete nichts an den Provider, verbrauchte aber dennoch den Reservezaehler.
+- **Aenderung:** Die dauerhafte Reserve wird nun nach Rollen-/Manifestpruefung und erfolgreichem `llm_call`-Audit beansprucht, unmittelbar vor Aufbau des begrenzten Provider-Timeouts und dem HTTP-Aufruf. Lokale Blockaden und fehlgeschlagene Call-Audits verbrauchen die durable Builder-Reserve nicht. Ein Integrationstest zeigt erst den blockierten Kontext ohne Verbrauch und danach den gueltigen einzelnen Provideraufruf.
+- **Verifikation lokal:** Agent-/Reflection-Chat-/Adapter-Gruppe: 77 bestanden; Ruff und Mypy fuer `agent.py` bestanden.
+- **Grenze / Hauptziel:** Providerfehler nach tatsaechlichem Aufruf beanspruchen die Reserve weiterhin konservativ. Servertest und Produktionsnachweis fehlen; OP-398/405 bleiben offen.

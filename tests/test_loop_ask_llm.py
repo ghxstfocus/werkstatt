@@ -178,7 +178,58 @@ def test_exhausted_budget_allows_only_checkpoint_claimed_chat_builder(
     assert second_reply.ok is False
     assert second_reply.error == "reflection_builder_reserve_exhausted"
     post.assert_called_once()
-    assert s.llm_calls == 2
+    assert s.llm_calls == 3
+
+
+def test_recovery_builder_context_block_keeps_durable_reserve_available(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.event_store import EventStore
+
+    s = _state(tmp_path)
+    s.run_id = "test-run-context-retry"
+    s.budget = {"max_llm_calls": 1}
+    s.llm_calls = 1
+    s.budget_exhausted_reason = "max_llm_calls"
+    s.reflection_chat_builder_reserve_active = True
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(s.project_name, s.run_id, s.aufgabe, status="running")
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+    prompt = "builder prompt"
+    system = "builder system"
+    manifest = {
+        "budget_event": "builder_context_budget",
+        "required_context_complete": False,
+        "user_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+        "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+    }
+
+    with patch(
+        "werkstatt.agent.requests.post", return_value=_ok_response("patch"),
+    ) as post:
+        blocked = agent.ask_llm(
+            "sk-test", system, prompt, "deepseek-chat", 0.2,
+            state=s, aufgabe="builder", context_manifest=manifest,
+        )
+        record = store.get_run_record(s.project_name, s.run_id)
+        assert record is not None
+        assert record["checkpoint"].get("reflection_chat_builder_calls", 0) == 0
+
+        manifest["required_context_complete"] = True
+        retried = agent.ask_llm(
+            "sk-test", system, prompt, "deepseek-chat", 0.2,
+            state=s, aufgabe="builder", context_manifest=manifest,
+        )
+
+    record = store.get_run_record(s.project_name, s.run_id)
+    assert record is not None
+    assert blocked.ok is False
+    assert blocked.error == (
+        "role_context_evidence_missing; provider request was not sent"
+    )
+    assert retried.ok is True
+    assert post.call_count == 1
+    assert record["checkpoint"]["reflection_chat_builder_calls"] == 1
 
 
 def test_chat_builder_provider_timeout_uses_remaining_reserve(

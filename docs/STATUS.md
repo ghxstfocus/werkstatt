@@ -120,6 +120,8 @@ Letzte Aktualisierung: 2026-11-16.
 
 - **Kriterien-Verify am Checkpoint (lokal, noch nicht serververifiziert):** Ein vollstaendiger Taskgraph wird nur dann als Zielkandidat vor Phase-End-Verify markiert, wenn jeder kriteriumsgebundene Task aktuelle Post-Build-Belege mit gleicher Run-ID und aktuellem Hash seines Dateiscopes hat. Fehlende Scopes werden am Checkpoint als nicht verifizierbar ausgewiesen und blockieren den voreiligen Phase-End-Verify-Schritt; Chat/Control erhalten einen begrenzten Status-Snapshot. Regressionen: 123 bestanden, 2 uebersprungen. Servernachweis fehlt; OP-398 bleibt offen.
 
+- **Reflection-Builder-Reserve bei lokal blockierten Handoffs (lokal, noch nicht serververifiziert):** Der durable Chat-Recovery-Builderzaehler wird erst beansprucht, nachdem Rollen-/Kontextbelege vollstaendig geprueft und `llm_call` erfolgreich auditiert sind. Ein vor Providerkontakt abgewiesener Pflichtkontext verbraucht damit nicht den einzigen reservierten Builderaufruf; ein Regressionstest blockiert zunaechst einen unvollstaendigen Manifeststatus und belegt danach einen erfolgreichen gueltigen Retry. Agent-/Reflection-Chat-/Adapter-Gruppe: 77 bestanden; Ruff und Mypy fuer `agent.py` bestanden. Servertest fehlt; OP-398/405 bleiben offen.
+
 ### OP-399: Projekt-Hub fuer GitHub- und lokale Quellen
 - **Status:** open
 - **Typ:** project-platform

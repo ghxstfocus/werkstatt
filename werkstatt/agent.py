@@ -457,6 +457,7 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     """
     route = route_for_role(rolle or aufgabe, model)
     model = route.model
+    is_scoped_recovery_builder = False
     if state is not None:
         if _enforce_run_budget(state):
             is_scoped_recovery_builder = bool(
@@ -466,12 +467,6 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             )
             if not is_scoped_recovery_builder:
                 return LLMReply(ok=False, error=state.budget_exhausted_reason)
-            try:
-                from werkstatt.reflection_chat import claim_recovery_builder_call
-
-                claim_recovery_builder_call(state)
-            except (OSError, RuntimeError, TypeError, ValueError) as exc:
-                return LLMReply(ok=False, error=str(exc))
         state.llm_calls += 1
     _task_role = _rolle_aus_aufgabe(aufgabe)
     _routed_role = _rolle_aus_aufgabe(rolle) if rolle else _task_role
@@ -683,6 +678,14 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                 system_len=_system_len,
                 user_len=_user_len,
             )
+
+    if is_scoped_recovery_builder and state is not None:
+        try:
+            from werkstatt.reflection_chat import claim_recovery_builder_call
+
+            claim_recovery_builder_call(state)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            return LLMReply(ok=False, error=str(exc))
 
     # Prompt-Dump (nur bei WERKSTATT_PROMPT_DUMP=1).
     _dump_prompt(aufgabe, model, system_prompt, user_content)
