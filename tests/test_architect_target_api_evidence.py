@@ -21,6 +21,73 @@ def test_architect_explorer_findings_formatter_keeps_all_data() -> None:
     assert json.loads(payload) == findings
 
 
+def test_required_architect_source_must_be_complete_and_prompt_bound() -> None:
+    from werkstatt.architect import _required_source_evidence_issue
+
+    source_hash = "a" * 64
+    excerpt = (
+        f'<source datei="module.py" sha256="{source_hash}" '
+        'vollstaendig="true">\n000001 | VALUE = 1\n</source>'
+    )
+    prompt = "Architect instructions\n\n" + excerpt + "\n\nOther context"
+    start = prompt.index(excerpt)
+    manifest = {
+        "sources": [{
+            "path": "module.py",
+            "source_sha256": source_hash,
+            "excerpt_sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
+            "system_start": start,
+            "system_end": start + len(excerpt),
+            "complete": True,
+        }],
+    }
+
+    assert _required_source_evidence_issue(
+        prompt, manifest, ["module.py"],
+    ) is None
+    assert _required_source_evidence_issue(
+        prompt, {"sources": []}, ["module.py"],
+    ) == "required_source_not_complete"
+    assert _required_source_evidence_issue(
+        prompt.replace("VALUE = 1", "VALUE = 2"), manifest, ["module.py"],
+    ) == "required_source_prompt_binding_invalid"
+
+
+def test_architect_blocks_missing_required_source_before_model_call(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt import architect
+
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="alpha",
+        api_index_cache={"module.py": {}},
+        architect_skills_block="",
+        architect_execution_context="bounded project context",
+        architect_required_source_files=["module.py"],
+        scout_auftrag={
+            "auftrag_prosa": "Update the confirmed file.",
+            "relevante_dateien": [{"pfad": "module.py"}],
+            "api_auszug": {},
+        },
+    )
+    monkeypatch.setattr(
+        architect,
+        "_planner_system",
+        lambda *_args, **_kwargs: setattr(
+            state, "architect_scout_source_manifest", {"sources": []},
+        ) or "architect instructions",
+    )
+    calls = []
+    monkeypatch.setattr(architect, "ask_llm", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(architect, "audit", lambda *_a, **_k: True)
+
+    assert architect.run_architect(
+        state, "Update module.py", "ignored", "key", {},
+    ) is False
+    assert calls == []
+
+
 def test_scout_architect_prompt_includes_exact_target_api_signatures() -> None:
     from werkstatt.architect import _planner_system
     from werkstatt.scout import _baue_api_index

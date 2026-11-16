@@ -2472,8 +2472,19 @@ def _scout_route_decision(
     }
     if target not in confirmed:
         return None, "explorer_bestaetigt_zieldatei_nicht"
-    if not (Path(project_dir) / target_path).is_file():
-        return None, "zieldatei_nicht_vorhanden"
+    try:
+        project_root = Path(project_dir).resolve(strict=True)
+        resolved_target = (project_root / target_path).resolve(strict=True)
+        resolved_target.relative_to(project_root)
+        if not resolved_target.is_file():
+            return None, "zieldatei_nicht_vorhanden"
+        if resolved_target.stat().st_size > 24_000:
+            return None, "zieldatei_uebersteigt_vollstaendigen_architect_auszug"
+        source_text = resolved_target.read_text(encoding="utf-8")
+    except (OSError, RuntimeError, UnicodeDecodeError, ValueError):
+        return None, "zieldatei_nicht_sicher_lesbar"
+    if len(source_text) > 6_000:
+        return None, "zieldatei_uebersteigt_vollstaendigen_architect_auszug"
     return target, "explizite_einzeldatei_mit_explorer_beleg"
 
 
@@ -2544,6 +2555,7 @@ def run_planner(state: RunState) -> bool:
     pd = state.project_dir
     pn = state.project_name
     api_key = state.api_key
+    state.architect_required_source_files = []
     
     if not api_key:
         audit("planner_kein_key", {}, pd, pn)
@@ -2881,6 +2893,7 @@ def run_planner(state: RunState) -> bool:
             _scout_route_reason = _direct_reason
         else:
             _code_index = {}
+            state.architect_required_source_files = [_scout_skip_path]
             _scout_report = {
                 "ziel": aufgabe,
                 "relevante_dateien": [{

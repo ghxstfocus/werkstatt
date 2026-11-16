@@ -150,6 +150,8 @@ class RunState:
     # Project-local Scout-selected source excerpts passed to Architect,
     # including line/hash and omission manifest for the LLM-request audit.
     architect_scout_source_manifest: dict[str, Any] = field(default_factory=dict)
+    # Explicit single-file Scout skips require a complete Architect source excerpt.
+    architect_required_source_files: list[str] = field(default_factory=list)
     # OP-135b: Explorer-Dateiliste (key_files + findings + next_reads).
     # Struktur identisch zu pipeline_phases.py:explorer_result.
     explorer_context: dict = field(default_factory=dict)

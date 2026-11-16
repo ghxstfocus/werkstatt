@@ -383,6 +383,57 @@ def _format_scout_apis_arch(apis: dict) -> str:
     return chr(10).join(lines)
 
 
+def _required_source_evidence_issue(
+    system_prompt: str,
+    manifest: object,
+    required_files: object,
+) -> str | None:
+    """Require explicitly routed sources to arrive complete and hash-bound."""
+    if not isinstance(required_files, list) or not required_files:
+        return None
+    if any(not isinstance(path, str) or not path for path in required_files):
+        return "required_source_paths_invalid"
+    if not isinstance(manifest, dict):
+        return "required_source_manifest_missing"
+    records = manifest.get("sources")
+    if not isinstance(records, list):
+        return "required_source_records_missing"
+    by_path = {
+        item.get("path"): item for item in records
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
+    for path in dict.fromkeys(required_files):
+        item = by_path.get(path)
+        if not isinstance(item, dict) or item.get("complete") is not True:
+            return "required_source_not_complete"
+        source_hash = item.get("source_sha256")
+        excerpt_hash = item.get("excerpt_sha256")
+        start = item.get("system_start")
+        end = item.get("system_end")
+        if (
+            not isinstance(source_hash, str)
+            or len(source_hash) != 64
+            or any(char not in "0123456789abcdef" for char in source_hash)
+            or not isinstance(excerpt_hash, str)
+            or len(excerpt_hash) != 64
+            or any(char not in "0123456789abcdef" for char in excerpt_hash)
+            or not isinstance(start, int)
+            or isinstance(start, bool)
+            or not isinstance(end, int)
+            or isinstance(end, bool)
+            or not 0 <= start < end <= len(system_prompt)
+        ):
+            return "required_source_provenance_invalid"
+        excerpt = system_prompt[start:end]
+        if (
+            hashlib.sha256(excerpt.encode("utf-8")).hexdigest() != excerpt_hash
+            or f'sha256="{source_hash}"' not in excerpt
+            or 'vollstaendig="true"' not in excerpt
+        ):
+            return "required_source_prompt_binding_invalid"
+    return None
+
+
 def _format_scout_auftrag(auftrag: dict) -> str:
     """OP-385: Scout-Report als einzigen Architect-Prompt-Block rendern.
 
@@ -1833,6 +1884,22 @@ def run_architect(
         (_arch_skills_block + "\n\n" if _arch_skills_block else "")
         + _arch_sys_base + "\n\n" + _BUILDER_SCHNITTSTELLE
     )
+    _required_source_issue = _required_source_evidence_issue(
+        _arch_sys,
+        getattr(state, "architect_scout_source_manifest", None),
+        getattr(state, "architect_required_source_files", []),
+    )
+    if _required_source_issue:
+        audit("planner_architect_context_budget", {
+            "scope": "required_source_evidence",
+            "action": "blocked",
+            "required_context_complete": False,
+            "required_files": getattr(
+                state, "architect_required_source_files", [],
+            ),
+            "reason": _required_source_issue,
+        }, pd, pn)
+        return False
     _korrekturhinweis = ""
     for _versuch in range(2):
         _sys_prompt = _arch_sys + _korrekturhinweis

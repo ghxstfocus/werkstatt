@@ -107,6 +107,19 @@ def test_scout_skip_requires_explicit_single_file_and_explorer_evidence(tmp_path
         {"key_files": []}, tmp_path,
     ) is None
 
+    large = tmp_path / "werkstatt" / "large.py"
+    large.write_text("VALUE = 'x'\n" + ("# extra context\n" * 500), encoding="utf-8")
+    assert _scout_skip_target(
+        "Korrigiere werkstatt/large.py",
+        {"key_files": [{"file": "werkstatt/large.py"}]}, tmp_path,
+    ) is None
+    oversized = tmp_path / "werkstatt" / "oversized.py"
+    oversized.write_text("# context\n" * 3_000, encoding="utf-8")
+    assert _scout_skip_target(
+        "Korrigiere werkstatt/oversized.py",
+        {"key_files": [{"file": "werkstatt/oversized.py"}]}, tmp_path,
+    ) is None
+
 
 def test_planner_skips_scout_but_keeps_architect_and_plan_path(tmp_path):
     from werkstatt.planner import run_planner
