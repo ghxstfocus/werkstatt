@@ -704,6 +704,7 @@ def _build_patches_fuer_datei(
             "budget_event": "builder_context_budget",
             "user_sha256": _user_sha256,
             "system_sha256": hashlib.sha256(BUILDER_SYSTEM.encode("utf-8")).hexdigest(),
+            "required_context_complete": _context_meta.get("blocked") is False,
             "source_file": zieldatei,
             "source_sha256": _source_hash if not _ist_neu else None,
             "budget": _context_meta,

@@ -1266,6 +1266,7 @@ def _run_scout(
                 "budget_event": "scout_context_budget",
                 "user_sha256": hashlib.sha256(user_content.encode("utf-8")).hexdigest(),
                 "system_sha256": hashlib.sha256(system_prompt.encode("utf-8")).hexdigest(),
+                "required_context_complete": _within_budget,
                 "budget": _context_meta,
                 "sections_offered": [
                     title for title, _ in _context_sections

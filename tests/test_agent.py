@@ -75,6 +75,7 @@ def test_llm_call_binds_context_manifest_to_exact_sent_prompt(
     state = mk_state(project_dir=tmp_path, project_name="manifest-test")
     manifest = {
         "budget_event": "builder_context_budget",
+        "required_context_complete": True,
         "user_sha256": hashlib.sha256(b"user payload").hexdigest(),
         "system_sha256": hashlib.sha256(b"system payload").hexdigest(),
         "included_sections": ["TASK", "SOURCE"],
@@ -97,6 +98,7 @@ def test_llm_call_binds_context_manifest_to_exact_sent_prompt(
     call = next(payload for kind, payload in events if kind == "llm_call")
     expected_manifest = {
         "budget_event": "builder_context_budget",
+        "required_context_complete": True,
         "user_sha256": hashlib.sha256(b"user payload").hexdigest(),
         "system_sha256": hashlib.sha256(b"system payload").hexdigest(),
         "included_sections": ["TASK", "SOURCE"],
@@ -146,6 +148,7 @@ def test_redaction_rebinds_role_section_span_to_exact_provider_text(
     system_end = system.index("</source>") + len("</source>")
     manifest = {
         "budget_event": "builder_context_budget",
+        "required_context_complete": True,
         "user_sha256": hashlib.sha256(source.encode()).hexdigest(),
         "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
         "section_manifest": [{
@@ -217,6 +220,7 @@ def test_unverified_required_span_blocks_provider_request(monkeypatch, tmp_path)
     user = "required text"
     manifest = {
         "budget_event": "builder_context_budget",
+        "required_context_complete": True,
         "user_sha256": hashlib.sha256(user.encode()).hexdigest(),
         "system_sha256": hashlib.sha256(b"system").hexdigest(),
         "section_manifest": [{
@@ -266,6 +270,7 @@ def test_context_manifest_keeps_role_provenance_before_optional_metadata() -> No
     manifest = {
         **{f"optional_{index}": index for index in range(60)},
         "budget_event": "builder_context_budget",
+        "required_context_complete": True,
         "user_sha256": "a" * 64,
         "system_sha256": "b" * 64,
     }
@@ -300,6 +305,7 @@ def test_llm_request_is_not_sent_when_audit_write_fails(monkeypatch, tmp_path):
         aufgabe="builder",
         context_manifest={
             "budget_event": "builder_context_budget",
+            "required_context_complete": True,
             "user_sha256": hashlib.sha256(
                 b"required role evidence",
             ).hexdigest(),
@@ -348,12 +354,58 @@ def test_role_request_without_budget_evidence_is_blocked(monkeypatch, tmp_path):
         "reason": "required_role_context_evidence_missing",
         "missing": [
             "context_manifest.budget_event",
+                "context_manifest.required_context_complete",
             "context_manifest.user_sha256",
                 "context_manifest.system_sha256",
         ],
         "expected_budget_events": ["builder_context_budget"],
         "provider_request_sent": False,
     }]
+
+
+def test_incomplete_required_context_manifest_blocks_provider_request(
+    monkeypatch, tmp_path,
+) -> None:
+    state = mk_state(project_dir=tmp_path, project_name="incomplete-context")
+    provider_calls = []
+    events = []
+    monkeypatch.setattr(
+        agent,
+        "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests,
+        "post",
+        lambda *_args, **_kwargs: provider_calls.append(True),
+    )
+    system = "system"
+    user = "task with a known missing required section"
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt=system,
+        user_content=user,
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="builder",
+        context_manifest={
+            "budget_event": "builder_context_budget",
+            "required_context_complete": False,
+            "user_sha256": hashlib.sha256(user.encode()).hexdigest(),
+            "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+        },
+    )
+
+    assert not reply.ok
+    assert reply.error == (
+        "role_context_evidence_missing; provider request was not sent"
+    )
+    assert provider_calls == []
+    blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
+    assert blocked[0]["missing"] == [
+        "context_manifest.required_context_complete",
+    ]
 
 
 def test_role_request_without_run_state_is_blocked(monkeypatch):
@@ -372,7 +424,10 @@ def test_role_request_without_run_state_is_blocked(monkeypatch):
         temperature=0.0,
         state=None,
         aufgabe="builder",
-        context_manifest={"budget_event": "builder_context_budget"},
+        context_manifest={
+            "budget_event": "builder_context_budget",
+            "required_context_complete": True,
+        },
     )
 
     assert reply.ok is False
@@ -405,6 +460,7 @@ def test_role_request_rejects_another_roles_budget_manifest(monkeypatch, tmp_pat
         aufgabe="builder",
         context_manifest={
             "budget_event": "scout_context_budget",
+            "required_context_complete": True,
             "user_sha256": hashlib.sha256(b"builder task").hexdigest(),
             "system_sha256": hashlib.sha256(b"system").hexdigest(),
         },
@@ -469,6 +525,7 @@ def test_role_identity_mismatch_blocks_before_provider(monkeypatch, tmp_path):
     )
     manifest = {
         "budget_event": "planner_architect_context_budget",
+        "required_context_complete": True,
         "user_sha256": hashlib.sha256(b"builder task").hexdigest(),
         "system_sha256": hashlib.sha256(b"system").hexdigest(),
     }
@@ -529,6 +586,7 @@ def test_evidence_role_cannot_be_routed_to_unknown_or_chat(monkeypatch, tmp_path
             rolle=explicit_role,
             context_manifest={
                 "budget_event": "builder_context_budget",
+                "required_context_complete": True,
                 "user_sha256": hashlib.sha256(b"builder task").hexdigest(),
                 "system_sha256": hashlib.sha256(b"system").hexdigest(),
             },
@@ -570,6 +628,7 @@ def test_builder_request_rejects_manifest_for_different_user_context(
         aufgabe="builder",
         context_manifest={
             "budget_event": "builder_context_budget",
+            "required_context_complete": True,
             "user_sha256": hashlib.sha256(b"stale builder task").hexdigest(),
             "system_sha256": hashlib.sha256(b"system").hexdigest(),
         },
@@ -605,6 +664,7 @@ def test_builder_request_rejects_manifest_for_different_system_prompt(
         aufgabe="builder",
         context_manifest={
             "budget_event": "builder_context_budget",
+            "required_context_complete": True,
             "user_sha256": hashlib.sha256(b"builder task").hexdigest(),
             "system_sha256": hashlib.sha256(b"stale builder system").hexdigest(),
         },

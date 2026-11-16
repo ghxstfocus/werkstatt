@@ -1017,6 +1017,9 @@ def run_phase_end_review(state: RunState) -> bool:
                     "budget_event": "reviewer_context_budget",
                     "user_sha256": hashlib.sha256(user.encode("utf-8")).hexdigest(),
                     "system_sha256": hashlib.sha256(_phase_system.encode("utf-8")).hexdigest(),
+                    "required_context_complete": (
+                        _phase_context_meta.get("required_complete") is True
+                    ),
                     "budget": _phase_context_meta,
                     "files": _phase_files,
                     "user_chars": len(user),
@@ -1564,6 +1567,9 @@ def run_reviewer(state: RunState) -> bool:
             "budget_event": "reviewer_context_budget",
             "user_sha256": hashlib.sha256(user_content.encode("utf-8")).hexdigest(),
             "system_sha256": hashlib.sha256(_system_content.encode("utf-8")).hexdigest(),
+            "required_context_complete": (
+                _review_context_meta.get("required_complete") is True
+            ),
             "budget": _review_context_meta,
             "task_files": _normalized_files,
             "diff_sha256": _diff_hash,

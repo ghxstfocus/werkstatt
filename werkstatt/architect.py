@@ -1846,6 +1846,7 @@ def run_architect(
                         state, "architect_scout_source_manifest", {},
                     ),
                     "scout_report_sha256": _scout_report_hash,
+                    "required_context_complete": True,
                     "execution_context": getattr(
                         state, "architect_execution_context_manifest", {},
                     ),

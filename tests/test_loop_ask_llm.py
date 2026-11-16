@@ -159,6 +159,7 @@ def test_exhausted_budget_allows_only_checkpoint_claimed_chat_builder(
     system = "builder system"
     context = {
         "budget_event": "builder_context_budget",
+        "required_context_complete": True,
         "user_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
         "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
     }
@@ -210,6 +211,7 @@ def test_chat_builder_provider_timeout_uses_remaining_reserve(
     system = "builder system"
     context = {
         "budget_event": "builder_context_budget",
+        "required_context_complete": True,
         "user_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
         "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
     }
@@ -551,6 +553,7 @@ def test_llm_usage_hat_stabile_rolle_ohne_agent_zu_ueberschreiben(tmp_path):
             aufgabe="planner-split",
             context_manifest={
                 "budget_event": "planner_split_context_budget",
+                "required_context_complete": True,
                 "user_sha256": hashlib.sha256(b"USER").hexdigest(),
                 "system_sha256": hashlib.sha256(b"SYS").hexdigest(),
             },
@@ -582,6 +585,7 @@ def test_builder_request_overrides_reasoner_to_flash_and_disables_thinking(tmp_p
             heartbeat=False,
             context_manifest={
                 "budget_event": "builder_context_budget",
+                "required_context_complete": True,
                 "user_sha256": hashlib.sha256(b"USR").hexdigest(),
                     "system_sha256": hashlib.sha256(b"SYS").hexdigest(),
             },
@@ -610,6 +614,7 @@ def test_architect_request_uses_pro_thinking_without_temperature(tmp_path):
             heartbeat=False,
             context_manifest={
                 "budget_event": "planner_architect_context_budget",
+                "required_context_complete": True,
                 "user_sha256": hashlib.sha256(b"USR").hexdigest(),
                     "system_sha256": hashlib.sha256(b"SYS").hexdigest(),
             },

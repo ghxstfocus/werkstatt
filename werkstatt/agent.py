@@ -492,6 +492,11 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             or budget_event not in expected_budget_events
         ):
             missing.append("context_manifest.budget_event")
+        if (
+            not isinstance(context_manifest, dict)
+            or context_manifest.get("required_context_complete") is not True
+        ):
+            missing.append("context_manifest.required_context_complete")
         if _evidence_roles & _ROLE_CONTEXT_DIGEST_REQUIRED:
             expected_user_sha256 = hashlib.sha256(
                 user_content.encode("utf-8")
