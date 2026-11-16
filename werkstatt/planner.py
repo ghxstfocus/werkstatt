@@ -42,6 +42,31 @@ from werkstatt.architect import (  # noqa: F401
 )
 from werkstatt.audit import audit
 
+
+def _publish_role_checkpoint(
+    state, role: str, status: str, reason: str,
+    input_evidence: object = None, output_evidence: object = None,
+) -> None:
+    """Publish bounded role transitions without copying prompt contents."""
+    def digest(value: object) -> str | None:
+        if value is None:
+            return None
+        encoded = json.dumps(
+            value, ensure_ascii=False, sort_keys=True, default=str,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    checkpoint = {
+        "role": role,
+        "status": status,
+        "reason": reason[:300],
+        "input_sha256": digest(input_evidence),
+        "output_sha256": digest(output_evidence),
+    }
+    callback = getattr(state, "planner_checkpoint_callback", None)
+    if callable(callback):
+        callback(checkpoint)
+
 # Fix AZ Stufe 9+10: Re-Exports fuer API-Kompatibilitaet.
 from werkstatt.scout import (  # noqa: F401
     _SCOUT_NACHFOLGER_BLOCK,
@@ -2955,18 +2980,36 @@ def run_planner(state: RunState) -> bool:
                 if _direct_report is not None else "wird_aufgerufen"
             ),
         }, pd, pn)
+        _publish_role_checkpoint(
+            state, "scout", "skipped", _scout_route_reason,
+            {"goal": aufgabe, "explorer": _explorer_ctx},
+            _scout_report,
+        )
     else:
         audit("planner_scout_required", {
             "grund": _scout_route_reason,
         }, pd, pn)
+        _publish_role_checkpoint(
+            state, "scout", "running", _scout_route_reason,
+            {"goal": aufgabe, "explorer": _explorer_ctx},
+        )
         _code_index = _baue_api_index(pd)
         _scout_report = _run_scout(
             state, aufgabe, _code_index, _key_files_scan, api_key,
         )
     if not isinstance(_scout_report, dict):
+        _publish_role_checkpoint(
+            state, "scout", "failed", "structured_report_missing",
+            {"goal": aufgabe, "explorer": _explorer_ctx},
+        )
         audit("planner_scout_json_fehler",
               {"grund": "kein_structured_scout_report"}, pd, pn)
         return False
+    if not _scout_skip_path:
+        _publish_role_checkpoint(
+            state, "scout", "completed", "structured_report_received",
+            {"goal": aufgabe, "explorer": _explorer_ctx}, _scout_report,
+        )
 
     # GOLD 2026-10-30: Scout kann "bereits_erfuellt" melden.
     # Dann brechen wir ab: kein Architect, kein Planner, kein Builder.
@@ -3038,6 +3081,16 @@ def run_planner(state: RunState) -> bool:
             ) if _atomar_ok else []
         )
         if _atom_tasks:
+            _publish_role_checkpoint(
+                state, "architect", "skipped",
+                "deterministic_atomic_plan_evidence_sufficient",
+                _scout_report, _atom_tasks,
+            )
+            _publish_role_checkpoint(
+                state, "planner_split", "skipped",
+                "deterministic_atomic_plan_already_task_graph",
+                _atom_tasks, _atom_tasks,
+            )
             audit("planner_atomarer_plan",
                   {"tasks": len(_atom_tasks),
                    "dateien": [t["task_files"][0] for t in _atom_tasks],
@@ -3074,13 +3127,35 @@ def run_planner(state: RunState) -> bool:
 
     # CALL 1: Architect (Fix AZ Stufe 10: ausgelagert nach architect.py)
     # OP-136b: Contract-Validierung scout->architect.
+    _publish_role_checkpoint(
+        state, "architect", "running", "scout_handoff_ready",
+        {"goal": aufgabe, "user_context": user_content,
+         "scout_report": _scout_report},
+    )
     if not _validate_contract_or_audit("scout", "architect", state, pd, pn):
+        _publish_role_checkpoint(
+            state, "architect", "failed", "scout_contract_rejected",
+            _scout_report,
+        )
         return False
     if not run_architect(state, aufgabe, user_content, api_key, _explorer_ctx):
+        _publish_role_checkpoint(
+            state, "architect", "failed", "architect_call_failed",
+            _scout_report,
+        )
         return False
     _arch_prosa = state.architect_prosa
+    _publish_role_checkpoint(
+        state, "architect", "completed", "architect_prose_received",
+        {"goal": aufgabe, "user_context": user_content,
+         "scout_report": _scout_report}, _arch_prosa,
+    )
     # OP-136b: Contract-Validierung architect->planner.
     if not _validate_contract_or_audit("architect", "planner", state, pd, pn):
+        _publish_role_checkpoint(
+            state, "planner_split", "failed", "architect_contract_rejected",
+            _arch_prosa,
+        )
         return False
 
     # CALL 2: Planner (JSON aus Prosa)
@@ -3093,16 +3168,30 @@ def run_planner(state: RunState) -> bool:
                     _key_files.append(_f)
 
     try:
+        _publish_role_checkpoint(
+            state, "planner_split", "running", "architect_handoff_ready",
+            {"architect_prose": _arch_prosa, "key_files": _key_files},
+        )
         _sub_tasks = _zerlege_in_sub_tasks(
             _arch_prosa, _key_files, api_key, pd, pn,
             aufgabe=aufgabe, state=state,
         )
     except TaskGraphError as exc:
+        _publish_role_checkpoint(
+            state, "planner_split", "failed", "task_graph_rejected",
+            _arch_prosa,
+        )
         audit("planner_plan_abgelehnt", {
             "grund": str(exc),
             "quelle": "architect_planner_split",
         }, pd, pn)
         return False
+
+    _publish_role_checkpoint(
+        state, "planner_split", "completed", "task_graph_received",
+        {"architect_prose": _arch_prosa, "key_files": _key_files},
+        {"tasks": _sub_tasks, "criteria": state.akzeptanzkriterien},
+    )
 
     if _sub_tasks:
         _sub_tasks = _normalisiere_task_files(

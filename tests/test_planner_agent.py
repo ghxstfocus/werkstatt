@@ -196,6 +196,8 @@ def test_planner_skips_scout_but_keeps_architect_and_plan_path(tmp_path):
         "key_files": [{"file": "werkstatt/small.py"}],
         "findings": "Datei vorhanden",
     }
+    role_checkpoints = []
+    st.planner_checkpoint_callback = role_checkpoints.append
 
     def architect(_state, _aufgabe, _content, _key, _explorer):
         _state.architect_prosa = "## Aenderung\nAendere VALUE in small.py."
@@ -221,6 +223,15 @@ def test_planner_skips_scout_but_keeps_architect_and_plan_path(tmp_path):
         call.args[0] == "planner_scout_skipped"
         for call in mock_audit.call_args_list
     )
+    assert [(item["role"], item["status"]) for item in role_checkpoints] == [
+        ("scout", "skipped"),
+        ("architect", "running"),
+        ("architect", "completed"),
+        ("planner_split", "running"),
+        ("planner_split", "completed"),
+    ]
+    assert role_checkpoints[2]["output_sha256"]
+    assert role_checkpoints[4]["output_sha256"]
 
 
 def test_literal_single_file_replacement_skips_scout_and_architect(tmp_path):
@@ -229,6 +240,8 @@ def test_literal_single_file_replacement_skips_scout_and_architect(tmp_path):
     st = _state(tmp_path)
     st.aufgabe = "Ersetze `OLD` durch `NEW` in module.py."
     st.explorer_context = {"key_files": [{"file": "module.py"}]}
+    role_checkpoints = []
+    st.planner_checkpoint_callback = role_checkpoints.append
 
     with patch(
         "werkstatt.planner._run_scout",
@@ -248,6 +261,11 @@ def test_literal_single_file_replacement_skips_scout_and_architect(tmp_path):
         and call.args[1].get("architect") == "uebersprungen"
         for call in mock_audit.call_args_list
     )
+    assert [(item["role"], item["status"]) for item in role_checkpoints] == [
+        ("scout", "skipped"),
+        ("architect", "skipped"),
+        ("planner_split", "skipped"),
+    ]
 
 
 def test_literal_replacement_with_ambiguous_or_stale_text_falls_back(tmp_path):

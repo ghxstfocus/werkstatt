@@ -1081,6 +1081,72 @@ def _persist_run_coordinator_decision(
     raise RuntimeError("Dispatch-Entscheidung konnte nicht CAS-persistiert werden")
 
 
+def _persist_run_planner_role_checkpoint(
+    project_name: str,
+    run_id: str,
+    role_checkpoint: dict[str, Any],
+    *,
+    run_state: RunState,
+) -> None:
+    """Persist a bounded planning-role boundary for live status and recovery."""
+    role = role_checkpoint.get("role")
+    status = role_checkpoint.get("status")
+    if role not in {"scout", "architect", "planner_split"}:
+        raise ValueError("Unbekannte Planner-Rolle im Checkpoint")
+    if status not in {"running", "completed", "skipped", "failed"}:
+        raise ValueError("Ungueltiger Planner-Rollenstatus")
+    safe = {
+        "role": role,
+        "status": status,
+        "reason": str(role_checkpoint.get("reason") or "")[:300],
+        "input_sha256": role_checkpoint.get("input_sha256"),
+        "output_sha256": role_checkpoint.get("output_sha256"),
+        "updated_at": time.time(),
+    }
+    for key in ("input_sha256", "output_sha256"):
+        digest = safe[key]
+        if digest is not None and (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(char not in "0123456789abcdef" for char in digest)
+        ):
+            raise ValueError("Ungueltiger Rollenbeleg-Hash")
+
+    store = EventStore()
+    for _attempt in range(5):
+        check_run_lease(run_state)
+        record = store.get_run_record(project_name, run_id)
+        if record is None or record.get("status") not in {"starting", "running"}:
+            raise RuntimeError("Aktiver RunCheckpoint fuer Planner-Rolle fehlt")
+        checkpoint = dict(record.get("checkpoint") or {})
+        history = checkpoint.get("planner_role_history")
+        history = list(history) if isinstance(history, list) else []
+        history.append(safe)
+        checkpoint["planner_role_history"] = history[-12:]
+        checkpoint["planner_role_checkpoint"] = safe
+        try:
+            store.update_run_checkpoint(
+                project_name, run_id, checkpoint,
+                expected_version=int(record["checkpoint_version"]),
+            )
+            audit(
+                "loop_run_coordinator_decision",
+                {
+                    "run_id": run_id,
+                    "decision": "planner_role_checkpoint",
+                    "action": role,
+                    "reason": safe["reason"],
+                    "role_checkpoint": safe,
+                },
+                run_state.project_dir,
+                project_name,
+            )
+            return
+        except RuntimeError:
+            continue
+    raise RuntimeError("Planner-Rollencheckpoint konnte nicht CAS-persistiert werden")
+
+
 def _select_loop_run_id(
     project_name: str,
     state: RunState,
@@ -1357,9 +1423,18 @@ def _run_pipeline_loop_impl(
                 )
                 return 1
             check_run_lease(state)
-            _rc_plan, _done = _phase_plan_and_preflight(
-                state, aufgabe, project_name, phase_state,
+            state.planner_checkpoint_callback = (
+                lambda role_checkpoint: _persist_run_planner_role_checkpoint(
+                    project_name, get_run_id(), role_checkpoint,
+                    run_state=state,
+                )
             )
+            try:
+                _rc_plan, _done = _phase_plan_and_preflight(
+                    state, aufgabe, project_name, phase_state,
+                )
+            finally:
+                state.planner_checkpoint_callback = None
             if _done or _rc_plan != 0:
                 check_run_lease(state)
                 _persist_run_result(

@@ -830,6 +830,17 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                 "phase": "build", "next_task_id": "task-2",
                 "completed_task_ids": ["task-1"],
             },
+            "planner_role_checkpoint": {
+                "role": "architect", "status": "completed",
+                "reason": "architect_prose_received",
+                "input_sha256": "a" * 64,
+                "output_sha256": "b" * 64,
+                "prompt": "SECRET role prompt",
+            },
+            "planner_role_history": [
+                {"role": "scout", "status": "completed", "reason": "ok"},
+                {"role": "shell", "status": "running", "reason": "invalid"},
+            ],
             "private_prompt": "do not expose",
         }, expected_version=run["checkpoint_version"],
     )
@@ -847,6 +858,14 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
     assert parsed["run_id"] == "alpha-run-1"
     assert parsed["checkpoint_status"] == "available"
     assert parsed["checkpoint"]["safe_point"]["next_task_id"] == "task-2"
+    assert parsed["checkpoint"]["planner_role_checkpoint"] == {
+        "role": "architect", "status": "completed",
+        "reason": "architect_prose_received",
+        "input_sha256": "a" * 64, "output_sha256": "b" * 64,
+    }
+    assert parsed["checkpoint"]["planner_role_history"] == [{
+        "role": "scout", "status": "completed", "reason": "ok",
+    }]
     assert parsed["checkpoint"]["coordinator_decision"]["action"] == (
         "execute_task_checkpoint"
     )
@@ -874,6 +893,7 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
     assert "private_prompt" not in json.dumps(dispatch_evidence)
     assert "private_prompt" not in result
     assert "never expose" not in result
+    assert "SECRET role prompt" not in result
     assert parsed["recent_events"][0]["summary"] == "Builder laeuft"
     assert "secret prompt" not in result
     assert "do not expose" not in result

@@ -755,6 +755,54 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
     }
 
 
+def test_planner_role_checkpoint_is_cas_persisted_without_prompt_text(
+    monkeypatch, tmp_path,
+):
+    import json
+
+    from werkstatt.event_store import EventStore
+    from werkstatt.loop import _persist_run_planner_role_checkpoint
+
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record("demo", "demo-run-role", "Complete goal")
+    monkeypatch.setattr("werkstatt.loop.EventStore", lambda: store)
+    monkeypatch.setattr("werkstatt.loop.audit", lambda *_args, **_kwargs: None)
+    state = RunState(project_name="demo", project_dir=tmp_path)
+    _persist_run_planner_role_checkpoint(
+        "demo", "demo-run-role", {
+            "role": "architect", "status": "completed",
+            "reason": "architect_prose_received",
+            "input_sha256": "a" * 64,
+            "output_sha256": "b" * 64,
+            "prompt": "SECRET prompt must not persist",
+        },
+        run_state=state,
+    )
+
+    record = store.get_run_record("demo", "demo-run-role")
+    assert record is not None
+    checkpoint = record["checkpoint"]
+    role_checkpoint = checkpoint["planner_role_checkpoint"]
+    assert role_checkpoint["role"] == "architect"
+    assert role_checkpoint["status"] == "completed"
+    assert role_checkpoint["input_sha256"] == "a" * 64
+    assert role_checkpoint["output_sha256"] == "b" * 64
+    assert checkpoint["planner_role_history"] == [role_checkpoint]
+    assert "SECRET prompt" not in json.dumps(checkpoint)
+
+
+def test_planner_role_checkpoint_rejects_unknown_role():
+    import pytest
+
+    from werkstatt.loop import _persist_run_planner_role_checkpoint
+
+    with pytest.raises(ValueError, match="Unbekannte Planner-Rolle"):
+        _persist_run_planner_role_checkpoint(
+            "demo", "demo-run", {"role": "shell", "status": "running"},
+            run_state=RunState(),
+        )
+
+
 def test_new_direct_loop_rotates_terminal_process_global_run_id(tmp_path):
     from werkstatt.audit import get_run_id, set_run_id
     from werkstatt.event_store import EventStore

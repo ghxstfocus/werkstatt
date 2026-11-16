@@ -744,6 +744,52 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                     checkpoint[key], (str, int, float, bool, type(None)),
                 )
             }
+            role_keys = {
+                "role", "status", "reason", "input_sha256",
+                "output_sha256", "updated_at",
+            }
+            role_statuses = {"running", "completed", "skipped", "failed"}
+            role_names = {"scout", "architect", "planner_split"}
+
+            def safe_role_checkpoint(value: object) -> dict[str, Any] | None:
+                if not isinstance(value, dict):
+                    return None
+                if (
+                    value.get("role") not in role_names
+                    or value.get("status") not in role_statuses
+                ):
+                    return None
+                safe_role = {
+                    key: value[key]
+                    for key in role_keys
+                    if key in value and isinstance(
+                        value[key], (str, int, float, bool, type(None)),
+                    )
+                }
+                safe_role["reason"] = str(safe_role.get("reason") or "")[:300]
+                for key in ("input_sha256", "output_sha256"):
+                    digest = safe_role.get(key)
+                    if digest is not None and (
+                        not isinstance(digest, str)
+                        or len(digest) != 64
+                        or any(c not in "0123456789abcdef" for c in digest)
+                    ):
+                        safe_role.pop(key, None)
+                return safe_role
+
+            role_checkpoint = safe_role_checkpoint(
+                checkpoint.get("planner_role_checkpoint"),
+            )
+            if role_checkpoint is not None:
+                result["checkpoint"][
+                    "planner_role_checkpoint"
+                ] = role_checkpoint
+            role_history = checkpoint.get("planner_role_history")
+            if isinstance(role_history, list):
+                result["checkpoint"]["planner_role_history"] = [
+                    safe_item for item in role_history[-8:]
+                    if (safe_item := safe_role_checkpoint(item)) is not None
+                ]
             dispatch = checkpoint.get("coordinator_decision")
             if isinstance(dispatch, dict):
                 dispatch_summary: dict[str, Any] = {}
