@@ -43,7 +43,9 @@ def _phase(tmp_path, tasks, criteria):
                     "lines": content.count(b"\n"),
                 })
             assert phase.record_task_read_evidence(task["id"], file_evidence)
-        phase.save()
+    if phase.data.get("tasks"):
+        phase.bind_approved_plan()
+    phase.save()
     return phase
 
 
@@ -362,6 +364,9 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
         "setup_checkpoint_complete": False,
         "plan_checkpoint_complete": False,
         "plan_goal_matches": False,
+        "plan_run_matches": True,
+        "plan_project_matches": True,
+        "plan_fingerprint_matches": True,
         "task_count": 0,
     }
 
@@ -408,7 +413,19 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     )
 
     state.aufgabe = "Goal"
+    # Simulate a real approved checkpoint: the production coordinator only
+    # marks a plan complete after the human gate has accepted a non-empty
+    # graph and its immutable content has been bound to the checkpoint.
+    resumed_phase.data["tasks"] = [{
+        "id": "approved-task",
+        "name": "Approved task",
+        "description": "Inspect the approved scope",
+        "action": "read",
+        "dependencies": [],
+        "criterion_refs": [],
+    }]
     resumed_phase.data["plan_complete"] = True
+    resumed_phase.bind_approved_plan()
     resumed_phase.save()
     final_phase = PhaseState("demo", base_dir=tmp_path)
     assert final_phase.load()
@@ -1016,6 +1033,36 @@ def test_coordinator_does_not_hydrate_plan_from_another_run(tmp_path) -> None:
     assert state.tasks == []
     assert state.tests == []
     assert state.akzeptanzkriterien == []
+
+
+def test_coordinator_rejects_plan_changed_after_human_approval(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [{
+            "id": "t1", "action": "update", "criterion_refs": ["AC1"],
+            "task_files": ["src/current.py"], "description": "Approved edit",
+        }],
+        ["Apply only the approved edit"],
+    )
+    phase.run_id = "approved-run"
+    phase.data["run_id"] = "approved-run"
+    phase.save()
+    phase.data["tasks"][0]["description"] = "Tampered edit outside approval"
+    state = RunState(
+        aufgabe="Ziel",
+        project_name="demo",
+        project_dir=tmp_path,
+        run_id="approved-run",
+    )
+    state.coordinator_setup_context_ready = True
+
+    decision = _run_coordinator_action(phase, state)
+
+    assert decision["coordinator_action"] == "planner_scout"
+    assert decision["decision_basis"]["plan_fingerprint_matches"] is False
+    assert state.tasks == []
 
 
 def test_run_coordinator_resolves_blocked_graph_before_stale_verify(tmp_path) -> None:

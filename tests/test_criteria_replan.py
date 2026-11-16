@@ -65,6 +65,7 @@ def test_replans_only_missing_criteria_and_preserves_completed_tasks(
     )
     phase.data["setup_complete"] = True
     phase.data["plan_complete"] = True
+    phase.bind_approved_plan()
     phase.mark_done("existing")
     state = RunState(
         project_dir=tmp_path,
@@ -198,6 +199,7 @@ def test_replans_failed_criterion_after_recovery_and_supersedes_history(
     )
     phase.data["setup_complete"] = True
     phase.data["plan_complete"] = True
+    phase.bind_approved_plan()
     phase.mark_done("done")
     phase.mark_failed(
         "failed", failure="builder_failed",

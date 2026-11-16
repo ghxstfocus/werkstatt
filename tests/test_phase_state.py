@@ -36,6 +36,31 @@ def test_init_new_persistiert_criterion_refs_ueber_reload(tmp_path):
     assert resumed.data["tasks"][0]["criterion_refs"] == ["AC1", "AC3"]
 
 
+def test_approved_plan_fingerprint_binds_plan_but_allows_runtime_progress():
+    phase = PhaseState("demo")
+    phase.init_new(
+        "Goal",
+        [{
+            "id": "t1",
+            "name": "Edit source",
+            "description": "Approved implementation",
+            "action": "update",
+            "task_files": ["src/main.py"],
+            "criterion_refs": ["AC1"],
+        }],
+        tests=["pytest tests/test_main.py"],
+        akzeptanzkriterien=["Expected behavior is implemented"],
+    )
+    original = phase.bind_approved_plan()
+    assert phase.approved_plan_is_current()
+
+    phase.mark_running("t1")
+    assert phase.approved_plan_is_current()
+    phase.data["tasks"][0]["description"] = "Changed after approval"
+    assert not phase.approved_plan_is_current()
+    assert phase.approved_plan_fingerprint() != original
+
+
 def test_task_verify_evidence_is_persisted_and_bound_to_criteria(tmp_path):
     project_dir = tmp_path / "project"
     (project_dir / "src").mkdir(parents=True)

@@ -111,6 +111,10 @@ def _phase_plan_and_preflight(
             and phase_state.data.get("aufgabe") == aufgabe
             and phase_state.data.get("plan_complete") is True
             and isinstance(phase_state.data.get("tasks"), list)
+            and (
+                not getattr(state, "run_id", None)
+                or phase_state.approved_plan_is_current()
+            )
         )
         if checkpoint_has_plan:
             state.tasks = list(phase_state.data["tasks"])
@@ -191,6 +195,27 @@ def _phase_plan_and_preflight(
                       {"phase_aufgabe": _ps_aufgabe[:100],
                        "aktuelle_aufgabe": (aufgabe or "")[:100],
                        "grund": "aufgabe_geaendert"}, pd, pn)
+            approved_plan_check = getattr(
+                phase_state, "approved_plan_is_current", None,
+            )
+            if (
+                getattr(state, "run_id", None)
+                and phase_state.data.get("plan_complete") is True
+                and (
+                    not callable(approved_plan_check)
+                    or not approved_plan_check()
+                )
+            ):
+                _resume_erlaubt = False
+                audit(
+                    "loop_resume_verworfen",
+                    {
+                        "grund": "approved_plan_fingerprint_mismatch",
+                        "run_id": state.run_id,
+                    },
+                    pd,
+                    pn,
+                )
         except (AttributeError, TypeError):
             pass
 

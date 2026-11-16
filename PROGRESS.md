@@ -7913,3 +7913,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Ein persistierter Plan wird nur noch wiederverwendet, wenn Ziel, Setup-/Planmarker sowie Run-ID und Projekt zum aktiven Run passen. Bei abweichender Run-ID laedt der Dispatcher keine Tasks/Kriterien und verlangt Setup fuer den aktuellen Run; die bestehenden Ausfuehrungs-/Evidence-Gates bleiben danach massgeblich.
 - **Verifikation lokal:** `tests/test_checkpoint_decision.py tests/test_loop_phases.py`: 93 bestanden. Ruff und gezieltes Mypy fuer `loop.py` bestanden.
 - **Grenze:** Nur lokaler Nachweis; keine Vollsuite, Server- oder Live-Resume-Verifikation. Das ersetzt nicht die weiter offene vollstaendige Migration vom linearen Phasenablauf.
+
+# 2026-11-16 – Freigegebenen Planinhalt am Checkpoint binden
+- **Befund:** Run-ID, Projekt und Ziel schuetzten den Plancheckpoint vor falschem Resume, aber veraenderte Task-/Kriterieninhalte konnten unter denselben Identitaeten weiterhin als freigegeben gelten.
+- **Aenderung:** Nach erfolgreichem Plan-/Human-Gate bindet der Phase-State einen kanonischen SHA-256-Fingerprint an den unveraenderlichen Taskgraph, Scope, Tests und Kriterien. Bei Resume vergleicht der Koordinator den Fingerprint vor dem Hydrieren; veraenderte oder alte, ungebundene Plaene werden verworfen und neu geplant. Laufzeitstatus und Verify-Belege bleiben ausserhalb des Planhashes, damit regulärer Taskfortschritt den genehmigten Plan nicht entwertet. Der Fingerprint-Mismatch wird als Entscheidungsgrundlage auditiert.
+- **Verifikation lokal:** Checkpoint-/Phase-State-/Criteria-Replan-/Loop-Phasen-/Planner-Gruppe: 196 bestanden, 3 uebersprungen; Ruff und gezieltes Mypy bestanden.
+- **Grenze:** Keine Vollsuite, Server- oder Live-Resume-Verifikation. Die globale Migration vom linearen Setup-/Plan-/Task-/Finalizer-Ablauf bleibt offen; OP-398 bleibt offen.

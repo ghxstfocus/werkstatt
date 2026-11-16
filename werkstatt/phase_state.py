@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import json
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
@@ -122,6 +123,68 @@ class PhaseState:
         with tmp.open("w", encoding="utf-8") as fh:
             yaml.safe_dump(self.data, fh, allow_unicode=True, sort_keys=False)
         tmp.replace(self.path)
+
+    def approved_plan_fingerprint(self) -> str | None:
+        """Hash only immutable, human-approved plan content.
+
+        Mutable task execution status and evidence are deliberately excluded
+        so the same approved graph remains valid while the run advances.
+        """
+        tasks = self.data.get("tasks")
+        if not isinstance(tasks, list) or not tasks:
+            return None
+        task_fields = (
+            "id", "name", "description", "action", "phase_id", "parent_id",
+            "task_files", "dependencies", "criterion_refs",
+        )
+        immutable_tasks: list[dict[str, Any]] = []
+        for task in tasks:
+            if not isinstance(task, dict):
+                return None
+            immutable_tasks.append({
+                field: task.get(field)
+                for field in task_fields if field in task
+            })
+        payload = {
+            "version": 1,
+            "project": self.data.get("project"),
+            "goal": self.data.get("aufgabe"),
+            "criteria_tracking": self.data.get("criteria_tracking"),
+            "tasks": immutable_tasks,
+            "tests": self.data.get("tests"),
+            "akzeptanzkriterien": self.data.get("akzeptanzkriterien"),
+            "phasen": self.data.get("phasen"),
+        }
+        try:
+            encoded = json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError, UnicodeEncodeError):
+            return None
+        return hashlib.sha256(encoded).hexdigest()
+
+    def bind_approved_plan(self) -> str:
+        """Persist the fingerprint after the plan human gate approves it."""
+        fingerprint = self.approved_plan_fingerprint()
+        if fingerprint is None:
+            raise ValueError("Freigegebener Plan ist nicht kanonisierbar")
+        self.data["plan_checkpoint_version"] = 1
+        self.data["approved_plan_sha256"] = fingerprint
+        return fingerprint
+
+    def approved_plan_is_current(self) -> bool:
+        """Check that mutable phase state still matches its approved plan."""
+        if self.data.get("plan_checkpoint_version") != 1:
+            return False
+        fingerprint = self.approved_plan_fingerprint()
+        return (
+            fingerprint is not None
+            and self.data.get("approved_plan_sha256") == fingerprint
+        )
 
     def init_new(
         self,

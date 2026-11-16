@@ -714,6 +714,14 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         not state.project_name
         or getattr(phase_state, "project_name", None) == state.project_name
     )
+    plan_fingerprint_matches = (
+        not state.run_id
+        or (
+            phase_state is not None
+            and callable(getattr(phase_state, "approved_plan_is_current", None))
+            and phase_state.approved_plan_is_current()
+        )
+    )
     task_records = phase_data.get("tasks")
     task_count = len(task_records) if isinstance(task_records, list) else 0
     plan_checkpoint_current = bool(
@@ -723,6 +731,7 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         and plan_goal_matches
         and plan_run_matches
         and plan_project_matches
+        and plan_fingerprint_matches
     )
     if plan_checkpoint_current and phase_state is not None:
         # A persisted plan survives process restarts; hydrate the current
@@ -778,6 +787,9 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 "setup_checkpoint_complete": setup_checkpoint_complete,
                 "plan_checkpoint_complete": plan_checkpoint_complete,
                 "plan_goal_matches": plan_goal_matches,
+                "plan_run_matches": plan_run_matches,
+                "plan_project_matches": plan_project_matches,
+                "plan_fingerprint_matches": plan_fingerprint_matches,
                 "task_count": task_count,
             },
             "preserve_failed_tasks_on_setup": preserve_failed_tasks_on_setup,
@@ -843,6 +855,9 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 "setup_checkpoint_complete": setup_checkpoint_complete,
                 "plan_checkpoint_complete": plan_checkpoint_complete,
                 "plan_goal_matches": plan_goal_matches,
+                "plan_run_matches": plan_run_matches,
+                "plan_project_matches": plan_project_matches,
+                "plan_fingerprint_matches": plan_fingerprint_matches,
                 "task_count": task_count,
                 "planner_role_stage": planner_role_stage,
                 "planner_role_decision": planner_decision.role,
@@ -1711,6 +1726,23 @@ def _run_pipeline_loop_impl(
                 return 1
             phase_state.data["setup_complete"] = True
             phase_state.data["plan_complete"] = True
+            try:
+                phase_state.bind_approved_plan()
+            except (AttributeError, ValueError) as exc:
+                audit(
+                    "loop_failed",
+                    {
+                        "reason": "approved_plan_fingerprint_failed",
+                        "error": str(exc)[:300],
+                    },
+                    state.project_dir,
+                    project_name,
+                )
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
             phase_state.save()
             tasks = state.tasks
             tasks_ok = len([
