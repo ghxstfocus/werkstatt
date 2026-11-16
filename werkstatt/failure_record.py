@@ -19,6 +19,8 @@ _SECRET_ASSIGNMENT = re.compile(
 )
 _BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
 _KEY_TOKEN = re.compile(r"\b(?:sk|gh[pousr]t?)-[A-Za-z0-9_-]{12,}\b")
+_UNVERSIONED_MAX_ENTRIES = 10_000
+_UNVERSIONED_MAX_BYTES = 64 * 1024 * 1024
 
 
 def _audit_root() -> Path:
@@ -51,7 +53,7 @@ def _worktree_fingerprint(project_dir: Path) -> str | None:
     """
     root = project_dir.resolve()
     if not any((parent / ".git").exists() for parent in (root, *root.parents)):
-        return None
+        return _unversioned_tree_fingerprint(root)
     status = _git_output(
         project_dir, "status", "--porcelain=v1", "--untracked-files=all",
     )
@@ -90,6 +92,55 @@ def _worktree_fingerprint(project_dir: Path) -> str | None:
             digest.update(b"<unavailable>")
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def _unversioned_tree_fingerprint(root: Path) -> str | None:
+    """Hash a small non-Git tree; return unavailable when the bound is hit."""
+    digest = hashlib.sha256(b"werkstatt-unversioned-tree-v1\0")
+    pending = [root]
+    entries_seen = 0
+    bytes_seen = 0
+    try:
+        while pending:
+            directory = pending.pop()
+            with os.scandir(directory) as iterator:
+                entries = list(iterator)
+            entries_seen += len(entries)
+            if entries_seen > _UNVERSIONED_MAX_ENTRIES:
+                return None
+            entries.sort(key=lambda item: item.name)
+            child_directories: list[Path] = []
+            for entry in entries:
+                path = Path(entry.path)
+                if entry.name in {".git", ".werkstatt"} and entry.is_dir(
+                    follow_symlinks=False,
+                ):
+                    continue
+                relative = path.relative_to(root).as_posix()
+                raw_relative = os.fsencode(relative)
+                digest.update(raw_relative + b"\0")
+                if entry.is_symlink():
+                    digest.update(b"symlink\0")
+                    digest.update(os.fsencode(os.readlink(path)))
+                elif entry.is_dir(follow_symlinks=False):
+                    digest.update(b"directory\0")
+                    child_directories.append(path)
+                elif entry.is_file(follow_symlinks=False):
+                    size = entry.stat(follow_symlinks=False).st_size
+                    bytes_seen += size
+                    if bytes_seen > _UNVERSIONED_MAX_BYTES:
+                        return None
+                    digest.update(b"file\0")
+                    with path.open("rb") as handle:
+                        while chunk := handle.read(1024 * 1024):
+                            digest.update(chunk)
+                else:
+                    digest.update(b"non-regular\0")
+                digest.update(b"\0")
+            pending.extend(reversed(child_directories))
+        return digest.hexdigest()
+    except OSError:
+        return None
 
 
 def _redact_excerpt(value: Any) -> str:
