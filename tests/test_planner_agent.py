@@ -316,6 +316,45 @@ def test_scout_route_decision_explains_escalation(tmp_path):
         "werkstatt/small.py",
         "explizite_einzeldatei_mit_explorer_beleg",
     )
+    assert _scout_route_decision(
+        "Korrigiere checkpoint handling in werkstatt/small.py",
+        context,
+        tmp_path,
+    ) == (
+        "werkstatt/small.py",
+        "explizite_einzeldatei_mit_explorer_beleg",
+    )
+    assert _scout_route_decision(
+        "Fix rapid status updates in werkstatt/small.py",
+        context,
+        tmp_path,
+    ) == (
+        "werkstatt/small.py",
+        "explizite_einzeldatei_mit_explorer_beleg",
+    )
+    assert _scout_route_decision(
+        "Analysiere die Architektur in werkstatt/small.py",
+        context,
+        tmp_path,
+    ) == (None, "auftrag_enthaelt_breiten_marker:architektur")
+    assert _scout_route_decision(
+        "Analyze the architecture in werkstatt/small.py",
+        context,
+        tmp_path,
+    ) == (None, "auftrag_enthaelt_breiten_marker:architecture")
+
+    for filename in ("api.py", "debugger.py"):
+        relative = f"werkstatt/{filename}"
+        target = tmp_path / relative
+        target.write_text("VALUE = 1\n", encoding="utf-8")
+        assert _scout_route_decision(
+            f"Fix {relative}",
+            {"key_files": [{"file": relative}]},
+            tmp_path,
+        ) == (
+            relative,
+            "explizite_einzeldatei_mit_explorer_beleg",
+        )
 
 
 def test_planner_ohne_key(tmp_path):

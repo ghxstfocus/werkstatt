@@ -2363,23 +2363,58 @@ def _scout_route_decision(
     if target.startswith("tests/"):
         return None, "testdatei_braucht_scout"
 
-    lowered = text.lower()
+    intent_text = text
+    for explicit_path in sorted(paths, key=len, reverse=True):
+        intent_text = re.sub(
+            re.escape(explicit_path), " ", intent_text,
+            flags=re.IGNORECASE,
+        )
+    lowered = intent_text.casefold()
     broad_markers = (
-        "alle ", "gesamt", "mehrere", "umfassend", "architektur",
-        "schnittstelle", "api", "debug", "fehler", "bug", "ursache",
-        "analys", "prüf", "pruef", "check", "review", "refactor",
-        "aufräum", "aufraeum", "migrier", "blockiert", "abhängig",
-        "abhaengig",
+        ("alle", r"\balle\b"),
+        ("all", r"\ball\b"),
+        ("gesamt", r"\bgesamt\w*\b"),
+        ("mehrere", r"\bmehrere\b"),
+        ("multiple", r"\bmultiple\b"),
+        ("umfassend", r"\bumfassend\w*\b"),
+        ("architektur", r"\barchitektur\w*\b"),
+        ("architecture", r"\barchitecture\w*\b"),
+        ("schnittstelle", r"\bschnittstell\w*\b"),
+        ("interface", r"\binterface\w*\b"),
+        ("api", r"\bapi\b"),
+        ("debug", r"\bdebug\w*\b"),
+        ("fehler", r"\bfehler\w*\b"),
+        ("error", r"\berror\w*\b"),
+        ("bug", r"\bbug\b"),
+        ("ursache", r"\bursach\w*\b"),
+        ("cause", r"\bcause\b"),
+        ("analys", r"\banalys\w*\b"),
+        ("analyze", r"\banaly[sz]\w*\b"),
+        ("inspect", r"\binspect\w*\b"),
+        ("pruef", r"\bpr[uü]f\w*\b"),
+        ("check", r"\bcheck(?:s|e|ed|ing)?\b"),
+        ("review", r"\breview\w*\b"),
+        ("refactor", r"\brefactor\w*\b"),
+        ("aufraeum", r"\b(?:aufräum|aufraeum)\w*\b"),
+        ("migrier", r"\bmigrier\w*\b"),
+        ("migrate", r"\bmigrat\w*\b"),
+        ("blockiert", r"\bblockier\w*\b"),
+        ("blocked", r"\bblocked\b"),
+        ("abhaengig", r"\b(?:abhängig|abhaengig)\w*\b"),
+        ("dependent", r"\bdependen\w*\b"),
     )
-    marker = next((item for item in broad_markers if item in lowered), None)
+    marker = next((
+        label for label, pattern in broad_markers
+        if re.search(pattern, lowered)
+    ), None)
     if marker:
         return None, f"auftrag_enthaelt_breiten_marker:{marker}"
     edit_markers = (
-        "ändere", "aendere", "korrigiere", "ergänze", "ergaenze",
-        "aktualisiere", "entferne", "ersetze", "füge", "fuege",
-        "update", "change", "edit", "fix", "add", "remove", "replace",
+        r"\b(?:änder|aender|korrigier|ergänz|ergaenz|aktualisier|"
+        r"entfern|ersetz|füg|fueg|update|change|edit|fix|add|remove|replace)"
+        r"\w*\b"
     )
-    if not any(item in lowered for item in edit_markers):
+    if not re.search(edit_markers, lowered):
         return None, "aenderungsabsicht_nicht_eindeutig"
 
     explorer_files = explorer_ctx.get("key_files") or []
