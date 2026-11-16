@@ -41,6 +41,16 @@ def test_prompt_directs_recent_append_only_reads_to_tail_evidence():
     assert "read_chat_history seitenweise nach" in chat_agent._SYSTEM_PROMPT
 
 
+def test_write_mode_prompt_requires_isolated_workspace_and_handoff_gate() -> None:
+    prompt = " ".join(chat_agent._WRITE_PROMPT.split())
+    assert "debug_workspace_open" in prompt
+    assert "debug_workspace_write" in prompt
+    assert "Der aktive Projekt-Checkout bleibt unveraendert" in prompt
+    assert "kein Commit" in prompt
+    assert "propose_debug_workspace_patch" in prompt
+    assert "separat freigegeben" in prompt
+
+
 def test_chat_reasoning_route_is_opt_in_and_private_context_survives_tools(
     session: ChatSession,
     monkeypatch: pytest.MonkeyPatch,

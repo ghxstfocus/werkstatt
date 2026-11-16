@@ -2330,7 +2330,7 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         ),
         "parameters": {"type": "object", "properties": {}},
         "fn": _debug_workspace_open,
-        "mode": "debugger",
+        "mode": "workspace",
     },
     "debug_workspace_read": {
         "description": "Liest eine UTF-8-Datei aus dem isolierten Debug-Worktree (max. 1 MB).",
@@ -2340,11 +2340,11 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["path"],
         },
         "fn": _debug_workspace_read,
-        "mode": "debugger",
+        "mode": "workspace",
     },
     "debug_workspace_write": {
         "description": (
-            "Erstellt oder ersetzt im Debug-Modus eine UTF-8-Datei im "
+            "Erstellt oder ersetzt im isolierten Chat-Workspace eine UTF-8-Datei im "
             "sitzungsgebundenen isolierten Worktree (max. 1 MB). Kein "
             "Schreiben in den aktiven Projekt-Checkout; Pfade und Secrets "
             "werden eingeschraenkt."
@@ -2358,13 +2358,13 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["path", "content"],
         },
         "fn": _debug_workspace_write,
-        "mode": "debugger",
+        "mode": "workspace",
     },
     "debug_workspace_diff": {
         "description": "Liefert Hash, geaenderte Pfade und Patch des isolierten Debug-Worktrees.",
         "parameters": {"type": "object", "properties": {}},
         "fn": _debug_workspace_diff,
-        "mode": "debugger",
+        "mode": "workspace",
     },
     "debug_workspace_pytest": {
         "description": (
@@ -2380,7 +2380,7 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["path"],
         },
         "fn": _debug_workspace_pytest,
-        "mode": "debugger",
+        "mode": "workspace",
     },
     "propose_debug_workspace_patch": {
         "description": (
@@ -2400,7 +2400,7 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["summary", "confidence"],
         },
         "fn": _propose_debug_workspace_patch,
-        "mode": "debugger",
+        "mode": "workspace",
     },
     "propose_debugger_fix": {
         "description": (
@@ -2518,6 +2518,8 @@ def _mode_erlaubt(spec: dict[str, Any], mode: str) -> bool:
         return True
     if want == "debugger":
         return mode == "debugger"
+    if want == "workspace":
+        return mode in {"write", "debugger"}
     return mode == "write"
 
 

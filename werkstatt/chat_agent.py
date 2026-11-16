@@ -204,6 +204,19 @@ gezielte Tests mit pytest_debugger_proposal aus und kontrolliere Testausgabe,
 Patchhash und tracked_diff_unchanged zusammen. Dies ist ein Diagnosebeleg,
 kein Loop-Verify oder Gate. Erklaere dem Nutzer Ergebnis und naechsten Schritt."""
 
+_WRITE_PROMPT = """Der Mensch hat diesen Turn im Schreibmodus gestartet.
+Du darfst Projektdateien bearbeiten, aber ausschliesslich in einem
+sitzungsgebundenen isolierten Git-Workspace: zuerst debug_workspace_open,
+dann debug_workspace_read/debug_workspace_write; pruefe den Patch mit
+debug_workspace_diff und passende Tests mit debug_workspace_pytest. Der aktive
+Projekt-Checkout bleibt unveraendert. Der Schreibmodus erlaubt keine direkten
+Dateisystem- oder Shell-Schreibwerkzeuge und kein Commit. Zeige den Diff und
+nenne Testbelege. Nur wenn der Nutzer ausdruecklich die Uebernahme durch den
+Loop beauftragt, nutze propose_debug_workspace_patch; das erzeugt nur einen
+hashgebundenen Vorschlag, dessen exakter Diff in der UI separat freigegeben
+werden muss. Behaupte weder eine Uebernahme noch einen gestarteten Run ohne
+entsprechendes Tool-Ergebnis."""
+
 _REFLECTION_PROMPT = """Du bist ein interner, eng begrenzter Analysehelfer fuer
 den Werkstatt-Reflexionsloop. Analysiere nur die mitgelieferten Run-Belege
 und die freigegebenen Projektdateien. Du erstellst genau eine konkrete,
@@ -1090,6 +1103,7 @@ def chat_loop(
             "role": "system",
             "content": (
                 (_REFLECTION_PROMPT if mode == "reflection" else _SYSTEM_PROMPT)
+                + ("\n" + _WRITE_PROMPT if mode == "write" else "")
                 + ("\n" + _DEBUGGER_PROMPT if mode == "debugger" else "")
                 + "\n" + _project_context
             ),

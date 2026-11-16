@@ -29,7 +29,9 @@
   function _chatRequestMode() {
     var uiMode = window.WerkstattMode && window.WerkstattMode.getMode
       ? window.WerkstattMode.getMode() : "cockpit";
-    return uiMode === "debug" ? "debugger" : "read";
+    if (uiMode === "debug") return "debugger";
+    if (uiMode === "control") return "write";
+    return "read";
   }
 
   function _neueSession(projekt, anfrage) {
@@ -197,7 +199,9 @@
     copy.textContent = (
       "Ich prüfe Fragen zu Code, Status und Runs anhand des aktiven Repos. " +
       "Du kannst Loop-Aktionen anfordern; ich zeige sie dir vor der Ausführung " +
-      "zur Bestätigung. Code-Patches direkt aus dem Chat sind noch nicht verfügbar."
+      "zur Bestätigung. Im Control- oder Debugmodus kann ich Code außerdem in " +
+      "einem isolierten Workspace vorbereiten und testen; die Loop-Übernahme " +
+      "braucht deine separate Bestätigung."
     );
     card.appendChild(copy);
 

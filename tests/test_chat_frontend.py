@@ -84,7 +84,7 @@ def test_chat_asset_urls_haben_einen_cache_bust() -> None:
     html = Path("static/layout.html").read_text(encoding="utf-8")
     assert re.search(r'/static/chat\.js\?v=[0-9]+', html)
     assert re.search(r'/static/live_feed\.js\?v=[0-9]+', html)
-    assert re.search(r'\?v=202611161700', html)
+    assert re.search(r'\?v=202611161848', html)
     assert "?v=202611121845" not in html
 
 
@@ -160,10 +160,11 @@ def test_chat_surfaces_followup_plan_disposition() -> None:
     assert '"Im Plan-Gate abgelehnt"' in js
 
 
-def test_selected_debug_mode_is_forwarded_as_debugger_capability():
+def test_ui_mode_selects_chat_capability():
     js = _chat_js()
     assert 'function _chatRequestMode()' in js
-    assert 'uiMode === "debug" ? "debugger" : "read"' in js
+    assert 'if (uiMode === "debug") return "debugger";' in js
+    assert 'if (uiMode === "control") return "write";' in js
     assert 'session_id: sid, message: text, mode: _chatRequestMode()' in js
     assert 'mode: _chatRequestMode(),' in js
 
@@ -172,7 +173,8 @@ def test_welcome_copy_matches_available_loop_capabilities() -> None:
     assert "startet keine Runs und ändert keinen Code" not in js
     assert "Loop-Aktionen anfordern" in js
     assert "zur Bestätigung." in js
-    assert "Code-Patches direkt aus dem Chat sind noch nicht verfügbar." in js
+    assert "isolierten Workspace" in js
+    assert "braucht deine separate Bestätigung." in js
 
 
 

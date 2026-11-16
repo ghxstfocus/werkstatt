@@ -63,8 +63,27 @@ def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
     assert len(debugger_names) == 24
 
 
-def test_debug_chat_writes_and_tests_only_in_session_worktree(
+def test_write_mode_exposes_only_isolated_workspace_write_tools() -> None:
+    names = {
+        item["function"]["name"]
+        for item in chat_tools.openai_schemas(mode="write")
+    }
+    assert len(names) == 20
+    assert {
+        "debug_workspace_open", "debug_workspace_read",
+        "debug_workspace_write", "debug_workspace_diff",
+        "debug_workspace_pytest", "propose_debug_workspace_patch",
+    } <= names
+    assert {
+        "pytest_run", "write_temp_test", "propose_debugger_fix",
+        "pytest_debugger_proposal", "write_file", "shell_exec",
+    }.isdisjoint(names)
+
+
+@pytest.mark.parametrize("mode", ["debugger", "write"])
+def test_chat_writes_and_tests_only_in_session_worktree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    mode: str,
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
@@ -79,7 +98,7 @@ def test_debug_chat_writes_and_tests_only_in_session_worktree(
     subprocess.run(["git", "-C", str(project), "add", "."], check=True)
     subprocess.run(["git", "-C", str(project), "commit", "-m", "base"], check=True, capture_output=True)
     context = {
-        "mode": "debugger",
+        "mode": mode,
         "project_dir": project,
         "source_project_dir": project,
         "project_name": "demo",
@@ -90,7 +109,7 @@ def test_debug_chat_writes_and_tests_only_in_session_worktree(
         "debug_workspace_write", {"path": "sample.py", "content": "value = 2\n"},
         **{**context, "mode": "read"},
     )
-    assert "erfordert mode='debugger'" in denied
+    assert "erfordert mode='workspace'" in denied
 
     opened = json.loads(chat_tools.execute_tool("debug_workspace_open", {}, **context))
     assert opened["status"] == "ready"
@@ -416,12 +435,15 @@ def test_git_log_funktioniert() -> None:
 
 
 def test_mode_write_routes_production_writes_through_loop() -> None:
-    """Write mode keeps project changes routed through the Loop handoff."""
+    """Write mode confines edits to an isolated workspace or Loop handoff."""
     schemas = chat_tools.openai_schemas(mode="write")
     names = {item["function"]["name"] for item in schemas}
-    assert len(schemas) == 14
-    assert {"loop_status", "request_loop_action"} <= names
-    assert "write_file" not in names
+    assert len(schemas) == 20
+    assert {
+        "loop_status", "request_loop_action", "debug_workspace_write",
+        "debug_workspace_diff", "propose_debug_workspace_patch",
+    } <= names
+    assert {"write_file", "shell_exec", "pytest_run"}.isdisjoint(names)
 
 
 def test_read_chat_history_is_session_bound_and_paginates(
