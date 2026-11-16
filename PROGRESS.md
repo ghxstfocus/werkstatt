@@ -8062,6 +8062,11 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation lokal:** Failure-Record-, Resume- und Review-Gruppe: 8 bestanden; Ruff bestanden. Der Windows-Lauf der zuvor auffaelligen Loop-Gruppe hat 10 bestanden und einen bestehenden plattformabhaengigen Audit-Erwartungsfehler gezeigt; Linux-CI fuer diesen Fix steht aus.
 - **Grenze:** Kein Vollsuite-, Server- oder Produktionsnachweis. OP-398 bleibt offen; Human-Gate, Phase-End-Verify und Commit liegen weiterhin im Finalizer.
 
+# 2026-11-16 – Phase-End-Review-Fix durch PR-CI bestaetigt
+- **Befund:** Der erste Fix vermied den unbeschraenkten Scan, blockierte aber kleine Nicht-Git-Projekte; ein begrenzter vollstaendiger Fingerprint war noetig, um diese Runs sicher abzuschliessen.
+- **Nachweis:** GitHub Actions Quality Gate fuer PR #63, Commit `4b410f4`, Run [43966742381](https://github.com/ghxstfocus/werkstatt/actions/runs/43966742381): 2.745 bestanden, 5 uebersprungen, 0 fehlgeschlagen; Ruff und Quality Gate bestanden. Der CI-Lauf deckt die neue Nicht-Git-Grenze und Phase-End-Review-Dispatch-Regressionen ab.
+- **Grenze:** Das ist PR-CI, kein Servercheckout, Webserver-Neustart oder Produktionslauf. OP-398 bleibt offen; Human-Gate, Phase-End-Verify und Commit sind noch Finalizer-Schritte, Setup/Plan/Task/Finalize sind nicht vollstaendig durch freie Checkpoint-Entscheidungen ersetzt.
+
 # 2026-11-16 – Abschluss-Follow-ups durch den Checkpoint-Koordinator ausfuehren
 - **Befund:** Ein bestaetigter Chat-Folgeauftrag, der waehrend des terminalen Compare-and-Swap eintraf, wurde nach seiner Planfreigabe ueber `_phase_tasks_loop` ohne aeussere Koordinatorentscheidungen abgearbeitet. `append_followup_tasks` aktualisierte zudem nicht den Fingerprint des genehmigten kombinierten Plans.
 - **Aenderung:** Das Anhängen bindet nun den kombinierten Taskgraph erneut an den bereits durch Plan- und Human-Gate freigegebenen Plan. Die Abschluss-Race-Verarbeitung bewertet den Checkpoint danach erneut, persistiert jede Dispatchentscheidung, reicht genau eine Aktion an den Task-Worker und finalisiert erst nach einer neuen `finalize_run`-Entscheidung.
