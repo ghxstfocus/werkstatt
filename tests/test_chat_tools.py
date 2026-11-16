@@ -840,6 +840,44 @@ def test_loop_status_falls_back_to_durable_cli_run(monkeypatch, tmp_path):
     assert parsed["run_id"] == "alpha-cli-1"
 
 
+def test_loop_status_reports_last_terminal_run_when_idle(monkeypatch, tmp_path):
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import app
+
+    monkeypatch.setattr(
+        app, "_loop_registry",
+        lambda: SimpleNamespace(read=lambda _project: None),
+    )
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(
+        project="alpha", run_id="alpha-run-last", target="Repair OP-398",
+        start_context={"origin": "chat"},
+    )
+    assert store.transition_run_status(
+        "alpha", "alpha-run-last", expected_status="running",
+        status="failed",
+    )
+    store.append(
+        "alpha-run-last", "loop_failed", status="error",
+        payload={"reason": "builder_verify_failed", "prompt": "private"},
+        project="alpha",
+    )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+
+    result = json.loads(chat_tools.execute_tool(
+        "loop_status", {}, project_dir=tmp_path, project_name="alpha",
+    ))
+
+    assert result["status"] == "idle"
+    assert result["status_source"] == "durable_last_run"
+    assert result["run_id"] == "alpha-run-last"
+    assert result["last_run_status"] == "failed"
+    assert result["goal"] == "Repair OP-398"
+    assert result["run_record_status"] == "failed"
+    assert result["recent_events"][0]["kind"] == "loop_failed"
+    assert "private" not in json.dumps(result)
+
+
 def test_loop_status_reports_registry_runrecord_mismatch_as_reconciling(
     monkeypatch, tmp_path,
 ):

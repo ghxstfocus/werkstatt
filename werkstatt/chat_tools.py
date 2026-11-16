@@ -586,8 +586,9 @@ def _audit_query(args: dict[str, Any]) -> str:
 
 
 def _read_active_run(_args: dict[str, Any]) -> str:
-    """Read the active project's durable Loop state without exposing prompts."""
+    """Read active Loop state or the latest terminal run, without prompts."""
     project = _PROJEKTNAME_KONTEXT.get()
+    latest_terminal_record = None
     try:
         # Use the same persistent process registry as the web controls. Its
         # read operation also reconciles stale process reservations safely.
@@ -609,18 +610,31 @@ def _read_active_run(_args: dict[str, Any]) -> str:
 
             store = EventStore()
             durable_record = store.get_active_run_record(project)
+            if durable_record is None:
+                latest_record = store.get_latest_run_record(project)
+                if latest_record is not None and latest_record.get("status") in {
+                    "starting", "running",
+                }:
+                    durable_record = latest_record
+                elif latest_record is not None:
+                    latest_terminal_record = latest_record
         except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
             return json.dumps({
                 "status": "unknown",
                 "detail": f"Dauerhafter Run-Status nicht lesbar ({type(exc).__name__}).",
             }, ensure_ascii=False)
-        if durable_record is None:
+        if durable_record is None and latest_terminal_record is None:
             return json.dumps({"status": "idle", "project": project}, ensure_ascii=False)
-        registry_record = {
-            "run_id": durable_record.get("run_id"),
-            "state": "checkpoint_running_unconfirmed",
-            "updated_at": durable_record.get("updated_at"),
-        }
+        selected_record = durable_record or latest_terminal_record
+        if selected_record is not None:
+            registry_record = {
+                "run_id": selected_record.get("run_id"),
+                "state": (
+                    "checkpoint_running_unconfirmed"
+                    if durable_record is not None else "idle"
+                ),
+                "updated_at": selected_record.get("updated_at"),
+            }
 
     run_id = registry_record.get("run_id")
     status = registry_record.get("state", "unknown")
@@ -630,6 +644,8 @@ def _read_active_run(_args: dict[str, Any]) -> str:
         "status_source": (
             "durable_run_record_fallback"
             if status == "checkpoint_running_unconfirmed"
+            else "durable_last_run"
+            if latest_terminal_record is not None
             else "process_registry"
         ),
         "run_id": run_id,
@@ -637,6 +653,10 @@ def _read_active_run(_args: dict[str, Any]) -> str:
     }
     if registry_record.get("recovery_issue"):
         result["recovery_issue"] = registry_record["recovery_issue"]
+    if latest_terminal_record is not None:
+        last_run_status = latest_terminal_record.get("status")
+        if last_run_status in {"completed", "failed"}:
+            result["last_run_status"] = last_run_status
     if not isinstance(run_id, str) or not run_id.startswith(f"{project}-"):
         result["checkpoint_status"] = "unknown"
         return json.dumps(result, ensure_ascii=False)
@@ -2035,7 +2055,8 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "Liest den aktuellen Prozessstatus des Loops im aktiven Projekt, "
             "sein Ziel und freigegebene Startmetadaten, den letzten "
             "dauerhaften Checkpoint und bis zu 20 kompakte "
-            "Ereigniszusammenfassungen. Keine Modellprompts oder Datei-Inhalte. "
+            "Ereigniszusammenfassungen. Im Leerlauf liefert es auch Status "
+            "und Belege des letzten terminalen Runs. Keine Modellprompts oder Datei-Inhalte. "
             "Nutze es bei Fragen zum laufenden Run; fuer Details audit_query."
         ),
         "parameters": {"type": "object", "properties": {}},

@@ -353,6 +353,18 @@ class EventStore:
             ).fetchone()
         return self._run_record_from_row(row) if row is not None else None
 
+    def get_latest_run_record(self, project: str) -> dict[str, Any] | None:
+        """Return the most recently updated durable run for a project."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT project, run_id, status, target, base_commit, "
+                "checkpoint_json, checkpoint_version, updated_at, "
+                "start_context_json FROM run_records "
+                "WHERE project=? ORDER BY updated_at DESC LIMIT 1",
+                (project,),
+            ).fetchone()
+        return self._run_record_from_row(row) if row is not None else None
+
     def update_run_checkpoint(
         self,
         project: str,
