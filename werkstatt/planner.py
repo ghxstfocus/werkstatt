@@ -872,6 +872,7 @@ def _llm_split_einzel_task(
             context_manifest={
                 "budget_event": "planner_split_context_budget",
                 "user_sha256": hashlib.sha256(_user.encode("utf-8")).hexdigest(),
+                "system_sha256": hashlib.sha256(_system.encode("utf-8")).hexdigest(),
                 "scope": "single_task",
                 "task_id": str(task.get("id") or "")[:120],
                 "system_chars": len(_system),
@@ -1580,6 +1581,7 @@ def _zerlege_in_sub_tasks(
             context_manifest={
                 "budget_event": "planner_split_context_budget",
                 "user_sha256": hashlib.sha256(_user.encode("utf-8")).hexdigest(),
+                "system_sha256": hashlib.sha256(PLANNER_SPLIT_SYSTEM.encode("utf-8")).hexdigest(),
                 "scope": "task_graph",
                 "system_chars": len(PLANNER_SPLIT_SYSTEM),
                 "user_chars": len(_user),

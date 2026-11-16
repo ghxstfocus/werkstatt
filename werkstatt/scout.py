@@ -1135,15 +1135,17 @@ def _run_scout(
             "assignment_chars": len(aufgabe),
         }, pd, pn)
         return None
+    system_prompt = _scout_system_with_nachfolger(state)
     reply = _with_spinner(
         "Scout",
         lambda: ask_llm(
-            api_key, _scout_system_with_nachfolger(state), user_content,
+            api_key, system_prompt, user_content,
             model="deepseek-chat", temperature=0.2, max_tokens=4000,
             aufgabe="scout", state=state,
             context_manifest={
                 "budget_event": "scout_context_budget",
                 "user_sha256": hashlib.sha256(user_content.encode("utf-8")).hexdigest(),
+                "system_sha256": hashlib.sha256(system_prompt.encode("utf-8")).hexdigest(),
                 "budget": _context_meta,
                 "sections_offered": [
                     title for title, _ in _context_sections

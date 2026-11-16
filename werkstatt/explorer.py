@@ -699,13 +699,15 @@ def run_explorer(state: RunState, frage: str) -> dict:
         + f"\n\n{file_inventory}"
     )
 
+    system_prompt = _explorer_system()
     reply = ask_llm(
-        api_key, _explorer_system(), context,
+        api_key, system_prompt, context,
         model="deepseek-chat", temperature=0.0, max_tokens=3000,
         state=state, aufgabe="explorer",
         context_manifest={
             "budget_event": "explorer_context",
             "user_sha256": hashlib.sha256(context.encode("utf-8")).hexdigest(),
+            "system_sha256": hashlib.sha256(system_prompt.encode("utf-8")).hexdigest(),
             "measurement_count": len(messungen),
             **inventory_manifest,
             "user_chars": len(context),

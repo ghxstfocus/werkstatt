@@ -799,16 +799,18 @@ def run_phase_end_review(state: RunState) -> bool:
     )
 
     try:
+        _phase_system = _reviewer_system(state, _phase_files)
         reply = _with_spinner(
             "Phase-Review",
             lambda: ask_llm(
-                api_key, _reviewer_system(state, _phase_files), user,
+                api_key, _phase_system, user,
                 model="deepseek-chat", temperature=0.2, max_tokens=4000,
                 redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
                 aufgabe="reviewer", state=state,
                 context_manifest={
                     "budget_event": "reviewer_phase_context",
                     "user_sha256": hashlib.sha256(user.encode("utf-8")).hexdigest(),
+                    "system_sha256": hashlib.sha256(_phase_system.encode("utf-8")).hexdigest(),
                     "files": _phase_files,
                     "user_chars": len(user),
                 },
@@ -1350,6 +1352,7 @@ def run_reviewer(state: RunState) -> bool:
         context_manifest={
             "budget_event": "reviewer_context_budget",
             "user_sha256": hashlib.sha256(user_content.encode("utf-8")).hexdigest(),
+            "system_sha256": hashlib.sha256(_system_content.encode("utf-8")).hexdigest(),
             "budget": _review_context_meta,
             "task_files": _normalized_files,
             "diff_sha256": _diff_hash,

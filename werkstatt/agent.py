@@ -353,6 +353,15 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
                 or context_manifest.get("user_sha256") != expected_user_sha256
             ):
                 missing.append("context_manifest.user_sha256")
+            expected_system_sha256 = hashlib.sha256(
+                system_prompt.encode("utf-8")
+            ).hexdigest()
+            if (
+                not isinstance(context_manifest, dict)
+                or context_manifest.get("system_sha256")
+                != expected_system_sha256
+            ):
+                missing.append("context_manifest.system_sha256")
         if missing:
             audit_written = False
             if state is not None:

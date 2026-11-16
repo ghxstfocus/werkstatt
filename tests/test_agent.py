@@ -76,6 +76,7 @@ def test_llm_call_binds_context_manifest_to_exact_sent_prompt(
     manifest = {
         "budget_event": "builder_context_budget",
         "user_sha256": hashlib.sha256(b"user payload").hexdigest(),
+        "system_sha256": hashlib.sha256(b"system payload").hexdigest(),
         "included_sections": ["TASK", "SOURCE"],
         "omitted_sections": ["OPTIONAL_HISTORY"],
         "user": "must not be copied into audit",
@@ -97,6 +98,7 @@ def test_llm_call_binds_context_manifest_to_exact_sent_prompt(
     expected_manifest = {
         "budget_event": "builder_context_budget",
         "user_sha256": hashlib.sha256(b"user payload").hexdigest(),
+        "system_sha256": hashlib.sha256(b"system payload").hexdigest(),
         "included_sections": ["TASK", "SOURCE"],
         "omitted_sections": ["OPTIONAL_HISTORY"],
     }
@@ -110,6 +112,9 @@ def test_llm_call_binds_context_manifest_to_exact_sent_prompt(
     ).hexdigest()
     assert call["user_sha256"] == hashlib.sha256(
         b"user payload",
+    ).hexdigest()
+    assert call["system_sha256"] == hashlib.sha256(
+        b"system payload",
     ).hexdigest()
 
 
@@ -149,6 +154,7 @@ def test_llm_request_is_not_sent_when_audit_write_fails(monkeypatch, tmp_path):
             "user_sha256": hashlib.sha256(
                 b"required role evidence",
             ).hexdigest(),
+            "system_sha256": hashlib.sha256(b"system").hexdigest(),
             "required": ["task", "verify"],
         },
     )
@@ -194,6 +200,7 @@ def test_role_request_without_budget_evidence_is_blocked(monkeypatch, tmp_path):
         "missing": [
             "context_manifest.budget_event",
             "context_manifest.user_sha256",
+                "context_manifest.system_sha256",
         ],
         "expected_budget_events": ["builder_context_budget"],
         "provider_request_sent": False,
@@ -250,6 +257,7 @@ def test_role_request_rejects_another_roles_budget_manifest(monkeypatch, tmp_pat
         context_manifest={
             "budget_event": "scout_context_budget",
             "user_sha256": hashlib.sha256(b"builder task").hexdigest(),
+            "system_sha256": hashlib.sha256(b"system").hexdigest(),
         },
     )
 
@@ -289,6 +297,7 @@ def test_builder_request_rejects_manifest_for_different_user_context(
         context_manifest={
             "budget_event": "builder_context_budget",
             "user_sha256": hashlib.sha256(b"stale builder task").hexdigest(),
+            "system_sha256": hashlib.sha256(b"system").hexdigest(),
         },
     )
 
@@ -296,3 +305,38 @@ def test_builder_request_rejects_manifest_for_different_user_context(
     assert provider_calls == []
     blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
     assert blocked[0]["missing"] == ["context_manifest.user_sha256"]
+
+
+def test_builder_request_rejects_manifest_for_different_system_prompt(
+    monkeypatch, tmp_path,
+):
+    state = mk_state(project_dir=tmp_path, project_name="wrong-system-hash")
+    events = []
+    provider_calls = []
+    monkeypatch.setattr(
+        agent, "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests, "post", lambda *_args, **_kwargs: provider_calls.append(True),
+    )
+
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt="current builder system",
+        user_content="builder task",
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="builder",
+        context_manifest={
+            "budget_event": "builder_context_budget",
+            "user_sha256": hashlib.sha256(b"builder task").hexdigest(),
+            "system_sha256": hashlib.sha256(b"stale builder system").hexdigest(),
+        },
+    )
+
+    assert reply.ok is False
+    assert provider_calls == []
+    blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
+    assert blocked[0]["missing"] == ["context_manifest.system_sha256"]
