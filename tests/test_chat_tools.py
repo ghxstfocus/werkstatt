@@ -575,6 +575,41 @@ def test_audit_query_large_payload_is_hash_bound_and_chunk_readable(
     assert json.loads(full_payload) == payload
 
 
+def test_audit_query_page_fits_active_chat_budget_and_keeps_cursor(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from werkstatt.event_store import EventStore
+
+    store = EventStore(tmp_path / "events.db")
+    for index in range(40):
+        store.append(
+            "alpha-run-1", "loop_checkpoint_decision",
+            payload={"summary": f"decision-{index}-" + ("x" * 650)},
+            project="alpha",
+        )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+
+    raw = chat_tools.execute_tool(
+        "audit_query", {"run_id": "alpha-run-1"},
+        project_dir=tmp_path, project_name="alpha",
+    )
+    assert len(raw) <= 22_000
+    assert len(raw) < 24_000
+    page = json.loads(raw)
+    assert page["status"] == "events_page"
+    assert 0 < page["returned_count"] < 40
+    assert page["has_more"] is True
+    assert page["next_since"] == page["events"][-1]["seq"]
+
+    next_page = json.loads(chat_tools.execute_tool(
+        "audit_query", {
+            "run_id": "alpha-run-1", "since": page["next_since"],
+        },
+        project_dir=tmp_path, project_name="alpha",
+    ))
+    assert next_page["events"][0]["seq"] > page["next_since"]
+
+
 def test_loop_status_returns_idle_when_project_has_no_run(monkeypatch, tmp_path):
     from werkstatt.event_store import EventStore
     from werkstatt.web import app

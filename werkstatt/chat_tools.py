@@ -423,7 +423,9 @@ def _audit_query(args: dict[str, Any]) -> str:
     if limit > 50:
         return "audit_query: limit darf hoechstens 50 sein"
 
-    max_response_chars = 28_000
+    # Stay below chat_agent's 24k active-tool budget so a completed page and
+    # its continuation cursor survive the next model-context compaction.
+    max_response_chars = 22_000
     payload_page_chars = 18_000
     try:
         store = EventStore()
@@ -559,6 +561,24 @@ def _audit_query(args: dict[str, Any]) -> str:
         result["next_since"] = selected[-1].get("seq", since)
     result["has_more"] = stopped_for_budget or len(events) > len(selected)
     if stopped_for_budget:
+        result["page_note"] = (
+            "Zeichenbudget erreicht; mit since=next_since fortsetzen."
+        )
+    while (
+        len(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+        > max_response_chars and selected
+    ):
+        selected.pop()
+        result["events"] = selected
+        result["returned_count"] = len(selected)
+        result["next_since"] = (
+            selected[-1].get("seq", since) if selected else since
+        )
+        result["omitted_payload_seqs"] = [
+            item.get("seq") for item in selected
+            if item.get("payload_omitted") is True
+        ]
+        result["has_more"] = True
         result["page_note"] = (
             "Zeichenbudget erreicht; mit since=next_since fortsetzen."
         )
