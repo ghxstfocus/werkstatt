@@ -724,10 +724,18 @@ def test_reflection_asks_chat_from_bounded_reserve_when_run_budget_is_exhausted(
 ) -> None:
     state = _state(tmp_path)
     state.budget_exhausted_reason = "max_llm_calls"
-    core_calls = []
+    original_task = state.aktuelle_task
+    core_calls: list[dict[str, object]] = []
 
-    def fake_core(*_args, **_kwargs):
-        core_calls.append(True)
+    def fake_core(current, **kwargs):
+        core_calls.append({
+            "task": dict(current.aktuelle_task),
+            "evidence": list(current.reflection_chat_evidence),
+            "reserve_active": getattr(
+                current, "reflection_chat_builder_reserve_active", False,
+            ),
+            "kwargs": kwargs,
+        })
         return len(core_calls) == 2
 
     monkeypatch.setattr(
@@ -750,6 +758,19 @@ def test_reflection_asks_chat_from_bounded_reserve_when_run_budget_is_exhausted(
 
     assert reflection._reflection_loop(state) is True
     assert len(core_calls) == 2
+    recovery_call = core_calls[1]
+    assert recovery_call["task"]["name"] == "Bounded repair"
+    assert recovery_call["task"]["description"] == (
+        "Fix the proven failure in the scoped file."
+    )
+    assert recovery_call["task"]["task_files"] == ["werkstatt/sample.py"]
+    assert recovery_call["evidence"] == _source_evidence()
+    assert recovery_call["reserve_active"] is True
+    assert "Projektchat-Kurskorrektur" in recovery_call["kwargs"]["error_context"]
+    assert recovery_call["kwargs"]["max_runden"] == 2
+    assert state.aktuelle_task is original_task
+    assert state.reflection_chat_evidence == []
+    assert state.reflection_chat_builder_reserve_active is False
 
 
 def test_phase_end_exhaustion_asks_chat_then_retries_scoped_file(

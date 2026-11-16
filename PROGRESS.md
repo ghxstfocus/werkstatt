@@ -7673,3 +7673,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Die Tests behalten das fail-closed Plan-Gate bei und liefern nun konkrete Pfade sowie eindeutige IDs/Kriterienzuordnungen. Die State-Flow-Baseline wurde gemaess Generatorausgabe um `builder_failure_reason` ergaenzt. Nur diese bisher fehlenden Test-/Baseline-Vertraege wurden korrigiert.
 - **Verifikation lokal:** Betroffene Plan-Gate-Tests, State-Flow-Tests und Reflection-/Recovery-Gruppe: 49 bestanden; Ruff, `tools/state_flow.py --check`, Audit-/Control-Drift, strikter Doku-Drift und Diff-Check bestanden. Die isolierten `tests/test_hooks_planner_gate.py`-Prozesstests koennen in diesem Windows-Checkout nicht laufen, da sie `/opt/werkstatt/hooks/planner_gate.py` hardcodieren; der Server-Pfad deckt sie ab.
 - **Grenze:** Keine lokale Vollsuite und kein Linux-Servernachweis fuer den Fixstand. Produktionsstatus unbekannt; OP-398 bleibt offen.
+
+# 2026-11-16 – Budget-Recovery prueft Chat-Aufgabe am Builder-Eingang (lokal)
+- **Befund:** Der Erschoepfungstest belegte zuvor nur, dass Reflection zweimal aufgerufen wurde. Er pruefte nicht, ob die konkrete Chat-Antwort den urspruenglichen Task wirklich ersetzt und mit Quellbelegen im begrenzten Builder-Reservepfad ankommt.
+- **Aenderung:** Die Regression erfasst jetzt beide Reflection-Core-Aufrufe und prueft den zweiten auf Chat-Name, konkrete Beschreibung, erlaubte Dateien, Quellbelege, aktive Reserve und Recovery-Fehlerkontext. Ausserdem prueft sie die Wiederherstellung des Ursprungstasks, der Belege und des Reserve-Flags nach dem Versuch.
+- **Verifikation lokal:** `tests/test_reflection_chat.py tests/test_reflection.py tests/test_tasks_loop_phase_build.py`: 40 bestanden; Ruff und Diff-Check bestanden.
+- **Grenze:** Der Builder-Core bleibt in diesem Test isoliert; der eigentliche Provider-/Patch-/Verify-Erfolg ist nicht simuliert oder als Produktion belegt. OP-398 bleibt offen.
