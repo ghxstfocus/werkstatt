@@ -773,3 +773,12 @@ def test_architect_scout_source_budget_marks_omissions_and_stale_hints(
     assert isinstance(sources, list) and sources
     assert isinstance(sources[0], dict)
     assert sources[0].get("unresolved_line_hints") == [90]
+    block_start = sources[0]["context_start"]
+    block_end = sources[0]["context_end"]
+    excerpt = rendered[block_start:block_end]
+    assert excerpt.startswith('<source datei="target.py"')
+    assert excerpt.endswith("</source>")
+    assert sources[0]["excerpt_chars"] == len(excerpt)
+    assert sources[0]["excerpt_sha256"] == hashlib.sha256(
+        excerpt.encode("utf-8"),
+    ).hexdigest()

@@ -324,11 +324,16 @@ def _format_scout_source_evidence(
         if len("\n\n".join([*output, block])) > content_limit:
             omitted_files.append(relative)
             continue
+        context_start = len("\n\n".join(output)) + 2
         output.append(block)
         included_files.append(relative)
         sources.append({
             "path": relative,
             "source_sha256": digest,
+            "excerpt_sha256": hashlib.sha256(block.encode("utf-8")).hexdigest(),
+            "excerpt_chars": len(block),
+            "context_start": context_start,
+            "context_end": context_start + len(block),
             "total_lines": line_count,
             "included_ranges": [list(span) for span in included_ranges],
             "omitted_ranges": [list(span) for span in omitted_ranges],

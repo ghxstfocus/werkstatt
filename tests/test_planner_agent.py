@@ -766,6 +766,15 @@ def test_planner_split_reloads_scout_source_with_hash_provenance(tmp_path):
     assert source_manifest["sources"][0]["source_sha256"] == architect_manifest[
         "sources"
     ][0]["source_sha256"]
+    source_record = source_manifest["sources"][0]
+    start, end = source_record["prompt_start"], source_record["prompt_end"]
+    excerpt = captured["content"][start:end]
+    assert excerpt.startswith('<source datei="src.py"')
+    assert excerpt.endswith("</source>")
+    assert len(excerpt) == source_record["excerpt_chars"]
+    assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == (
+        source_record["excerpt_sha256"]
+    )
     assert captured["manifest"]["source_evidence_sha256"]
 
 

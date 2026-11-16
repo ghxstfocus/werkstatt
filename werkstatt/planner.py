@@ -1639,6 +1639,9 @@ def _zerlege_in_sub_tasks(
             }, pd, pn)
             return []
 
+    source_section_prefix = (
+        "## AKTUELLE QUELLBELEGE (Scout-Auswahl, erneut gelesen)\n"
+    )
     _user, section_manifest = _compose_planner_prompt_sections([
         ("planner_skills", f"{_skb}\n\n" if _skb else "", True),
         ("measurement_index", _mess_planner_block, True),
@@ -1651,8 +1654,8 @@ def _zerlege_in_sub_tasks(
         ),
         (
             "scout_source_evidence",
-            f"## AKTUELLE QUELLBELEGE (Scout-Auswahl, erneut gelesen)\n"
-            f"{source_context}\n\n" if source_context else "",
+            f"{source_section_prefix}{source_context}\n\n"
+            if source_context else "",
             True,
         ),
         (
@@ -1666,6 +1669,32 @@ def _zerlege_in_sub_tasks(
             False,
         ),
     ])
+    source_section = next(
+        (item for item in section_manifest
+         if item.get("name") == "scout_source_evidence"
+         and item.get("status") == "included"),
+        None,
+    )
+    source_records = source_manifest.get("sources", [])
+    if isinstance(source_records, list) and source_section is not None:
+        section_start = source_section.get("prompt_start")
+        if not isinstance(section_start, int):
+            section_start = None
+        for item in source_records:
+            if not isinstance(item, dict) or section_start is None:
+                continue
+            context_start = item.get("context_start")
+            context_end = item.get("context_end")
+            if not isinstance(context_start, int) or not isinstance(context_end, int):
+                continue
+            item["prompt_start"] = (
+                section_start + len(source_section_prefix)
+                + context_start
+            )
+            item["prompt_end"] = (
+                section_start + len(source_section_prefix)
+                + context_end
+            )
     if not _planner_split_context_fits(
         "planner-split", PLANNER_SPLIT_SYSTEM, _user, pd, pn,
         source_evidence=source_manifest,
