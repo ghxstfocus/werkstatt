@@ -7471,3 +7471,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Der Standardhandoff gibt alle Phasenheader ohne Zeichenlimit weiter. Wird `_reduce_roadmap` explizit mit einem Limit aufgerufen, entfallen nur ganze Header und Anzahl/Unvollstaendigkeit werden genannt. Gekuerzte Entry-Auszuge nennen den Quellumfang und markieren das unbekannte Ende.
 - **Verifikation lokal:** Architect-prompt-/Planner-/API-Evidenzgruppe: 74 bestanden, 3 uebersprungen; Ruff, Mypy fuer `architect.py`, Audit-Drift, Control-Drift und strikter Doku-Drift bestanden.
 - **Grenze / Hauptziel:** Die Roadmap-Reduktion uebergibt weiterhin nur Phasenheader, keine Phaseninhalte. Das begrenzt Detailwissen bewusst; Servernachweis fehlt und OP-398/405 bleiben offen.
+# 2026-11-16 – Architect-Preflight bekommt vollständigen Korrekturkontext (lokal)
+- **Befund:** Nach API-Preflight-Ablehnung wurden der zuvor erzeugte Architect-Plan bei 24.000 Zeichen und die API-Befunde bei 20 Eintraegen still gekappt. Fehler jenseits der Grenze konnten so in der Korrekturantwort wiederkehren.
+- **Aenderung:** Der Wiederholungsrequest erhaelt den gesamten abgelehnten Plan und jede Befundzeile. Das Ablehnungs-Audit fuehrt ebenfalls alle Befunde samt Anzahl. Ueberschreitet der vollstaendige Request das bestehende 60.000-Zeichenlimit, wird der Korrekturaufruf vor Providerzugriff blockiert.
+- **Verifikation lokal:** Architect-Preflight-/Dokumentkontext-Gruppe: 45 bestanden; Ruff, Mypy fuer `architect.py`, Audit-Drift, Control-Drift und strikter Doku-Drift bestanden.
+- **Grenze / Hauptziel:** Betrifft nur die Architect-API-Preflight-Korrektur; andere Architect-/Planner- und Rollen-Handoffs muessen separat weiter geprueft werden. Servernachweis fehlt; OP-405/398 bleiben offen.

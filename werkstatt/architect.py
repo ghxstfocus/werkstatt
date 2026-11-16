@@ -1884,7 +1884,8 @@ def run_architect(
         audit("planner_plan_abgelehnt", {
             "quelle": "architect_api_preflight",
             "versuch": _versuch + 1,
-            "befunde": _api_befunde[:20],
+            "befund_count": len(_api_befunde),
+            "befunde": _api_befunde,
             "quellbelege": (
                 _source_metadata if _versuch == 0 else {"files": [], "chars": 0}
             ),
@@ -1904,12 +1905,12 @@ def run_architect(
                 "denselben Datei-/Task-Schnitten korrigiert aus.\n"
             )
             _korrekturhinweis += "\nBefunde:\n" + "\n".join(
-                f"- {item}" for item in _api_befunde[:20]
+                f"- {item}" for item in _api_befunde
             ) + "\n"
             _arch_user_content = (
                 f"{_arch_user_content}\n\n"
                 "## ABGELEHNTER ARCHITECT-ENTWURF (KORREKTURKONTEXT)\n"
-                f"{_arch_prosa[:24000]}\n"
+                f"{_arch_prosa}\n"
                 "\n## BEGRENZTE QUELLBELEGE (READ-ONLY)\n"
                 f"{_source_context}\n"
             )

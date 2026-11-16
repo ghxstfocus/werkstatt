@@ -361,6 +361,73 @@ def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_p
     ).strip()
 
 
+def test_architect_retry_preserves_full_rejected_plan_and_all_findings(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from werkstatt import architect
+
+    target = tmp_path / "werkstatt" / "event_store.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "class EventStore:\n"
+        "    def append(self, event):\n"
+        "        return None\n",
+        encoding="utf-8",
+    )
+    missing_refs = " ".join(
+        f"Use `EventStore.missing_api_{index}()` in this plan."
+        for index in range(24)
+    )
+    rejected_plan = (
+        "## werkstatt/event_store.py\n"
+        + ("Design rationale remains relevant. " * 900)
+        + "\n"
+        + missing_refs
+        + " REJECTED_PLAN_TAIL_MARKER"
+    )
+    replies = iter([
+        LLMReply(True, rejected_plan),
+        LLMReply(True, "Use `EventStore.append(event)` for the existing API." * 3),
+    ])
+    prompts: list[str] = []
+    contents: list[str] = []
+    audit_events: list[tuple[str, dict]] = []
+
+    def ask_llm(_key, system, content, **_kwargs):
+        prompts.append(system)
+        contents.append(content)
+        return next(replies)
+
+    state = SimpleNamespace(
+        project_dir=tmp_path,
+        project_name="demo",
+        api_index_cache=_api_index(),
+        scout_auftrag={},
+        architect_execution_context="Auftrag pruefen.",
+        architect_skills_block="",
+    )
+    monkeypatch.setattr(architect, "_planner_system", lambda *_args: "System")
+    monkeypatch.setattr(architect, "_with_spinner", lambda _label, fn: fn())
+    monkeypatch.setattr(architect, "ask_llm", ask_llm)
+    monkeypatch.setattr(architect, "_strip_xml_tags", lambda value: value)
+    monkeypatch.setattr(architect, "_get_architect_model", lambda: "test-model")
+    monkeypatch.setattr(
+        architect, "audit",
+        lambda kind, payload, *_args, **_kwargs: audit_events.append((kind, payload)),
+    )
+
+    assert architect.run_architect(state, "Aufgabe", "Kontext", "key", None)
+    assert "REJECTED_PLAN_TAIL_MARKER" in contents[1]
+    assert len(rejected_plan) > 24_000
+    assert "EventStore.missing_api_23" in prompts[1]
+    rejected_event = next(
+        payload for kind, payload in audit_events
+        if kind == "planner_plan_abgelehnt"
+    )
+    assert rejected_event["befund_count"] == 24
+    assert len(rejected_event["befunde"]) == 24
+
+
 def test_api_preflight_source_context_is_project_confined_and_bounded(tmp_path) -> None:
     from werkstatt.architect import _api_preflight_source_context
 
