@@ -64,6 +64,8 @@ Letzte Aktualisierung: 2026-11-16.
 
 - **Widerspruechliche Pflichtabschnitt-Belege am Provideradapter (lokal, noch nicht serververifiziert):** `ask_llm` blockiert jetzt auch dann, wenn das Rollenmanifest `required_context_complete=true` meldet, aber ein enthaltenes Abschnittsmanifest `blocked_required`, `missing_required`, `omitted_required` oder `truncated_required` ausweist. Der Block wird vor dem Provideraufruf auditiert; Regression belegt den Widerspruchsfall. Agent-/Loop-Ask-LLM-Gruppe: 52 bestanden; Ruff, Mypy fuer `agent.py`, Audit- und Control-Drift bestanden. Semantische Angemessenheit der erforderlichen Abschnitte muss weiter evaluiert werden; OP-405 bleibt offen.
 
+- **Positionierung des Builder-Reparaturkontexts (lokal, noch nicht serververifiziert):** Wenn eine Reparatur Verify-/Reviewer-Feedback als Pflichtkontext hat, bleibt Task und Dateibeleg am Promptanfang; vollstaendige Reparaturhinweise stehen nach optionale Abschnitten am Promptende. Manifestoffsets und SHA-256 folgen der neuen Reihenfolge. Das ist eine begrenzte, forschungsbegruendete Promptpositionsmassnahme, kein Nachweis semantischer Suffizienz oder besserer Erfolgsrate. Regression prueft Request-Text und Manifestoffset. [Liu et al., TACL 2023](https://arxiv.org/abs/2307.03172) dokumentieren positionsabhaengige Leistung bei relevanter Information in langen Kontexten. Servertest fehlt; OP-405 bleibt offen.
+
 ### OP-396: Chat als projektbezogene Hauptoberflaeche
 - **Status:** open
 - **Typ:** ui-orchestration

@@ -264,6 +264,33 @@ def test_builder_context_keeps_required_and_omits_optional_as_whole() -> None:
     assert "prompt_start" not in sections["OPTIONAL"]
 
 
+def test_builder_keeps_repair_feedback_at_end_of_context() -> None:
+    repair_feedback = (
+        "## AKTUELLE VERIFY-BELEGE\n"
+        "The changed parser still fails the focused regression."
+    )
+    prompt, manifest = _budget_builder_context(
+        [
+            ("TASK", "## TASK\nRepair the parser regression."),
+            ("FEEDBACK_UND_VERIFY", repair_feedback),
+        ],
+        [("PROJECT_SKILL", "## SKILL\n" + "guidance " * 20)],
+        max_chars=2_000,
+        final_required_section="FEEDBACK_UND_VERIFY",
+    )
+
+    assert prompt is not None
+    assert prompt.endswith(repair_feedback)
+    assert prompt.index("Repair the parser regression") < prompt.index("## SKILL")
+    sections = manifest["section_manifest"]
+    feedback = next(
+        item for item in sections if item["name"] == "FEEDBACK_UND_VERIFY"
+    )
+    start, end = feedback["prompt_start"], feedback["prompt_end"]
+    assert prompt[start:end] == repair_feedback
+    assert feedback["status"] == "required"
+
+
 def test_builder_context_blocks_without_truncating_required_evidence() -> None:
     prompt, meta = _budget_builder_context(
         [("TASK", "T" * 20), ("FILE", "F" * 20)],
@@ -381,6 +408,7 @@ def test_builder_requires_full_repair_feedback_and_marks_history_boundary(
     assert section["status"] == "required"
     start, end = section["prompt_start"], section["prompt_end"]
     assert "## AKTUELLE VERIFY-BELEGE" in prompt[start:end]
+    assert prompt.endswith(prompt[start:end])
 
 
 def test_builder_blocks_when_complete_repair_evidence_exceeds_budget(tmp_path):

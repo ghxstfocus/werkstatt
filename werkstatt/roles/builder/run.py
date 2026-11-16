@@ -132,6 +132,7 @@ def _budget_builder_context(
     optional: list[tuple[str, str]],
     *,
     max_chars: int = _BUILDER_CONTEXT_MAX_CHARS,
+    final_required_section: str | None = None,
 ) -> tuple[str | None, dict[str, object]]:
     """Keeps required task evidence whole and admits optional sections whole.
 
@@ -140,12 +141,24 @@ def _budget_builder_context(
     task/file evidence. Optional sections are considered in caller priority
     order and omissions are explicit in both prompt and audit metadata.
     """
-    required_text = "\n\n".join(text for _, text in required if text)
+    anchor = next(
+        (
+            (name, text) for name, text in reversed(required)
+            if name == final_required_section and text
+        ),
+        None,
+    )
+    leading_required = [
+        (name, text) for name, text in required
+        if text and (anchor is None or (name, text) != anchor)
+    ]
+    required_text = "\n\n".join(text for _, text in leading_required)
     required_names = [name for name, text in required if text]
-    if len(required_text) > max_chars:
+    required_chars = len("\n\n".join(text for _, text in required if text))
+    if required_chars > max_chars:
         return None, {
             "max_chars": max_chars,
-            "required_chars": len(required_text),
+            "required_chars": required_chars,
             "required_sections": required_names,
             "included_optional": [],
             "omitted_optional": [name for name, text in optional if text],
@@ -171,7 +184,7 @@ def _budget_builder_context(
 
     # Reserve room for the explicit omission notice before admitting optional
     # material; never trim a section to make it fit.
-    optional_budget = max(0, max_chars - len(required_text) - 1_024)
+    optional_budget = max(0, max_chars - required_chars - 1_024)
     selected: list[tuple[str, str]] = []
     omitted: list[str] = []
     used_optional = 0
@@ -192,34 +205,34 @@ def _budget_builder_context(
         + "\nBei Bedarf gezielt nachladen; Auslassung ist kein Negativbeleg."
         if omitted else ""
     )
-    parts = [required_text, *(text for _, text in selected), notice]
+    parts = [
+        required_text,
+        *(text for _, text in selected),
+        notice,
+        anchor[1] if anchor is not None else "",
+    ]
     prompt = "\n\n".join(part for part in parts if part)
     section_manifest: list[dict[str, object]] = []
     cursor = 0
-    for name, text in required:
-        if not text:
-            continue
+    manifest_required = [*leading_required]
+    if anchor is not None:
+        manifest_required.append(anchor)
+    # Manifest order follows the assembled prompt so offsets are monotonic.
+    for name, text in [
+        *leading_required,
+        *selected,
+        *([anchor] if anchor is not None else []),
+    ]:
         start = prompt.find(text, cursor)
         if start < 0:
-            raise ValueError("required_builder_section_not_in_prompt")
+            raise ValueError("builder_section_not_in_prompt")
         end = start + len(text)
         section_manifest.append({
             "name": name,
-            "status": "required",
-            "chars": len(text),
-            "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-            "prompt_start": start,
-            "prompt_end": end,
-        })
-        cursor = end
-    for name, text in selected:
-        start = prompt.find(text, cursor)
-        if start < 0:
-            raise ValueError("included_builder_section_not_in_prompt")
-        end = start + len(text)
-        section_manifest.append({
-            "name": name,
-            "status": "included_optional",
+            "status": (
+                "required" if (name, text) in manifest_required
+                else "included_optional"
+            ),
             "chars": len(text),
             "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
             "prompt_start": start,
@@ -238,7 +251,7 @@ def _budget_builder_context(
     )
     metadata: dict[str, object] = {
         "max_chars": max_chars,
-        "required_chars": len(required_text),
+        "required_chars": required_chars,
         "required_sections": required_names,
         "included_optional": [name for name, _ in selected],
         "omitted_optional": omitted,
@@ -667,6 +680,9 @@ def _build_patches_fuer_datei(
     ])
     _user, _context_meta = _budget_builder_context(
         _required_context, _optional_context,
+        final_required_section=(
+            "FEEDBACK_UND_VERIFY" if _repair_context_required else None
+        ),
     )
     _user_sha256 = (
         hashlib.sha256(_user.encode("utf-8")).hexdigest()

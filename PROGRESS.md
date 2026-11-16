@@ -7533,3 +7533,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Das Koordinator-Audit-Payload enthaelt jetzt denselben Snapshot. Ein whitelisted Projektionstest belegt, dass der Snapshot verfuegbar ist und beliebige Zusatzfelder (einschliesslich moeglicher Promptinhalte) nicht in das Ereignis kopiert werden.
 - **Verifikation lokal:** Checkpoint-/Chat-/Loop-Gruppe: 124 bestanden, 2 uebersprungen; Ruff, Mypy fuer `loop.py`, Audit-Drift, Control-Drift und strikter Doku-Drift bestanden.
 - **Grenze / Hauptziel:** Der Snapshot dokumentiert Taskbelegstatus, nicht die semantische Angemessenheit der Verify-Stage. Server-/Produktionsnachweis fehlt; OP-396/397/398 bleiben offen.
+
+# 2026-11-16 – Kritischen Reparaturkontext am Builder-Promptende platzieren (lokal)
+- **Befund:** Builder-Aufgaben hielten den Task und Dateibeleg am Anfang, setzten danach aber verpflichtendes Verify-/Reviewer-Reparaturfeedback vor alle optionalen Kontexte. Viele vollstaendige optionale Abschnitte konnten den aktuellen Reparaturbefund damit von der Promptgrenze weg in die Mitte schieben.
+- **Aenderung:** `_budget_builder_context` kann einen benannten Pflichtabschnitt bis zum Ende des finalen Prompts verschieben, ohne ihn abzuschneiden, aus dem Pflichtbudget herauszurechnen oder seine Manifestoffsets/Hashes zu verlieren. Bei Reparaturen wird `FEEDBACK_UND_VERIFY` als solcher Abschnitt gesetzt; der Task bleibt am Anfang. Regression prueft reale Builder-Requestreihenfolge und den Abschnittsbeleg.
+- **Wissenschaftliche Grundlage:** Liu et al., *Lost in the Middle*, TACL 2023, berichten positionsabhaengige Retrieval-/QA-Leistung in langen Kontexten. Das begruendet den Positionsversuch, nicht die Annahme eines Werkstatt-spezifischen Erfolgsgewinns: https://arxiv.org/abs/2307.03172
+- **Verifikation lokal:** Builder-Kontext-/Agent-/Loop-Ask-LLM-Gruppe: 64 bestanden; Ruff fuer Builder/Test, Mypy fuer `roles/builder/run.py` bestanden.
+- **Grenze / Hauptziel:** Das ordnet deklarierte Pflichtbelege gezielter, beweist jedoch weder ihre semantische Suffizienz noch einen besseren Reparaturerfolg. Server-/Produktionsnachweis fehlt; OP-405 bleibt offen.
