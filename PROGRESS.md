@@ -7486,3 +7486,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Das finale JSON-Seitenlimit liegt jetzt bei 22.000 Zeichen. Falls der Pagination-Hinweis die Grenze ueberschreitet, entfernt der Builder ganze Ereignisse vom Seitenende und berechnet `next_since`/Auslassungen neu, sodass kein halbiertes Event und kein ueberlanger Seitentext ausgegeben wird.
 - **Verifikation lokal:** Chat-Tool-/Chat-Agent-Gruppe: 128 bestanden, 2 uebersprungen; Ruff, Mypy fuer `chat_tools.py`, Audit-Drift, Control-Drift und strikter Doku-Drift bestanden.
 - **Grenze / Hauptziel:** Der rohe Event-Payload wird weiterhin nur als hashgebundener Stub ausgegeben, wenn Chunkabruf noetig ist. Servernachweis fehlt; OP-396/397 bleiben offen.
+# 2026-11-16 – Chat-Recovery-Aufgabenname unverändert an Builder übergeben (lokal)
+- **Befund:** Der Reflection-Chat-Validator akzeptiert Aufgabennamen bis 240 Zeichen; der Phase-End-Reflection-Kern kappte denselben Namen vor dem Builder auf 200 Zeichen. Damit war die Chat-Aufgabe am Übergabepunkt nicht mehr identisch.
+- **Änderung:** Das unbeabsichtigte Kürzen wurde entfernt. Regression übergibt einen 240-Zeichen-Aufgabennamen und vergleicht den exakten Wert am Builder-Eingang.
+- **Verifikation lokal:** `Reflection-Chat-/Reflection-Gruppe: 32 bestanden.
+- **Grenze / Hauptziel:** Belegt ist nur die Erhaltung des Aufgabennamens auf diesem Handoff, nicht die semantische Korrektheit aller Recovery-Aufträge. Servernachweis fehlt; OP-398/405 bleiben offen.

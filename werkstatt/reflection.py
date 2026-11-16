@@ -1249,7 +1249,7 @@ def _phase_end_reflection_core(
             state.aktuelle_task = {
                 "id": f"phase-fix-{_datei}",
                 "name": (
-                    str(task_override.get("name", ""))[:200]
+                    str(task_override.get("name", ""))
                     if task_override_applies
                     else f"Phase-Fix: {_datei}"
                 ),

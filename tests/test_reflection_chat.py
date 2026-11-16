@@ -731,8 +731,10 @@ def test_phase_end_core_uses_chat_task_without_rewriting_reviewer_evidence(
     }]
     state.applied_count = 0
     state.patches = []
+    proposed_name = "Evidence-driven repair " + ("x" * 217)
+    assert len(proposed_name) == 240
     override = {
-        "name": "Evidence-driven repair",
+        "name": proposed_name,
         "description": "Apply the source-backed correction.",
         "task_files": ["werkstatt/sample.py"],
     }
@@ -756,7 +758,7 @@ def test_phase_end_core_uses_chat_task_without_rewriting_reviewer_evidence(
     assert reflection._phase_end_reflection_core(
         state, builder_task_override=override,
     ) is True
-    assert builder_tasks[0]["name"] == "Evidence-driven repair"
+    assert builder_tasks[0]["name"] == proposed_name
     assert builder_tasks[0]["description"] == "Apply the source-backed correction."
     assert builder_tasks[0]["task_files"] == ["werkstatt/sample.py"]
     assert state.reviewer_bugs == [{
