@@ -686,6 +686,14 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                         "unverifiable_omitted_count": 0,
                         "private_prompt": "never expose",
                     },
+                    "decision_basis": {
+                        "setup_context_ready": True,
+                        "setup_checkpoint_complete": True,
+                        "plan_checkpoint_complete": True,
+                        "plan_goal_matches": True,
+                        "task_count": 4,
+                        "private_prompt": "never expose",
+                    },
                 },
                 "private_prompt": "never expose",
             },
@@ -716,6 +724,13 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
     assert parsed["checkpoint"]["coordinator_decision"]["executor"] == "builder"
     dispatch_evidence = parsed["checkpoint"]["coordinator_decision"]["evidence"]
     assert dispatch_evidence["task_progress"]["failed"] == 1
+    assert dispatch_evidence["decision_basis"] == {
+        "setup_context_ready": True,
+        "setup_checkpoint_complete": True,
+        "plan_checkpoint_complete": True,
+        "plan_goal_matches": True,
+        "task_count": 4,
+    }
     coverage = dispatch_evidence["criteria_task_coverage"]
     assert coverage["uncovered_count"] == 23
     assert coverage["uncovered_omitted_count"] == 3

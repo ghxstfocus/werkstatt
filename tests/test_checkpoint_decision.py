@@ -230,12 +230,23 @@ def test_coordinator_audit_payload_includes_task_verify_evidence() -> None:
             "decision": "reject_criteria_verify_scope_missing",
             "coordinator_action": "reject_checkpoint",
             "criteria_task_verification": verification,
+            "decision_basis": {
+                "setup_context_ready": False,
+                "plan_goal_matches": True,
+                "task_count": 2,
+                "private_prompt": "must not be copied",
+            },
             "private_prompt": "must not be copied",
         },
     )
 
     assert payload["run_id"] == "demo-run-1"
     assert payload["criteria_task_verification"] == verification
+    assert payload["decision_basis"] == {
+        "setup_context_ready": False,
+        "plan_goal_matches": True,
+        "task_count": 2,
+    }
     assert "private_prompt" not in payload
 
 
@@ -245,9 +256,15 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     from werkstatt.loop import _run_coordinator_action
 
     state = RunState(aufgabe="Goal")
-    assert _run_coordinator_action(None, state)["coordinator_action"] == (
-        "explore_setup"
-    )
+    missing_setup = _run_coordinator_action(None, state)
+    assert missing_setup["coordinator_action"] == "explore_setup"
+    assert missing_setup["decision_basis"] == {
+        "setup_context_ready": False,
+        "setup_checkpoint_complete": False,
+        "plan_checkpoint_complete": False,
+        "plan_goal_matches": False,
+        "task_count": 0,
+    }
 
     phase = PhaseState("demo", base_dir=tmp_path)
     phase.init_new("Goal", [], tests=[], akzeptanzkriterien=[])
@@ -257,9 +274,10 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     assert resumed_phase.load()
     # A new process must rebuild its transient Explorer context even though
     # the old process had completed setup.
-    assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
-        "explore_setup"
-    )
+    resumed_setup = _run_coordinator_action(resumed_phase, state)
+    assert resumed_setup["coordinator_action"] == "explore_setup"
+    assert resumed_setup["decision_basis"]["setup_checkpoint_complete"] is True
+    assert resumed_setup["decision_basis"]["plan_checkpoint_complete"] is False
     state.coordinator_setup_context_ready = True
     assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
         "plan_preflight"
@@ -317,6 +335,14 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
             "reverify_possible_omitted_count": 0,
             "unverifiable_omitted_count": 0,
         },
+        "decision_basis": {
+            "setup_context_ready": True,
+            "setup_checkpoint_complete": True,
+            "plan_checkpoint_complete": True,
+            "plan_goal_matches": True,
+            "task_count": 3,
+            "private_prompt": "do not persist",
+        },
     }
 
     _persist_run_coordinator_decision(
@@ -356,6 +382,13 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
                 "reverify_possible_omitted_count": 0,
                 "unverifiable": ["task-3"],
                 "unverifiable_omitted_count": 0,
+            },
+            "decision_basis": {
+                "setup_context_ready": True,
+                "setup_checkpoint_complete": True,
+                "plan_checkpoint_complete": True,
+                "plan_goal_matches": True,
+                "task_count": 3,
             },
         },
     }

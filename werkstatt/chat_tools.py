@@ -739,6 +739,24 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                 evidence = dispatch.get("evidence")
                 if isinstance(evidence, dict):
                     evidence_summary: dict[str, Any] = {}
+                    decision_basis = evidence.get("decision_basis")
+                    if isinstance(decision_basis, dict):
+                        safe_basis: dict[str, Any] = {}
+                        for key in (
+                            "setup_context_ready", "setup_checkpoint_complete",
+                            "plan_checkpoint_complete", "plan_goal_matches",
+                        ):
+                            if isinstance(decision_basis.get(key), bool):
+                                safe_basis[key] = decision_basis[key]
+                        task_count = decision_basis.get("task_count")
+                        if (
+                            isinstance(task_count, int)
+                            and not isinstance(task_count, bool)
+                            and task_count >= 0
+                        ):
+                            safe_basis["task_count"] = task_count
+                        if safe_basis:
+                            evidence_summary["decision_basis"] = safe_basis
                     progress = evidence.get("task_progress")
                     if isinstance(progress, dict):
                         evidence_summary["task_progress"] = {

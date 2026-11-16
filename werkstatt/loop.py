@@ -550,17 +550,31 @@ def _finish_run_after_followups(
 
 def _run_coordinator_action(phase_state, state: RunState) -> dict:
     """Choose one resumable run action from persisted checkpoint evidence."""
+    phase_data = getattr(phase_state, "data", {})
+    phase_data = phase_data if isinstance(phase_data, dict) else {}
+    setup_checkpoint_complete = phase_data.get("setup_complete") is True
+    plan_checkpoint_complete = phase_data.get("plan_complete") is True
+    plan_goal_matches = phase_data.get("aufgabe") == state.aufgabe
+    task_records = phase_data.get("tasks")
+    task_count = len(task_records) if isinstance(task_records, list) else 0
     if not state.coordinator_setup_context_ready:
         return {
             "decision": "prepare_project_context",
             "coordinator_action": "explore_setup",
             "reason": "current_process_setup_context_missing",
             "next_executor": "explorer_and_setup",
+            "decision_basis": {
+                "setup_context_ready": False,
+                "setup_checkpoint_complete": setup_checkpoint_complete,
+                "plan_checkpoint_complete": plan_checkpoint_complete,
+                "plan_goal_matches": plan_goal_matches,
+                "task_count": task_count,
+            },
         }
     plan_checkpoint_current = bool(
         phase_state is not None
-        and phase_state.data.get("plan_complete") is True
-        and phase_state.data.get("aufgabe") == state.aufgabe
+        and plan_checkpoint_complete
+        and plan_goal_matches
     )
     if plan_checkpoint_current and phase_state is not None:
         # A persisted plan survives process restarts; hydrate the current
@@ -585,6 +599,13 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
             "coordinator_action": "plan_preflight",
             "reason": "plan_checkpoint_missing",
             "next_executor": "planner_and_preflight",
+            "decision_basis": {
+                "setup_context_ready": True,
+                "setup_checkpoint_complete": setup_checkpoint_complete,
+                "plan_checkpoint_complete": plan_checkpoint_complete,
+                "plan_goal_matches": plan_goal_matches,
+                "task_count": task_count,
+            },
         }
     from werkstatt.phases.tasks import _checkpoint_decision_payload
 
@@ -626,6 +647,27 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
     }
 
 
+def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
+    """Keep only primitive checkpoint facts safe for Control and RunRecord."""
+    if not isinstance(raw, dict):
+        return None
+    safe: dict[str, Any] = {}
+    for key in (
+        "setup_context_ready", "setup_checkpoint_complete",
+        "plan_checkpoint_complete", "plan_goal_matches",
+    ):
+        if isinstance(raw.get(key), bool):
+            safe[key] = raw[key]
+    task_count = raw.get("task_count")
+    if (
+        isinstance(task_count, int)
+        and not isinstance(task_count, bool)
+        and task_count >= 0
+    ):
+        safe["task_count"] = task_count
+    return safe or None
+
+
 def _coordinator_decision_audit_payload(
     run_id: str, decision: dict[str, Any],
 ) -> dict[str, Any]:
@@ -642,6 +684,11 @@ def _coordinator_decision_audit_payload(
         "task_progress": decision.get("task_progress"),
         "criteria_task_coverage": decision.get("criteria_task_coverage"),
     }
+    decision_basis = _safe_coordinator_decision_basis(
+        decision.get("decision_basis"),
+    )
+    if decision_basis is not None:
+        payload["decision_basis"] = decision_basis
     verification = decision.get("criteria_task_verification")
     if isinstance(verification, dict):
         payload["criteria_task_verification"] = verification
@@ -716,6 +763,12 @@ def _persist_run_coordinator_decision(
                 "task_progress": progress,
                 "criteria_task_coverage": coverage,
             }
+        raw_basis = decision.get("decision_basis")
+        safe_basis = _safe_coordinator_decision_basis(raw_basis)
+        if safe_basis is not None:
+            persisted_decision.setdefault("evidence", {})[
+                "decision_basis"
+            ] = safe_basis
         raw_verification = decision.get("criteria_task_verification")
         if isinstance(raw_verification, dict):
             verification: dict[str, Any] = {}
