@@ -118,6 +118,66 @@ def test_llm_call_binds_context_manifest_to_exact_sent_prompt(
     ).hexdigest()
 
 
+def test_redaction_rebinds_role_section_span_to_exact_provider_text(
+    monkeypatch, tmp_path,
+) -> None:
+    events = []
+    requests = []
+    monkeypatch.setattr(
+        agent, "audit",
+        lambda kind, payload, *_a, **_kw: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests, "post",
+        lambda _url, **kwargs: (requests.append(kwargs["json"]), _DummyResponse())[1],
+    )
+
+    def fake_redact(text, *, max_len):
+        assert max_len == 100000
+        return text.replace("private-token", "[REDACTED]"), []
+
+    monkeypatch.setattr(agent.redaction, "redact_all", fake_redact)
+    state = mk_state(project_dir=tmp_path, project_name="redacted-span")
+    source = "task\n\nprivate-token\n\nending"
+    start = source.index("private-token")
+    end = start + len("private-token")
+    manifest = {
+        "budget_event": "builder_context_budget",
+        "user_sha256": hashlib.sha256(source.encode()).hexdigest(),
+        "system_sha256": hashlib.sha256(b"system").hexdigest(),
+        "section_manifest": [{
+            "name": "SOURCE",
+            "sha256": hashlib.sha256(b"private-token").hexdigest(),
+            "prompt_start": start,
+            "prompt_end": end,
+        }],
+    }
+
+    reply = agent.ask_llm(
+        api_key="x", system_prompt="system", user_content=source,
+        model="m", temperature=0.0, state=state, aufgabe="builder",
+        context_manifest=manifest,
+    )
+
+    assert reply.ok
+    sent_user = requests[0]["messages"][1]["content"]
+    assert sent_user == "task\n\n[REDACTED]\n\nending"
+    call = next(payload for kind, payload in events if kind == "llm_call")
+    section = call["context_manifest"]["section_manifest"][0]
+    sent_start = section["sent_start"]
+    sent_end = section["sent_end"]
+    assert section["sent_status"] == "verified"
+    assert sent_user[sent_start:sent_end] == "[REDACTED]"
+    assert section["sent_sha256"] == hashlib.sha256(
+        b"[REDACTED]",
+    ).hexdigest()
+    assert call["context_manifest"]["source_user_sha256"] == hashlib.sha256(
+        source.encode(),
+    ).hexdigest()
+    assert call["context_manifest"]["user_sha256"] == call["user_sha256"]
+    assert manifest["section_manifest"][0].get("sent_status") is None
+
+
 def test_context_manifest_bounds_total_nested_metadata_size() -> None:
     nested = "x" * 240
     for _ in range(5):

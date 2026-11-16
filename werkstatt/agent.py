@@ -12,6 +12,7 @@ import json
 import subprocess
 import threading
 import time
+from copy import deepcopy
 from itertools import islice
 from pathlib import Path
 from typing import Any
@@ -189,7 +190,10 @@ def _safe_context_manifest(
     # These fields are the minimum chain linking a role-budget decision to
     # the exact messages sent. Preserve them before optional diagnostics so a
     # large manifest cannot evict its own proof from the audit record.
-    provenance_keys = ("budget_event", "user_sha256", "system_sha256")
+    provenance_keys = (
+        "budget_event", "user_sha256", "system_sha256",
+        "source_user_sha256", "source_system_sha256",
+    )
     ordered_manifest = {
         **{key: manifest[key] for key in provenance_keys if key in manifest},
         **{key: value for key, value in manifest.items() if key not in provenance_keys},
@@ -252,6 +256,70 @@ def _safe_context_manifest(
     if truncated:
         cleaned["_manifest_truncated"] = True
     return cleaned
+
+
+def _bind_manifest_spans_to_sent_text(
+    manifest: dict[str, Any] | None,
+    source: str,
+    sent: str,
+    *,
+    offset_key: str,
+    digest_key: str,
+    redact: bool,
+) -> None:
+    """Add verified offsets/hashes for manifest spans in the provider text.
+
+    Existing ``prompt_*``/``system_*`` coordinates describe the source prompt.
+    Redaction can change its length, so provider coordinates are recorded
+    separately and only when both the source digest and mapped bytes verify.
+    """
+    if not isinstance(manifest, dict):
+        return
+
+    def clean(value: str) -> str:
+        return redaction.redact_all(value, max_len=100000)[0] if redact else value
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            start = node.get(f"{offset_key}_start")
+            end = node.get(f"{offset_key}_end")
+            if (
+                isinstance(start, int) and not isinstance(start, bool)
+                and isinstance(end, int) and not isinstance(end, bool)
+                and 0 <= start <= end <= len(source)
+            ):
+                source_span = source[start:end]
+                source_hash = hashlib.sha256(source_span.encode("utf-8")).hexdigest()
+                node["source_span_sha256"] = source_hash
+                span_matches = node.get(digest_key) == source_hash
+                sent_prefix = clean(source[:start])
+                sent_span = clean(source_span)
+                mapped_start = len(sent_prefix)
+                mapped_end = mapped_start + len(sent_span)
+                if (
+                    span_matches
+                    and sent[:mapped_start] == sent_prefix
+                    and sent[mapped_start:mapped_end] == sent_span
+                    and sent[mapped_end:] == clean(source[end:])
+                ):
+                    node["sent_start"] = mapped_start
+                    node["sent_end"] = mapped_end
+                    node["sent_sha256"] = hashlib.sha256(
+                        sent_span.encode("utf-8"),
+                    ).hexdigest()
+                    node["sent_status"] = "verified"
+                else:
+                    node["sent_status"] = (
+                        "source_digest_mismatch" if not span_matches
+                        else "unmapped_after_redaction"
+                    )
+            for child in node.values():
+                visit(child)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    visit(manifest)
 
 
 def _rolle_aus_aufgabe(aufgabe: str) -> str:
@@ -425,9 +493,36 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     # Pruefung braucht der Reviewer aber auch oeffentliche Werte
     # (z.B. 1.1.1.1 in einem Test), sonst sieht er '[IPV4]' und
     # '[IPV4]' und kann sie nicht unterscheiden.
+    source_user_content = user_content
+    source_system_prompt = system_prompt
     if redact:
         user_content, _ = redaction.redact_all(user_content, max_len=100000)
         system_prompt, _ = redaction.redact_all(system_prompt, max_len=100000)
+    if isinstance(context_manifest, dict):
+        context_manifest = deepcopy(context_manifest)
+        if redact:
+            context_manifest["source_user_sha256"] = hashlib.sha256(
+                source_user_content.encode("utf-8"),
+            ).hexdigest()
+            context_manifest["source_system_sha256"] = hashlib.sha256(
+                source_system_prompt.encode("utf-8"),
+            ).hexdigest()
+        _bind_manifest_spans_to_sent_text(
+            context_manifest, source_user_content, user_content,
+            offset_key="prompt", digest_key="sha256", redact=redact,
+        )
+        _bind_manifest_spans_to_sent_text(
+            context_manifest, source_system_prompt, system_prompt,
+            offset_key="system", digest_key="excerpt_sha256", redact=redact,
+        )
+        # These top-level hashes describe the exact bytes crossing the model
+        # boundary. Keep pre-redaction identity separately for traceability.
+        context_manifest["user_sha256"] = hashlib.sha256(
+            user_content.encode("utf-8"),
+        ).hexdigest()
+        context_manifest["system_sha256"] = hashlib.sha256(
+            system_prompt.encode("utf-8"),
+        ).hexdigest()
     headers: dict[str, str] = {"Authorization": f"Bearer {api_key}",
                               "Content-Type": "application/json"}
     payload: dict[str, Any] = {
