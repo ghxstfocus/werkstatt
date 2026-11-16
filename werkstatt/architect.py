@@ -1584,8 +1584,16 @@ def _reduce_entry(text: str, max_chars: int = 700) -> str:
         nxt = rest.find("\n## ")
         body = rest if nxt < 0 else rest[:nxt]
         parts.append(f"## {section}{body}".rstrip())
-    result = "\n\n".join(parts) if parts else text[:max_chars]
-    return result[:max_chars]
+    result = "\n\n".join(parts) if parts else text
+    if len(result) <= max_chars:
+        return result
+    marker = (
+        f"\n[PROJEKT-ENTRY GEKUERZT: Quelle {len(result)} Zeichen; "
+        "Rest ausgelassen und unbekannt.]"
+    )
+    if len(marker) >= max_chars:
+        return marker[:max_chars]
+    return result[:max_chars - len(marker)] + marker
 
 
 def _reduce_status(text: str) -> str:
@@ -1601,7 +1609,7 @@ def _reduce_status(text: str) -> str:
     return rest if nxt < 0 else rest[:len(marker) + nxt]
 
 
-def _reduce_roadmap(text: str, max_chars: int = 800) -> str:
+def _reduce_roadmap(text: str, max_chars: int | None = None) -> str:
     """ROADMAP.md: nur Zeilen mit '## Phase' + Status-Icons behalten."""
     if not text:
         return ""
@@ -1610,8 +1618,21 @@ def _reduce_roadmap(text: str, max_chars: int = 800) -> str:
         stripped = ln.strip()
         if stripped.startswith(("## Phase", "### Phase")):
             lines.append(stripped)
-    result = "\n".join(lines)
-    return result[:max_chars]
+    if max_chars is None or len("\n".join(lines)) <= max_chars:
+        return "\n".join(lines)
+    included = list(lines)
+    while included:
+        omitted = len(lines) - len(included)
+        marker = (
+            f"[{omitted} Phase-Header ausgelassen; "
+            "Roadmap-Auswahl unvollstaendig.]"
+        )
+        candidate = "\n".join([*included, marker])
+        if len(candidate) <= max_chars:
+            return candidate
+        included.pop()
+    marker = f"[{len(lines)} Phase-Header ausgelassen; Roadmap-Auswahl unvollstaendig.]"
+    return marker[:max_chars]
 
 
 def _build_selbst_check_block() -> str:
@@ -1684,7 +1705,7 @@ def build_architect_docs_section_v2(docs: dict) -> str:
     if status:
         parts.append("### PROJEKT-STATUS (offene Punkte)\n" + status)
 
-    roadmap = _reduce_roadmap(docs.get("roadmap", ""), max_chars=800)
+    roadmap = _reduce_roadmap(docs.get("roadmap", ""))
     if roadmap:
         parts.append("### PROJEKT-ROADMAP (nur Phasen-Header)\n" + roadmap)
 

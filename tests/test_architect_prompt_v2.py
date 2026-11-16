@@ -34,6 +34,14 @@ def test_reduce_entry_behaelt_zweck_und_struktur():
     assert "Hard-Rules" not in result
 
 
+def test_reduce_entry_marks_truncated_project_context():
+    text = "## Zweck\n" + ("Projektzweck " * 100)
+    result = _reduce_entry(text)
+    assert len(result) <= 700
+    assert "PROJEKT-ENTRY GEKUERZT" in result
+    assert "Quelle " in result and " Zeichen;" in result
+
+
 def test_reduce_status_behaelt_offene_punkte():
     text = (
         "# Status\n\n## Kennzahlen\nZeug...\n\n"
@@ -86,10 +94,14 @@ def test_reduce_roadmap_nur_phasen_header():
 
 
 def test_reduce_roadmap_max_800():
-    # Viele Phasen-Header -> bleibt unter 800 Z.
+    # Der Standardpfad bewahrt alle Header; explizites Limit markiert
+    # vollstaendige ausgelassene Header statt sie still abzuschneiden.
     text = "\n".join(f"## Phase {i}: Titel" for i in range(100))
+    assert "## Phase 99: Titel" in _reduce_roadmap(text)
     result = _reduce_roadmap(text, max_chars=800)
     assert len(result) <= 800
+    assert "Phase-Header ausgelassen" in result
+    assert "Roadmap-Auswahl unvollstaendig" in result
 
 
 # --- Gesamt-Builder ---
@@ -124,12 +136,14 @@ def test_build_v2_enthaelt_vier_living_docs_bereiche():
     assert "--- roadmap ---" not in result
 
 
-def test_build_v2_roadmap_unter_1000():
-    # 200 Phasen -> Roadmap-Sektion bleibt trotzdem klein.
+def test_build_v2_roadmap_behaelt_alle_phasenheader():
+    # Der Architect darf spaetere Phasen nicht durch eine stille 800-Z-
+    # Vorabkuerzung verlieren.
     roadmap = "\n".join(f"## Phase {i}: Titel" for i in range(200))
     docs = {"roadmap": roadmap}
     result = build_architect_docs_section_v2(docs)
-    assert len(result) < 1500
+    assert "## Phase 0: Titel" in result
+    assert "## Phase 199: Titel" in result
 
 
 # --- Selbst-Check ---
