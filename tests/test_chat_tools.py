@@ -847,12 +847,19 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                         "planner_role_decision_reason": (
                             "architect_output_needs_task_graph_compilation"
                         ),
+                        "planner_role_available_evidence": [
+                            "user_goal", "architect_plan", "architect_prose",
+                            "acceptance_criteria", "current_source_manifest",
+                        ],
                         "planner_role_required_evidence": [
                             "user_goal", "architect_prose",
                             "acceptance_criteria",
                         ],
                         "planner_role_missing_evidence": [
                             "validated_task_graph",
+                        ],
+                        "planner_role_missing_inputs": [
+                            "current_source_manifest",
                         ],
                         "private_prompt": "never expose",
                     },
@@ -919,10 +926,15 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
         "planner_role_decision_reason": (
             "architect_output_needs_task_graph_compilation"
         ),
+        "planner_role_available_evidence": [
+            "user_goal", "architect_plan", "architect_prose",
+            "acceptance_criteria", "current_source_manifest",
+        ],
         "planner_role_required_evidence": [
             "user_goal", "architect_prose", "acceptance_criteria",
         ],
         "planner_role_missing_evidence": ["validated_task_graph"],
+        "planner_role_missing_inputs": ["current_source_manifest"],
     }
     coverage = dispatch_evidence["criteria_task_coverage"]
     assert coverage["uncovered_count"] == 23

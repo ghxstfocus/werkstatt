@@ -819,13 +819,56 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 state.aufgabe, scout_skip_target, state.project_dir,
             )
         )
+        planner_available_evidence: set[str] = set()
+        if isinstance(state.aufgabe, str) and state.aufgabe.strip():
+            planner_available_evidence.add("user_goal")
+        if isinstance(state.explorer_context, dict) and state.explorer_context:
+            planner_available_evidence.update({
+                "project_inventory", "explorer_evidence",
+            })
+        if scout_skip_target:
+            planner_available_evidence.add("explorer_source_evidence")
+        if planner_role_stage in {"scout", "architect"}:
+            planner_available_evidence.update({
+                "scout_report", "current_source_evidence",
+            })
+        if planner_role_stage == "architect":
+            planner_available_evidence.update({
+                "architect_plan", "architect_prose", "acceptance_criteria",
+                "current_source_manifest",
+            })
+        if direct_builder_ready:
+            planner_available_evidence.update({
+                "explicit_user_edit", "unique_current_source",
+            })
         planner_decision = choose_next_planner_role(
             scout_skip_path=scout_skip_target,
-            completed_role=planner_role_stage,
+            available_evidence=planner_available_evidence,
             direct_builder_ready=direct_builder_ready,
-            architect_output_ready=planner_role_stage == "architect",
         )
-        if planner_decision.role is None:
+        if planner_decision.missing_inputs:
+            refresh_goal_sha256 = hashlib.sha256(
+                state.aufgabe.encode("utf-8"),
+            ).hexdigest()
+            refresh_count = phase_data.get(
+                "planner_evidence_refresh_count", 0,
+            )
+            refresh_goal = phase_data.get(
+                "planner_evidence_refresh_goal_sha256",
+            )
+            already_refreshed = (
+                refresh_goal == refresh_goal_sha256
+                and isinstance(refresh_count, int)
+                and not isinstance(refresh_count, bool)
+                and refresh_count >= 1
+            )
+            next_role = "stop_missing_evidence" if already_refreshed else "refresh_evidence"
+            reason = (
+                "planner_role_required_evidence_unavailable_after_refresh"
+                if already_refreshed
+                else "planner_role_required_evidence_missing"
+            )
+        elif planner_decision.role is None:
             # A missing plan checkpoint cannot be treated as complete.
             # Re-enter the graph compiler, which validates/recovers its own
             # role artifact before any Plan or Human gate can pass.
@@ -852,11 +895,21 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                     and scout_route_reason
                     else planner_decision.reason
                 )
+        coordinator_action = (
+            "explore_setup" if next_role == "refresh_evidence"
+            else "stop_missing_evidence"
+            if next_role == "stop_missing_evidence"
+            else f"planner_{next_role}"
+        )
         return {
             "decision": "prepare_approved_work_graph",
-            "coordinator_action": f"planner_{next_role}",
+            "coordinator_action": coordinator_action,
             "reason": reason,
-            "next_executor": f"planner_{next_role}",
+            "next_executor": (
+                "explorer_and_setup" if next_role == "refresh_evidence"
+                else "coordinator" if next_role == "stop_missing_evidence"
+                else f"planner_{next_role}"
+            ),
             "decision_basis": {
                 "setup_context_ready": True,
                 "setup_checkpoint_complete": setup_checkpoint_complete,
@@ -869,12 +922,18 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 "planner_role_stage": planner_role_stage,
                 "planner_role_decision": planner_decision.role,
                 "planner_role_decision_reason": planner_decision.reason,
-            "planner_role_required_evidence": list(
-                planner_decision.required_evidence,
-            ),
-            "planner_role_missing_evidence": list(
-                planner_decision.missing_evidence,
-            ),
+                "planner_role_available_evidence": list(
+                    planner_decision.available_evidence,
+                ),
+                "planner_role_required_evidence": list(
+                    planner_decision.required_evidence,
+                ),
+                "planner_role_missing_evidence": list(
+                    planner_decision.missing_evidence,
+                ),
+                "planner_role_missing_inputs": list(
+                    planner_decision.missing_inputs,
+                ),
                 "scout_route_reason": scout_route_reason,
                 "direct_builder_ready": direct_builder_ready,
                 "direct_builder_reason": direct_builder_reason,
@@ -1039,12 +1098,14 @@ def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
     if isinstance(role_reason, str) and role_reason in PLANNER_ROLE_DECISION_REASONS:
         safe["planner_role_decision_reason"] = role_reason
     for key in (
+        "planner_role_available_evidence",
         "planner_role_required_evidence", "planner_role_missing_evidence",
+        "planner_role_missing_inputs",
     ):
         items = raw.get(key)
         if (
             isinstance(items, list)
-            and len(items) <= 8
+            and len(items) <= 12
             and all(isinstance(item, str) and item in PLANNER_ROLE_EVIDENCE_NAMES
                     for item in items)
         ):
@@ -1588,6 +1649,28 @@ def _run_pipeline_loop_impl(
             )
             return 1
         action = decision.get("coordinator_action")
+        if action == "stop_missing_evidence":
+            decision_basis = decision.get("decision_basis")
+            missing_inputs = (
+                decision_basis.get("planner_role_missing_inputs", [])
+                if isinstance(decision_basis, dict) else []
+            )
+            audit(
+                "loop_planner_required_evidence_unavailable",
+                {
+                    "missing_inputs": missing_inputs,
+                    "reason": decision.get("reason"),
+                },
+                state.project_dir,
+                project_name,
+            )
+            if phase_state is not None:
+                phase_state.save()
+            _persist_run_result(
+                EventStore(), project_name, get_run_id(), 1,
+                run_state=state, phase_state=phase_state,
+            )
+            return 1
         if action == "explore_setup":
             check_run_lease(state)
             if decision.get("preserve_failed_tasks_on_setup") is True:
@@ -1623,6 +1706,26 @@ def _run_pipeline_loop_impl(
                 return 1
             phase_state.run_id = get_run_id()
             phase_state.data["setup_complete"] = True
+            if decision.get("reason") == "planner_role_required_evidence_missing":
+                refresh_goal_sha256 = hashlib.sha256(
+                    state.aufgabe.encode("utf-8"),
+                ).hexdigest()
+                previous_goal = phase_state.data.get(
+                    "planner_evidence_refresh_goal_sha256",
+                )
+                previous_count = phase_state.data.get(
+                    "planner_evidence_refresh_count", 0,
+                )
+                phase_state.data["planner_evidence_refresh_goal_sha256"] = (
+                    refresh_goal_sha256
+                )
+                phase_state.data["planner_evidence_refresh_count"] = (
+                    previous_count + 1
+                    if previous_goal == refresh_goal_sha256
+                    and isinstance(previous_count, int)
+                    and not isinstance(previous_count, bool)
+                    else 1
+                )
             setup_context_checkpoint = _deterministic_setup_context_checkpoint(
                 state,
             )

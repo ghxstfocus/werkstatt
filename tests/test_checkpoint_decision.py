@@ -334,10 +334,14 @@ def test_coordinator_audit_payload_includes_task_verify_evidence() -> None:
                 "setup_context_ready": False,
                 "plan_goal_matches": True,
                 "task_count": 2,
+                "planner_role_available_evidence": [
+                    "user_goal", "project_inventory", "explorer_evidence",
+                ],
                 "planner_role_required_evidence": [
                     "user_goal", "project_inventory",
                 ],
                 "planner_role_missing_evidence": ["scout_report"],
+                "planner_role_missing_inputs": ["current_source_evidence"],
                 "untrusted_evidence": ["raw prompt"],
                 "private_prompt": "must not be copied",
             },
@@ -352,10 +356,14 @@ def test_coordinator_audit_payload_includes_task_verify_evidence() -> None:
         "setup_context_ready": False,
         "plan_goal_matches": True,
         "task_count": 2,
+        "planner_role_available_evidence": [
+            "user_goal", "project_inventory", "explorer_evidence",
+        ],
         "planner_role_required_evidence": [
             "user_goal", "project_inventory",
         ],
         "planner_role_missing_evidence": ["scout_report"],
+        "planner_role_missing_inputs": ["current_source_evidence"],
     }
     assert "private_prompt" not in payload
 
@@ -394,6 +402,7 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     assert resumed_setup["decision_basis"]["setup_checkpoint_complete"] is True
     assert resumed_setup["decision_basis"]["plan_checkpoint_complete"] is False
     state.coordinator_setup_context_ready = True
+    state.explorer_context = _deterministic_explorer_context(tmp_path)
     assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
         "planner_scout"
     )
@@ -547,6 +556,48 @@ def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(
     assert direct_decision["decision_basis"][
         "planner_role_required_evidence"
     ] == ["explicit_user_edit", "unique_current_source"]
+    assert direct_decision["decision_basis"][
+        "planner_role_available_evidence"
+    ] == [
+        "explicit_user_edit", "explorer_evidence",
+        "explorer_source_evidence", "project_inventory",
+        "unique_current_source", "user_goal",
+    ]
+
+
+def test_coordinator_refreshes_missing_planner_inputs_once_then_stops(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = PhaseState("demo", base_dir=tmp_path / "phase")
+    phase.init_new("Goal", [], tests=[], akzeptanzkriterien=[])
+    phase.data["setup_complete"] = True
+    phase.run_id = "run-1"
+    phase.save()
+    state = RunState(
+        aufgabe="Goal", project_name="demo", project_dir=tmp_path,
+        run_id="run-1",
+    )
+    state.coordinator_setup_context_ready = True
+    state.explorer_context = {}
+
+    refresh = _run_coordinator_action(phase, state)
+    assert refresh["coordinator_action"] == "explore_setup"
+    assert refresh["decision_basis"]["planner_role_missing_inputs"] == [
+        "project_inventory", "explorer_evidence",
+    ]
+
+    phase.data["planner_evidence_refresh_goal_sha256"] = hashlib.sha256(
+        b"Goal",
+    ).hexdigest()
+    phase.data["planner_evidence_refresh_count"] = 1
+    phase.save()
+    stop = _run_coordinator_action(phase, state)
+    assert stop["coordinator_action"] == "stop_missing_evidence"
+    assert stop["reason"] == (
+        "planner_role_required_evidence_unavailable_after_refresh"
+    )
 
 
 def _deterministic_explorer_context(tmp_path):
@@ -1090,6 +1141,7 @@ def test_coordinator_rejects_plan_changed_after_human_approval(tmp_path) -> None
         run_id="approved-run",
     )
     state.coordinator_setup_context_ready = True
+    state.explorer_context = _deterministic_explorer_context(tmp_path)
 
     decision = _run_coordinator_action(phase, state)
 

@@ -2253,7 +2253,10 @@ def run_planner(
     if _scout_report and _scout_report.get("bereits_erfuellt") is True:
         _role_decision = choose_next_planner_role(
             scout_skip_path=_scout_skip_path,
-            scout_already_fulfilled=True,
+            available_evidence={
+                "scout_report", "current_source_evidence",
+                "goal_already_fulfilled",
+            },
         )
         audit("planner_role_dispatch_decision", {
             "next_role": _role_decision.role,
@@ -2381,8 +2384,11 @@ def run_planner(
         if _atom_tasks:
             _role_decision = choose_next_planner_role(
                 scout_skip_path=_scout_skip_path,
-                completed_role="scout",
-                deterministic_task_graph_ready=True,
+                available_evidence={
+                    "scout_report", "scout_atomic_plan",
+                    "current_source_hashes", "criteria_coverage",
+                    "validated_task_graph",
+                },
             )
             audit("planner_role_dispatch_decision", {
                 "next_role": _role_decision.role,
@@ -2433,7 +2439,10 @@ def run_planner(
     # ausgefuehrt.
     _after_scout_decision = choose_next_planner_role(
         scout_skip_path=_scout_skip_path,
-        completed_role="scout",
+        available_evidence={
+            "scout_report", "user_goal", "current_source_evidence",
+            *( {"explorer_source_evidence"} if _scout_skip_path else set() ),
+        },
     )
     audit("planner_role_dispatch_decision", {
         "next_role": _after_scout_decision.role,
@@ -2641,8 +2650,11 @@ def run_planner(
             state.tests = []
             _role_decision = choose_next_planner_role(
                 scout_skip_path=_scout_skip_path,
-                completed_role="architect",
-                deterministic_task_graph_ready=True,
+                available_evidence={
+                    "architect_plan", "architect_prose", "current_source_manifest",
+                    "current_source_hashes", "criteria_coverage",
+                    "validated_task_graph",
+                },
             )
             _output_hash = hashlib.sha256(
                 _arch_prosa.encode("utf-8"),
@@ -2702,8 +2714,11 @@ def run_planner(
             state.tests = []
             _role_decision = choose_next_planner_role(
                 scout_skip_path=_scout_skip_path,
-                completed_role="architect",
-                deterministic_task_graph_ready=True,
+                available_evidence={
+                    "architect_plan", "architect_prose", "current_source_manifest",
+                    "current_source_hashes", "criteria_coverage",
+                    "validated_task_graph",
+                },
             )
             audit("planner_role_dispatch_decision", {
                 "next_role": _role_decision.role,
@@ -2730,8 +2745,11 @@ def run_planner(
 
     _after_architect_decision = choose_next_planner_role(
         scout_skip_path=_scout_skip_path,
-        completed_role="architect",
-        architect_output_ready=bool(_arch_prosa.strip()),
+        available_evidence={
+            "user_goal", "scout_report", "architect_plan", "architect_prose",
+            "acceptance_criteria", "current_source_manifest",
+            "current_source_evidence",
+        },
     )
     audit("planner_role_dispatch_decision", {
         "next_role": _after_architect_decision.role,

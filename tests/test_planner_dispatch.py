@@ -15,36 +15,59 @@ from werkstatt.roles.planner_dispatch import (
 @pytest.mark.parametrize(
     ("kwargs", "role", "reason"),
     [
-        ({"scout_skip_path": None}, "scout", "scout_evidence_missing"),
         (
-            {"scout_skip_path": "src/module.py"},
+            {
+                "scout_skip_path": None,
+                "available_evidence": {
+                    "user_goal", "project_inventory", "explorer_evidence",
+                },
+            },
+            "scout", "scout_evidence_missing",
+        ),
+        (
+            {
+                "scout_skip_path": "src/module.py",
+                "available_evidence": {"explorer_source_evidence"},
+            },
             "architect",
             "scout_skipped_current_explorer_source_evidence",
         ),
         (
-            {"scout_skip_path": None, "completed_role": "scout"},
+            {
+                "scout_skip_path": None,
+                "available_evidence": {
+                    "user_goal", "scout_report", "current_source_evidence",
+                },
+            },
             "architect",
             "scout_report_needs_design_decision",
         ),
         (
             {
                 "scout_skip_path": None,
-                "completed_role": "architect",
-                "architect_output_ready": True,
+                "available_evidence": {
+                    "user_goal", "architect_plan", "architect_prose",
+                    "acceptance_criteria", "current_source_manifest",
+                },
             },
             "planner_split",
             "architect_output_needs_task_graph_compilation",
         ),
         (
-            {"scout_skip_path": None, "task_graph_ready": True},
+            {
+                "scout_skip_path": None,
+                "available_evidence": {"validated_task_graph"},
+            },
             None,
             "validated_task_graph_ready",
         ),
         (
             {
                 "scout_skip_path": "src/module.py",
-                "completed_role": "scout",
-                "deterministic_task_graph_ready": True,
+                "available_evidence": {
+                    "scout_atomic_plan", "current_source_hashes",
+                    "criteria_coverage", "validated_task_graph",
+                },
             },
             None,
             "validated_deterministic_task_graph_ready",
@@ -52,13 +75,22 @@ from werkstatt.roles.planner_dispatch import (
         (
             {
                 "scout_skip_path": "src/settings.py",
+                "available_evidence": {
+                    "explicit_user_edit", "unique_current_source",
+                },
                 "direct_builder_ready": True,
             },
             "builder_direct",
             "unique_source_bound_edit_ready",
         ),
         (
-            {"scout_skip_path": None, "scout_already_fulfilled": True},
+            {
+                "scout_skip_path": None,
+                "available_evidence": {
+                    "scout_report", "current_source_evidence",
+                    "goal_already_fulfilled",
+                },
+            },
             None,
             "scout_reports_goal_already_fulfilled",
         ),
@@ -89,32 +121,51 @@ def test_architect_reasoning_is_independent_of_scout_skip() -> None:
     )
 
 
-def test_planner_dispatch_rejects_unknown_completed_role() -> None:
-    with pytest.raises(ValueError, match="Unbekannte abgeschlossene Planner-Rolle"):
+def test_planner_dispatch_rejects_unknown_evidence() -> None:
+    with pytest.raises(ValueError, match="Unbekannte Planner-Belege"):
         choose_next_planner_role(
-            scout_skip_path=None, completed_role="builder",
+            scout_skip_path=None, available_evidence={"raw_model_prompt"},
         )
 
 
-def test_planner_dispatch_declares_role_inputs_and_missing_artifact() -> None:
-    scout = choose_next_planner_role(scout_skip_path=None)
+def test_planner_dispatch_declares_inputs_missing_and_available_evidence() -> None:
+    scout = choose_next_planner_role(
+        scout_skip_path=None,
+        available_evidence={
+            "user_goal", "project_inventory", "explorer_evidence",
+        },
+    )
     assert scout.role == "scout"
     assert scout.required_evidence == (
         "user_goal", "project_inventory", "explorer_evidence",
     )
     assert scout.missing_evidence == ("scout_report",)
+    assert scout.missing_inputs == ()
+    assert scout.available_evidence == (
+        "explorer_evidence", "project_inventory", "user_goal",
+    )
 
     architect = choose_next_planner_role(
-        scout_skip_path=None, completed_role="scout",
+        scout_skip_path=None,
+        available_evidence={
+            "user_goal", "scout_report", "current_source_evidence",
+        },
     )
     assert architect.required_evidence == (
         "user_goal", "scout_report", "current_source_evidence",
     )
     assert architect.missing_evidence == ("architect_plan",)
+    assert architect.missing_inputs == ()
+    assert architect.available_evidence == (
+        "current_source_evidence", "scout_report", "user_goal",
+    )
 
     split = choose_next_planner_role(
-        scout_skip_path=None, completed_role="architect",
-        architect_output_ready=True,
+        scout_skip_path=None,
+        available_evidence={
+            "user_goal", "architect_plan", "architect_prose",
+            "acceptance_criteria", "current_source_manifest",
+        },
     )
     assert split.role == "planner_split"
     assert split.required_evidence == (
@@ -124,10 +175,26 @@ def test_planner_dispatch_declares_role_inputs_and_missing_artifact() -> None:
     assert split.missing_evidence == ("validated_task_graph",)
 
     direct = choose_next_planner_role(
-        scout_skip_path="src/settings.py", direct_builder_ready=True,
+        scout_skip_path="src/settings.py",
+        available_evidence={
+            "explicit_user_edit", "unique_current_source",
+        },
+        direct_builder_ready=True,
     )
     assert direct.role == "builder_direct"
     assert direct.missing_evidence == ()
+
+
+def test_planner_dispatch_marks_missing_required_input() -> None:
+    decision = choose_next_planner_role(
+        scout_skip_path=None,
+        available_evidence={"scout_report"},
+    )
+
+    assert decision.role == "architect"
+    assert decision.missing_evidence == ("architect_plan",)
+    assert decision.missing_inputs == ("user_goal", "current_source_evidence")
+    assert decision.available_evidence == ("scout_report",)
 
 
 def test_direct_builder_route_requires_current_unique_source_edit(tmp_path) -> None:

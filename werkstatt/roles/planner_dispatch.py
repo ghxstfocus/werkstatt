@@ -6,6 +6,7 @@ work. It never authorizes code changes or bypasses plan/human gates.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
@@ -34,6 +35,7 @@ PLANNER_ROLE_EVIDENCE_NAMES = frozenset({
     "current_source_manifest", "architect_prose", "acceptance_criteria",
     "validated_task_graph", "explorer_source_evidence",
     "current_source_evidence",
+    "goal_already_fulfilled",
 })
 
 
@@ -45,6 +47,8 @@ class PlannerRoleDecision:
     reason: str
     required_evidence: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
+    missing_inputs: tuple[str, ...] = ()
+    available_evidence: tuple[str, ...] = ()
 
 
 def scout_route_decision(
@@ -418,95 +422,90 @@ def architect_independent_file_tasks_decision(
 def choose_next_planner_role(
     *,
     scout_skip_path: str | None,
-    completed_role: str | None = None,
-    scout_already_fulfilled: bool = False,
-    deterministic_task_graph_ready: bool = False,
+    available_evidence: Iterable[str],
     direct_builder_ready: bool = False,
-    architect_output_ready: bool = False,
-    task_graph_ready: bool = False,
 ) -> PlannerRoleDecision:
-    """Choose only the next missing Planner capability.
+    """Select the next capability from checkpoint artifacts, not role order.
 
-    ``scout_skip_path`` is supplied only after the current Explorer evidence
-    and source path have passed the Scout-skip validator. The deterministic
-    completion flags are supplied only after their corresponding evidence or
-    compiled task graph has passed validation.
+    Every supplied artifact name is an enum and must have been validated by
+    its producer. The selected worker's input requirements are returned next
+    to the available and missing artifacts for audit and Chat status.
     """
-    if task_graph_ready:
-        return PlannerRoleDecision(
-            None, "validated_task_graph_ready",
-            ("validated_task_graph",), (),
+    available = frozenset(available_evidence)
+    unknown = available - PLANNER_ROLE_EVIDENCE_NAMES
+    if unknown:
+        raise ValueError(f"Unbekannte Planner-Belege: {sorted(unknown)}")
+
+    def decision(
+        role: str | None,
+        reason: str,
+        required: tuple[str, ...] = (),
+        missing: tuple[str, ...] = (),
+    ) -> PlannerRoleDecision:
+        missing_inputs = tuple(
+            item for item in required if item not in available
         )
-    if scout_already_fulfilled:
         return PlannerRoleDecision(
-            None, "scout_reports_goal_already_fulfilled",
-            ("scout_report", "current_source_evidence"), (),
+            role=role,
+            reason=reason,
+            required_evidence=required,
+            missing_evidence=missing,
+            missing_inputs=missing_inputs,
+            available_evidence=tuple(sorted(available)),
         )
-    if deterministic_task_graph_ready:
-        return PlannerRoleDecision(
-            None, "validated_deterministic_task_graph_ready",
-            ("scout_atomic_plan", "current_source_hashes", "criteria_coverage"),
-            (),
+
+    if "goal_already_fulfilled" in available:
+        return decision(
+            None,
+            "scout_reports_goal_already_fulfilled",
+            ("scout_report", "current_source_evidence"),
         )
+    if "validated_task_graph" in available:
+        reason: str = (
+            "validated_deterministic_task_graph_ready"
+            if "scout_atomic_plan" in available
+            else "validated_task_graph_ready"
+        )
+        required: tuple[str, ...] = (
+            ("scout_atomic_plan", "current_source_hashes", "criteria_coverage")
+            if "scout_atomic_plan" in available
+            else ("validated_task_graph",)
+        )
+        return decision(None, reason, required)
     if direct_builder_ready:
-        return PlannerRoleDecision(
-            "builder_direct", "unique_source_bound_edit_ready",
-            ("explicit_user_edit", "unique_current_source"), (),
+        required = ("explicit_user_edit", "unique_current_source")
+        missing = tuple(item for item in required if item not in available)
+        return decision(
+            "builder_direct", "unique_source_bound_edit_ready", required, missing,
         )
-
-    if completed_role is None:
-        if scout_skip_path:
-            return PlannerRoleDecision(
-                "architect", "scout_skipped_current_explorer_source_evidence",
-                ("user_goal", "explorer_source_evidence"), ("architect_plan",),
-            )
-        return PlannerRoleDecision(
-            "scout", "scout_evidence_missing",
-            ("user_goal", "project_inventory", "explorer_evidence"),
-            ("scout_report",),
+    if "architect_plan" in available:
+        return decision(
+            "planner_split",
+            "architect_output_needs_task_graph_compilation",
+            (
+                "user_goal", "architect_prose", "acceptance_criteria",
+                "current_source_manifest",
+            ),
+            ("validated_task_graph",),
         )
-
-    if completed_role == "scout":
-        if not scout_skip_path and not architect_output_ready:
-            return PlannerRoleDecision(
-                "architect", "scout_report_needs_design_decision",
-                ("user_goal", "scout_report", "current_source_evidence"),
-                ("architect_plan",),
-            )
-        if architect_output_ready:
-            return PlannerRoleDecision(
-                "planner_split", "architect_output_needs_task_graph_compilation",
-                (
-                    "user_goal", "architect_prose", "acceptance_criteria",
-                    "current_source_manifest",
-                ),
-                ("validated_task_graph",),
-            )
-        return PlannerRoleDecision(
-            "architect", "scout_skipped_but_architect_output_missing",
-            ("user_goal", "explorer_source_evidence"), ("architect_plan",),
+    if "scout_report" in available:
+        return decision(
+            "architect",
+            "scout_report_needs_design_decision",
+            ("user_goal", "scout_report", "current_source_evidence"),
+            ("architect_plan",),
         )
-
-    if completed_role == "architect":
-        if architect_output_ready:
-            return PlannerRoleDecision(
-                "planner_split", "architect_output_needs_task_graph_compilation",
-                (
-                    "user_goal", "architect_prose", "acceptance_criteria",
-                    "current_source_manifest",
-                ),
-                ("validated_task_graph",),
-            )
-        return PlannerRoleDecision(
-            "architect", "architect_output_missing_recover_role",
-            ("user_goal", "explorer_source_evidence"), ("architect_plan",),
+    if scout_skip_path and "explorer_source_evidence" in available:
+        return decision(
+            "architect",
+            "scout_skipped_current_explorer_source_evidence",
+            ("user_goal", "explorer_source_evidence"),
+            ("architect_plan",),
         )
-
-    if completed_role == "planner_split":
-        return PlannerRoleDecision(
-            None, "planner_split_checkpoint_completed",
-            ("validated_task_graph",), (),
-        )
-
-    raise ValueError(f"Unbekannte abgeschlossene Planner-Rolle: {completed_role}")
+    return decision(
+        "scout",
+        "scout_evidence_missing",
+        ("user_goal", "project_inventory", "explorer_evidence"),
+        ("scout_report",),
+    )
 

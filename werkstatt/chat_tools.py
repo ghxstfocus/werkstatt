@@ -859,13 +859,15 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                                 "planner_role_decision_reason"
                             ] = role_reason
                         for key in (
+                            "planner_role_available_evidence",
                             "planner_role_required_evidence",
                             "planner_role_missing_evidence",
+                            "planner_role_missing_inputs",
                         ):
                             items = decision_basis.get(key)
                             if (
                                 isinstance(items, list)
-                                and len(items) <= 8
+                                and len(items) <= 12
                                 and all(
                                     isinstance(item, str)
                                     and item in PLANNER_ROLE_EVIDENCE_NAMES
