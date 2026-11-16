@@ -654,6 +654,7 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                 "reason": "Builder fuer Task 2.",
                 "executor": "builder",
                 "task_id": "task-2",
+                "preserve_failed_tasks_on_setup": True,
                 "checkpoint_version": 4,
                 "evidence": {
                     "task_progress": {
@@ -723,6 +724,9 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
         "execute_task_checkpoint"
     )
     assert parsed["checkpoint"]["coordinator_decision"]["executor"] == "builder"
+    assert parsed["checkpoint"]["coordinator_decision"][
+        "preserve_failed_tasks_on_setup"
+    ] is True
     dispatch_evidence = parsed["checkpoint"]["coordinator_decision"]["evidence"]
     assert dispatch_evidence["task_progress"]["failed"] == 1
     assert dispatch_evidence["decision_basis"] == {

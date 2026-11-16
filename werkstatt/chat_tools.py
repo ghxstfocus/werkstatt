@@ -733,6 +733,13 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                     value = dispatch.get(key)
                     if isinstance(value, str):
                         dispatch_summary[key] = value[:limit]
+                preserve_failed = dispatch.get(
+                    "preserve_failed_tasks_on_setup",
+                )
+                if isinstance(preserve_failed, bool):
+                    dispatch_summary[
+                        "preserve_failed_tasks_on_setup"
+                    ] = preserve_failed
                 version = dispatch.get("checkpoint_version")
                 if isinstance(version, int) and not isinstance(version, bool):
                     dispatch_summary["checkpoint_version"] = version

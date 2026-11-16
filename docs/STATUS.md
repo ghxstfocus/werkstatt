@@ -88,6 +88,7 @@ Letzte Aktualisierung: 2026-11-16.
 
 - **Dispatch-Status-Folgeschritt (lokal, noch nicht serververifiziert):** Der Chat-Status zeigt nun auch den begrenzten Kriterien-Task-Verify-Snapshot des aktuellen Koordinator-Checkpoints (aktuell, erneut verifizierbar, nicht verifizierbar samt Auslassungszaehlern). Freie Checkpoint-/Prompttexte werden nicht durchgereicht. Regression prueft Chatprojektion und Privatfeld-Auslassung; zusammen mit Checkpoint-Gruppe lokal 123 bestanden, 2 uebersprungen. Servernachweis fehlt; OP-396/397 bleiben offen.
 - **Control-Entscheidungsevidenz-Folgeschritt (lokal, noch nicht serververifiziert):** Das Ereignis `loop_run_coordinator_decision` enthaelt jetzt denselben begrenzten Kriterien-Task-Verify-Snapshot wie der persistierte Checkpoint. Damit sind die Verifizierungszahlen und Tasks am sichtbaren Entscheidungsereignis nachvollziehbar. Regression deckt das Control-Payload und den Ausschluss privater Zusatzfelder ab. Servernachweis fehlt; OP-396/397 bleiben offen.
+- **Recovery-Entscheidung im Projektchat (lokal, noch nicht serververifiziert):** `loop_status` gibt nun den booleschen Checkpointmarker `preserve_failed_tasks_on_setup` typisiert weiter. Damit kann der Chat einen Resume erklaeren, der Explorer-Kontext erneuert und gleichzeitig terminale Fehlerbelege fuer die gezielte Planner-Recovery bewahrt. Andere Checkpointfelder bleiben weiterhin strikt allowlisted. Chat-Tool-Gruppe: 55 bestanden, 2 uebersprungen; Servernachweis fehlt.
 
 ### OP-397: Hintergrundjobs und Checkpoint-Steuerung
 - **Status:** open
