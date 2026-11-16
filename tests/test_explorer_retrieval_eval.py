@@ -21,6 +21,7 @@ def test_repository_retrieval_recall_and_first_relevant_rank() -> None:
     precisions: list[float] = []
     recalls: list[float] = []
     reciprocal_ranks: list[float] = []
+    case_diagnostics: list[dict[str, object]] = []
 
     for query, expected_relevant in cases:
         selected, manifest = _rank_source_files(root, query, limit=5)
@@ -31,6 +32,21 @@ def test_repository_retrieval_recall_and_first_relevant_rank() -> None:
         hits = expected_relevant.intersection(selected_files)
         precisions.append(len(hits) / len(selected_files) if selected_files else 0.0)
         recalls.append(len(hits) / len(expected_relevant))
+        case_diagnostics.append({
+            "query": query,
+            "expected": sorted(expected_relevant),
+            "selected": selected_files,
+            "hits": sorted(hits),
+            "indexed_file_count": manifest.get("indexed_file_count"),
+            "content_scanned_file_count": manifest.get(
+                "content_scanned_file_count"
+            ),
+            "index_truncated": manifest.get("index_truncated"),
+            "read_failures": manifest.get("read_failures"),
+            "discriminative_token_count": manifest.get(
+                "discriminative_token_count"
+            ),
+        })
         first_rank = next(
             (index for index, path in enumerate(selected_files, 1)
              if path in expected_relevant),
@@ -38,6 +54,6 @@ def test_repository_retrieval_recall_and_first_relevant_rank() -> None:
         )
         reciprocal_ranks.append(1 / first_rank if first_rank else 0.0)
 
-    assert min(precisions) == 1.0
-    assert min(recalls) == 1.0
-    assert min(reciprocal_ranks) == 1.0
+    assert min(precisions) == 1.0, case_diagnostics
+    assert min(recalls) == 1.0, case_diagnostics
+    assert min(reciprocal_ranks) == 1.0, case_diagnostics
