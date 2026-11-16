@@ -1,6 +1,7 @@
 """Scout receives prioritized project documents through its budgeted context."""
 from __future__ import annotations
 
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -31,6 +32,7 @@ def test_scout_offers_status_and_adr_before_optional_project_docs(
     )
     offered: list[str] = []
     manifests: list[dict] = []
+    prompts: list[str] = []
     original_budget = scout._budget_scout_context
 
     def capture_budget(assignment, sections, **kwargs):
@@ -39,8 +41,9 @@ def test_scout_offers_status_and_adr_before_optional_project_docs(
 
     monkeypatch.setattr(scout, "_budget_scout_context", capture_budget)
     monkeypatch.setattr(scout, "_with_spinner", lambda _label, call: call())
-    def fake_ask_llm(*_args, **kwargs):
+    def fake_ask_llm(_key, _system, user_content, **kwargs):
         manifests.append(kwargs["context_manifest"])
+        prompts.append(user_content)
         return SimpleNamespace(
             ok=True,
             content=json.dumps({
@@ -64,6 +67,14 @@ def test_scout_offers_status_and_adr_before_optional_project_docs(
     assert manifests[0]["budget_event"] == "scout_context_budget"
     assert manifests[0]["sections_offered"] == offered
     assert manifests[0]["budget"]["included"]
+    for section in manifests[0]["sections"]:
+        if section["status"] not in {"required_included", "included"}:
+            continue
+        excerpt = prompts[0][section["prompt_start"]:section["prompt_end"]]
+        assert len(excerpt) == section["chars"]
+        assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == (
+            section["sha256"]
+        )
     assert offered[-5:] == [
         "PROJEKT-DOKU: architecture",
         "PROJEKT-DOKU: conventions",

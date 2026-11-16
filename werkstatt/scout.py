@@ -45,6 +45,48 @@ def _budget_scout_context(
     are explicit and cannot be used as negative evidence by downstream roles.
     """
     assignment_block = f"## AUFGABE\n{assignment}"
+    offered_sections = [
+        (title, f"## {title}\n{content}")
+        for title, content in sections
+        if isinstance(title, str) and isinstance(content, str) and content
+    ]
+
+    def section_manifest(
+        text: str | None,
+        included_indices: set[int],
+        *,
+        blocked: bool = False,
+    ) -> list[dict[str, object]]:
+        records: list[dict[str, object]] = []
+        entries = [("assignment", assignment_block, True)] + [
+            (title, section, index in included_indices)
+            for index, (title, section) in enumerate(offered_sections)
+        ]
+        cursor = 0
+        for index, (name, content, included) in enumerate(entries):
+            record: dict[str, object] = {
+                "name": name,
+                "status": (
+                    "blocked_required" if blocked and index == 0
+                    else "required_included" if index == 0
+                    else "included" if included else "omitted_optional"
+                ),
+                "chars": len(content),
+                "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            }
+            if included and not blocked and text is not None:
+                start = text.find(content, cursor)
+                if start < 0:
+                    raise ValueError(
+                        f"Scout-Kontextabschnitt {name!r} fehlt im finalen Text.",
+                    )
+                end = start + len(content)
+                record["prompt_start"] = start
+                record["prompt_end"] = end
+                cursor = end + 2
+            records.append(record)
+        return records
+
     if len(assignment_block) > max_chars:
         return "", {
             "max_chars": max_chars,
@@ -52,6 +94,7 @@ def _budget_scout_context(
             "included": [],
             "omitted": [title for title, _ in sections],
             "required_overflow": True,
+            "section_manifest": section_manifest(None, set(), blocked=True),
         }, False
 
     report_reserve = min(1_200, max(160, max_chars // 30))
@@ -60,14 +103,13 @@ def _budget_scout_context(
     included: list[str] = ["assignment"]
     omitted: list[str] = []
     used = len(assignment_block)
-    for title, content in sections:
-        if not isinstance(title, str) or not isinstance(content, str) or not content:
-            continue
-        chunk = f"## {title}\n{content}"
+    included_indices: set[int] = set()
+    for index, (title, chunk) in enumerate(offered_sections):
         addition = len(chunk) + 2
         if used + addition <= content_limit:
             chunks.append(chunk)
             included.append(title)
+            included_indices.add(index)
             used += addition
         else:
             omitted.append(title)
@@ -86,6 +128,7 @@ def _budget_scout_context(
         "included": included,
         "omitted": omitted,
         "required_overflow": False,
+        "section_manifest": section_manifest(text, included_indices),
     }
     return text, metadata, len(text) <= max_chars
 
@@ -1162,6 +1205,7 @@ def _run_scout(
                 "sections_offered": [
                     title for title, _ in _context_sections
                 ],
+                "sections": _context_meta.get("section_manifest", []),
             },
         ),
     )
