@@ -91,6 +91,34 @@ def _budget_architect_execution_context(
     max_chars: int = ARCHITECT_EXECUTION_CONTEXT_MAX_CHARS,
 ) -> tuple[str, dict[str, object]]:
     """Admit whole sections in priority order and report omitted evidence."""
+    def section_manifest(
+        text: str, included_indices: set[int],
+    ) -> list[dict[str, object]]:
+        records: list[dict[str, object]] = []
+        cursor = 0
+        for index, (title, content) in enumerate(normalized):
+            section = f"## {title}\n{content}"
+            included = index in included_indices
+            record: dict[str, object] = {
+                "name": title,
+                "status": "included" if included else "omitted_optional",
+                "chars": len(section),
+                "content_chars": len(content),
+                "sha256": hashlib.sha256(section.encode("utf-8")).hexdigest(),
+            }
+            if included:
+                start = text.find(section, cursor)
+                if start < 0:
+                    raise ValueError(
+                        f"Architect-Kontextabschnitt {title!r} fehlt im finalen Text.",
+                    )
+                end = start + len(section)
+                record["prompt_start"] = start
+                record["prompt_end"] = end
+                cursor = end + 2
+            records.append(record)
+        return records
+
     normalized = [
         (title, content)
         for title, content in sections
@@ -104,6 +132,9 @@ def _budget_architect_execution_context(
             "included": [title for title, _ in normalized],
             "truncated": [],
             "omitted": [],
+            "section_manifest": section_manifest(
+                full, set(range(len(normalized))),
+            ),
         }
 
     # No section is sliced mid-content: keep a concise omission notice and
@@ -142,6 +173,7 @@ def _budget_architect_execution_context(
         "included": included,
         "truncated": [],
         "omitted": omitted,
+        "section_manifest": section_manifest(text, set(range(len(included)))),
     }
     return text, metadata
 

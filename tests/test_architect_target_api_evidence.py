@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -452,12 +453,41 @@ def test_execution_context_budget_keeps_sections_whole_and_reports_omissions() -
     assert metadata["included"] == ["PRIORITAET"]
     assert metadata["truncated"] == []
     assert metadata["omitted"] == ["NACHRANGIG"]
+    sections = {item["name"]: item for item in metadata["section_manifest"]}
+    included = sections["PRIORITAET"]
+    start = included["prompt_start"]
+    end = included["prompt_end"]
+    assert context[start:end] == "## PRIORITAET\n" + "p" * 11000
+    assert included["status"] == "included"
+    assert included["sha256"] == hashlib.sha256(
+        ("## PRIORITAET\n" + "p" * 11000).encode("utf-8"),
+    ).hexdigest()
+    omitted = sections["NACHRANGIG"]
+    assert omitted["status"] == "omitted_optional"
+    assert omitted["sha256"] == hashlib.sha256(
+        ("## NACHRANGIG\n" + "n" * 2000).encode("utf-8"),
+    ).hexdigest()
+    assert "prompt_start" not in omitted
 
     tiny, tiny_metadata = _budget_architect_execution_context(
         [("PRIORITAET", "x" * 100)], max_chars=80,
     )
     assert len(tiny) <= 80
     assert tiny_metadata["chars"] == len(tiny)
+
+
+def test_architect_execution_context_manifest_covers_all_included_sections() -> None:
+    from werkstatt.planner import _budget_architect_execution_context
+
+    context, metadata = _budget_architect_execution_context(
+        [("ZIEL", "konkrete Aufgabe"), ("QUELLEN", "aktuelle Belege")],
+    )
+
+    for record in metadata["section_manifest"]:
+        assert record["status"] == "included"
+        start, end = record["prompt_start"], record["prompt_end"]
+        section = context[start:end]
+        assert hashlib.sha256(section.encode("utf-8")).hexdigest() == record["sha256"]
 
 
 def test_architect_defensive_context_limit_is_audited(monkeypatch, tmp_path) -> None:
