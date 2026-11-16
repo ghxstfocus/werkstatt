@@ -452,7 +452,7 @@ def _rank_source_files(
             + role_path_score
         )
         if (
-            len(requested_role_tokens) == 1
+            requested_role_tokens
             and not role_path_matches
             and requested_role_tokens.intersection(_ROLE_RETRIEVAL_TOKENS)
             and path_tokens.intersection(_ROLE_RETRIEVAL_TOKENS)
