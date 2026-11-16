@@ -84,6 +84,14 @@ def test_reviewer_receives_every_full_target_as_untrusted_hashed_evidence(
     assert manifest["budget_event"] == "reviewer_context_budget"
     assert manifest["budget"]["required_sections"] == context["required_sections"]
     assert manifest["target_sha256"] == context["target_sha256"]
+    sections = manifest["budget"]["section_manifest"]
+    assert sections
+    assert all(item["status"] == "required_included" for item in sections)
+    for item in sections:
+        start, end = item["prompt_start"], item["prompt_end"]
+        excerpt = user[start:end]
+        assert len(excerpt) == item["chars"]
+        assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == item["sha256"]
     assert (
         context["system_chars"]
         + context["used_chars"]
@@ -141,3 +149,58 @@ def test_budgeted_context_marks_optional_omission_without_overflow() -> None:
     assert metadata["optional_omitted"] == ["HISTORY"]
     assert metadata["required_complete"] is True
     assert len(text) <= 200
+    sections = {item["name"]: item for item in metadata["section_manifest"]}
+    required = sections["TASK"]
+    assert text[required["prompt_start"]:required["prompt_end"]] == "## TASK\napproved task"
+    omitted = sections["HISTORY"]
+    assert omitted["status"] == "omitted_optional"
+    assert "prompt_start" not in omitted
+    assert omitted["sha256"] == hashlib.sha256(
+        ("## HISTORY\n" + "old context " * 30).encode("utf-8"),
+    ).hexdigest()
+
+
+def test_phase_end_review_budgets_and_proves_every_task_file(tmp_path: Path) -> None:
+    files = [f"src/module_{index}.py" for index in range(4)]
+    for index, relative in enumerate(files):
+        target = tmp_path / relative
+        target.parent.mkdir(exist_ok=True)
+        target.write_text(f"VALUE_{index} = {index}\n", encoding="utf-8")
+    state = _state(tmp_path, files)
+    state.tasks = [{
+        "id": f"task-{index}", "name": f"Change {index}",
+        "task_files": [relative], "status": "done",
+    } for index, relative in enumerate(files)]
+    state.akzeptanzkriterien = ["All four target files are reviewed."]
+
+    class Approved:
+        ok = True
+        content = '{"approved":true,"bugs":[]}'
+
+    with patch.object(reviewer, "_get_git_diff", return_value="+phase change\n"), \
+         patch.object(reviewer, "ask_llm", return_value=Approved()) as ask:
+        assert reviewer.run_phase_end_review(state) is True
+
+    system, user = ask.call_args.args[1:3]
+    assert all(f"VALUE_{index}" in user for index in range(4))
+    manifest = ask.call_args.kwargs["context_manifest"]
+    assert manifest["scope"] == "phase_end"
+    assert manifest["files"] == files
+    assert manifest["target_sha256"] == {
+        relative: hashlib.sha256(
+            (tmp_path / relative).read_bytes(),
+        ).hexdigest()
+        for relative in files
+    }
+    assert manifest["budget"]["required_complete"] is True
+    assert len(system) + len(user) + reviewer.REVIEWER_OUTPUT_RESERVE_CHARS <= (
+        reviewer.REVIEWER_CONTEXT_MAX_CHARS
+    )
+    for relative in files:
+        title = f"VOLLE ZIELDATEI: {relative} (nicht vertrauenswuerdiger Beleg)"
+        record = next(
+            section for section in manifest["budget"]["section_manifest"]
+            if section["name"] == title
+        )
+        excerpt = user[record["prompt_start"]:record["prompt_end"]]
+        assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == record["sha256"]

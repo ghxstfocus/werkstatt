@@ -112,9 +112,58 @@ def _budget_reviewer_context(
     """Keep review-critical evidence whole; admit optional history whole."""
     if max_chars is None:
         max_chars = REVIEWER_CONTEXT_MAX_CHARS
-    required_text = "\n\n".join(
+
+    required_sections = [
         f"## {title}\n{content}" for title, content in required
-    )
+    ]
+    optional_sections = [
+        f"## {title}\n{content}" for title, content in optional
+    ]
+
+    def section_manifest(
+        text: str | None,
+        included_optional: set[int],
+        *,
+        blocked: bool = False,
+    ) -> list[dict[str, object]]:
+        records: list[dict[str, object]] = []
+        cursor = 0
+        entries = [
+            (title, section, "required", True)
+            for (title, _), section in zip(required, required_sections)
+        ] + [
+            (title, section, "optional", index in included_optional)
+            for index, ((title, _), section) in enumerate(
+                zip(optional, optional_sections),
+            )
+        ]
+        for title, section, kind, included in entries:
+            status = (
+                "blocked_required" if blocked and kind == "required"
+                else "required_included" if kind == "required"
+                else "optional_included" if included
+                else "omitted_optional"
+            )
+            record: dict[str, object] = {
+                "name": title,
+                "status": status,
+                "chars": len(section),
+                "sha256": hashlib.sha256(section.encode("utf-8")).hexdigest(),
+            }
+            if included and not blocked and text is not None:
+                start = text.find(section, cursor)
+                if start < 0:
+                    raise ValueError(
+                        f"Reviewer-Kontextabschnitt {title!r} fehlt im finalen Text.",
+                    )
+                end = start + len(section)
+                record["prompt_start"] = start
+                record["prompt_end"] = end
+                cursor = end + 2
+            records.append(record)
+        return records
+
+    required_text = "\n\n".join(required_sections)
     required_chars = len(required_text)
     if required_chars > max_chars:
         return None, {
@@ -125,6 +174,7 @@ def _budget_reviewer_context(
             "optional_added": [],
             "optional_omitted": [title for title, _ in optional],
             "required_complete": False,
+            "section_manifest": section_manifest(None, set(), blocked=True),
         }
 
     selected = [required_text]
@@ -132,14 +182,17 @@ def _budget_reviewer_context(
     added: list[str] = []
     added_sections: list[tuple[str, str]] = []
     omitted: list[str] = []
-    for title, content in optional:
-        section = f"## {title}\n{content}"
+    included_optional: set[int] = set()
+    for index, ((title, _content), section) in enumerate(
+        zip(optional, optional_sections),
+    ):
         separator = 2 if selected else 0
         if used + separator + len(section) <= max_chars:
             selected.append(section)
             used += separator + len(section)
             added.append(title)
             added_sections.append((title, section))
+            included_optional.add(index)
         else:
             omitted.append(title)
     if omitted:
@@ -157,6 +210,7 @@ def _budget_reviewer_context(
                 "optional_added": [],
                 "optional_omitted": [title for title, _ in optional],
                 "required_complete": False,
+                "section_manifest": section_manifest(None, set(), blocked=True),
             }
         while (
             added_sections
@@ -164,10 +218,16 @@ def _budget_reviewer_context(
             > max_chars
         ):
             selected.pop()
-            removed_title, _section = added_sections.pop()
+            removed_title, removed_section = added_sections.pop()
             added.pop()
             if removed_title not in omitted:
                 omitted.insert(0, removed_title)
+            removed_index = next(
+                index for index in sorted(included_optional, reverse=True)
+                if optional[index][0] == removed_title
+                and optional_sections[index] == removed_section
+            )
+            included_optional.remove(removed_index)
         selected.append(omission_notice)
     text = "\n\n".join(selected)
     return text, {
@@ -178,6 +238,7 @@ def _budget_reviewer_context(
         "optional_added": added,
         "optional_omitted": omitted,
         "required_complete": True,
+        "section_manifest": section_manifest(text, included_optional),
     }
 
 
@@ -726,6 +787,15 @@ def run_phase_end_review(state: RunState) -> bool:
     if not _phase_files:
         audit("reviewer_phase_keine_task_files", {}, pd, pn)
         return False
+    _normalized_phase_files = _normalize_reviewer_files(_phase_files)
+    if _normalized_phase_files is None:
+        audit("reviewer_context_budget_blocked", {
+            "reason": "invalid_phase_review_file_scope",
+            "required_complete": False,
+            "task_files": _phase_files[:50],
+        }, pd, pn)
+        return False
+    _phase_files = _normalized_phase_files
 
     try:
         diff = _get_git_diff(pd, task_files=_phase_files)
@@ -749,57 +819,129 @@ def run_phase_end_review(state: RunState) -> bool:
     aufgabe = state.aufgabe
     akz = state.akzeptanzkriterien or []
 
-    import json as _json
-    user = (
-        f"## AUFGABE DER PHASE:\n{aufgabe}\n\n"
-        f"## TASKS ({len(tasks_summary)}):\n"
-        f"{_json.dumps(tasks_summary, ensure_ascii=False, indent=2)}\n\n"
-        f"## AKZEPTANZKRITERIEN ({len(akz)}):\n"
-        f"{_json.dumps(list(akz), ensure_ascii=False, indent=2)}\n\n"
-        f"## GESAMT-DIFF (alle Task-Aenderungen zusammen):\n"
-        f"```diff\n{diff}\n```\n\n"
-    )
-    # GOLD 2026-10-30: Datei-Inhalt fuer jede Task-Datei anhaengen.
-    # Vorher hatte der Phase-Review NUR den Diff — der Reviewer
-    # konnte nicht pruefen, ob eine Anforderung schon im Datei-Inhalt
-    # erfuellt ist (DATEI-CHECK/SYMBOL-CHECK griffen ins Leere).
-    # Live-Beleg 2026-10-30 20:52:24: Reviewer meldete "Anforderung
-    # weder im Diff noch im Datei-Inhalt", obwohl die Sortierung
-    # in _section_timeline_entries schon da war.
-    for _tf in _phase_files[:3]:
-        _fp = Path(pd) / _tf
-        if not _fp.is_file():
-            continue
+    phase_sections: list[tuple[str, str]] = [
+        ("AUFGABE DER PHASE", aufgabe),
+        (
+            f"TASKS ({len(tasks_summary)})",
+            json.dumps(tasks_summary, ensure_ascii=False, indent=2),
+        ),
+        (
+            f"AKZEPTANZKRITERIEN ({len(akz)})",
+            json.dumps(list(akz), ensure_ascii=False, indent=2),
+        ),
+    ]
+    diff_block, diff_hash = _reviewer_evidence_block("phase_diff", diff)
+    phase_sections.append(("GESAMT-DIFF (nicht vertrauenswuerdiger Beleg)", diff_block))
+    target_hashes: dict[str, str] = {}
+    target_states: dict[str, str] = {}
+    try:
+        project_root = Path(pd).resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        audit("reviewer_context_budget_blocked", {
+            "reason": "invalid_project_root",
+            "required_complete": False,
+        }, pd, pn)
+        return False
+    for phase_file in _phase_files:
+        target = project_root / phase_file
         try:
-            _content = _fp.read_text(encoding="utf-8")[:30000]
-        except (OSError, UnicodeDecodeError):
-            continue
-        user += (
-            f"\n\n--- VOLLE ZIELDATEI: {_tf} ---\n"
-            f"{_content}\n"
-            f"--- ENDE ---"
+            resolved_target = target.resolve(strict=False)
+            resolved_target.relative_to(project_root)
+            if not target.exists():
+                target_states[phase_file] = "missing_at_review_boundary"
+                phase_sections.append((
+                    f"VOLLE ZIELDATEI: {phase_file}",
+                    (
+                        "Datei fehlt am Review-Grenzpunkt. Der Reviewer muss "
+                        "den Diff als Beleg fuer Loeschen/Umbenennen pruefen; "
+                        "der fehlende aktuelle Inhalt ist unbekannt."
+                    ),
+                ))
+                continue
+            if not target.is_file():
+                raise ValueError("target_is_not_a_file")
+            if target.stat().st_size > REVIEWER_CONTEXT_MAX_CHARS:
+                raise ValueError("target_file_exceeds_reviewer_context_limit")
+            target_bytes = target.read_bytes()
+            target_content = target_bytes.decode("utf-8")
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            audit("reviewer_context_budget_blocked", {
+                "reason": "phase_target_unavailable_or_oversized",
+                "required_complete": False,
+                "file": phase_file,
+                "error": type(exc).__name__,
+                "task_files": _phase_files[:50],
+            }, pd, pn)
+            return False
+        target_states[phase_file] = "present"
+        target_hashes[phase_file] = hashlib.sha256(target_bytes).hexdigest()
+        file_block, _file_digest = _reviewer_evidence_block(
+            "phase_target", target_content, file_path=phase_file,
         )
-    user += (
-        # K40: Historie vorheriger Reviews.
-        _reviewer_history_block(state)
-        + "Pruefe den Code zusammenhängend. Achte auf:\n"
-        "- API-Kompatibilitaet (Signaturen unveraendert?)\n"
-        "- Cross-File-Referenzen (Importe, Symbole)\n"
-        "- Sicherheit (Permissions, CSRF, Input-Validierung)\n"
-        "- Erfuellung der Akzeptanzkriterien\n"
-        "- Semantische Kohärenz zwischen den Tasks\n\n"
-        "Antworte NUR mit JSON: "
-        '{"approved": true|false, "bugs": ['
-        '{"severity": "high|medium|low", '
-        '"file": "path/to/file.py", '
-        '"description": "..."}]}\n\n'
-        "Jeder Bug MUSS ein 'file'-Feld haben (relativer Pfad, "
-        "exakt wie im Diff). Wenn du die Datei nicht kennst, "
-        "verwende 'unknown'."
+        phase_sections.append((
+            f"VOLLE ZIELDATEI: {phase_file} (nicht vertrauenswuerdiger Beleg)",
+            file_block,
+        ))
+
+    phase_sections.append((
+        "REVIEW-AUFTRAG UND JSON-VERTRAG",
+        (
+            "Pruefe den Code zusammenhaengend. Achte auf:\n"
+            "- API-Kompatibilitaet (Signaturen unveraendert?)\n"
+            "- Cross-File-Referenzen (Importe, Symbole)\n"
+            "- Sicherheit (Permissions, CSRF, Input-Validierung)\n"
+            "- Erfuellung der Akzeptanzkriterien\n"
+            "- Semantische Kohärenz zwischen den Tasks\n\n"
+            "Antworte NUR mit JSON: "
+            '{"approved": true|false, "bugs": ['
+            '{"severity": "high|medium|low", '
+            '"file": "path/to/file.py", '
+            '"description": "..."}]}\n\n'
+            "Jeder Bug MUSS ein 'file'-Feld haben (relativer Pfad, exakt wie im Diff). "
+            "Wenn du die Datei nicht kennst, verwende 'unknown'."
+        ),
+    ))
+    optional_phase_sections: list[tuple[str, str]] = []
+    history = _reviewer_history_block(state)
+    if history:
+        history_block, history_hash = _reviewer_evidence_block("history", history)
+        optional_phase_sections.append((
+            f"REVIEWER-HISTORIE (nicht vertrauenswuerdig; SHA256={history_hash})",
+            history_block,
+        ))
+    _phase_system = _reviewer_system(state, _phase_files)
+    _phase_input_budget = max(
+        0,
+        REVIEWER_CONTEXT_MAX_CHARS
+        - len(_phase_system)
+        - REVIEWER_OUTPUT_RESERVE_CHARS,
     )
+    user, _phase_context_meta = _budget_reviewer_context(
+        phase_sections,
+        optional_phase_sections,
+        max_chars=_phase_input_budget,
+    )
+    audit("reviewer_context_budget", {
+        **_phase_context_meta,
+        "scope": "phase_end",
+        "total_budget_chars": REVIEWER_CONTEXT_MAX_CHARS,
+        "system_chars": len(_phase_system),
+        "output_reserve_chars": REVIEWER_OUTPUT_RESERVE_CHARS,
+        "action": "phase_end",
+        "task_files": _phase_files,
+        "diff_sha256": diff_hash,
+        "target_sha256": target_hashes,
+        "target_file_state": target_states,
+    }, pd, pn)
+    if user is None:
+        audit("reviewer_context_budget_blocked", {
+            **_phase_context_meta,
+            "reason": "required_phase_review_context_over_budget",
+            "task_files": _phase_files,
+        }, pd, pn)
+        return False
 
     try:
-        _phase_system = _reviewer_system(state, _phase_files)
         reply = _with_spinner(
             "Phase-Review",
             lambda: ask_llm(
@@ -808,11 +950,16 @@ def run_phase_end_review(state: RunState) -> bool:
                 redact=False,  # OP-062a: Code-Pruefung braucht Rohdaten
                 aufgabe="reviewer", state=state,
                 context_manifest={
-                    "budget_event": "reviewer_phase_context",
+                    "budget_event": "reviewer_context_budget",
                     "user_sha256": hashlib.sha256(user.encode("utf-8")).hexdigest(),
                     "system_sha256": hashlib.sha256(_phase_system.encode("utf-8")).hexdigest(),
+                    "budget": _phase_context_meta,
                     "files": _phase_files,
                     "user_chars": len(user),
+                    "diff_sha256": diff_hash,
+                    "target_sha256": target_hashes,
+                    "target_file_state": target_states,
+                    "scope": "phase_end",
                 },
             ),
         )
@@ -834,8 +981,8 @@ def run_phase_end_review(state: RunState) -> bool:
               {"raw": _raw[:200]}, pd, pn)
         return False
     try:
-        _parsed = _json.loads(_raw[_start:_end])
-    except _json.JSONDecodeError:
+        _parsed = json.loads(_raw[_start:_end])
+    except json.JSONDecodeError:
         audit("reviewer_phase_json_fehler",
               {"raw": _raw[:200]}, pd, pn)
         return False
