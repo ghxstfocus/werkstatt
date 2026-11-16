@@ -457,6 +457,44 @@ def test_planner_role_stage_persists_for_same_run_and_goal(tmp_path) -> None:
         )
 
 
+def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    broad_goal = "Analysiere src/feature.py und erklaere die Ursache des Fehlers"
+    phase = PhaseState("demo", base_dir=tmp_path / "phase")
+    phase.init_new(broad_goal, [], tests=[], akzeptanzkriterien=[])
+    phase.data["setup_complete"] = True
+    phase.run_id = "run-1"
+    phase.save()
+    state = RunState(
+        aufgabe=broad_goal, project_name="demo", project_dir=tmp_path,
+        run_id="run-1",
+    )
+    state.explorer_context = _deterministic_explorer_context(tmp_path)
+    state.coordinator_setup_context_ready = True
+
+    broad_decision = _run_coordinator_action(phase, state)
+    assert broad_decision["coordinator_action"] == "planner_scout"
+    assert broad_decision["decision_basis"]["scout_route_reason"].startswith(
+        "auftrag_enthaelt_breiten_marker:"
+    )
+
+    focused_goal = "Ergaenze src/feature.py um eine neue Funktion"
+    phase.data["aufgabe"] = focused_goal
+    phase.save()
+    state.aufgabe = focused_goal
+    focused_decision = _run_coordinator_action(phase, state)
+    assert focused_decision["coordinator_action"] == "planner_architect"
+    assert focused_decision["decision_basis"]["scout_route_reason"] == (
+        "explizite_einzeldatei_mit_explorer_beleg"
+    )
+    assert focused_decision["reason"] == (
+        "scout_skipped:explizite_einzeldatei_mit_explorer_beleg"
+    )
+
+
 def _deterministic_explorer_context(tmp_path):
     source = tmp_path / "src" / "feature.py"
     source.parent.mkdir(parents=True, exist_ok=True)
@@ -520,9 +558,12 @@ def test_resume_reuses_only_fresh_deterministic_explorer_checkpoint(
     )
     decision = _run_coordinator_action(resumed_phase, resumed_state)
 
-    assert decision["coordinator_action"] == "planner_scout"
+    assert decision["coordinator_action"] == "planner_architect"
     assert resumed_state.coordinator_setup_context_ready is True
     assert resumed_state.explorer_context == checkpoint["context"]
+    assert decision["decision_basis"]["scout_route_reason"] == (
+        "explizite_einzeldatei_mit_explorer_beleg"
+    )
 
 
 def test_resume_rejects_stale_deterministic_explorer_source(tmp_path) -> None:

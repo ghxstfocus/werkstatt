@@ -542,6 +542,16 @@ eine semantische Relevanz-Evaluation noch eine Aufloesung der gemeinsamen
 Planner-Kontextaufbereitung. Chat-Inbox-Unterbrechbarkeit, unabhaengige
 Rollenworker und der Gesamtumbau bleiben offen.
 
+Lokaler Folgeschritt: Der Koordinator wertet vor dem ersten Planner-Dispatch
+denselben deterministischen Scout-Router wie `run_planner` aus. Nur bei
+explizitem Einzeldateiziel, eindeutiger Aenderungsabsicht, Explorer-Bestaetigung
+und aktuell sicher lesbarer Quelldatei beginnt er direkt mit Architect; breite,
+diagnostische oder unklare Auftraege starten weiterhin bei Scout. `run_planner`
+prueft die Skip-Bedingungen erneut vor der Ausfuehrung. Damit ist eine konkrete
+Rolle bedarfsgerecht abwaehlbar; die Auswahl aller Planner-Rollen und der
+Builder-/Reviewer-/Verify-/Reflection-Aktionen ist noch nicht vollstaendig
+adaptiv. Der Folgeschritt ist lokal getestet und noch nicht serververifiziert.
+
 ## Konsequenzen
 
 - Positive: ein Chat-Auftrag und ein OP benutzen denselben Lauf; ein Fehler
