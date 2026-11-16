@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from unittest.mock import patch
 
 from werkstatt.explorer import (
@@ -201,6 +202,7 @@ def test_content_retrieval_ranks_specific_source_hits_and_reports_scope(tmp_path
     assert manifest["content_scanned_file_count"] == 2
     assert manifest["index_scan_succeeded"] is True
     assert manifest["omissions_are_not_negative_evidence"] is True
+    assert len(matches[0]["source_sha256"]) == 64
 
 
 def test_content_retrieval_excludes_already_selected_and_common_terms(tmp_path):
@@ -218,6 +220,51 @@ def test_content_retrieval_excludes_already_selected_and_common_terms(tmp_path):
     assert matches == []
     assert manifest["matching_file_count"] == 0
     assert manifest["common_or_unmatched_tokens_ignored"] == 1
+
+
+def test_explorer_wires_content_retrieval_into_actual_role_request(tmp_path):
+    unrelated = tmp_path / "alpha.py"
+    unrelated.write_text("def unrelated(): return 1\n", encoding="utf-8")
+    relevant = tmp_path / "beta.py"
+    source = "def quasarledger_sync(): return 2\n"
+    relevant.write_text(source, encoding="utf-8")
+    state = _state(tmp_path)
+
+    class FakeReply:
+        ok = True
+        content = '{"findings":"candidate found","key_files":[],"next_reads":[]}'
+
+    with patch("werkstatt.explorer.ask_llm", return_value=FakeReply()) as ask:
+        run_explorer(state, "Explain QuasarLedger synchronization")
+
+    user = ask.call_args.args[2]
+    manifest = ask.call_args.kwargs["context_manifest"]
+    retrieval = manifest["content_retrieval"]
+    assert retrieval["indexed_file_scope"] == (
+        "Python-Dateien, kein Vollindex des Projekts"
+    )
+    assert [item["file"] for item in retrieval["selected_sources"]] == [
+        "beta.py",
+    ]
+    candidate = retrieval["selected_sources"][0]
+    excerpt = user[candidate["prompt_start"]:candidate["prompt_end"]]
+    assert excerpt == "beta.py"
+    assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == (
+        candidate["prompt_sha256"]
+    )
+    assert hashlib.sha256(relevant.read_bytes()).hexdigest() == (
+        candidate["source_sha256"]
+    )
+    excerpt = user[
+        candidate["source_excerpt_prompt_start"]:
+        candidate["source_excerpt_prompt_end"]
+    ]
+    assert json.loads(excerpt) == "000001 | def quasarledger_sync(): return 2"
+    assert hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == (
+        candidate["source_excerpt_prompt_sha256"]
+    )
+    assert candidate["source_excerpt_complete"] is True
+    assert "Keine gueltigen spezifischen Python-Inhaltstreffer" not in user
 
 
 def test_content_retrieval_reports_total_byte_budget_omissions(tmp_path):
