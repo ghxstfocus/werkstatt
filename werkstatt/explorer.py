@@ -71,8 +71,11 @@ def _list_source_file_inventory(
     ignored_dirs = {
         ".git", ".venv", "__pycache__", ".mypy_cache", ".pytest_cache",
         ".ruff_cache", "node_modules", "dist", "build", ".next",
-        ".nuxt", "coverage",
+        ".nuxt", "coverage", ".tox", ".nox", ".cache", "venv",
+        "site-packages", "target",
     }
+    scan_limit = max(max_files, 0) * 20
+    candidate_limit_reached = False
     try:
         for directory, subdirs, filenames in os.walk(
             project_dir,
@@ -87,11 +90,37 @@ def _list_source_file_inventory(
                 if Path(filename).suffix.casefold() not in extensions:
                     continue
                 paths.append(str(Path(directory) / filename))
-                if len(paths) > max_files:
-                    return paths[:max_files], not scan_error, True
+                if len(paths) > scan_limit:
+                    candidate_limit_reached = True
+                    break
+            if candidate_limit_reached:
+                break
     except OSError:
         scan_error = True
-    return paths[:max_files], not scan_error, len(paths) > max_files
+
+    def inventory_priority(path: str) -> tuple[int, str]:
+        relative = Path(path).relative_to(project_dir)
+        parts = {part.casefold() for part in relative.parts[:-1]}
+        suffix = relative.suffix.casefold()
+        is_test = bool(parts & {"test", "tests", "__tests__", "spec"}) or (
+            relative.name.casefold().startswith(("test_", "tests_"))
+        )
+        if is_test:
+            priority = 2
+        elif suffix in {".md", ".rst", ".txt"}:
+            priority = 3
+        elif suffix in {".json", ".jsonc", ".yaml", ".yml", ".toml",
+                        ".ini", ".cfg", ".xml"}:
+            priority = 1
+        else:
+            priority = 0
+        return priority, relative.as_posix().casefold()
+
+    paths.sort(key=inventory_priority)
+    index_truncated = (
+        len(paths) > max_files or candidate_limit_reached
+    )
+    return paths[:max_files], not scan_error, index_truncated
 
 
 def _list_py_file_inventory(
@@ -230,7 +259,7 @@ def _rank_source_files(
     )
     query_tokens = _source_content_tokens(query)
     excluded = {item.replace("\\", "/") for item in (exclude or set())}
-    documents: list[tuple[str, set[str], str, int]] = []
+    documents: list[tuple[str, set[str], str, int, set[str], float]] = []
     read_failures = 0
     large_files_skipped = 0
     total_budget_skipped = 0
@@ -253,13 +282,30 @@ def _rank_source_files(
             continue
         scanned_bytes += file_size
         tokens = _source_content_tokens(content)
+        path_tokens = _source_content_tokens(rel.replace("/", " "))
+        lowered_path = rel.casefold()
+        if any(part in lowered_path.split("/") for part in (
+            "test", "tests", "__tests__", "spec",
+        )) or Path(rel).name.casefold().startswith(("test_", "tests_")):
+            source_weight = 0.65
+        elif Path(rel).suffix.casefold() in {".md", ".rst", ".txt"}:
+            source_weight = 0.35
+        else:
+            source_weight = 1.0
+        if Path(rel).name.casefold() in {
+            "progress.md", "changelog.md", "history.md",
+        }:
+            source_weight *= 0.35
         documents.append((
             rel, tokens, hashlib.sha256(source_bytes).hexdigest(), file_size,
+            path_tokens, source_weight,
         ))
 
     frequencies = {
         term: sum(
-            term in tokens for _path, tokens, _digest, _size in documents
+            term in tokens
+            for _path, tokens, _digest, _size, _path_tokens, _weight
+            in documents
         )
         for term in query_tokens
     }
@@ -276,22 +322,30 @@ def _rank_source_files(
             if count > 0 and count * 2 < len(documents)
         }
     scored: list[tuple[float, int, str, list[str]]] = []
-    for index, (path, tokens, _digest, _size) in enumerate(documents):
+    for index, (
+        path, tokens, _digest, file_size, path_tokens, source_weight,
+    ) in enumerate(documents):
         if path in excluded:
             continue
         matched = sorted(term for term in discriminative if term in tokens)
+        path_matches = sorted(term for term in query_tokens if term in path_tokens)
         if not matched:
             continue
-        score = sum(
-            math.log1p((len(documents) - frequencies[term] + 0.5)
-                       / (frequencies[term] + 0.5))
-            for term in matched
+        idf = lambda term: math.log1p(  # noqa: E731
+            (len(documents) - frequencies.get(term, 0) + 0.5)
+            / (frequencies.get(term, 0) + 0.5)
+        )
+        content_score = sum(idf(term) for term in matched)
+        path_score = sum(idf(term) for term in path_matches)
+        length_penalty = 1 + 0.5 * math.log1p(file_size / 4_096)
+        score = source_weight * (
+            content_score / length_penalty + 2.0 * path_score
         )
         scored.append((score, index, path, matched))
     scored.sort(key=lambda row: (-row[0], row[1]))
     source_records = {
         path: (digest, size)
-        for path, _tokens, digest, size in documents
+        for path, _tokens, digest, size, _path_tokens, _weight in documents
     }
     selected = [
         {

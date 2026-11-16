@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 from werkstatt.explorer import (
     _list_py_file_inventory,
+    _list_source_file_inventory,
     _python_inventory_context,
     _rank_python_source_files,
     _rank_source_files,
@@ -242,6 +244,68 @@ def test_source_retrieval_finds_typescriptx_and_hashes_selected_source(tmp_path)
     assert ".tsx" in manifest["indexed_extensions"]
     assert ".py" in manifest["indexed_extensions"]
     assert manifest["indexed_file_scope"].startswith("Quell-/Textdateien")
+
+
+def test_source_inventory_prioritizes_product_code_before_history_and_tests(
+    tmp_path,
+):
+    (tmp_path / "PROGRESS.md").write_text("old history", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "architecture.md").write_text(
+        "architecture", encoding="utf-8",
+    )
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_core.py").write_text(
+        "def test_core(): pass", encoding="utf-8",
+    )
+    source = tmp_path / "werkstatt"
+    source.mkdir()
+    product_file = source / "core.py"
+    product_file.write_text("def core(): pass", encoding="utf-8")
+
+    indexed, scan_succeeded, truncated = _list_source_file_inventory(
+        tmp_path, max_files=2,
+    )
+
+    assert [
+        item for item in indexed
+        if Path(item).name == product_file.name
+    ] == [str(product_file)]
+    assert scan_succeeded is True
+    assert truncated is True
+
+
+def test_source_rank_does_not_let_progress_history_outrank_product_code(
+    tmp_path,
+):
+    (tmp_path / "PROGRESS.md").write_text(
+        "reflection chat builder recovery error evidence\n" * 500,
+        encoding="utf-8",
+    )
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_reflection_chat.py").write_text(
+        "def test_reflection_chat_builder_recovery_error_evidence(): pass\n",
+        encoding="utf-8",
+    )
+    package_dir = tmp_path / "werkstatt"
+    package_dir.mkdir()
+    (package_dir / "reflection_chat.py").write_text(
+        "def build_recovery_task():\n"
+        "    # reflection chat builder recovery error evidence\n"
+        "    return True\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "unrelated.py").write_text(
+        "def unrelated(): return None\n", encoding="utf-8",
+    )
+
+    matches, _manifest = _rank_source_files(
+        tmp_path,
+        "reflection chat builder recovery error evidence",
+    )
+
+    assert matches[0]["file"] == "werkstatt/reflection_chat.py"
 
 
 def test_explorer_wires_content_retrieval_into_actual_role_request(tmp_path):
