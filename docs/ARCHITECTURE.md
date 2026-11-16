@@ -109,8 +109,9 @@ deepseek-flash mit Thinking aus. Zerlegt die Architect-Prosa in Tasks mit
 architect_start/architect_ende (woertliche Marker, M-461).
 Rekursiv, max 2 Ebenen (M-469/M-470/M-471).
 
-Der Planner-Orchestrator bleibt in `werkstatt/planner.py`; deterministische
-Taskgraph-Validierung und -Sortierung liegt in `werkstatt/task_graph.py`.
+Der Planner-Orchestrator bleibt in `werkstatt/planner.py`; die Ausgabe-
+Kompilierung liegt in `werkstatt/planner_task_compiler.py`, deterministische
+Taskgraph-Validierung und -Sortierung in `werkstatt/task_graph.py`.
 `werkstatt/roles/planner_dispatch.py` entscheidet anhand aktueller Checkpoint-
 Belege, welche Planner-Rolle benoetigt wird. Eine eindeutig AST-bestaetigte
 Python-Literalzuweisung kann schon am Run-Checkpoint an builder_direct
