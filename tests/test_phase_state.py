@@ -360,6 +360,19 @@ def test_resume_failed_keine_failed_tasks(tmp_path):
     assert n == 0
 
 
+def test_resume_failed_can_preserve_terminal_failures_for_checkpoint_replan(
+    tmp_path,
+):
+    ps = PhaseState("test", base_dir=tmp_path)
+    ps.init_new("test", [{"id": "failed"}, {"id": "running"}])
+    ps.mark_failed("failed", failure="builder_failed")
+    ps.mark_running("running")
+
+    assert ps.resume_failed(preserve_failed=True) == 1
+    assert ps.get_task("failed")["status"] == "failed"
+    assert ps.get_task("running")["status"] == "pending"
+
+
 def test_resume_blocked_wird_nach_erfolgreicher_dependency_ausfuehrbar(tmp_path):
     """Blocked-Tasks werden beim Resume reaktiviert und koennen deps nachholen."""
     ps = PhaseState("testprojekt", base_dir=tmp_path)

@@ -470,8 +470,13 @@ class PhaseState:
             if d not in _by_id or _by_id[d].get("status") != "done"
         ]
 
-    def resume_failed(self) -> int:
-        """Setzt failed-, running- und blockierte Tasks beim Resume zurueck.
+    def resume_failed(self, *, preserve_failed: bool = False) -> int:
+        """Reaktiviert Tasks beim Resume.
+
+        `preserve_failed` laesst terminal fehlgeschlagene Tasks unangetastet,
+        wenn ein Checkpoint stattdessen eine gezielte Recovery-Neuplanung
+        verlangt. Abgebrochene `running`-Tasks und `blocked`-Tasks bleiben
+        unabhaengig davon reaktivierbar.
 
         Returns: Anzahl reaktivierter Tasks.
         """
@@ -480,7 +485,10 @@ class PhaseState:
             # K1: running-Tasks sind Reste eines abgebrochenen Laufs.
             # OP-163: Blocked-Tasks muessen ebenfalls reaktiviert werden,
             # damit sie nach erfolgreichem Resume ihrer Abhaengigkeit laufen.
-            if task.get("status") in ("failed", "running", "blocked"):
+            retryable = {"running", "blocked"}
+            if not preserve_failed:
+                retryable.add("failed")
+            if task.get("status") in retryable:
                 task["status"] = "pending"
                 task["failure"] = None
                 n += 1

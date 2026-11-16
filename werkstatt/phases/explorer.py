@@ -25,6 +25,8 @@ def _phase_explorer_and_setup(
     aufgabe: str,
     project_name: str,
     phase_state,
+    *,
+    preserve_failed_tasks: bool = False,
 ):
     """Phase 1 (Fix AZ Stufe 8-A, 2026-10-31): Explorer + Preflight +
     PhaseState-Init.
@@ -411,7 +413,9 @@ def _phase_explorer_and_setup(
     if phase_state is not None and phase_state.exists():
         if not phase_state.data:
             phase_state.load()
-        _n_resume = phase_state.resume_failed()
+        _n_resume = phase_state.resume_failed(
+            preserve_failed=preserve_failed_tasks,
+        )
         if _n_resume > 0:
             audit(
                 "loop_resume_failed_tasks",

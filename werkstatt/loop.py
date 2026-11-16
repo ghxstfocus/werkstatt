@@ -582,6 +582,7 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
             state.phasen = phases if isinstance(phases, list) else []
 
     reuse_checkpoint_context = False
+    preserve_failed_tasks_on_setup = False
     if (
         not state.coordinator_setup_context_ready
         and plan_checkpoint_current
@@ -595,6 +596,9 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
 
         checkpoint_action = _checkpoint_decision_payload(
             phase_state, phase_state.get_next_task(), state=state,
+        )
+        preserve_failed_tasks_on_setup = (
+            checkpoint_action.get("decision") == "replan_failed_criteria"
         )
         reuse_checkpoint_context = checkpoint_action.get("decision") in {
             "execute_planned_task",
@@ -613,6 +617,7 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 "plan_goal_matches": plan_goal_matches,
                 "task_count": task_count,
             },
+            "preserve_failed_tasks_on_setup": preserve_failed_tasks_on_setup,
         }
     if not plan_checkpoint_current:
         return {
@@ -729,6 +734,9 @@ def _coordinator_decision_audit_payload(
         "task_progress": decision.get("task_progress"),
         "criteria_task_coverage": decision.get("criteria_task_coverage"),
     }
+    preserve_failed = decision.get("preserve_failed_tasks_on_setup")
+    if isinstance(preserve_failed, bool):
+        payload["preserve_failed_tasks_on_setup"] = preserve_failed
     decision_basis = _safe_coordinator_decision_basis(
         decision.get("decision_basis"),
     )
@@ -764,6 +772,9 @@ def _persist_run_coordinator_decision(
             "task_id": str(decision.get("next_task_id") or "")[:120],
             "checkpoint_version": int(record["checkpoint_version"]) + 1,
         }
+        preserve_failed = decision.get("preserve_failed_tasks_on_setup")
+        if isinstance(preserve_failed, bool):
+            persisted_decision["preserve_failed_tasks_on_setup"] = preserve_failed
         raw_progress = decision.get("task_progress")
         if isinstance(raw_progress, dict):
             progress = {
@@ -1084,6 +1095,9 @@ def _run_pipeline_loop_impl(
             check_run_lease(state)
             _rc_exp, phase_state = _phase_explorer_and_setup(
                 state, aufgabe, project_name, phase_state,
+                preserve_failed_tasks=(
+                    decision.get("preserve_failed_tasks_on_setup") is True
+                ),
             )
             if _rc_exp != 0 or phase_state is None:
                 rc = _rc_exp or 1

@@ -229,6 +229,7 @@ def test_coordinator_audit_payload_includes_task_verify_evidence() -> None:
         {
             "decision": "reject_criteria_verify_scope_missing",
             "coordinator_action": "reject_checkpoint",
+            "preserve_failed_tasks_on_setup": True,
             "criteria_task_verification": verification,
             "decision_basis": {
                 "setup_context_ready": False,
@@ -242,6 +243,7 @@ def test_coordinator_audit_payload_includes_task_verify_evidence() -> None:
 
     assert payload["run_id"] == "demo-run-1"
     assert payload["criteria_task_verification"] == verification
+    assert payload["preserve_failed_tasks_on_setup"] is True
     assert payload["decision_basis"] == {
         "setup_context_ready": False,
         "plan_goal_matches": True,
@@ -361,6 +363,34 @@ def test_run_coordinator_rebuilds_context_when_checkpoint_requires_replanning(
     assert decision["decision_basis"]["setup_context_ready"] is False
 
 
+def test_recovery_replan_resume_preserves_failed_task_through_explorer_setup(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [{
+            "id": "failed-task",
+            "name": "Implement criterion",
+            "criterion_refs": ["AC1"],
+            "task_files": ["src/feature.py"],
+        }],
+        ["Feature works"],
+    )
+    phase.mark_failed("failed-task", failure="builder_failed")
+    state = RunState(aufgabe="Ziel")
+
+    decision = _run_coordinator_action(phase, state)
+
+    assert decision["decision"] == "prepare_project_context"
+    assert decision["coordinator_action"] == "explore_setup"
+    assert decision["preserve_failed_tasks_on_setup"] is True
+
+    assert phase.resume_failed(preserve_failed=True) == 0
+    assert phase.get_task("failed-task")["status"] == "failed"
+
+
 def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
     from werkstatt.event_store import EventStore
     from werkstatt.loop import _persist_run_coordinator_decision
@@ -370,6 +400,7 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
     decision = {
         "decision": "execute_planned_task",
         "coordinator_action": "execute_task_checkpoint",
+        "preserve_failed_tasks_on_setup": True,
         "reason": "Builder needed for the next dependency-free task.",
         "next_executor": "builder",
         "next_task_id": "task-1",
@@ -416,6 +447,7 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
         "executor": "builder",
         "task_id": "task-1",
         "checkpoint_version": 1,
+        "preserve_failed_tasks_on_setup": True,
         "evidence": {
             "task_progress": {
                 "total": 3, "pending": 1, "running": 0,
