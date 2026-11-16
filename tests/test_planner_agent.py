@@ -12,6 +12,20 @@ from werkstatt.planner import _preflight_scan, run_planner
 from werkstatt.state import RunState
 
 
+def test_planner_explorer_findings_formatter_keeps_all_data() -> None:
+    from werkstatt.planner import _format_explorer_findings
+
+    findings = {
+        f"finding_{index}": [f"detail_{index}_{item}" * 20 for item in range(7)]
+        for index in range(12)
+    }
+
+    rendered = _format_explorer_findings(findings)
+
+    assert "Untrusted Explorer-Daten" in rendered
+    assert json.loads(rendered.split("\n", 1)[1]) == findings
+
+
 def _state(tmp_path):
     return RunState(
         block_id="t", aufgabe="Baue Feature X", start_ts="",

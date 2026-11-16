@@ -1,8 +1,24 @@
 import hashlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
 from werkstatt.state import LLMReply
+
+
+def test_architect_explorer_findings_formatter_keeps_all_data() -> None:
+    from werkstatt.architect import _format_explorer_findings
+
+    findings = {
+        f"finding_{index}": [f"detail_{index}_{item}" * 20 for item in range(7)]
+        for index in range(12)
+    }
+
+    rendered = _format_explorer_findings(findings)
+
+    assert "Untrusted Explorer-Daten" in rendered
+    payload = rendered.split("\n", 1)[1]
+    assert json.loads(payload) == findings
 
 
 def test_scout_architect_prompt_includes_exact_target_api_signatures() -> None:
