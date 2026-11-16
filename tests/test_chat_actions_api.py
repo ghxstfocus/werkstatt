@@ -1,7 +1,6 @@
 """API tests for chat initiated, explicitly confirmed loop actions."""
 from __future__ import annotations
 
-import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -582,7 +581,10 @@ def test_chat_start_persists_chat_origin_and_selection_reason(
     app_modul._PAUSIERTE_LOOPS.clear()
 
     class _Started:
-        pid = os.getpid()
+        # Never point a fake child process at pytest itself: cleanup or a
+        # future process-registry guard must not be able to terminate the test
+        # runner when this start-action fixture is reused.
+        pid = 987654
 
         def poll(self) -> None:
             return None

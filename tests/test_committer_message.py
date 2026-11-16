@@ -8,6 +8,10 @@ from unittest.mock import MagicMock
 sys.path.insert(0, "/opt/werkstatt")
 from werkstatt.committer import _committe_zielprojekt  # noqa: F401
 
+_COMMITTER_SOURCE = (
+    Path(__file__).resolve().parents[1] / "werkstatt" / "committer.py"
+)
+
 
 def test_message_format_docs():
     """Nur .md-Dateien geaendert -> docs(project): ..."""
@@ -19,7 +23,7 @@ def test_message_format_docs():
     # aber wir koennen die String-Bausteine pruefen, indem wir den
     # message-generation-Teil nachbauen. Stattdessen: pruefe, dass
     # das neue Schema in committer.py existiert.
-    src = Path("/opt/werkstatt/werkstatt/committer.py").read_text(encoding="utf-8")
+    src = _COMMITTER_SOURCE.read_text(encoding="utf-8")
     assert "_type = \"docs\"" in src
     assert "_only_md" in src
     assert "Loop-Auftrag (Werkstatt human_gate)" in src
@@ -27,20 +31,20 @@ def test_message_format_docs():
 
 def test_message_format_feat():
     """Neue Datei (create) -> feat(project): ..."""
-    src = Path("/opt/werkstatt/werkstatt/committer.py").read_text(encoding="utf-8")
+    src = _COMMITTER_SOURCE.read_text(encoding="utf-8")
     assert "_type = \"feat\"" in src
     assert "all(a == \"create\"" in src
 
 
 def test_message_format_fix():
     """Update einer .py-Datei -> fix(project): ..."""
-    src = Path("/opt/werkstatt/werkstatt/committer.py").read_text(encoding="utf-8")
+    src = _COMMITTER_SOURCE.read_text(encoding="utf-8")
     assert "_type = \"fix\"" in src
 
 
 def test_message_72_zeichen_limit():
     """Subject max 72 Zeichen."""
-    src = Path("/opt/werkstatt/werkstatt/committer.py").read_text(encoding="utf-8")
+    src = _COMMITTER_SOURCE.read_text(encoding="utf-8")
     assert "len(_msg.split" in src
     assert "> 72" in src
     # 72-Zeichen-Truncation: entweder "..." oder Substring-Slice

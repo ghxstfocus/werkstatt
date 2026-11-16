@@ -6,7 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-_HOOK = Path("/opt/werkstatt/hooks/pre_tool_use.py")
+_ROOT = Path(__file__).resolve().parents[1]
+_HOOK = _ROOT / "hooks" / "pre_tool_use.py"
 
 
 def _run_hook(patch: str, project_dir: Path) -> dict:

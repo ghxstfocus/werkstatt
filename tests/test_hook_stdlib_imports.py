@@ -6,13 +6,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "/opt/werkstatt")
+_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_ROOT))
 
 
 class TestHookStdlibImports:
     def _call_hook(self, patch: str, project_dir: Path) -> dict:
         p = subprocess.run(
-            [sys.executable, "/opt/werkstatt/hooks/pre_tool_use.py"],
+            [sys.executable, str(_ROOT / "hooks" / "pre_tool_use.py")],
             input=json.dumps({"patch": patch,
                               "project_dir": str(project_dir),
                               "action": "create"}),

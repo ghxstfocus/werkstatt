@@ -6,7 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-_HOOK = Path("/opt/werkstatt/hooks/planner_gate.py")
+_ROOT = Path(__file__).resolve().parents[1]
+_HOOK = _ROOT / "hooks" / "planner_gate.py"
 
 
 def _run(payload: dict) -> dict:

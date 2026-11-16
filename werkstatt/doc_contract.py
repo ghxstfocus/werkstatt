@@ -49,6 +49,7 @@ def validate_project_docs(
         relative = Path(raw_path)
         if (
             relative.is_absolute()
+            or raw_path.startswith("/")
             or windows_path.is_absolute()
             or windows_path.drive
             or "\\" in raw_path

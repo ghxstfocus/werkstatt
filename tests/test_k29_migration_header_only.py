@@ -4,14 +4,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-HOOK = Path("/opt/werkstatt/hooks/planner_gate.py")
+ROOT = Path(__file__).resolve().parents[1]
+HOOK = ROOT / "hooks" / "planner_gate.py"
 
 
 def _run_hook(payload: dict) -> dict:
     res = subprocess.run(
         [sys.executable, str(HOOK)],
         input=json.dumps(payload),
-        cwd="/opt/werkstatt",
+        cwd=ROOT,
         capture_output=True, text=True, timeout=10, check=False,
     )
     assert res.returncode == 0, f"rc={res.returncode} stderr={res.stderr}"

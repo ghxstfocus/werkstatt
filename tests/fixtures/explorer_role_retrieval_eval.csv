@@ -2,7 +2,7 @@ query,required_files,forbidden_files
 builder Pflichtkontext context budget manifest required_context_complete ask_llm hash,werkstatt/roles/builder/run.py;tests/test_builder_context_budget.py,tests/test_scout_context_budget.py
 Scout Architect Handoff source excerpts original line numbers sha256 manifest omitted files context,werkstatt/scout.py;werkstatt/architect.py,
 chat approved plan exact handoff loop_checkpoint_decision safe coordinator,werkstatt/chat_tools.py;werkstatt/reflection_chat.py,werkstatt/debugger_handoff.py
-verify failed task evidence checkpoint coordinator replan adaptation next action run dispatcher,werkstatt/criteria_replan.py;werkstatt/phase_state.py;werkstatt/loop.py,
+verify failed task evidence checkpoint coordinator replan adaptation next action run dispatcher approved plan fingerprint run id,werkstatt/criteria_replan.py;werkstatt/phase_state.py;werkstatt/loop.py,
 Explorer deterministisches Projektdatei-Inventar Inhaltssuche key_files gezielt nachladen,werkstatt/explorer.py,
 Scout breite Recherche Diagnose Ursache Widerspruch API Quellvorschau,werkstatt/scout.py;werkstatt/diagnose.py,tests/test_reflection_spec_widerspruch.py
 Architect Plan API-Preflight constraints Dokumentkontext Scout Quellenbelege,werkstatt/architect.py;werkstatt/scout.py,
