@@ -33,7 +33,10 @@ def _state(tmp_path, tasks=True, tests=True, akz=True, explorer_ctx=None):
         file_whitelist=[], api_key="fake", budget={},
         agent_docs={}, project_dir=tmp_path, project_name="p"
     )
-    st.tasks = ["Task 1"] if tasks else []
+    st.tasks = [{
+        "id": "t1", "name": "Task 1", "task_files": ["src/sample.py"],
+        "criterion_refs": ["AC1"],
+    }] if tasks else []
     st.tests = ["Test 1"] if tests else []
     st.akzeptanzkriterien = ["Kriterium 1"] if akz else []
     # OP-136a: explorer_context muss gefuellt sein, damit der
@@ -50,8 +53,9 @@ def _state(tmp_path, tasks=True, tests=True, akz=True, explorer_ctx=None):
     return st
 
 
-def test_plan_gate_ok(tmp_path):
+def test_plan_gate_ok(tmp_path, monkeypatch):
     st = _state(tmp_path)
+    monkeypatch.setattr(loop_mod, "_call_hook", lambda *_a, **_k: {"allow": True})
     assert _plan_gate(st) is True
 
 
@@ -1272,7 +1276,7 @@ def test_phase_state_init_new_ohne_action():
     assert ps.data["tasks"][0]["action"] is None
 
 
-def test_plan_gate_phasen_valid(tmp_path):
+def test_plan_gate_phasen_valid(tmp_path, monkeypatch):
     """M-323c: 2 Phasen, alle Tasks mit gueltiger phase_id -> True."""
     from werkstatt.loop import _plan_gate
     from werkstatt.state import RunState
@@ -1283,8 +1287,10 @@ def test_plan_gate_phasen_valid(tmp_path):
         budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
     )
     st.tasks = [
-        {"id": "t1", "phase_id": "p1"},
-        {"id": "t2", "phase_id": "p2"},
+        {"id": "t1", "phase_id": "p1", "task_files": ["src/a.py"],
+         "criterion_refs": ["AC1"]},
+        {"id": "t2", "phase_id": "p2", "task_files": ["src/b.py"],
+         "criterion_refs": ["AC1"]},
     ]
     st.tests = ["pytest -q"]
     st.akzeptanzkriterien = ["a"]
@@ -1292,6 +1298,7 @@ def test_plan_gate_phasen_valid(tmp_path):
         {"id": "p1", "titel": "Phase 1", "tasks": ["t1"]},
         {"id": "p2", "titel": "Phase 2", "tasks": ["t2"]},
     ]
+    monkeypatch.setattr(loop_mod, "_call_hook", lambda *_a, **_k: {"allow": True})
     assert _plan_gate(st) is True
 
 
@@ -1337,7 +1344,7 @@ def test_plan_gate_phase_ohne_tasks(tmp_path):
     assert _plan_gate(st) is False
 
 
-def test_plan_gate_flat_bleibt_gueltig(tmp_path):
+def test_plan_gate_flat_bleibt_gueltig(tmp_path, monkeypatch):
     """M-323c: flacher Plan (phasen leer) bleibt gueltig."""
     from werkstatt.loop import _plan_gate
     from werkstatt.state import RunState
@@ -1347,10 +1354,14 @@ def test_plan_gate_flat_bleibt_gueltig(tmp_path):
         always={}, optional={}, file_whitelist=[], api_key="",
         budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
     )
-    st.tasks = [{"id": "t1"}, {"id": "t2"}]
+    st.tasks = [
+        {"id": "t1", "task_files": ["src/a.py"], "criterion_refs": ["AC1"]},
+        {"id": "t2", "task_files": ["src/b.py"], "criterion_refs": ["AC1"]},
+    ]
     st.tests = ["pytest -q"]
     st.akzeptanzkriterien = ["a"]
     st.phasen = []
+    monkeypatch.setattr(loop_mod, "_call_hook", lambda *_a, **_k: {"allow": True})
     assert _plan_gate(st) is True
 
 

@@ -57,17 +57,42 @@ def _scoped_files(task: dict[str, Any]) -> list[str]:
 
 def _compact_items(value: Any, keys: tuple[str, ...]) -> list[Any]:
     if not isinstance(value, list):
-        return []
+        return ([{"_context_notice": "source_not_a_list"}]
+                if value is not None else [{"_context_notice": "source_missing"}])
     compacted: list[Any] = []
+    omitted_items = 0
+    omitted_fields = 0
     for item in value:
         if isinstance(item, str):
             compacted.append(item)
         elif isinstance(item, dict):
-            compacted.append({
+            represented = {
                 key: str(item[key])
                 for key in keys
                 if isinstance(item.get(key), (str, int, float, bool))
-            })
+            }
+            omitted_fields += sum(
+                1 for key, field_value in item.items()
+                if key not in keys
+                or not isinstance(field_value, (str, int, float, bool))
+            )
+            if represented:
+                compacted.append(represented)
+            else:
+                omitted_items += 1
+        else:
+            omitted_items += 1
+    if omitted_items or omitted_fields:
+        compacted.append({
+            "_context_notice": "representation_incomplete",
+            "omitted_item_count": omitted_items,
+            "omitted_field_count": omitted_fields,
+            "instruction": (
+                "These counts are not evidence of absence. Read relevant "
+                "project sources with the available tools; if the missing "
+                "details cannot be verified, do not propose a repair."
+            ),
+        })
     return compacted
 
 
@@ -94,28 +119,21 @@ def _readable_evidence(
             "acceptance_criteria": _compact_items(
                 task.get("acceptance_criteria")
                 or task.get("akzeptanzkriterien")
-                or getattr(state, "akzeptanzkriterien", []),
+            or getattr(state, "akzeptanzkriterien", None),
                 ("id", "criterion_id", "text", "description", "status"),
             ),
         },
         "planned_tests": _compact_items(
-            getattr(state, "tests", []),
+            getattr(state, "tests", None),
             ("id", "name", "file", "command", "description", "criterion_id"),
         ),
-        "verify_errors": [
-            str(item)
-            for item in (getattr(state, "last_verify_errors", None) or [])
-            if isinstance(item, (str, int, float))
-        ],
-        "reviewer_bugs": [
-            {
-                key: str(item.get(key, ""))
-                for key in ("file", "line", "severity", "description")
-                if item.get(key) is not None
-            }
-            for item in (getattr(state, "reviewer_bugs", None) or [])
-            if isinstance(item, dict)
-        ],
+        "verify_errors": _compact_items(
+            getattr(state, "last_verify_errors", None), ("error",),
+        ),
+        "reviewer_bugs": _compact_items(
+            getattr(state, "reviewer_bugs", None),
+            ("file", "line", "severity", "description"),
+        ),
     }
     optional = {
         "architect_constraints": str(
@@ -429,7 +447,9 @@ def ask_project_chat_for_builder_task(
         "fehlender belastbarer "
         "Reparaturaufgabe: {\"decision\":\"cannot_solve\","
         "\"reason\":\"...\"}. Fehlende optionale Belege oder ihre Hash-/"
-        "Groessenmetadaten sind keine Negativbelege. Lies benoetigte, aber "
+        "Groessenmetadaten sind keine Negativbelege. Kontextmarker zu nicht "
+        "darstellbaren Pflichtdaten sind ebenfalls keine Negativbelege. Lies "
+        "benoetigte, aber "
         "ausgelassene Informationen mit den Projektwerkzeugen gezielt nach; "
         "wenn das nicht belastbar gelingt, lehne ab.\n\nBELEGE:\n"
         + evidence_json

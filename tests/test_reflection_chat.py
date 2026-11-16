@@ -144,6 +144,34 @@ def test_reflection_handoff_includes_exact_recovery_failure_context(
     ).hexdigest()
 
 
+def test_reflection_marks_unrepresented_required_records_for_targeted_loading(
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    state.akzeptanzkriterien = [{
+        "id": "AC-1",
+        "text": "Fix the concrete regression.",
+        "verification_contract": {"must_include": "discarded detail"},
+    }, object()]
+    state.aktuelle_task["acceptance_criteria"] = state.akzeptanzkriterien
+    state.last_verify_errors = ["mypy failed", {"raw_report": ["hidden"]}]
+    state.reviewer_bugs = [{"file": "werkstatt/sample.py", "new_field": "hidden"}]
+
+    evidence = reflection_chat._readable_evidence(state)
+
+    criteria = evidence["task"]["acceptance_criteria"]
+    assert criteria[0] == {
+        "id": "AC-1", "text": "Fix the concrete regression.",
+    }
+    assert criteria[-1]["_context_notice"] == "representation_incomplete"
+    assert criteria[-1]["omitted_item_count"] == 1
+    assert criteria[-1]["omitted_field_count"] == 1
+    assert evidence["verify_errors"][-1]["_context_notice"] == (
+        "representation_incomplete"
+    )
+    assert evidence["reviewer_bugs"][-1]["omitted_field_count"] == 1
+
+
 def test_reflection_chat_refuses_required_context_over_budget_before_session(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
