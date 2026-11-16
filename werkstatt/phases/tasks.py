@@ -1188,12 +1188,84 @@ def _phase_tasks_loop(
                 )
             continue
 
-        _builder_ok = _run_with_progress(
-            lambda i=i: _with_spinner(f"Builder t{i}", lambda: run_builder(state)),
-            i, len(tasks), task_name,
-        )
+        debugger_fix = getattr(state, "debugger_fix_contract", None)
+        if (
+            debugger_fix is not None
+            and isinstance(task_obj, dict)
+            and task_obj.get("id") == "debugger-fix"
+        ):
+            from werkstatt.debugger_handoff import (
+                DebuggerFix,
+                DebuggerFixError,
+                debugger_fix_loop_patches,
+            )
+
+            try:
+                if not isinstance(debugger_fix, DebuggerFix):
+                    raise DebuggerFixError(
+                        "Debugger-Loop-Vertrag ist im RunState ungueltig."
+                    )
+                if sorted(task_obj.get("task_files") or []) != sorted(
+                    debugger_fix.betroffene_dateien
+                ):
+                    raise DebuggerFixError(
+                        "Debugger-Task-Dateiscope weicht vom freigegebenen Diff ab."
+                    )
+                state.patches = debugger_fix_loop_patches(
+                    debugger_fix, pd,
+                )
+            except (DebuggerFixError, OSError, RuntimeError, ValueError) as exc:
+                state.patches = []
+                state.builder_failure_reason = "approved_debugger_diff_rejected"
+                audit(
+                    "loop_debugger_fix_rejected",
+                    {"reason": type(exc).__name__, "task_id": task_id},
+                    pd,
+                    pn,
+                )
+                _builder_ok = False
+            else:
+                state.builder_failure_reason = ""
+                audit(
+                    "loop_debugger_fix_prepared",
+                    {
+                        "task_id": task_id,
+                        "patch_hash": debugger_fix.patch_hash,
+                        "files": list(debugger_fix.betroffene_dateien),
+                    },
+                    pd,
+                    pn,
+                )
+                _builder_ok = True
+        else:
+            _builder_ok = _run_with_progress(
+                lambda i=i: _with_spinner(
+                    f"Builder t{i}", lambda: run_builder(state),
+                ),
+                i, len(tasks), task_name,
+            )
         check_run_lease(state)
         if not _builder_ok:
+            if (
+                debugger_fix is not None
+                and isinstance(task_obj, dict)
+                and task_obj.get("id") == "debugger-fix"
+            ):
+                _task_ende(
+                    state,
+                    phase_state,
+                    task_id,
+                    ok=False,
+                    name=task_name,
+                    failure="approved_debugger_diff_rejected",
+                    failure_detail=(
+                        "Der freigegebene Debugger-Diff konnte nicht exakt "
+                        "und innerhalb seines gebundenen Dateiscopes "
+                        "vorbereitet werden."
+                    ),
+                )
+                phase_state.save()
+                return 1, tasks_ok, tasks
             # M-316 + M-317: Idempotenz-Erkennung NUR bei
             # action="create". Bei update: fail-closed (return 1).
             _loop_action = None
@@ -1414,6 +1486,23 @@ def _phase_tasks_loop(
         for patch in patches:
             if not isinstance(patch, dict):
                 continue
+            if patch.get("approved_debugger_exact") is True and not (
+                debugger_fix is not None
+                and isinstance(task_obj, dict)
+                and task_obj.get("id") == "debugger-fix"
+            ):
+                audit(
+                    "loop_debugger_fix_rejected",
+                    {"reason": "unbound_exact_patch_marker", "task_id": task_id},
+                    pd,
+                    pn,
+                )
+                _task_ende(
+                    state, phase_state, task_id, ok=False,
+                    name=task_name, failure="approved_debugger_diff_rejected",
+                )
+                phase_state.save()
+                return 1, tasks_ok, tasks
             action = patch.get("action", "update")
             patch_text = patch.get("new_string", "") or patch.get("content", "")
             hook_res = _call_hook("pre_tool_use.py", {
@@ -1536,7 +1625,11 @@ def _phase_tasks_loop(
                 # FIX N 2026-10-31: Write-Fehler fail-closed.
                 try:
                     check_run_lease(state)
-                    target.write_text(content)
+                    if patch.get("approved_debugger_exact") is True:
+                        with target.open("w", encoding="utf-8", newline="") as handle:
+                            handle.write(content)
+                    else:
+                        target.write_text(content)
                 except OSError as _e:
                     audit("loop_patch_write_failed",
                           {"file": file, "fehler": str(_e)[:200]}, pd, pn)
@@ -1551,7 +1644,13 @@ def _phase_tasks_loop(
                 if not target.exists():
                     audit("loop_patch_file_missing", {"file": file}, pd, pn)
                     continue
-                file_content = target.read_text()
+                exact_debugger_patch = (
+                    patch.get("approved_debugger_exact") is True
+                )
+                file_content = (
+                    target.read_bytes().decode("utf-8")
+                    if exact_debugger_patch else target.read_text()
+                )
                 _neu_content2, _match2 = _apply_one_patch(
                     file_content, old_str, new_str,
                 )
@@ -1621,7 +1720,13 @@ def _phase_tasks_loop(
                 # FIX N 2026-10-31: Write-Fehler fail-closed.
                 try:
                     check_run_lease(state)
-                    target.write_text(_neu_content2)
+                    if exact_debugger_patch:
+                        with target.open(
+                            "w", encoding="utf-8", newline="",
+                        ) as handle:
+                            handle.write(_neu_content2)
+                    else:
+                        target.write_text(_neu_content2)
                 except OSError as _e:
                     audit("loop_patch_write_failed",
                           {"file": file, "fehler": str(_e)[:200]}, pd, pn)
@@ -1631,7 +1736,10 @@ def _phase_tasks_loop(
                     break
                 # M-298d: Post-Apply-Verifikation (Profi-Ansatz
                 # Overwatcher/Claude-Code edit-verifier).
-                _after = target.read_text()
+                _after = (
+                    target.read_bytes().decode("utf-8")
+                    if exact_debugger_patch else target.read_text()
+                )
                 if new_str not in _after:
                     audit("loop_patch_not_applied", {"file": file}, pd, pn)
                     # GOLD 2026-10-30: Auch nach erfolgreicher Reflection

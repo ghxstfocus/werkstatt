@@ -13,8 +13,10 @@ import pytest
 from werkstatt.debugger_handoff import (
     DebuggerFixError,
     cleanup_debugger_workspace,
+    debugger_fix_loop_patches,
     materialize_debugger_workspace,
     parse_debugger_fix,
+    parse_debugger_loop_task,
     validate_debugger_fix_checkout,
 )
 
@@ -148,6 +150,42 @@ def test_create_debugger_fix_builds_hash_and_loop_task() -> None:
     assert payload["diff"] == _DIFF
     assert payload["approval"] == "exact_diff_hash"
     assert "Plan-/Human-Gate" in payload["instruction"]
+    assert parse_debugger_loop_task(debugger_fix_loop_task(fix)) == fix
+
+
+def test_debugger_loop_patch_records_are_derived_from_exact_diff(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    subprocess.run(["git", "init", str(project)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.email", "test@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "core.autocrlf", "false"], check=True)
+    target = project / "werkstatt" / "sample.py"
+    target.parent.mkdir()
+    target.write_bytes(b"value = 1\n")
+    subprocess.run(["git", "-C", str(project), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(project), "commit", "-m", "base"], check=True, capture_output=True)
+    head = subprocess.run(
+        ["git", "-C", str(project), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    fix = parse_debugger_fix(_payload(base_head=head))
+
+    patches = debugger_fix_loop_patches(fix, project)
+
+    assert patches == [{
+        "action": "update",
+        "file": "werkstatt/sample.py",
+        "old_string": "value = 1\n",
+        "new_string": "value = 2\n",
+        "approved_debugger_exact": True,
+    }]
+    assert target.read_bytes() == b"value = 1\n"
+    worktrees = subprocess.run(
+        ["git", "-C", str(project), "worktree", "list", "--porcelain"],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    assert worktrees.count("worktree ") == 1
 
 
 def test_chat_patch_is_written_only_to_detached_debug_worktree(tmp_path: Path) -> None:

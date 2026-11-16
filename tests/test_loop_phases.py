@@ -157,6 +157,78 @@ def test_checkpoint_rejects_unregistered_task_action() -> None:
     assert "keinen freigegebenen Executor" in decision["reason"]
 
 
+def test_debugger_contract_builds_a_deterministic_plan_without_planner(
+    tmp_path, monkeypatch,
+):
+    from werkstatt.debugger_handoff import create_debugger_fix
+    from werkstatt.phases import plan as plan_phase
+
+    class Phase:
+        def __init__(self):
+            self.data = {}
+            self.run_id = None
+
+        def exists(self):
+            return False
+
+        def init_new(self, aufgabe, tasks, **kwargs):
+            self.data = {
+                "aufgabe": aufgabe,
+                "tasks": tasks,
+                "tests": kwargs.get("tests", []),
+                "akzeptanzkriterien": kwargs.get("akzeptanzkriterien", []),
+                "plan_complete": True,
+            }
+
+    diff = (
+        "diff --git a/werkstatt/sample.py b/werkstatt/sample.py\n"
+        "index 1111111..2222222 100644\n"
+        "--- a/werkstatt/sample.py\n+++ b/werkstatt/sample.py\n"
+        "@@ -1 +1 @@\n-value = 1\n+value = 2\n"
+    )
+    fix = create_debugger_fix(
+        signatur="fixture-regression",
+        ursache_tag="stale_fixture",
+        diff=diff,
+        betroffene_dateien=["werkstatt/sample.py"],
+        confidence=0.9,
+        project="testproj",
+        run_id="testproj-run-1",
+        base_head="a" * 40,
+    )
+    state = _state(tmp_path, aufgabe="serialized debugger fix")
+    state.debugger_fix_contract = fix
+    state.tasks = []
+    phase = Phase()
+    monkeypatch.setattr(plan_phase, "group_start", lambda *_args: None)
+    monkeypatch.setattr(plan_phase, "group_end", lambda: None)
+    monkeypatch.setattr(plan_phase, "step", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(plan_phase, "audit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(plan_phase, "_plan_gate", lambda current: bool(current.tasks))
+    monkeypatch.setattr(plan_phase, "_human_gate_plan", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(plan_phase, "_verify_patches", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        plan_phase,
+        "run_planner",
+        lambda *_args: pytest.fail("Exact debugger diff must not be replanned"),
+    )
+
+    rc, done = plan_phase._phase_plan_and_preflight(
+        state, state.aufgabe, "testproj", phase,
+    )
+
+    assert (rc, done) == (0, False)
+    task = state.tasks[0]
+    assert task["id"] == "debugger-fix"
+    assert task["action"] == "update"
+    assert task["task_files"] == ["werkstatt/sample.py"]
+    assert task["criterion_refs"] == ["AC1"]
+    assert state.akzeptanzkriterien[0].startswith(
+        "Der exakt freigegebene Patch "
+    )
+    assert phase.data["tasks"] == state.tasks
+
+
 def _kind(tmp_path: Path, kind: str) -> list[dict]:
     return [e for e in _audit_events(tmp_path) if e.get("kind") == kind]
 

@@ -43,6 +43,70 @@ def _phase_plan_and_preflight(
 
     group_start("Phase 2: Planner")
     _t_plan = time.monotonic()
+    debugger_fix = getattr(state, "debugger_fix_contract", None)
+    if debugger_fix is not None:
+        checkpoint_has_plan = bool(
+            phase_state is not None
+            and phase_state.exists()
+            and phase_state.data.get("aufgabe") == aufgabe
+            and phase_state.data.get("plan_complete") is True
+            and isinstance(phase_state.data.get("tasks"), list)
+        )
+        if checkpoint_has_plan:
+            state.tasks = list(phase_state.data["tasks"])
+            state.tests = list(phase_state.data.get("tests") or [])
+            state.akzeptanzkriterien = list(
+                phase_state.data.get("akzeptanzkriterien") or []
+            )
+        else:
+            from werkstatt.debugger_handoff import DebuggerFix
+
+            if not isinstance(debugger_fix, DebuggerFix):
+                audit(
+                    "loop_debugger_fix_rejected",
+                    {"reason": "invalid_in_memory_contract"},
+                    pd,
+                    pn,
+                )
+                return 1, False
+            criterion = (
+                "Der exakt freigegebene Patch "
+                f"{debugger_fix.patch_hash} wird innerhalb seines Dateiscopes "
+                "angewendet und von den normalen Verify-/Review-Gates geprueft."
+            )
+            state.tasks = [{
+                "id": "debugger-fix",
+                "name": f"Debugger-Fix: {debugger_fix.signatur}",
+                "description": (
+                    f"Ursache: {debugger_fix.ursache_tag}; "
+                    f"freigegebener Diff SHA-256: {debugger_fix.patch_hash}; "
+                    f"Dateien: {', '.join(debugger_fix.betroffene_dateien)}"
+                ),
+                "action": "update",
+                "task_files": list(debugger_fix.betroffene_dateien),
+                "criterion_refs": ["AC1"],
+            }]
+            state.tests = []
+            state.akzeptanzkriterien = [criterion]
+            state.phasen = []
+            state.architect_prosa = (
+                "Deterministischer Debugger-Handoff. Der Nutzer hat den "
+                f"Diff {debugger_fix.patch_hash} fuer das Projekt "
+                f"{debugger_fix.project} an Basis {debugger_fix.base_head} "
+                "freigegeben. Der Loop wendet denselben Diff im genehmigten "
+                "Dateiscope an und durchlaeuft die normalen Verify-, Review- "
+                "und Ergebnis-Gates."
+            )
+            audit(
+                "loop_debugger_fix_plan",
+                {
+                    "patch_hash": debugger_fix.patch_hash,
+                    "source_run_id": debugger_fix.run_id,
+                    "files": list(debugger_fix.betroffene_dateien),
+                },
+                pd,
+                pn,
+            )
     plan_ok = _plan_gate(state)
     # OP-381k (2026-11-09): Resume-Aufgabe-Check.
     # Ohne diesen Check wuerde ein Loop-Start mit anderer Aufgabe die

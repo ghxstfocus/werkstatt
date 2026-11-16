@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -195,6 +196,93 @@ def test_confirmed_start_queues_followup_for_busy_loop(
     assert repeated.status_code == 200
     assert repeated.json()["state"] == "queued"
     assert repeated.json()["result"] == payload["result"]
+
+
+def test_approved_debugger_diff_is_not_reinterpreted_as_busy_run_followup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from werkstatt import chat_session
+    from werkstatt.debugger_handoff import create_debugger_fix
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import app as app_modul
+
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir()
+    subprocess.run(["git", "init", str(project_dir)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(project_dir), "config", "user.email", "test@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(project_dir), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(project_dir), "config", "core.autocrlf", "false"], check=True)
+    source = project_dir / "sample.py"
+    source.write_bytes(b"value = 1\n")
+    subprocess.run(["git", "-C", str(project_dir), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(project_dir), "commit", "-m", "base"], check=True, capture_output=True)
+    head = subprocess.run(
+        ["git", "-C", str(project_dir), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    source.write_bytes(b"value = 2\n")
+    diff = subprocess.run(
+        ["git", "-C", str(project_dir), "diff", "--no-ext-diff"],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    source.write_bytes(b"value = 1\n")
+    fix = create_debugger_fix(
+        signatur="sample-regression",
+        ursache_tag="failed_test",
+        diff=diff,
+        betroffene_dateien=["sample.py"],
+        confidence=0.9,
+        project="demo",
+        run_id="demo-source-run",
+        base_head=head,
+    )
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db_path)
+    event_store = EventStore(db_pfad=tmp_path / "events.db")
+    event_store.create_run_record(
+        "demo", "existing-run", "Originalauftrag", base_commit=head,
+    )
+    monkeypatch.setattr(app_modul, "EventStore", lambda: event_store)
+    session_id = "1" * 32
+    proposal_id = "2" * 32
+    session = chat_session.ChatSession("demo", session_id, db_pfad=db_path)
+    session.append("loop_action_proposed", {
+        "proposal_id": proposal_id,
+        "project": "demo",
+        "action": "start",
+        "arguments": {"debugger_fix": fix.to_payload()},
+        "debug_workspace_prepared": True,
+        "workspace_diff_sha256": "0" * 64,
+        "summary": "Debugger-Fix",
+        "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+    })
+    process = SimpleNamespace(pid=12345, poll=lambda: None)
+    monkeypatch.setattr(app_modul, "_LOOP_RUN_IDS", {"demo": "existing-run"})
+    monkeypatch.setitem(app_modul._LAUFENDE_LOOPS, "demo", process)
+    monkeypatch.setattr(
+        app_modul, "_loop_registry",
+        lambda: SimpleNamespace(read=lambda _project: {"state": "running"}),
+    )
+    response = TestClient(app_modul.app).post(
+        f"/api/projects/demo/chat/actions/{proposal_id}",
+        json={"session_id": session_id, "decision": "confirm"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["state"] == "not_started"
+    assert "nicht als Folgeauftrag umgedeutet" in response.json()["detail"]
+    assert event_store.claim_run_message(
+        "demo", "existing-run", "test", kind="chat_followup_request",
+    ) is None
+    assert any(
+        event["kind"] == "loop_action_not_started"
+        for event in session.load()
+    )
 
 
 def test_confirmed_start_replays_handoff_after_request_crash(

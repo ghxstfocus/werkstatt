@@ -12,6 +12,7 @@ import math
 import re
 import subprocess
 import tempfile
+import uuid
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
@@ -26,11 +27,13 @@ __all__ = [
     "debugger_workspace_path",
     "materialize_debugger_workspace",
     "parse_debugger_fix",
+    "parse_debugger_loop_task",
     "validate_debugger_fix_checkout",
 ]
 
 _MAX_DIFF_BYTES = 20_000
 _MAX_FILES = 20
+_MAX_LOOP_PATCH_CONTENT_BYTES = 5_000_000
 _HEX_HEAD = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _CAUSE_TAG = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -218,6 +221,37 @@ def parse_debugger_fix(payload: Mapping[str, Any]) -> DebuggerFix:
     if not isinstance(payload["patch_hash"], str) or payload["patch_hash"] != fix.patch_hash:
         raise DebuggerFixError("Patch-Hash stimmt nicht mit dem freizugebenden Inhalt ueberein.")
     return fix
+
+
+def parse_debugger_loop_task(value: str) -> DebuggerFix | None:
+    """Parse only the versioned exact-diff contract sent to the Loop."""
+    try:
+        payload = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("type") != "debugger_fix":
+        return None
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("approval") != "exact_diff_hash"
+    ):
+        raise DebuggerFixError("Debugger-Loop-Vertrag hat eine unbekannte Version.")
+    try:
+        return parse_debugger_fix({
+            "signatur": payload["signatur"],
+            "ursache_tag": payload["ursache_tag"],
+            "diff": payload["diff"],
+            "betroffene_dateien": payload["betroffene_dateien"],
+            "confidence": payload["confidence"],
+            "project": payload["project"],
+            "run_id": payload["source_run_id"],
+            "base_head": payload["base_head"],
+            "patch_hash": payload["patch_hash"],
+        })
+    except KeyError as exc:
+        raise DebuggerFixError(
+            "Debugger-Loop-Vertrag enthaelt nicht alle Pflichtfelder."
+        ) from exc
 
 
 
@@ -425,6 +459,107 @@ def cleanup_debugger_workspace(
         detail = result.stderr or result.stdout or "git worktree remove fehlgeschlagen"
         return False, detail[-2_000:]
     return True, "Debug-Arbeitsbaum entfernt."
+
+
+def debugger_fix_loop_patches(
+    fix: DebuggerFix,
+    project_dir: Path | str,
+    *,
+    timeout_s: int = 30,
+) -> list[dict[str, Any]]:
+    """Convert the approved Git diff into exact normal-Loop patch records.
+
+    The project checkout is read only here. A temporary detached worktree
+    applies the approved diff at its pinned base; the ordinary Loop patch
+    applier then writes those exact resulting file contents after its hooks.
+    """
+    root = Path(project_dir).expanduser().resolve()
+    ok, detail = validate_debugger_fix_checkout(
+        fix, root, expected_project=fix.project, timeout_s=timeout_s,
+    )
+    if not ok:
+        raise DebuggerFixError(detail)
+
+    before: dict[str, bytes | None] = {}
+    content_bytes = 0
+    for relative in fix.betroffene_dateien:
+        target = root / relative
+        if target.is_symlink():
+            raise DebuggerFixError("Debugger-Zieldatei ist ein Symlink.")
+        try:
+            target.resolve(strict=False).relative_to(root)
+        except ValueError as exc:
+            raise DebuggerFixError("Debugger-Zieldatei liegt ausserhalb des Projekts.") from exc
+        source = subprocess.run(
+            ["git", "show", f"{fix.base_head}:{relative}"],
+            cwd=root,
+            capture_output=True,
+            check=False,
+            timeout=timeout_s,
+        )
+        if source.returncode == 0:
+            if not target.is_file():
+                raise DebuggerFixError("Debugger-Zieldatei fehlt am gepinnten Basisstand.")
+            current = target.read_bytes()
+            if current != source.stdout:
+                raise DebuggerFixError("Debugger-Zieldatei weicht vom gepinnten Basisstand ab.")
+            before[relative] = current
+            content_bytes += len(current)
+        else:
+            if target.exists():
+                raise DebuggerFixError("Debugger-Neudatei existiert bereits im Checkout.")
+            before[relative] = None
+
+    worktree = materialize_debugger_workspace(
+        fix, root, uuid.uuid4().hex, timeout_s=timeout_s,
+    )
+    try:
+        patches: list[dict[str, Any]] = []
+        for relative in fix.betroffene_dateien:
+            target = worktree / relative
+            if target.is_symlink():
+                raise DebuggerFixError("Debugger-Zieldatei ist ein Symlink.")
+            after = target.read_bytes() if target.is_file() else None
+            previous = before[relative]
+            content_bytes += len(after or b"")
+            if content_bytes > _MAX_LOOP_PATCH_CONTENT_BYTES:
+                raise DebuggerFixError(
+                    "Debugger-Patch ueberschreitet das 5-MB-Loop-Limit."
+                )
+            if previous is None and after is not None:
+                patches.append({
+                    "action": "create",
+                    "file": relative,
+                    "content": after.decode("utf-8"),
+                    "approved_debugger_exact": True,
+                })
+            elif previous is not None and after is None:
+                patches.append({
+                    "action": "delete",
+                    "file": relative,
+                    "approved_debugger_exact": True,
+                })
+            elif previous is not None and after is not None:
+                patches.append({
+                    "action": "update",
+                    "file": relative,
+                    "old_string": previous.decode("utf-8"),
+                    "new_string": after.decode("utf-8"),
+                    "approved_debugger_exact": True,
+                })
+            else:
+                raise DebuggerFixError("Debugger-Patch enthaelt keine Dateiaenderung.")
+        return patches
+    except UnicodeDecodeError as exc:
+        raise DebuggerFixError(
+            "Debugger-Diff kann nicht als UTF-8-Text verarbeitet werden."
+        ) from exc
+    finally:
+        cleaned, cleanup_detail = cleanup_debugger_workspace(
+            fix, root, worktree.name, timeout_s=timeout_s,
+        )
+        if not cleaned:
+            raise DebuggerFixError(cleanup_detail)
 
 
 def validate_debugger_fix_checkout(

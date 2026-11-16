@@ -221,6 +221,9 @@ class RunState:
     # Originating Chat can be consulted for one bounded recovery proposal.
     # The assistant only proposes a task; the Builder remains the sole writer.
     chat_origin_session_id: str | None = None
+    # OP-240: exact, hash-bound debugger patch approved in Chat and dispatched
+    # through the ordinary Loop gates without asking a Builder to rewrite it.
+    debugger_fix_contract: Any = None
     reflection_chat_attempts: set[str] = field(default_factory=set)
     reflection_chat_error: str = ""
     reflection_chat_evidence: list[dict[str, Any]] = field(default_factory=list)

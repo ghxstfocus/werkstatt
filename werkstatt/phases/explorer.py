@@ -36,37 +36,57 @@ def _phase_explorer_and_setup(
     """
     pd = state.project_dir
     pn = state.project_name
+    debugger_fix = getattr(state, "debugger_fix_contract", None)
+    if debugger_fix is not None:
+        from werkstatt.debugger_handoff import DebuggerFix
+
+        if not isinstance(debugger_fix, DebuggerFix):
+            audit(
+                "loop_debugger_fix_rejected",
+                {"reason": "invalid_in_memory_contract"},
+                pd,
+                pn,
+            )
+            return 1, phase_state
+        _explorer_request = " ".join((
+            debugger_fix.signatur,
+            *debugger_fix.betroffene_dateien,
+        ))
+        _explizite_dateien = list(debugger_fix.betroffene_dateien)
+    else:
+        _explorer_request = aufgabe
 
     # 0b. Explorer (Phase 14, read-only). Einmal pro Loop-Lauf.
     # M-396: Ueberspringen, wenn die Aufgabe explizite Dateien nennt.
     import re as _re_explorer
-    _explizite_dateien = _re_explorer.findall(
-        r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:py|md|yaml|yml|json|toml|css|html|js))\b',
-        aufgabe,
-    )
+    if debugger_fix is None:
+        _explizite_dateien = _re_explorer.findall(
+            r'\b([a-zA-Z_][a-zA-Z0-9_/]+\.(?:py|md|yaml|yml|json|toml|css|html|js))\b',
+            _explorer_request,
+        )
 
     # GOLD 2026-10-30: Suchbegriffe aus der Aufgabe extrahieren.
     # Der Explorer nutzt sie, um bei grossen Dateien die relevanten
     # Zeilen zu finden statt stumpf erste 100 + letzte 50.
     _suchbegriffe: list[str] = []
     # Backticks: `foo_bar`, `nth-child(n+4)` — volle Kette in Backticks
-    for _m in _re_explorer.finditer(r'`([^`]{2,120})`', aufgabe):
+    for _m in _re_explorer.finditer(r'`([^`]{2,120})`', _explorer_request):
         _b = _m.group(1).strip()
         if _b:
             _suchbegriffe.append(_b)
     # CSS-Klassen mit table-Praefix: table-alerts, table-inventory
-    for _m in _re_explorer.finditer(r'\b(table-[a-z][a-z0-9-]{1,40})\b', aufgabe):
+    for _m in _re_explorer.finditer(r'\b(table-[a-z][a-z0-9-]{1,40})\b', _explorer_request):
         _b = _m.group(1)
         if _b not in _suchbegriffe:
             _suchbegriffe.append(_b)
     # CSS-Selektoren in Klammern: nth-child(...) vollstaendig
-    for _m in _re_explorer.finditer(r'(nth-child\([^)]{1,40}\))', aufgabe):
+    for _m in _re_explorer.finditer(r'(nth-child\([^)]{1,40}\))', _explorer_request):
         _b = _m.group(1)
         if _b not in _suchbegriffe:
             _suchbegriffe.append(_b)
     # Funktions-/Methoden-Namen mit Unterstrich (def foo_bar, foo_bar())
     for _m in _re_explorer.finditer(
-            r'\b([a-z][a-z0-9]*_[a-z0-9_]{2,40})\b', aufgabe):
+            r'\b([a-z][a-z0-9]*_[a-z0-9_]{2,40})\b', _explorer_request):
         _b = _m.group(1)
         if _b not in _suchbegriffe:
             _suchbegriffe.append(_b)
@@ -83,7 +103,7 @@ def _phase_explorer_and_setup(
     _ordner_dateien: list[str] = []
     for _m in _re_explorer.finditer(
             r'\b((?:[a-zA-Z_][a-zA-Z0-9_-]*/){2,}[a-zA-Z0-9_-]*/)\b',
-            aufgabe):
+            _explorer_request):
         _ordner = _m.group(1).rstrip("/")
         _dir = Path(pd) / _ordner
         if not _dir.is_dir():
@@ -114,14 +134,16 @@ def _phase_explorer_and_setup(
     group_start("Phase 1: Explorer")
     _t_exp = time.monotonic()
     _skip_reason = "kein_deterministischer_literalplan"
-    _skip_explorer = False
-    if len(_explizite_dateien) == 1:
+    _skip_explorer = debugger_fix is not None
+    if debugger_fix is not None:
+        _skip_reason = "approved_debugger_diff_has_pinned_scope"
+    elif len(_explizite_dateien) == 1:
         try:
             from werkstatt.planner import _scout_route_decision
 
             _candidate = _explizite_dateien[0]
             _scout_target, _skip_reason = _scout_route_decision(
-                aufgabe,
+                _explorer_request,
                 {"key_files": [{"file": _candidate}]},
                 pd,
             )
@@ -179,7 +201,7 @@ def _phase_explorer_and_setup(
             "beleg": "expliziter_pfad_und_narrow_edit_router",
         }, pd, pn)
     else:
-        _explorer_ergaenzung = run_explorer(state, aufgabe) or {}
+        _explorer_ergaenzung = run_explorer(state, _explorer_request) or {}
         audit("loop_explorer_required", {
             "grund": _skip_reason,
         }, pd, pn)
@@ -321,7 +343,7 @@ def _phase_explorer_and_setup(
         from werkstatt.explorer import _rank_source_files
 
         _source_matches, _retrieval_manifest = _rank_source_files(
-            Path(pd), aufgabe + " " + " ".join(_suchbegriffe),
+            Path(pd), _explorer_request + " " + " ".join(_suchbegriffe),
             exclude=set(_seen),
             limit=5 - len(explorer_result["key_files"]),
         )

@@ -1492,6 +1492,35 @@ def _main_inner(argv: list[str] | None = None) -> int:
         project_dir=_pd,
         project_name=args.project,
     )
+    try:
+        from werkstatt.debugger_handoff import (
+            DebuggerFixError,
+            parse_debugger_loop_task,
+            validate_debugger_fix_checkout,
+        )
+
+        debugger_fix = parse_debugger_loop_task(args.aufgabe)
+        if debugger_fix is not None:
+            if debugger_fix.project != args.project:
+                raise DebuggerFixError(
+                    "Debugger-Fix gehoert nicht zum aktiven Projekt."
+                )
+            valid, reason = validate_debugger_fix_checkout(
+                debugger_fix, _pd, expected_project=args.project,
+            )
+            if not valid:
+                raise DebuggerFixError(reason)
+            _state.debugger_fix_contract = debugger_fix
+    except (DebuggerFixError, TypeError, ValueError) as exc:
+        audit(
+            "loop_debugger_fix_rejected",
+            {"reason": type(exc).__name__},
+            _pd,
+            args.project,
+        )
+        _r.step(0, "Debugger", "Freigegebener Diff ist nicht mehr gueltig", ok=False)
+        _r.footer(success=False, tasks_total=0, tasks_ok=0)
+        return 1
     _state.start_monotonic = _time.monotonic()
     state_ref: list[RunState] = [_state]
 

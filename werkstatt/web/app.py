@@ -1998,6 +1998,35 @@ def create_app() -> FastAPI:
                     )
                     if recovered is not None:
                         return recovered
+                    if debugger_payload is not None:
+                        from werkstatt.debugger_handoff import (
+                            cleanup_debugger_workspace,
+                        )
+
+                        cleanup_debugger_workspace(
+                            fix, _PROJECTS_BASE / projekt, proposal_id,
+                        )
+                        detail = (
+                            "Der freigegebene Debugger-Diff wurde nicht als "
+                            "Folgeauftrag umgedeutet: Der aktive Run koennte "
+                            "seine Basisdateien aendern. Warte auf den "
+                            "Abschluss und erstelle danach einen neuen, an "
+                            "den aktuellen Stand gebundenen Vorschlag."
+                        )
+                        session.append_once(
+                            f"loop-action-not-started:{proposal_id}",
+                            "loop_action_not_started",
+                            {
+                                "proposal_id": proposal_id,
+                                "reason": "debugger_fix_base_may_change",
+                                "detail": detail,
+                            },
+                        )
+                        return {
+                            "proposal_id": proposal_id,
+                            "state": "not_started",
+                            "detail": detail,
+                        }
                     active_run_id = _LOOP_RUN_IDS.get(projekt)
                     run_record = (
                         EventStore().get_run_record(projekt, active_run_id)
