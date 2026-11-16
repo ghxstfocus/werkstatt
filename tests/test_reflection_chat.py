@@ -324,6 +324,64 @@ def test_parse_task_accepts_only_authorized_files() -> None:
     ) is None
 
 
+def test_reflection_chat_refusal_reason_is_preserved_from_idempotent_turn(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    evidence = reflection_chat._readable_evidence(state)
+    prompt, _ = reflection_chat._build_recovery_prompt(evidence)
+    refusal = json.dumps({
+        "decision": "cannot_solve",
+        "reason": "  No current source evidence.\nNeed another file.  ",
+    })
+
+    class FakeSession:
+        def __init__(self, _project: str, _session_id: str) -> None:
+            pass
+
+        def get_job_turn(self, _job_id: str) -> dict[str, str]:
+            return {"user_text": prompt, "assistant_text": refusal}
+
+    monkeypatch.setattr("werkstatt.chat_session.ChatSession", FakeSession)
+
+    assert reflection_chat.ask_project_chat_for_builder_task(state) is None
+    assert state.reflection_chat_error == "chat_cannot_solve"
+    assert state.reflection_chat_refusal_reason == (
+        "No current source evidence. Need another file."
+    )
+
+
+def test_reflection_audit_includes_chat_refusal_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def refuse(_state, **_kwargs):
+        _state.reflection_chat_error = "chat_cannot_solve"
+        _state.reflection_chat_refusal_reason = "Quellbeleg nicht ausreichend."
+
+    monkeypatch.setattr(reflection, "_reflection_loop_core", lambda *_a, **_k: False)
+    monkeypatch.setattr(
+        reflection_chat, "ask_project_chat_for_builder_task", refuse,
+    )
+    monkeypatch.setattr(
+        reflection, "audit",
+        lambda kind, payload, *_a, **_k: events.append((kind, payload)),
+    )
+
+    assert reflection._reflection_loop(state) is False
+
+    rejected = [
+        payload for kind, payload in events
+        if kind == "loop_reflection_chat_rejected"
+    ]
+    assert rejected[0]["reason"] == "chat_cannot_solve"
+    assert rejected[0]["chat_refusal_reason"] == "Quellbeleg nicht ausreichend."
+
+
 def test_chat_source_evidence_must_match_current_authorized_excerpt(
     tmp_path: Path,
 ) -> None:

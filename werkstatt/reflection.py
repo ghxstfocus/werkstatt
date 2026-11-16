@@ -1083,6 +1083,9 @@ def _reflection_loop(
         audit(
             "loop_reflection_chat_rejected",
             {"reason": failure, "evidence_hash": evidence_fingerprint,
+             "chat_refusal_reason": str(getattr(
+                 state, "reflection_chat_refusal_reason", "",
+             ))[:300],
              "context_budget": context_budget,
              "recovery_chat_calls": getattr(
                  state, "reflection_chat_calls", 0,
@@ -1502,6 +1505,9 @@ def _phase_end_reflection(state: RunState) -> bool:
         audit(
             "loop_reflection_chat_rejected",
             {"trigger": "phase_end", "reason": failure,
+             "chat_refusal_reason": str(getattr(
+                 state, "reflection_chat_refusal_reason", "",
+             ))[:300],
              "evidence_hash": evidence_fingerprint,
              "context_budget": context_budget,
              "recovery_chat_calls": getattr(

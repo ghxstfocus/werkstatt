@@ -279,6 +279,24 @@ def _parse_task(answer: str, allowed_files: list[str]) -> dict[str, Any] | None:
     }
 
 
+def _parse_refusal_reason(answer: str) -> str:
+    """Extract a short refusal explanation for audit/display, never execution."""
+    start = answer.find("{")
+    end = answer.rfind("}") + 1
+    if start < 0 or end <= start:
+        return ""
+    try:
+        payload = json.loads(answer[start:end])
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(payload, dict) or payload.get("decision") != "cannot_solve":
+        return ""
+    reason = payload.get("reason")
+    if not isinstance(reason, str):
+        return ""
+    return " ".join(re.sub(r"[\x00-\x1f\x7f]", " ", reason).split())[:300]
+
+
 def _verify_source_evidence(
     task: dict[str, Any],
     allowed_files: list[str],
@@ -515,6 +533,7 @@ def ask_project_chat_for_builder_task(
     Only a strict task proposal over already-authorized files is returned.
     """
     state.reflection_chat_error = ""
+    state.reflection_chat_refusal_reason = ""
     project = str(getattr(state, "project_name", ""))
     session_id = getattr(state, "chat_origin_session_id", None)
     task = getattr(state, "aktuelle_task", None)
@@ -563,6 +582,10 @@ def ask_project_chat_for_builder_task(
                 prior_turn["assistant_text"], allowed_files,
             )
             if parsed_prior is None:
+                refusal = _parse_refusal_reason(prior_turn["assistant_text"])
+                if refusal:
+                    state.reflection_chat_error = "chat_cannot_solve"
+                    state.reflection_chat_refusal_reason = refusal
                 return None
             verified_prior = _verify_source_evidence(
                 parsed_prior, parsed_prior["task_files"], state.project_dir,
@@ -645,6 +668,11 @@ def ask_project_chat_for_builder_task(
         )
         raw_task = _parse_task(answer, allowed_files)
         parsed = None
+        if raw_task is None:
+            refusal = _parse_refusal_reason(answer)
+            if refusal:
+                state.reflection_chat_error = "chat_cannot_solve"
+                state.reflection_chat_refusal_reason = refusal
         if raw_task is not None:
             verified_evidence = _verify_source_evidence(
                 raw_task, raw_task["task_files"], state.project_dir,
