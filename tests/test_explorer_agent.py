@@ -36,6 +36,7 @@ def test_explorer_liefert_json(tmp_path):
         assert len(result["key_files"]) == 1
         assert result["key_files"][0]["file"] == "a.py"
     manifest = ask.call_args.kwargs["context_manifest"]
+    assert "begrenzte lexikalische Auswahl" in ask.call_args.args[1]
     assert manifest["budget_event"] == "explorer_context"
     assert manifest["measurement_count"] == 0
     assert manifest["file_count"] == 0
@@ -50,10 +51,13 @@ def test_explorer_liefert_json(tmp_path):
 
 
 def test_python_inventory_marks_prompt_omissions_and_scan_limit():
-    paths = [f"src/module_{index}.py" for index in range(200)]
+    paths = [
+        *(f"src/module_{index}_target.py" for index in range(75)),
+        *(f"src/other_{index}.py" for index in range(125)),
+    ]
 
     context, manifest = _python_inventory_context(
-        paths, scan_succeeded=True, index_truncated=True,
+        paths, scan_succeeded=True, index_truncated=True, query="target",
     )
 
     assert manifest == {
@@ -62,13 +66,19 @@ def test_python_inventory_marks_prompt_omissions_and_scan_limit():
         "file_index_truncated": True,
         "file_scan_complete": False,
         "file_scan_cap": 200,
+        "file_selection_strategy": "query_path_terms_v1",
+        "query_tokens_used": 1,
+        "query_common_tokens_ignored": 0,
+        "query_matched_file_count": 75,
+        "files_unmatched_by_query": 125,
+        "query_matches_omitted_due_to_prompt_cap": 25,
         "files_offered": paths[:50],
         "files_omitted_from_prompt": 150,
         "prompt_file_cap": 50,
     }
     assert "Indexlimit 200 erreicht" in context
     assert "mindestens" not in context
-    assert "150 ausgelassen" in context
+    assert "25 passende Pfade" in context
     assert "kein Negativbeleg" in context
     assert paths[50] not in context
 
@@ -109,6 +119,37 @@ def test_python_inventory_does_not_turn_scan_error_into_empty_repo():
     assert manifest["file_scan_complete"] is False
     assert "Scan fehlgeschlagen oder teilweise" in context
     assert "keine Python-Dateien gefunden" not in context
+
+
+def test_python_inventory_prioritizes_only_query_matching_paths():
+    paths = ["src/alpha_service.py", "src/beta_service.py", "src/tests.py"]
+
+    context, manifest = _python_inventory_context(
+        paths, scan_succeeded=True, index_truncated=False,
+        query="Fix the beta service failure",
+    )
+
+    assert manifest["query_matched_file_count"] == 1
+    assert manifest["files_offered"] == ["src/beta_service.py"]
+    assert manifest["files_unmatched_by_query"] == 2
+    assert "src/alpha_service.py" not in context
+    assert "kein Negativbeleg" in context
+
+
+def test_python_inventory_offers_no_arbitrary_paths_without_query_match():
+    paths = ["src/alpha.py", "src/beta.py"]
+
+    context, manifest = _python_inventory_context(
+        paths, scan_succeeded=True, index_truncated=True,
+        query="Explain the architecture",
+    )
+
+    assert manifest["files_offered"] == []
+    assert manifest["query_matched_file_count"] == 0
+    assert manifest["files_unmatched_by_query"] == 2
+    assert manifest["file_scan_complete"] is False
+    assert "keine beliebigen Dateien angeboten" in context
+    assert "gezielt nachgeladen" in context
 
 
 def test_explorer_ohne_key(tmp_path):

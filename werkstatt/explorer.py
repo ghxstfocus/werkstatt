@@ -29,6 +29,10 @@ WICHTIG (M-338-Fix):
     key_files.
   - Wenn keine Messung moeglich war und keine Datei explizit
     in der Aufgabe genannt ist: key_files = [].
+  - Das Python-Inventar ist eine begrenzte lexikalische Auswahl von
+    Dateinamen, kein Vollstaendigkeits- oder Nichtexistenzbeleg.
+    Wenn passende Quellpfade fehlen oder keine Namen passen, benenne die
+    Belegluecke fuer gezieltes Nachladen statt aus der Auslassung zu folgern.
 
 Antworte NUR mit validem JSON:
 {
@@ -81,16 +85,83 @@ def _list_py_files(project_dir: Path, max_files: int = 200) -> list[str]:
     return paths
 
 
+_EXPLORER_QUERY_STOPWORDS = frozenset({
+    "and", "are", "das", "der", "die", "ein", "eine", "einer", "eines",
+    "for", "from", "funktion", "funktioniert", "how", "ist", "mit", "modul",
+    "oder", "projekt", "the", "und", "was", "wie", "works", "zum", "zur",
+})
+
+
+def _rank_python_paths(
+    paths: list[str], query: str,
+) -> tuple[list[str], int, int, int]:
+    """Rank only paths supported by query terms; never fill with arbitrary files."""
+    query_tokens = {
+        token.casefold()
+        for token in re.findall(r"[A-Za-z0-9]+", query)
+        if len(token) >= 3 and token.casefold() not in _EXPLORER_QUERY_STOPWORDS
+    }
+    normalized_query = query.replace("\\", "/").casefold()
+    path_tokens: list[tuple[str, set[str], set[str]]] = []
+    for path in paths:
+        normalized = path.replace("\\", "/")
+        parts = [part.casefold() for part in normalized.split("/") if part]
+        if not parts:
+            continue
+        basename_tokens = set(re.findall(r"[A-Za-z0-9]+", Path(parts[-1]).stem))
+        parent_tokens = {
+            token
+            for part in parts[:-1]
+            for token in re.findall(r"[A-Za-z0-9]+", part)
+        }
+        path_tokens.append((path, basename_tokens, parent_tokens))
+
+    path_frequency = {
+        token: sum(
+            token in basename or token in parent
+            for _path, basename, parent in path_tokens
+        )
+        for token in query_tokens
+    }
+    effective_tokens = {
+        token for token, count in path_frequency.items()
+        if count > 0 and count * 2 < len(path_tokens)
+    }
+    common_tokens_ignored = len(query_tokens - effective_tokens)
+    scored: list[tuple[int, int, str]] = []
+    for index, (path, basename_tokens, parent_tokens) in enumerate(path_tokens):
+        score = sum(
+            (5 if token in basename_tokens else 2 if token in parent_tokens else 0)
+            for token in effective_tokens
+        )
+        normalized = path.replace("\\", "/")
+        if normalized_query and normalized_query in normalized.casefold():
+            score += 20
+        if score:
+            scored.append((score, index, path))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return (
+        [path for _score, _index, path in scored],
+        len(scored),
+        len(effective_tokens),
+        common_tokens_ignored,
+    )
+
+
 def _python_inventory_context(
     paths: list[str],
     *,
     scan_succeeded: bool,
     index_truncated: bool,
+    query: str = "",
     index_cap: int = 200,
     prompt_cap: int = 50,
 ) -> tuple[str, dict[str, Any]]:
-    """Describe inventory and prompt omissions without implying absence."""
-    offered = paths[:prompt_cap]
+    """Offer query-matched paths only; describe every unmatched/omitted path."""
+    (
+        ranked, query_matched, query_token_count, common_tokens_ignored,
+    ) = _rank_python_paths(paths, query)
+    offered = ranked[:prompt_cap]
     prompt_omitted = max(0, len(paths) - len(offered))
     if not scan_succeeded:
         status = (
@@ -104,13 +175,30 @@ def _python_inventory_context(
         )
     elif not paths:
         status = "Inventar vollstaendig; keine Python-Dateien gefunden."
+    elif query_matched:
+        status = (
+            f"{query_matched} Pfade passen lexikalisch zu Auftragsbegriffen; "
+            "sie sind nach Dateiname und Pfad priorisiert."
+        )
     else:
-        status = "Inventar vollstaendig innerhalb des Indexlimits."
-    if prompt_omitted:
+        status = "Kein Pfad wurde aus dem Inventar ausgewaehlt."
+    if paths and not query_matched:
         status += (
-            f" Prompt-Liste zeigt {len(offered)} von {len(paths)} Treffern; "
-            f"{prompt_omitted} ausgelassen. Auslassungen sind kein "
-            "Negativbeleg; bei Bedarf gezielt nachladen."
+            " Kein hinreichend spezifischer Pfad passt lexikalisch zu den "
+            "Auftragsbegriffen; es werden keine beliebigen Dateien angeboten. "
+            "Das ist kein Negativbeleg. Fehlende Quellinformation muss "
+            "gezielt nachgeladen werden."
+        )
+    if query_matched > len(offered):
+        status += (
+            f" {query_matched - len(offered)} passende Pfade wegen des "
+            "Promptlimits nicht angeboten; bei Bedarf gezielt nachladen."
+        )
+    if len(paths) > query_matched:
+        status += (
+            f" {len(paths) - query_matched} weitere Indexpfade passten nicht "
+            "lexikalisch und wurden nicht angeboten; das ist kein "
+            "Negativbeleg und kein Vollstaendigkeitsbeweis."
         )
     inventory = (
         f"Python-Datei-Inventar: {status}\n"
@@ -124,6 +212,14 @@ def _python_inventory_context(
         "file_index_truncated": index_truncated,
         "file_scan_complete": scan_succeeded and not index_truncated,
         "file_scan_cap": index_cap,
+        "file_selection_strategy": "query_path_terms_v1",
+        "query_tokens_used": query_token_count,
+        "query_common_tokens_ignored": common_tokens_ignored,
+        "query_matched_file_count": query_matched,
+        "files_unmatched_by_query": max(0, len(paths) - query_matched),
+        "query_matches_omitted_due_to_prompt_cap": max(
+            0, query_matched - len(offered),
+        ),
         "files_offered": offered,
         "files_omitted_from_prompt": prompt_omitted,
         "prompt_file_cap": prompt_cap,
@@ -691,6 +787,7 @@ def run_explorer(state: RunState, frage: str) -> dict:
         py_files,
         scan_succeeded=_scan_succeeded,
         index_truncated=_index_truncated,
+        query=frage,
     )
     context = (
         f"Frage: {frage}\n\n"
