@@ -421,6 +421,30 @@ def test_read_chat_history_uses_the_turn_snapshot_not_live_parent_session(
     assert current_event["status"] == "outside_snapshot"
 
 
+def test_read_chat_history_includes_prior_job_prompt_while_job_is_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_session
+
+    db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db)
+    session = chat_session.ChatSession("demo", "session-a")
+    session.append_job_prompt("job-running", "Pruefe den angehaengten Fehler")
+    current = session.append("user", {"text": "Was hast du dazu gefunden?"})
+
+    result = json.loads(chat_tools.execute_tool(
+        "read_chat_history", {}, project_dir=tmp_path, project_name="demo",
+        session_id="session-a", history_session_id="session-a",
+        history_before_seq=current,
+    ))
+
+    assert result["status"] == "ok"
+    assert result["events"][0]["kind"] == "job_queued"
+    assert result["events"][0]["payload"]["user_text"]["text"] == (
+        "Pruefe den angehaengten Fehler"
+    )
+
+
 def test_execute_tool_mit_mode_write_bei_read_tool(tmp_path) -> None:
     r = chat_tools.execute_tool(
         "diagnose", {}, mode="write", project_dir=tmp_path,

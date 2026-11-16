@@ -71,6 +71,7 @@ class ChatJobStore:
                 " context_seq INTEGER, run_id TEXT, project TEXT,"
                 " run_inbox_enqueued INTEGER NOT NULL DEFAULT 0,"
                 " run_result_enqueued INTEGER NOT NULL DEFAULT 0,"
+                " admission_ready INTEGER NOT NULL DEFAULT 1,"
                 " snapshot_required INTEGER NOT NULL DEFAULT 0,"
                 " run_snapshot_source TEXT,run_snapshot_path TEXT,"
                 " run_snapshot_head TEXT,run_snapshot_fingerprint TEXT,"
@@ -120,6 +121,11 @@ class ChatJobStore:
                     "ALTER TABLE jobs ADD COLUMN snapshot_required INTEGER "
                     "NOT NULL DEFAULT 0",
                 )
+            if "admission_ready" not in columns:
+                conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN admission_ready INTEGER "
+                    "NOT NULL DEFAULT 1",
+                )
             for column in (
                 "run_snapshot_source",
                 "run_snapshot_path",
@@ -150,6 +156,7 @@ class ChatJobStore:
         self, session_id: str, message: str, mode: str, idempotency_key: str,
         *, context_seq: int | None = None, run_id: str | None = None,
         project: str | None = None, snapshot_required: bool = False,
+        admission_required: bool = False,
     ) -> tuple[dict[str, Any], bool]:
         """Atomar anlegen; wiederholter Key liefert den bestehenden Job."""
         now = _now()
@@ -171,11 +178,14 @@ class ChatJobStore:
             conn.execute(
                 "INSERT INTO jobs(job_id,session_id,idempotency_key,message,"
                 "mode,state,created_at,updated_at,context_seq,run_id,project,"
-                "snapshot_required) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                "snapshot_required,admission_ready) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (job_id, session_id, idempotency_key, message, mode,
                  "queued", now, now,
-                 None if context_seq is None else max(0, context_seq),
-                 run_id, project, int(snapshot_required)),
+                 None if admission_required else (
+                     None if context_seq is None else max(0, context_seq)
+                 ), run_id, project, int(snapshot_required),
+                 int(not admission_required)),
             )
             conn.execute(
                 "INSERT INTO job_events(job_id,kind,payload,ts) VALUES(?,?,?,?)",
@@ -211,9 +221,44 @@ class ChatJobStore:
     def queued(self) -> list[dict[str, Any]]:
         with closing(self._connect()) as conn:
             rows = conn.execute(
-                "SELECT * FROM jobs WHERE state='queued' ORDER BY rowid",
+                "SELECT * FROM jobs WHERE state='queued' AND admission_ready=1 "
+                "ORDER BY rowid",
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def unadmitted(self) -> list[dict[str, Any]]:
+        """Jobs fenced until their prompt has a durable session position."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM jobs WHERE admission_ready=0 "
+                "AND state IN ('queued','failed','cancelled') ORDER BY rowid",
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_admission_ready(self, job_id: str, context_seq: int) -> bool:
+        """Bind the session snapshot cutoff before the job can be claimed."""
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT state,admission_ready FROM jobs WHERE job_id=?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                conn.rollback()
+                return False
+            if bool(row["admission_ready"]):
+                conn.commit()
+                return True
+            if row["state"] not in {"queued", "failed", "cancelled"}:
+                conn.rollback()
+                return False
+            conn.execute(
+                "UPDATE jobs SET context_seq=?,admission_ready=1,updated_at=? "
+                "WHERE job_id=? AND admission_ready=0",
+                (max(0, context_seq), _now(), job_id),
+            )
+            conn.commit()
+            return True
 
     def pending_run_inbox(
         self,
@@ -229,7 +274,8 @@ class ChatJobStore:
             rows = conn.execute(
                 "SELECT rowid AS outbox_seq,job_id,session_id,mode,context_seq,run_id "
                 "FROM jobs WHERE project=? AND run_id IS NOT NULL "
-                "AND run_inbox_enqueued=0 AND rowid>? ORDER BY rowid LIMIT ?",
+                "AND run_inbox_enqueued=0 AND admission_ready=1 "
+                "AND rowid>? ORDER BY rowid LIMIT ?",
                 (project, max(0, after_rowid), limit),
             ).fetchall()
         return [dict(row) for row in rows]
@@ -443,7 +489,7 @@ class ChatJobStore:
             conn.execute("BEGIN IMMEDIATE")
             job = conn.execute(
                 "SELECT session_id FROM jobs "
-                "WHERE job_id=? AND state='queued'",
+                "WHERE job_id=? AND state='queued' AND admission_ready=1",
                 (job_id,),
             ).fetchone()
             if job is None:
@@ -451,7 +497,8 @@ class ChatJobStore:
                 return False
             cur = conn.execute(
                 "UPDATE jobs SET state='running',updated_at=?,worker_id=?,"
-                "heartbeat_at=? WHERE job_id=? AND state='queued'",
+                "heartbeat_at=? WHERE job_id=? AND state='queued' "
+                "AND admission_ready=1",
                 (now, worker_id, now, job_id),
             )
             if cur.rowcount:
@@ -1011,7 +1058,10 @@ def sync_completed_job_turns(
         ):
             added += 1
     for job in store.terminal_for_session(session_id):
-        session.delete_snapshot(str(job["job_id"]))
+        job_id = str(job["job_id"])
+        if job.get("state") in {"failed", "cancelled"}:
+            session.append_job_status(job_id, str(job["state"]))
+        session.delete_snapshot(job_id)
     return added
 
 
@@ -1138,7 +1188,20 @@ def resume_chat_jobs(
     """Reconciles run notices/results before dispatching after restart."""
     path = Path(db_path) if db_path else _db_path(project)
     # Expired workers become terminal before their result outbox is replayed.
-    ChatJobStore(path).recover_abandoned_jobs()
+    store = ChatJobStore(path)
+    store.recover_abandoned_jobs()
+    if store.unadmitted():
+        from werkstatt.chat_session import ChatSession
+
+        for job in store.unadmitted():
+            session = ChatSession(project, str(job["session_id"]))
+            context_seq = session.append_job_prompt(
+                str(job["job_id"]), str(job["message"]),
+            )
+            if not store.mark_admission_ready(str(job["job_id"]), context_seq):
+                raise RuntimeError(
+                    f"Chat-Anfrage {job['job_id']} blieb vor Dispatch gesperrt",
+                )
     reconcile_run_inbox(project, db_path=path)
     _dispatch_pending(path, project, Path(project_dir))
 
@@ -1224,6 +1287,7 @@ def enqueue_chat_job(
         run_id=run_id,
         project=project,
         snapshot_required=snapshot_on_accept and run_id is None,
+        admission_required=True,
     )
     if snapshot_on_accept and run_id is None and job.get("state") == "queued":
         store.require_standalone_snapshot(str(job["job_id"]))
@@ -1269,6 +1333,14 @@ def enqueue_chat_job(
                 reason="chat_snapshot_failed",
             )
             job = store.get(str(job["job_id"])) or job
+    from werkstatt.chat_session import ChatSession
+
+    admitted_context_seq = ChatSession(project, session_id).append_job_prompt(
+        str(job["job_id"]), message,
+    )
+    if not store.mark_admission_ready(str(job["job_id"]), admitted_context_seq):
+        raise RuntimeError("Chat-Anfrage blieb vor Dispatch gesperrt")
+    job = store.get(str(job["job_id"])) or job
     if run_id is not None:
         reconcile_run_inbox(project, db_path=path)
     _dispatch_pending(path, project, Path(project_dir))

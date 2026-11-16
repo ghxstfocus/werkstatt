@@ -184,6 +184,57 @@ def test_append_job_turn_is_idempotent_and_reconstructs_history(db: Path) -> Non
     assert session.get_job_turn("missing") is None
 
 
+def test_queued_job_prompt_is_visible_once_and_status_is_truthful(db: Path) -> None:
+    session = ChatSession("demo", "parent", db_pfad=db)
+    session.append_job_prompt("job-a", "Pruefe die Fehlermeldung")
+    session.append_job_prompt("job-a", "Pruefe die Fehlermeldung")
+
+    pending = derive_messages(session.load())
+    assert pending == [
+        {"role": "user", "content": "Pruefe die Fehlermeldung"},
+        {
+            "role": "assistant",
+            "content": (
+                "Die vorherige Chat-Anfrage wird noch bearbeitet; "
+                "ihre Antwort liegt noch nicht vor."
+            ),
+        },
+    ]
+
+    session.append_job_turn("job-a", "Pruefe die Fehlermeldung", "Befund")
+    assert derive_messages(session.load()) == [
+        {"role": "user", "content": "Pruefe die Fehlermeldung"},
+        {"role": "assistant", "content": "Befund"},
+    ]
+
+    session.append_job_prompt("job-b", "Zweite Anfrage")
+    session.append_job_status("job-b", "failed")
+    assert derive_messages(session.load())[-2:] == [
+        {"role": "user", "content": "Zweite Anfrage"},
+        {
+            "role": "assistant",
+            "content": (
+                "Die vorherige Chat-Anfrage ist fehlgeschlagen; "
+                "es liegt keine Antwort vor."
+            ),
+        },
+    ]
+
+
+def test_job_prompt_cutoff_is_atomic_and_replay_stable(db: Path) -> None:
+    session = ChatSession("demo", "parent", db_pfad=db)
+    prior = session.append("user", {"text": "Prior turn"})
+
+    cutoff = session.append_job_prompt("job-a", "First request")
+    session.append("user", {"text": "Later independent turn"})
+    replay_cutoff = session.append_job_prompt("job-a", "First request")
+
+    assert cutoff == prior
+    assert replay_cutoff == cutoff
+    queued = next(event for event in session.load() if event["kind"] == "job_queued")
+    assert queued["payload"]["context_seq"] == prior
+
+
 def test_derive_messages_mapping(db: Path) -> None:
     s = ChatSession("demo", "s1", db_pfad=db)
     s.append("user", {"text": "was ist x?"})

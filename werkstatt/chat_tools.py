@@ -1087,6 +1087,7 @@ def _read_chat_history(args: dict[str, Any]) -> str:
         kind = event.get("kind")
         fields = (
             ("user_text", "assistant_text") if kind == "job_turn"
+            else ("user_text",) if kind == "job_queued"
             else ("text",) if kind in {"user", "assistant"}
             else ()
         )

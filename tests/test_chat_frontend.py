@@ -32,6 +32,7 @@ def test_markdown_renderer_verwendet_dom_und_keine_html_injektion() -> None:
 def test_session_history_renders_completed_background_turn_pairs() -> None:
     js = _chat_js()
     assert 'kind === "job_turn"' in js
+    assert 'kind === "job_queued"' in js
     assert 'p.user_text || ""' in js
     assert 'p.assistant_text || ""' in js
 

@@ -260,7 +260,7 @@ class ChatSession:
             if before_seq is None:
                 rows = conn.execute(
                     "SELECT seq,ts,kind,payload FROM events "
-                    "WHERE session_id=? AND kind IN ('user','assistant','job_turn') "
+                    "WHERE session_id=? AND kind IN ('user','assistant','job_turn','job_queued','job_status') "
                     "ORDER BY seq DESC LIMIT ?",
                     (self.session_id, limit + 1),
                 ).fetchall()
@@ -268,7 +268,7 @@ class ChatSession:
                 rows = conn.execute(
                     "SELECT seq,ts,kind,payload FROM events "
                     "WHERE session_id=? AND seq<? "
-                    "AND kind IN ('user','assistant','job_turn') "
+                    "AND kind IN ('user','assistant','job_turn','job_queued','job_status') "
                     "ORDER BY seq DESC LIMIT ?",
                     (self.session_id, before_seq, limit + 1),
                 ).fetchall()
@@ -411,6 +411,69 @@ class ChatSession:
             conn.commit()
         return bool(inserted.rowcount)
 
+    def append_job_prompt(self, job_id: str, user_text: str) -> int:
+        """Persist a submitted background-chat prompt before dispatch."""
+        if not job_id or len(job_id) > 128:
+            raise ValueError("job_id must contain 1-128 characters")
+        event_key = f"chat-job-prompt:{job_id}"
+        ts = datetime.now(UTC).isoformat()
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute(
+                "SELECT seq FROM idempotent_events "
+                "WHERE session_id=? AND event_key=?",
+                (self.session_id, event_key),
+            ).fetchone()
+            if existing is not None:
+                row = conn.execute(
+                    "SELECT payload FROM events WHERE session_id=? AND seq=?",
+                    (self.session_id, int(existing[0])),
+                ).fetchone()
+                payload = json.loads(row[0]) if row is not None else {}
+                context_seq = payload.get("context_seq")
+                conn.commit()
+                if isinstance(context_seq, int) and not isinstance(context_seq, bool):
+                    return context_seq
+                raise RuntimeError("persisted job prompt lacks context_seq")
+            row = conn.execute(
+                "SELECT COALESCE(MAX(seq),0) FROM events WHERE session_id=?",
+                (self.session_id,),
+            ).fetchone()
+            context_seq = int(row[0]) if row else 0
+            payload = json.dumps(
+                {
+                    "job_id": job_id,
+                    "user_text": user_text,
+                    "context_seq": context_seq,
+                },
+                ensure_ascii=False,
+            )
+            cursor = conn.execute(
+                "INSERT INTO events(session_id,ts,kind,payload) "
+                "VALUES(?,?,?,?)",
+                (self.session_id, ts, "job_queued", payload),
+            )
+            seq = int(cursor.lastrowid or 0)
+            conn.execute(
+                "INSERT INTO idempotent_events(session_id,event_key,seq) "
+                "VALUES(?,?,?)",
+                (self.session_id, event_key, seq),
+            )
+            conn.commit()
+            return context_seq
+
+    def append_job_status(self, job_id: str, status: str) -> int:
+        """Persist a terminal no-answer status once for history/reconnect."""
+        if not job_id or len(job_id) > 128:
+            raise ValueError("job_id must contain 1-128 characters")
+        if status not in {"failed", "cancelled"}:
+            raise ValueError("status must be failed or cancelled")
+        return self.append_once(
+            f"chat-job-status:{job_id}",
+            "job_status",
+            {"job_id": job_id, "status": status},
+        )
+
     def get_job_turn(self, job_id: str) -> dict[str, str] | None:
         """Return an already-persisted assistant job turn by its stable ID."""
         with closing(self._connect()) as conn:
@@ -454,7 +517,7 @@ def list_sessions(
         if mit_inhalt:
             rows = conn.execute(
                 "SELECT DISTINCT session_id FROM events "
-                "WHERE kind IN ('user', 'assistant') "
+                "WHERE kind IN ('user', 'assistant', 'job_queued') "
                 "AND session_id NOT IN ("
                 "SELECT target_session_id FROM chat_snapshots) "
                 "ORDER BY session_id"
@@ -482,7 +545,7 @@ def list_session_summaries(
     with closing(sqlite3.connect(pfad)) as conn:
         rows = conn.execute(
             "SELECT session_id, MAX(seq), MAX(ts) FROM events "
-            "WHERE kind IN ('user', 'assistant', 'job_turn') "
+            "WHERE kind IN ('user', 'assistant', 'job_turn', 'job_queued') "
             "AND session_id NOT IN ("
             "SELECT target_session_id FROM chat_snapshots) "
             "GROUP BY session_id ORDER BY MAX(seq) DESC LIMIT ?",
@@ -492,7 +555,7 @@ def list_session_summaries(
         for session_id, _last_seq, updated_at in rows:
             first = conn.execute(
                 "SELECT kind, payload FROM events WHERE session_id=? "
-                "AND kind IN ('user', 'job_turn') ORDER BY seq ASC LIMIT 1",
+                "AND kind IN ('user', 'job_turn', 'job_queued') ORDER BY seq ASC LIMIT 1",
                 (session_id,),
             ).fetchone()
             payload: dict[str, Any] = {}
@@ -549,6 +612,26 @@ def derive_messages(
     Unbekannte kinds werden ignoriert.
     """
     msgs: list[dict[str, Any]] = []
+    queued_jobs = {
+        str((event.get("payload") or {}).get("job_id"))
+        for event in events
+        if event.get("kind") == "job_queued"
+        and isinstance((event.get("payload") or {}).get("job_id"), str)
+    }
+    completed_jobs = {
+        str((event.get("payload") or {}).get("job_id")):
+            (event.get("payload") or {}).get("assistant_text", "")
+        for event in events
+        if event.get("kind") == "job_turn"
+        and isinstance((event.get("payload") or {}).get("job_id"), str)
+    }
+    terminal_jobs = {
+        str((event.get("payload") or {}).get("job_id")):
+            (event.get("payload") or {}).get("status")
+        for event in events
+        if event.get("kind") == "job_status"
+        and isinstance((event.get("payload") or {}).get("job_id"), str)
+    }
     for ev in events:
         kind = ev.get("kind")
         payload = ev.get("payload") or {}
@@ -562,11 +645,38 @@ def derive_messages(
                 "role": "assistant",
                 "content": payload.get("text", ""),
             })
+        elif kind == "job_queued":
+            job_id = str(payload.get("job_id") or "")
+            user_text = payload.get("user_text")
+            if isinstance(user_text, str):
+                msgs.append({"role": "user", "content": user_text})
+                if job_id in completed_jobs:
+                    msgs.append({
+                        "role": "assistant",
+                        "content": completed_jobs[job_id],
+                    })
+                else:
+                    status = terminal_jobs.get(job_id)
+                    detail = (
+                        "Die vorherige Chat-Anfrage ist fehlgeschlagen; "
+                        "es liegt keine Antwort vor."
+                        if status == "failed" else
+                        "Die vorherige Chat-Anfrage wurde abgebrochen; "
+                        "es liegt keine Antwort vor."
+                        if status == "cancelled" else
+                        "Die vorherige Chat-Anfrage wird noch bearbeitet; "
+                        "ihre Antwort liegt noch nicht vor."
+                    )
+                    msgs.append({"role": "assistant", "content": detail})
         elif kind == "job_turn":
-            msgs.extend([
-                {"role": "user", "content": payload.get("user_text", "")},
-                {"role": "assistant", "content": payload.get("assistant_text", "")},
-            ])
+            job_id = str(payload.get("job_id") or "")
+            if job_id not in queued_jobs:
+                msgs.extend([
+                    {"role": "user", "content": payload.get("user_text", "")},
+                    {"role": "assistant", "content": payload.get("assistant_text", "")},
+                ])
+        elif kind == "job_status":
+            continue
         elif kind == "tool_call":
             msgs.append({
                 "role": "assistant",

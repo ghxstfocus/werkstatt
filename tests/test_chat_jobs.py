@@ -32,6 +32,25 @@ def test_create_is_idempotent_and_survives_store_reopen(tmp_path: Path) -> None:
     assert ChatJobStore(db).get(first["job_id"])["events"][0]["kind"] == "queued"
 
 
+def test_admission_fence_requires_session_prompt_before_claim(
+    tmp_path: Path,
+) -> None:
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _ = store.create(
+        "session-a", "Frage", "read", "request-key-admission-001",
+        admission_required=True,
+    )
+
+    assert job["admission_ready"] == 0
+    assert store.queued() == []
+    assert not store.claim(job["job_id"])
+    assert store.mark_admission_ready(job["job_id"], 9)
+    assert store.get(job["job_id"])["context_seq"] == 9
+    assert store.get(job["job_id"])["admission_ready"] == 1
+    assert [item["job_id"] for item in store.queued()] == [job["job_id"]]
+    assert store.claim(job["job_id"])
+
+
 def test_claim_is_single_winner_and_completion_is_persisted(tmp_path: Path) -> None:
     store = ChatJobStore(tmp_path / "jobs.db")
     job, _ = store.create("session-a", "Frage", "read", "request-key-0002")
@@ -136,6 +155,84 @@ def test_run_job_uses_snapshot_and_merges_completed_turn_once(
     }
 
 
+def test_later_same_session_job_sees_prior_unanswered_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_agent, chat_jobs, chat_session
+
+    jobs_db = tmp_path / "jobs.db"
+    chat_db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_jobs, "_db_path", lambda _project: jobs_db)
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
+    monkeypatch.setattr(chat_jobs, "_dispatch_pending", lambda *_args: None)
+    parent = chat_session.ChatSession("demo", "session-a")
+
+    first = chat_jobs.enqueue_chat_job(
+        "demo", tmp_path, "session-a", "Untersuche diesen Serverfehler",
+        "read", "request-prior-active-001",
+        context_seq=parent.max_seq(),
+    )["job"]
+    second = chat_jobs.enqueue_chat_job(
+        "demo", tmp_path, "session-a", "Was hast du im Fehler gesehen?",
+        "read", "request-current-active-02",
+        context_seq=parent.max_seq(),
+    )["job"]
+
+    observed: list[list[dict[str, str]]] = []
+
+    def fake_chat_loop(session, _message, **_kwargs):
+        observed.append(chat_session.derive_messages(session.load()))
+        return "Der erste Auftrag läuft noch."
+
+    monkeypatch.setattr(chat_agent, "chat_loop", fake_chat_loop)
+    monkeypatch.setattr(chat_jobs, "_WORKER_ID", "worker-test")
+    assert chat_jobs._run_job(jobs_db, "demo", tmp_path, second["job_id"])
+
+    assert first["state"] == "queued"
+    assert observed == [[
+        {"role": "user", "content": "Untersuche diesen Serverfehler"},
+        {
+            "role": "assistant",
+            "content": (
+                "Die vorherige Chat-Anfrage wird noch bearbeitet; "
+                "ihre Antwort liegt noch nicht vor."
+            ),
+        },
+    ]]
+    turns = [event for event in parent.load() if event["kind"] == "job_turn"]
+    assert len(turns) == 1
+    assert turns[0]["payload"]["user_text"] == "Was hast du im Fehler gesehen?"
+
+
+def test_resume_repairs_job_admission_after_crash_before_prompt_projection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, chat_session
+
+    jobs_db = tmp_path / "jobs.db"
+    chat_db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_jobs, "_db_path", lambda _project: jobs_db)
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
+    monkeypatch.setattr(chat_jobs, "_dispatch_pending", lambda *_args: None)
+    parent = chat_session.ChatSession("demo", "session-a")
+    parent.append("user", {"text": "Earlier"})
+    store = ChatJobStore(jobs_db)
+    job, _ = store.create(
+        "session-a", "Request before crash", "read",
+        "request-key-admission-replay-01", project="demo",
+        admission_required=True,
+    )
+
+    chat_jobs.resume_chat_jobs("demo", tmp_path, db_path=jobs_db)
+
+    repaired = store.get(job["job_id"])
+    assert repaired is not None
+    assert repaired["admission_ready"] == 1
+    assert repaired["context_seq"] == 1
+    queued = [event for event in parent.load() if event["kind"] == "job_queued"]
+    assert len(queued) == 1
+
+
 def test_sync_completed_job_turns_repairs_missing_parent_projection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -163,6 +260,40 @@ def test_sync_completed_job_turns_repairs_missing_parent_projection(
         "demo", "session-a", db_pfad=chat_db,
     ).load()
     assert [event["kind"] for event in events] == ["job_turn"]
+
+
+def test_sync_projects_failed_job_status_without_exposing_error_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, chat_session
+
+    chat_db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
+    session = chat_session.ChatSession("demo", "session-a")
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _ = store.create(
+        "session-a", "Frage", "read", "request-key-failed-projection-1",
+    )
+    session.append_job_prompt(job["job_id"], "Frage")
+    assert store.claim(job["job_id"])
+    assert store.finish(
+        job["job_id"], error="RuntimeError: sensitive traceback",
+        worker_id="test-worker",
+    )
+
+    assert chat_jobs.sync_completed_job_turns(
+        "demo", "session-a", db_path=store.db_path,
+    ) == 0
+    events = session.load()
+    assert [event["kind"] for event in events] == ["job_queued", "job_status"]
+    assert "sensitive traceback" not in str(events)
+    assert chat_session.derive_messages(events)[-1] == {
+        "role": "assistant",
+        "content": (
+            "Die vorherige Chat-Anfrage ist fehlgeschlagen; "
+            "es liegt keine Antwort vor."
+        ),
+    }
 
 
 def test_job_failure_is_visible_and_terminal(tmp_path: Path) -> None:
@@ -643,7 +774,7 @@ def test_sync_cleans_branch_for_failed_terminal_job(
     assert chat_session.ChatSession(
         "demo", job["job_id"], db_pfad=chat_db,
     ).load() == []
-    assert parent.load() == []
+    assert [event["kind"] for event in parent.load()] == ["job_status"]
 
 def test_job_events_are_projected_to_timeline_exactly_once(
     tmp_path: Path,

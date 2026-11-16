@@ -231,6 +231,12 @@
     return _ladeHistory(projekt, sid).then(function (events) {
       if (projekt !== zustand.projekt || anfrage !== zustand.historyRequest) return false;
       var hatNachricht = false;
+      var queuedJobIds = Object.create(null);
+      events.forEach(function (event) {
+        if (event.kind === "job_queued" && event.payload && event.payload.job_id) {
+          queuedJobIds[event.payload.job_id] = true;
+        }
+      });
       events.forEach(function (ev) {
         var kind = ev.kind;
         var p = ev.payload || {};
@@ -240,9 +246,12 @@
         } else if (kind === "assistant") {
           hatNachricht = true;
           _karte("assistant", p.text || "");
-        } else if (kind === "job_turn") {
+        } else if (kind === "job_queued") {
           hatNachricht = true;
           _karte("user", p.user_text || "");
+        } else if (kind === "job_turn") {
+          hatNachricht = true;
+          if (!queuedJobIds[p.job_id]) _karte("user", p.user_text || "");
           _karte("assistant", p.assistant_text || "");
         } else if (kind === "gate_card") {
           hatNachricht = true;
@@ -1163,7 +1172,8 @@
       if (!_jobAktiv(projekt, sid, request)) return;
       var bekannteIds = Object.create(null);
       events.forEach(function (ev) {
-        if (ev.kind === "user" && ev.payload && ev.payload.job_id) {
+        if ((ev.kind === "user" || ev.kind === "job_queued") &&
+            ev.payload && ev.payload.job_id) {
           bekannteIds[ev.payload.job_id] = true;
         }
       });
