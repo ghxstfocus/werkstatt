@@ -180,6 +180,51 @@ def test_exhausted_budget_allows_only_checkpoint_claimed_chat_builder(
     assert s.llm_calls == 2
 
 
+def test_chat_builder_provider_timeout_uses_remaining_reserve(
+    monkeypatch, tmp_path,
+):
+    from datetime import UTC, datetime, timedelta
+
+    from werkstatt.event_store import EventStore
+
+    s = _state(tmp_path)
+    s.run_id = "test-run-timeout"
+    s.budget = {"max_llm_calls": 1}
+    s.llm_calls = 1
+    s.budget_exhausted_reason = "max_llm_calls"
+    s.reflection_chat_builder_reserve_active = True
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record(s.project_name, s.run_id, s.aufgabe, status="running")
+    record = store.get_run_record(s.project_name, s.run_id)
+    assert record is not None
+    checkpoint = dict(record["checkpoint"])
+    checkpoint["reflection_chat_builder_expires_at"] = (
+        datetime.now(UTC) + timedelta(seconds=8)
+    ).isoformat()
+    store.update_run_checkpoint(
+        s.project_name, s.run_id, checkpoint,
+        expected_version=record["checkpoint_version"],
+    )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+    prompt = "builder prompt"
+    system = "builder system"
+    context = {
+        "budget_event": "builder_context_budget",
+        "user_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+        "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+    }
+    with patch(
+        "werkstatt.agent.requests.post", return_value=_ok_response("patch"),
+    ) as post:
+        reply = agent.ask_llm(
+            "sk-test", system, prompt, "deepseek-chat", 0.2,
+            state=s, aufgabe="builder", context_manifest=context,
+        )
+    assert reply.ok is True
+    connect_timeout, read_timeout = post.call_args.kwargs["timeout"]
+    assert connect_timeout + read_timeout <= 8
+
+
 def test_exhausted_budget_does_not_reserve_chat_for_other_roles(
     monkeypatch, tmp_path,
 ):

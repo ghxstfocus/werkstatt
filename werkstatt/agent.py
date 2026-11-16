@@ -677,9 +677,29 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     _max_total_s = int(
         getattr(state, "max_total_llm_s", 240)
         if state is not None else 240)
+    if (
+        state is not None
+        and aufgabe == "builder"
+        and getattr(state, "reflection_chat_builder_reserve_active", False)
+    ):
+        builder_deadline = getattr(
+            state, "reflection_chat_builder_deadline_monotonic", 0.0,
+        )
+        if builder_deadline > 0:
+            remaining_s = builder_deadline - time.monotonic()
+            if remaining_s <= 0:
+                return LLMReply(
+                    ok=False,
+                    error="reflection_builder_reserve_expired",
+                    system_len=_system_len,
+                    user_len=_user_len,
+                )
+            _max_total_s = min(_max_total_s, max(1, int(remaining_s)))
     # Zeitout-Verhaeltnis (Timeout-A2): read=180 deckt
     # einen einzelnen Call ab. max_total=240 erlaubt
     # 180 s + 60 s Nachlauf fuer einen Retry.
+    _CONNECT_S = min(_CONNECT_S, max(1, _max_total_s // 4))
+    _READ_S = min(_READ_S, max(1, _max_total_s - _CONNECT_S))
     _t0 = time.monotonic()
     _deadline = _t0 + _max_total_s
     # Auflage 2087: Retry nur bei 429 (Rate Limit) und 5xx

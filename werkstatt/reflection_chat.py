@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any
 
@@ -369,6 +370,9 @@ def claim_recovery_builder_call(state: Any) -> int:
         except RuntimeError:
             continue
         state.reflection_chat_builder_calls = used + 1
+        state.reflection_chat_builder_deadline_monotonic = (
+            time.monotonic() + (expires_at - now).total_seconds()
+        )
         return used + 1
     raise RuntimeError("reflection_builder_checkpoint_conflict")
 
