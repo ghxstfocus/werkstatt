@@ -182,13 +182,230 @@ def architect_reasoning_route(
 
 
 def direct_builder_route_decision(
-    task: str, scout_skip_path: str | None, project_dir,
+    task: str,
+    scout_skip_path: str | None,
+    project_dir,
+    *,
+    explorer_context: object,
 ) -> tuple[bool, str]:
-    """Select deterministic Builder planning only with a unique source proof."""
+    """Select Builder directly for a narrow, explicit, current-file edit."""
     if scout_skip_path is None:
         return False, "kein_belegtes_einzeldateiziel"
+    expected_sha256 = explorer_source_sha256(
+        explorer_context, scout_skip_path,
+    )
+    current_sha256 = current_direct_source_sha256(
+        scout_skip_path, project_dir,
+    )
+    if expected_sha256 is None:
+        return False, "explorer_quellhash_fehlt_oder_unvollstaendig"
+    if current_sha256 != expected_sha256:
+        return False, "explorer_quellbeleg_veraltet"
     plan, reason = build_direct_edit_plan(task, scout_skip_path, project_dir)
-    return plan is not None, reason
+    if plan is not None:
+        return True, reason
+    direct_task, task_reason, _source_sha256 = build_direct_single_file_task(
+        task, scout_skip_path, project_dir,
+        expected_source_sha256=expected_sha256,
+    )
+    if direct_task is not None:
+        return True, task_reason
+    return False, reason
+
+
+def explorer_source_sha256(
+    explorer_context: object, target: str,
+) -> str | None:
+    """Return a complete Explorer hash for exactly the selected target."""
+    if not isinstance(explorer_context, dict):
+        return None
+    key_files = explorer_context.get("key_files")
+    if not isinstance(key_files, list):
+        return None
+    matching = [
+        item for item in key_files
+        if isinstance(item, dict) and item.get("file") == target
+    ]
+    if len(matching) != 1:
+        return None
+    item = matching[0]
+    digest = item.get("source_sha256")
+    if (
+        item.get("source_complete") is not True
+        or not isinstance(digest, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", digest)
+    ):
+        return None
+    return digest
+
+
+def current_direct_source_sha256(target: str, project_dir) -> str | None:
+    """Hash a small, safe project-local Python source without decoding gaps."""
+    try:
+        relative = Path(target)
+        if relative.is_absolute() or ".." in relative.parts:
+            return None
+        root = Path(project_dir).resolve(strict=True)
+        source_path = (root / relative).resolve(strict=True)
+        source_path.relative_to(root)
+        if (
+            not source_path.is_file()
+            or source_path.suffix != ".py"
+            or source_path.stat().st_size > 24_000
+        ):
+            return None
+        source = source_path.read_bytes()
+        source.decode("utf-8")
+    except (OSError, RuntimeError, UnicodeDecodeError, ValueError):
+        return None
+    if len(source) > 24_000:
+        return None
+    import hashlib
+
+    return hashlib.sha256(source).hexdigest()
+
+
+def prepare_direct_builder_context(
+    goal: str, project_dir,
+) -> tuple[dict | None, str]:
+    """Build minimal, hash-bound evidence for a narrow direct Builder route.
+
+    This is a deterministic read capability. It intentionally does not mark a
+    repository-wide related-file scan complete and cannot prepare broad work.
+    """
+    if not isinstance(goal, str) or len(goal) > 300:
+        return None, "direct_goal_outside_limit"
+    targets = set(re.findall(
+        r"(?<![\w.-])(?:[\w.-]+/)*[\w.-]+\.py", goal,
+    ))
+    if len(targets) != 1:
+        return None, "direct_goal_needs_one_explicit_python_file"
+    target = next(iter(targets))
+    source_sha256 = current_direct_source_sha256(target, project_dir)
+    if source_sha256 is None:
+        return None, "direct_target_missing_or_unsafe"
+    try:
+        root = Path(project_dir).resolve(strict=True)
+        source_path = (root / Path(target)).resolve(strict=True)
+        source_path.relative_to(root)
+        source_text = source_path.read_text(encoding="utf-8")
+    except (OSError, RuntimeError, UnicodeDecodeError, ValueError):
+        return None, "direct_target_unreadable"
+    if len(source_text) > 6_000:
+        return None, "direct_target_context_too_large"
+    line_count = len(source_text.splitlines())
+    context = {
+        "findings": (
+            "Explizites Ein-Datei-Ziel wurde vom Koordinator deterministisch "
+            "gelesen; der vollständige Quellhash ist aktuell."
+        ),
+        "key_files": [{
+            "file": target,
+            "why": "explizites Einzeldatei-Ziel, direkt aus aktuellem Repo gelesen",
+            "confidence": "high",
+            "preview": source_text,
+            "source_line_ranges": [[1, max(1, line_count)]],
+            "source_total_lines": line_count,
+            "source_complete": True,
+            "preview_source_chars": len(source_text),
+            "source_sha256": source_sha256,
+        }],
+        "next_reads": [],
+        "content_retrieval": {},
+        "dispatch": {
+            "role": "builder",
+            "selected": "direct_builder",
+            "reason": "direct_builder_current_source_evidence",
+            "evidence_kind": "deterministic",
+        },
+        "related_files_scan": {
+            "status": "not_requested",
+            "reason": "bounded_single_file_low_risk_route",
+            "explicit_file_count": 1,
+        },
+    }
+    ready, reason = direct_builder_route_decision(
+        goal,
+        target,
+        project_dir,
+        explorer_context=context,
+    )
+    if not ready:
+        return None, reason
+    return context, "eindeutige_explorer_datei_niedriges_risiko"
+
+
+def build_direct_single_file_task(
+    goal: str,
+    target: str | None,
+    project_dir,
+    *,
+    expected_source_sha256: str | None = None,
+) -> tuple[dict | None, str, str | None]:
+    """Compile a tiny, explicit single-file edit without Scout/Architect/Split.
+
+    This is a bounded capability route, not a natural-language plan generator:
+    the approved criterion is the exact user goal, the file must be the sole
+    Explorer-confirmed target, and the Builder must still reread it and pass
+    the normal verify/review gates. Any uncertainty returns to role dispatch.
+    """
+    if not isinstance(goal, str) or not goal.strip() or len(goal) > 300:
+        return None, "direktauftrag_ausserhalb_einzel_task_limit", None
+    if not isinstance(target, str) or not target.endswith(".py"):
+        return None, "direktauftrag_braucht_eine_python_zieldatei", None
+    if re.search(
+        r"\b(?:tests?|pytest|regress\w*|verify|pr[uü]f\w*|review\w*|"
+        r"analys\w*|debug\w*|ursach\w*|refactor\w*|architektur\w*|"
+        r"api|schema|migration\w*|sicher\w*|security|auth\w*|"
+        r"berechtig\w*|permission\w*|parallel\w*|concurren\w*|"
+        r"async\w*|thread\w*|datenbank|database|mehrere|multiple|alle)\b",
+        goal,
+        flags=re.IGNORECASE,
+    ):
+        return None, "direktauftrag_enthaelt_mehrdeutigkeit_oder_risiko", None
+    edit_pattern = (
+        r"\b(?:aender\w*|änder\w*|korrigier\w*|ergänz\w*|ergaenz\w*|"
+        r"aktualisier\w*|entfern\w*|ersetz\w*|füg\w*|fueg\w*|"
+        r"implementier\w*|fix\w*|add\w*|remove\w*|replace\w*|"
+        r"change\w*|update\w*)\b"
+    )
+    if len(re.findall(edit_pattern, goal, flags=re.IGNORECASE)) != 1:
+        return None, "direktauftrag_nicht_einzelne_aenderungsabsicht", None
+    try:
+        relative = Path(target)
+        if relative.is_absolute() or ".." in relative.parts:
+            return None, "direktauftrag_zielpfad_ungueltig", None
+        root = Path(project_dir).resolve(strict=True)
+        source_path = (root / relative).resolve(strict=True)
+        source_path.relative_to(root)
+        if not source_path.is_file() or source_path.stat().st_size > 24_000:
+            return None, "direktauftrag_quelle_nicht_begrenzt_lesbar", None
+        source = source_path.read_bytes()
+        source_text = source.decode("utf-8")
+    except (OSError, RuntimeError, UnicodeDecodeError, ValueError):
+        return None, "direktauftrag_quellbeleg_fehlt_oder_ungueltig", None
+    if len(source_text) > 6_000:
+        return None, "direktauftrag_quelle_uebersteigt_kontextlimit", None
+    import hashlib
+
+    source_sha256 = hashlib.sha256(source).hexdigest()
+    if (
+        expected_source_sha256 is not None
+        and source_sha256 != expected_source_sha256
+    ):
+        return None, "explorer_quellbeleg_veraltet", source_sha256
+    return {
+        "id": "t1",
+        "name": f"Builder direkt: {target}",
+        "description": (
+            "Fuehre ausschliesslich diesen freizugebenden Nutzerauftrag aus: "
+            f"{goal.strip()}"
+        ),
+        "action": "update",
+        "task_files": [target],
+        "dependencies": [],
+        "criterion_refs": ["AC1"],
+    }, "eindeutige_explorer_datei_niedriges_risiko", source_sha256
 
 
 def architect_single_file_task_decision(

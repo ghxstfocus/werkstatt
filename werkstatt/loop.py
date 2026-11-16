@@ -561,20 +561,38 @@ def _is_checkpointable_deterministic_explorer_context(
         return False
     dispatch = context.get("dispatch")
     scan = context.get("related_files_scan")
-    return bool(
+    direct_builder_context = bool(
         isinstance(dispatch, dict)
-        and dispatch.get("role") == "explorer"
-        and dispatch.get("selected") == "skip"
+        and dispatch.get("role") == "builder"
+        and dispatch.get("selected") == "direct_builder"
+        and dispatch.get("reason") == "direct_builder_current_source_evidence"
         and dispatch.get("evidence_kind") == "deterministic"
-        and dispatch.get("reason")
-        == "explizite_einzeldatei_mit_explorer_beleg"
-        and context.get("findings")
-        == (
-            "Explizites Einzeldatei-Ziel ist durch den deterministischen "
-            "Planner-Router bestaetigt; kein Explorer-LLM-Aufruf."
+        and isinstance(scan, dict)
+        and scan.get("status") == "not_requested"
+        and scan.get("reason") == "bounded_single_file_low_risk_route"
+    )
+    return bool(
+        (
+            direct_builder_context
+            or (
+                isinstance(dispatch, dict)
+                and dispatch.get("role") == "explorer"
+                and dispatch.get("selected") == "skip"
+                and dispatch.get("evidence_kind") == "deterministic"
+                and dispatch.get("reason")
+                == "explizite_einzeldatei_mit_explorer_beleg"
+                and context.get("findings")
+                == (
+                    "Explizites Einzeldatei-Ziel ist durch den deterministischen "
+                    "Planner-Router bestaetigt; kein Explorer-LLM-Aufruf."
+                )
+            )
+        )
+        and (
+            direct_builder_context
+            or isinstance(scan, dict) and scan.get("status") == "complete"
         )
         and isinstance(scan, dict)
-        and scan.get("status") == "complete"
         and context.get("content_retrieval") in ({}, None)
         and context.get("next_reads") == []
     )
@@ -776,6 +794,54 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         }
     if not state.coordinator_setup_context_ready:
         _restore_deterministic_setup_context(phase_state, state)
+    if (
+        not state.coordinator_setup_context_ready
+        and not plan_checkpoint_current
+        and getattr(state, "debugger_fix_contract", None) is None
+    ):
+        from werkstatt.roles.planner_dispatch import (
+            prepare_direct_builder_context,
+        )
+
+        direct_context, direct_reason = prepare_direct_builder_context(
+            state.aufgabe, state.project_dir,
+        )
+        if direct_context is not None:
+            state.explorer_context = direct_context
+            state.coordinator_setup_context_ready = True
+            key_file = direct_context["key_files"][0]
+            return {
+                "decision": "prepare_approved_work_graph",
+                "coordinator_action": "planner_direct",
+                "reason": direct_reason,
+                "next_executor": "builder_direct",
+                "decision_basis": {
+                    "setup_context_ready": True,
+                    "setup_checkpoint_complete": False,
+                    "setup_context_source": "direct_current_source_tool",
+                    "plan_checkpoint_complete": False,
+                    "plan_goal_matches": plan_goal_matches,
+                    "plan_run_matches": plan_run_matches,
+                    "plan_project_matches": plan_project_matches,
+                    "plan_fingerprint_matches": plan_fingerprint_matches,
+                    "task_count": task_count,
+                    "planner_role_decision": "builder_direct",
+                    "planner_role_decision_reason": (
+                        "unique_source_bound_edit_ready"
+                    ),
+                    "planner_role_available_evidence": [
+                        "user_goal", "explicit_user_edit",
+                        "unique_current_source",
+                    ],
+                    "planner_role_required_evidence": [
+                        "explicit_user_edit", "unique_current_source",
+                    ],
+                    "planner_role_missing_evidence": [],
+                    "planner_role_missing_inputs": [],
+                    "direct_target": key_file["file"],
+                    "direct_source_sha256": key_file["source_sha256"],
+                },
+            }
     if not state.coordinator_setup_context_ready and not reuse_checkpoint_context:
         return {
             "decision": "prepare_project_context",
@@ -817,6 +883,7 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         direct_builder_ready, direct_builder_reason = (
             direct_builder_route_decision(
                 state.aufgabe, scout_skip_target, state.project_dir,
+                explorer_context=state.explorer_context,
             )
         )
         planner_available_evidence: set[str] = set()
@@ -1072,13 +1139,18 @@ def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
     for key in (
         "setup_context_ready", "setup_checkpoint_complete",
         "plan_checkpoint_complete", "plan_goal_matches",
+        "plan_run_matches", "plan_project_matches",
+        "plan_fingerprint_matches",
     ):
         if isinstance(raw.get(key), bool):
             safe[key] = raw[key]
     context_source = raw.get("setup_context_source")
     if (
         isinstance(context_source, str)
-        and context_source in {"checkpointed_plan", "fresh_explorer"}
+        and context_source in {
+            "checkpointed_plan", "fresh_explorer",
+            "direct_current_source_tool",
+        }
     ):
         safe["setup_context_source"] = context_source
     task_count = raw.get("task_count")
@@ -1110,6 +1182,21 @@ def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
                     for item in items)
         ):
             safe[key] = list(dict.fromkeys(items))
+    direct_target = raw.get("direct_target")
+    if (
+        isinstance(direct_target, str)
+        and len(direct_target) <= 300
+        and not Path(direct_target).is_absolute()
+        and ".." not in Path(direct_target).parts
+    ):
+        safe["direct_target"] = direct_target
+    direct_hash = raw.get("direct_source_sha256")
+    if (
+        isinstance(direct_hash, str)
+        and len(direct_hash) == 64
+        and all(char in "0123456789abcdef" for char in direct_hash)
+    ):
+        safe["direct_source_sha256"] = direct_hash
     return safe or None
 
 

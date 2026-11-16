@@ -113,11 +113,14 @@ Der Planner-Orchestrator bleibt in `werkstatt/planner.py`; die Ausgabe-
 Kompilierung liegt in `werkstatt/planner_task_compiler.py`, deterministische
 Taskgraph-Validierung und -Sortierung in `werkstatt/task_graph.py`.
 `werkstatt/roles/planner_dispatch.py` entscheidet anhand aktueller Checkpoint-
-Belege, welche Planner-Rolle benoetigt wird. Eine eindeutig AST-bestaetigte
-Python-Literalzuweisung kann schon am Run-Checkpoint an builder_direct
-geroutet werden und Architect/Split auslassen. Die Extraktion dieser Module
-loest die verbleibende lineare Run-Phasenfolge noch nicht vollstaendig ab;
-ADR-0032 beschreibt das Zielverhalten.
+Belege, welche Planner-Rolle benoetigt wird. Ein kurzer, ausdruecklicher,
+niedrigriskanter Ein-Datei-Python-Aenderungsauftrag mit aktueller
+Explorer-Evidenz oder hashgebundenem deterministischem Quelllese-Beleg kann
+direkt als Builder-Task an Plan-/Human-Gate gehen und
+Scout, Architect sowie Planner-Split auslassen. Diagnose, Tests, breite oder
+riskante Aufgaben eskalieren an die benoetigten Rollen. Die Laufzeit verwendet
+weiterhin Setup-/Plan-/Task-/Finalize-Handler; deren vollstaendige Ersetzung
+durch den freien zielorientierten Koordinator aus ADR-0032 ist offen.
 
 ### 2.4 Builder (werkstatt/roles/builder/run.py)
 
@@ -276,10 +279,13 @@ Klasse, fuer die es einen klaren Hint gibt.
 injiziert (`## API-SIGNATUREN`). Reduziert den AST-Index (13 Dateien) auf
 die relevanten Symbole fuer den Builder.
 
-### Rollen-Kette (unveraendert, bewusst)
+### Historische Rollen-Kette (kein Laufzeitvertrag)
 
+Je nach Auftrag und Checkpoint-Evidenz werden erforderliche Faehigkeiten
+ausgewaehlt; der einfache, aktuelle Ein-Datei-Pfad kann direkt zum Builder
+dispatchen. Der uebliche breite Reasoning-Pfad bleibt:
 Explorer -> Scout -> Architect -> Planner-Split -> Builder -> Verify ->
-Reviewer -> (Reflection bei Fail) -> Phase-Review -> Human-Gate.
+Reviewer -> (Reflection bei Fail) -> Human-Gate.
 
 Jede Stufe reduziert die Kontextmenge fuer die naechste. Der Builder
 bekommt am Ende: 1 Task-Beschreibung, 1 Datei, relevante API-Signaturen,

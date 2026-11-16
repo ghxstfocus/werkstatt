@@ -85,6 +85,94 @@ def test_planner_erstellt_plan(tmp_path):
         assert st.architect_reasoning_enabled is True
 
 
+def test_checkpoint_selected_direct_builder_skips_planner_roles(
+    tmp_path, monkeypatch,
+):
+    from werkstatt import planner
+
+    source = tmp_path / "src" / "feature.py"
+    source.parent.mkdir()
+    source.write_text("def feature():\n    return 1\n", encoding="utf-8")
+    source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+    state = _state(tmp_path)
+    state.aufgabe = "Korrigiere den Rückgabewert von feature in src/feature.py"
+    state.explorer_context = {
+        "key_files": [{
+            "file": "src/feature.py",
+            "source_sha256": source_sha256,
+            "source_complete": True,
+        }],
+    }
+    state.planner_action_role = "builder_direct"
+    monkeypatch.setattr(
+        planner, "_deterministic_entfernen_precheck", lambda _state: False,
+    )
+    monkeypatch.setattr(planner, "_erledigte_punkte", lambda _path: "")
+    monkeypatch.setattr(planner, "_migrations_stand", lambda *_args: "")
+    monkeypatch.setattr(
+        planner, "_run_scout",
+        lambda *_args: pytest.fail("Scout must not run on direct Builder route"),
+    )
+    monkeypatch.setattr(
+        planner, "run_architect",
+        lambda *_args, **_kwargs: pytest.fail(
+            "Architect must not run on direct Builder route",
+        ),
+    )
+
+    assert planner.run_planner(state) is True
+    assert state.tasks[0]["task_files"] == ["src/feature.py"]
+    assert state.tasks[0]["action"] == "update"
+    assert state.tasks[0]["criterion_refs"] == ["AC1"]
+    assert state.akzeptanzkriterien == [state.aufgabe]
+    assert state.tests == [
+        (
+            "Die fuer geaenderte Dateien konfigurierte Verify-Suite muss "
+            "erfolgreich sein."
+        ),
+    ]
+    monkeypatch.setattr(
+        "werkstatt.gates._call_hook", lambda *_args, **_kwargs: {"allow": True},
+    )
+    from werkstatt.phases.plan import _check_plan_gate_current
+
+    assert _check_plan_gate_current(state) is True, state.last_planner_info
+
+
+def test_direct_builder_plan_rejects_source_changed_after_dispatch(
+    tmp_path, monkeypatch,
+):
+    from werkstatt import planner
+
+    source = tmp_path / "src" / "feature.py"
+    source.parent.mkdir()
+    source.write_text("def feature():\n    return 1\n", encoding="utf-8")
+    stale_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    source.write_text("def feature():\n    return 2\n", encoding="utf-8")
+    state = _state(tmp_path)
+    state.aufgabe = "Korrigiere den Rueckgabewert von feature in src/feature.py"
+    state.explorer_context = {
+        "key_files": [{
+            "file": "src/feature.py",
+            "source_sha256": stale_hash,
+            "source_complete": True,
+        }],
+    }
+    state.planner_action_role = "builder_direct"
+    monkeypatch.setattr(
+        planner, "_deterministic_entfernen_precheck", lambda _state: False,
+    )
+    monkeypatch.setattr(planner, "_erledigte_punkte", lambda _path: "")
+    monkeypatch.setattr(planner, "_migrations_stand", lambda *_args: "")
+    monkeypatch.setattr(
+        planner, "_run_scout",
+        lambda *_args: pytest.fail("stale direct evidence must stop dispatch"),
+    )
+
+    assert planner.run_planner(state) is False
+    assert state.tasks == []
+
+
 def test_planner_can_yield_after_each_required_role(tmp_path, monkeypatch):
     from werkstatt import planner
 

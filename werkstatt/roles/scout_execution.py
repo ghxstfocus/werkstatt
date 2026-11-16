@@ -8,7 +8,6 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ScoutRoleServices:
-    route: Callable[..., tuple[str | None, str]]
     direct_plan: Callable[..., tuple[dict | None, str]]
     build_index: Callable[..., dict]
     input_fingerprint: Callable[..., str | None]
@@ -37,6 +36,8 @@ def run_scout_checkpoint(
     goal: str,
     api_key: str,
     key_files: list[str],
+    skip_path: str | None,
+    route_reason: str,
     services: ScoutRoleServices,
 ) -> ScoutCheckpointResult:
     """Run or reuse Scout, or return the validated narrow-source route.
@@ -47,9 +48,6 @@ def run_scout_checkpoint(
     """
     project_dir = state.project_dir
     project_name = state.project_name
-    skip_path, route_reason = services.route(
-        goal, getattr(state, "explorer_context", None), project_dir,
-    )
     source = "Scout"
     code_index: dict = {}
     input_sha256: str | None = None

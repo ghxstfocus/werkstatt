@@ -32,11 +32,15 @@ Danach entscheidet der Planner anhand Auftrag, Scope und Beleglage:
 - Scout kann entfallen, wenn ein einzelnes Ziel explizit genannt und vom
   Explorer bestaetigt wurde.
 - Architect fuer Aenderungen mit Design-, Abhaengigkeits- oder
-  Mehrdatei-Entscheidungen. Er kann entfallen, wenn eine einzelne,
-  wortwoertliche Ersetzung oder eine eindeutige Python-Literalzuweisung im
-  aktuellen Dateiinhalt eindeutig belegt ist oder ein gepruefter atomarer
-  Scout-Plan die Aenderung vollstaendig nennt. In diesen Faellen waehlt der
-  Checkpoint builder_direct; Mehrdeutigkeit eskaliert an die Rollen.
+  Mehrdatei-Entscheidungen. Er kann auch bei einem einzelnen, ausdruecklich
+  genannten Python-Ziel entfallen, wenn Explorer oder der deterministische
+  Quelllese-Worker die aktuelle Quelle vollstaendig hashgebunden belegen,
+  genau eine einfache Aenderungsabsicht vorliegt, der Auftrag
+  kurz und frei von Test-, Diagnose-, Sicherheits-, API-, Schema-, Migrations-
+  oder Mehrdateirisiken ist. Der Checkpoint waehlt dann builder_direct; die
+  unveraenderte Nutzeranweisung wird als einziges Kriterium im Plan-Gate
+  freigegeben. Der Builder liest die Datei erneut; Verify, Review und Ergebnis-
+  Gate bleiben bestehen. Literal-/atomare Direktplaene sind davon getrennt.
 - Der aktuelle Planner-Split ist nach dem Architect-Prosa-Plan der normale
   Schritt zur Erzeugung des Task-JSON; er ist kein Fallback. Deterministische
   Taskgraph-Pruefungen validieren anschliessend IDs, Kriterien und
