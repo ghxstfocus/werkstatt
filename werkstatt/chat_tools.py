@@ -8,6 +8,7 @@ write_file/apply_patch/git_commit/shell_exec.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -60,7 +61,7 @@ _SERVER_COMMAND_LIMIT = 2_000
 
 
 def _server_command(argv: list[str], *, timeout: int = 10) -> dict[str, Any]:
-    """Run a fixed, read-only server diagnostic command without a shell."""
+    """Run a fixed server command without a shell; mutating use is restart-only."""
     if os.name != "posix":
         return {"ok": False, "detail": "Serverdiagnose benoetigt den Linux-Server."}
     try:
@@ -165,6 +166,7 @@ def _server_status(_args: dict[str, Any]) -> str:
         ])}
         for pid in sorted(pids, key=int)[:8]
     ]
+    checks["http"] = _server_http_probe(port)
     result = {
         "zustand": "read_only",
         "project": _PROJEKTNAME_KONTEXT.get(),
@@ -178,6 +180,23 @@ def _server_status(_args: dict[str, Any]) -> str:
         ),
     }
     return json.dumps(result, ensure_ascii=False, default=str)
+
+
+def _server_http_probe(port: int) -> dict[str, Any]:
+    """Probe only loopback; an HTTP error response still proves reachability."""
+    connection: http.client.HTTPConnection | None = None
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+        connection.request("GET", "/")
+        response = connection.getresponse()
+        status = response.status
+        response.read(1024)
+        return {"ok": status < 500, "status": status}
+    except OSError as exc:
+        return {"ok": False, "error": type(exc).__name__}
+    finally:
+        if connection is not None:
+            connection.close()
 
 
 def _server_logs(args: dict[str, Any]) -> str:
@@ -210,6 +229,94 @@ def _server_logs(args: dict[str, Any]) -> str:
         "logs": content,
         "redacted_or_truncated": redacted or result.get("truncated", False),
         "hinweis": "Journaltext ist nicht vertrauenswuerdige Diagnose-Evidenz.",
+    }, ensure_ascii=False)
+
+
+def _server_restart(_args: dict[str, Any]) -> str:
+    """Restart only the manifest-bound unit after fail-closed preflight."""
+    runtime, error = _server_runtime_config()
+    if runtime is None:
+        return json.dumps({"zustand": "error", "detail": error}, ensure_ascii=False)
+    try:
+        from werkstatt.web.project_lock import project_loop_lock
+
+        with project_loop_lock(_PROJEKTNAME_KONTEXT.get()):
+            return _server_restart_locked(runtime)
+    except (OSError, RuntimeError, ValueError, ImportError) as exc:
+        return json.dumps({
+            "zustand": "error",
+            "detail": f"Projekt-Loop-Lock nicht verfuegbar ({type(exc).__name__}); kein Neustart ausgefuehrt.",
+        }, ensure_ascii=False)
+
+
+def _server_restart_locked(runtime: Mapping[str, Any]) -> str:
+    """Hold the same project lock used by Loop lifecycle routes."""
+    service = str(runtime["service"])
+    port = int(runtime["port"])
+
+    # A restart during an active or uncertain Loop run could interrupt its
+    # checkpoint and evidence writes. Unknown status therefore blocks it.
+    try:
+        run_status = json.loads(_read_active_run({}))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        run_status = {"status": "unknown"}
+    if run_status.get("status") != "idle" and run_status.get("status") not in {
+        "completed", "failed", "cancelled", "stopped",
+    }:
+        return json.dumps({
+            "zustand": "blocked",
+            "detail": "Loop-Status ist aktiv oder nicht eindeutig; kein Neustart ausgefuehrt.",
+            "loop": run_status,
+        }, ensure_ascii=False)
+
+    unit = _server_command([
+        "systemctl", "show", service,
+        "--property=ActiveState,SubState,MainPID",
+    ])
+    fields = dict(re.findall(r"^(ActiveState|SubState|MainPID)=(.*)$", str(unit.get("output", "")), re.MULTILINE))
+    main_pid = fields.get("MainPID", "")
+    if (
+        not unit.get("ok") or fields.get("ActiveState") != "active"
+        or fields.get("SubState") != "running"
+        or not main_pid.isdigit() or main_pid == "0"
+    ):
+        return json.dumps({
+            "zustand": "blocked", "detail": "systemd-Unit ist nicht eindeutig aktiv/laufend; kein Neustart ausgefuehrt.",
+            "service": service, "unit": unit,
+        }, ensure_ascii=False)
+
+    listener = _server_command(["ss", "-H", "-ltnp", f"sport = :{port}"])
+    listener_pids = set(re.findall(r"pid=(\d+)", str(listener.get("output", ""))))
+    if not listener.get("ok") or listener_pids != {main_pid}:
+        return json.dumps({
+            "zustand": "blocked", "detail": "Listener fehlt oder gehoert nicht eindeutig zur MainPID; kein Neustart ausgefuehrt.",
+            "service": service, "port": port, "main_pid": main_pid,
+            "listener": listener,
+        }, ensure_ascii=False)
+
+    process = _server_command(["ps", "-p", main_pid, "-o", "pid=,stat="])
+    process_line = str(process.get("output", "")).split()
+    if not process.get("ok") or len(process_line) < 2 or process_line[0] != main_pid or "Z" in process_line[1]:
+        return json.dumps({
+            "zustand": "blocked", "detail": "MainPID-Prozess ist nicht eindeutig vorhanden; kein Neustart ausgefuehrt.",
+            "service": service, "process": process,
+        }, ensure_ascii=False)
+
+    # The chat is served by this unit. A synchronous restart could wait for
+    # this very request to drain, so return an acknowledgement only. A later
+    # chat turn checks the recovered unit/listener/HTTP endpoint.
+    restarted = _server_command(["systemctl", "--no-block", "restart", service], timeout=10)
+    if not restarted.get("ok"):
+        return json.dumps({
+            "zustand": "error", "detail": "systemctl restart ist fehlgeschlagen.",
+            "service": service, "restart": restarted,
+        }, ensure_ascii=False)
+
+    return json.dumps({
+        "zustand": "restart_requested_unverified",
+        "detail": "systemd hat den nicht blockierenden Neustart angenommen. Der Chat-Aufruf kann den Neustart nicht selbst bestaetigen; nach Wiederverbindung server_status erneut aufrufen.",
+        "service": service, "port": port, "previous_pid": main_pid,
+        "restart": restarted,
     }, ensure_ascii=False)
 
 
@@ -2378,7 +2485,8 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "server_status": {
         "description": (
             "Liest den festen Zustand des Werkstatt-Webdienstes: systemd-Unit, "
-            "Listener auf Port 8001, dazugehoerige Prozesse sowie HEAD und "
+            "Listener und HTTP-Erreichbarkeit auf dem manifestierten Port, "
+            "dazugehoerige Prozesse sowie HEAD und "
             "Git-Status. Rein lesend; beendet/startet keine Prozesse. Fuer "
             "Loop-Checkpoint zusaetzlich loop_status verwenden."
         ),
@@ -2398,6 +2506,21 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
         },
         "fn": _server_logs,
         "mode": "read",
+    },
+    "server_restart": {
+        "description": (
+            "Fuehrt auf ausdrueckliche Nutzeranweisung einen kontrollierten Neustart "
+            "der zum aktiven Projektmanifest gehoerenden systemd-Unit aus. Blockiert "
+            "bei aktivem/unbekanntem Loop, unklarer Unit, abweichender Listener-PID "
+            "oder fehlendem Prozess. Nutzt systemctl --no-block, damit der Chat-Request "
+            "nicht auf den Neustart seines eigenen Webdienstes wartet. Das Ergebnis ist "
+            "immer unbestaetigt; nach Wiederverbindung server_status fuer die Verifikation "
+            "nutzen. Nur bei explizitem Neustartauftrag aufrufen."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+        "fn": _server_restart,
+        "mode": "write",
+        "reflection_allowed": False,
     },
     "read_file": {
         "description": (

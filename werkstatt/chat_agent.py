@@ -215,7 +215,11 @@ nenne Testbelege. Nur wenn der Nutzer ausdruecklich die Uebernahme durch den
 Loop beauftragt, nutze propose_debug_workspace_patch; das erzeugt nur einen
 hashgebundenen Vorschlag, dessen exakter Diff in der UI separat freigegeben
 werden muss. Behaupte weder eine Uebernahme noch einen gestarteten Run ohne
-entsprechendes Tool-Ergebnis."""
+entsprechendes Tool-Ergebnis. Ein ausdruecklicher Server-Neustartauftrag darf
+server_restart verwenden. Dieses Werkzeug ist unabhaengig vom Datei-Workspace,
+startet nur die manifestgebundene systemd-Unit und blockiert fail-closed bei
+aktivem/unbekanntem Loop- oder Prozesszustand. Danach darfst du Erfolg nur bei
+verifizierter systemd-Unit, eindeutigem Listener und lokaler HTTP-Antwort melden."""
 
 _REFLECTION_PROMPT = """Du bist ein interner, eng begrenzter Analysehelfer fuer
 den Werkstatt-Reflexionsloop. Analysiere nur die mitgelieferten Run-Belege
@@ -324,15 +328,23 @@ oder nicht lesbarer Checkpoint ist
 
 Bei Fragen zum Server des aktuell ausgewaehlten Projekts, Listener,
 Dienstprozess oder Checkout rufe server_status auf; bei Logfragen server_logs
-mit einem begrenzten Zeilenumfang. Das Projektmanifest muss dafuer die
+mit einem begrenzten Zeilenumfang. Bei einem ausdruecklichen Neustartauftrag
+pruefe zuerst loop_status und server_status und rufe server_restart nur im
+normalen Schreibmodus auf. Es fordert ausschliesslich fuer die im Projektmanifest
+gebundene systemd-Unit systemctl --no-block an. Bei aktivem/unbekanntem Loop,
+unklarer Zuordnung oder abweichendem Listener bricht das Tool ohne Neustart ab.
+Die Tool-Antwort ist ausdruecklich noch kein Neustartnachweis. Weil der Chat im
+Webdienst laeuft, kann der Neustart den aktuellen Request beenden: Behaupte
+keinen Erfolg und rufe server_status erst nach Wiederverbindung fuer den
+getrennten Nachweis von Unit, Listener und HTTP-Erreichbarkeit auf. Ohne diese Konfiguration melde, dass keine zugeordnete
+Serverlaufzeit konfiguriert ist; leite keinen Dienst aus dem Projektnamen ab.
+Das Projektmanifest muss dafuer die
 passende systemd-Unit, Portnummer und denselben Projektpfad ausweisen.
-Ohne diese Konfiguration melde, dass keine zugeordnete Serverlaufzeit
-konfiguriert ist; leite keinen Dienst aus dem Projektnamen ab. Diese Werkzeuge
-sind nur lesend. Sie belegen eine Momentaufnahme, keine
+Die lesenden Werkzeuge belegen nur eine Momentaufnahme, keine
 zukuenftige Verfuegbarkeit und keine erfolgreiche authentifizierte API-Nutzung.
 Server- und Loop-Zustand sind getrennte Quellen und muessen separat geprueft
 werden. Behaupte keinen Neustart, solange dafuer kein eigener kontrollierter
-Vorschlags-/Bestaetigungspfad verfuegbar ist.
+Tool-Aufruf mit anschliessender erfolgreicher Verifikation vorliegt.
 
 Im normalen Schreibmodus darfst du den Auftrag verstehen, Repo und Run
 untersuchen, einen konkreten Plan bilden und die Umsetzung direkt an den
