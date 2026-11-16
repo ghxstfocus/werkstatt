@@ -337,8 +337,11 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
         def __init__(self, project: str, session_id: str) -> None:
             calls["parent"] = (project, session_id)
 
-        def snapshot_to(self, target_session_id: str) -> object:
+        def snapshot_to(
+            self, target_session_id: str, *, at_seq: int | None = None,
+        ) -> object:
             calls["snapshot"] = target_session_id
+            calls["snapshot_seq"] = at_seq
             return object()
 
         def get_job_turn(self, _job_id: str) -> dict[str, str] | None:
@@ -404,6 +407,7 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     assert "test_expected" in calls["message"]
     assert "Keep the public API stable" in calls["message"]
     assert calls["deleted"] == calls["snapshot"]
+    assert calls["snapshot_seq"] == 0
     assert calls["job_turn"]
     assert state.llm_calls == 2
     assert calls["max_rounds"] == reflection_chat.REFLECTION_CHAT_MAX_CALLS - 1
@@ -432,6 +436,7 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     assert "read_file-Auszug" in calls["message"]
     assert audit_events[0][0] == "loop_reflection_chat_model_request"
     assert audit_events[0][1]["evidence_sha256"]
+    assert audit_events[0][1]["origin_history_snapshot_seq"] == 0
     assert audit_events[0][1]["request_sha256"] == "b" * 64
     assert audit_events[0][2] == "alpha-run-1"
 
@@ -493,7 +498,8 @@ def test_exhausted_run_chat_reserve_is_separately_bounded(
         def get_job_turn(self, _job_id: str):
             return None
 
-        def snapshot_to(self, _job_id: str):
+        def snapshot_to(self, _job_id: str, *, at_seq: int | None = None):
+            assert at_seq == 0
             return object()
 
         def delete_snapshot(self, _job_id: str) -> bool:

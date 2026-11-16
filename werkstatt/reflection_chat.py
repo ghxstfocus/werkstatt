@@ -464,9 +464,12 @@ def ask_project_chat_for_builder_task(
             parsed_prior["source_evidence"] = verified_prior
             return parsed_prior
         # A prior process may have died with only a partial branch snapshot.
-        # Rebuild it from the same immutable parent transcript before retrying.
+        # Rebuild an empty, isolated branch before retrying: the recovery Chat
+        # gets the explicit run evidence below, and can fetch additional
+        # project facts through its read-only tools. Copying the user's recent
+        # conversation here would mix unrelated turns into a role handoff.
         parent.delete_snapshot(job_id)
-        worker = parent.snapshot_to(job_id)
+        worker = parent.snapshot_to(job_id, at_seq=0)
         from werkstatt.audit import audit
         from werkstatt.chat_agent import chat_loop
         from werkstatt.chat_tools import CHAT_TOOLS
@@ -499,6 +502,7 @@ def ask_project_chat_for_builder_task(
                     "project": project,
                     "session_id": session_id,
                     "task_id": str(task.get("id", "")),
+                    "origin_history_snapshot_seq": 0,
                     "evidence_sha256": evidence_hash,
                     "evidence_prompt_span": {
                         "unit": "unicode_codepoints",
