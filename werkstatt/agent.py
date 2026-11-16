@@ -250,7 +250,7 @@ def _rolle_aus_aufgabe(aufgabe: str) -> str:
     """Mappt stabile Rollenlabels; freie Task-Namen bleiben unbekannt."""
     label = (aufgabe or "").strip().lower().replace("_", "-")
     if label in {"architect", "planner", "builder", "reviewer",
-                 "reflection", "explorer", "scout", "debugger"}:
+                 "reflection", "explorer", "scout", "debugger", "chat"}:
         return label
     if label.startswith("planner-"):
         return "planner"
@@ -329,8 +329,22 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
         if _enforce_run_budget(state):
             return LLMReply(ok=False, error=state.budget_exhausted_reason)
         state.llm_calls += 1
-    if aufgabe in _EVIDENCE_REQUIRED_ROLES:
+    _task_role = _rolle_aus_aufgabe(aufgabe)
+    _routed_role = _rolle_aus_aufgabe(rolle) if rolle else _task_role
+    _evidence_roles = {
+        candidate
+        for candidate in (_task_role, _routed_role)
+        if candidate in _EVIDENCE_REQUIRED_ROLES
+    }
+    if _evidence_roles:
         missing: list[str] = []
+        explicit_role_mismatch = bool(
+            rolle
+            and _task_role in _EVIDENCE_REQUIRED_ROLES
+            and _routed_role != _task_role
+        )
+        if len(_evidence_roles) > 1 or explicit_role_mismatch:
+            missing.append("role_identity_mismatch")
         if state is None:
             missing.append("run_state")
         budget_event = (
@@ -338,13 +352,16 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             if isinstance(context_manifest, dict)
             else None
         )
-        expected_budget_events = _ROLE_CONTEXT_BUDGET_EVENTS[aufgabe]
+        expected_budget_events = frozenset().union(*(
+            _ROLE_CONTEXT_BUDGET_EVENTS[role]
+            for role in _evidence_roles
+        ))
         if (
             not isinstance(budget_event, str)
             or budget_event not in expected_budget_events
         ):
             missing.append("context_manifest.budget_event")
-        if aufgabe in _ROLE_CONTEXT_DIGEST_REQUIRED:
+        if _evidence_roles & _ROLE_CONTEXT_DIGEST_REQUIRED:
             expected_user_sha256 = hashlib.sha256(
                 user_content.encode("utf-8")
             ).hexdigest()

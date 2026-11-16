@@ -269,6 +269,131 @@ def test_role_request_rejects_another_roles_budget_manifest(monkeypatch, tmp_pat
     assert blocked[0]["expected_budget_events"] == ["builder_context_budget"]
 
 
+def test_explicit_role_cannot_bypass_context_requirement(monkeypatch, tmp_path):
+    state = mk_state(project_dir=tmp_path, project_name="role-only-context")
+    provider_calls = []
+    events = []
+    monkeypatch.setattr(
+        agent,
+        "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests,
+        "post",
+        lambda *_args, **_kwargs: provider_calls.append(True),
+    )
+
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt="system",
+        user_content="builder work",
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="custom-task-label",
+        rolle="builder",
+    )
+
+    assert reply.ok is False
+    assert reply.error == (
+        "role_context_evidence_missing; provider request was not sent"
+    )
+    assert provider_calls == []
+    blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
+    assert blocked[0]["expected_budget_events"] == ["builder_context_budget"]
+
+
+def test_role_identity_mismatch_blocks_before_provider(monkeypatch, tmp_path):
+    state = mk_state(project_dir=tmp_path, project_name="role-mismatch")
+    provider_calls = []
+    events = []
+    monkeypatch.setattr(
+        agent,
+        "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests,
+        "post",
+        lambda *_args, **_kwargs: provider_calls.append(True),
+    )
+    manifest = {
+        "budget_event": "planner_architect_context_budget",
+        "user_sha256": hashlib.sha256(b"builder task").hexdigest(),
+        "system_sha256": hashlib.sha256(b"system").hexdigest(),
+    }
+
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt="system",
+        user_content="builder task",
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="builder",
+        rolle="architect",
+        context_manifest=manifest,
+    )
+
+    assert reply.ok is False
+    assert provider_calls == []
+    blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
+    assert blocked[0]["missing"] == ["role_identity_mismatch"]
+    assert blocked[0]["expected_budget_events"] == [
+        "builder_context_budget", "planner_architect_context_budget",
+    ]
+
+
+def test_evidence_role_cannot_be_routed_to_unknown_or_chat(monkeypatch, tmp_path):
+    for explicit_role in ("unknown-role", "chat"):
+        state = mk_state(
+            project_dir=tmp_path / explicit_role,
+            project_name="role-mismatch",
+        )
+        state.project_dir.mkdir(parents=True)
+        provider_calls = []
+        events = []
+        monkeypatch.setattr(
+            agent,
+            "audit",
+            lambda kind, payload, *_args, events=events, **_kwargs: (
+                events.append((kind, payload))
+            ),
+        )
+        monkeypatch.setattr(
+            agent.requests,
+            "post",
+            lambda *_args, provider_calls=provider_calls, **_kwargs: (
+                provider_calls.append(True)
+            ),
+        )
+
+        reply = agent.ask_llm(
+            api_key="test-key",
+            system_prompt="system",
+            user_content="builder task",
+            model="deepseek-chat",
+            temperature=0.0,
+            state=state,
+            aufgabe="builder",
+            rolle=explicit_role,
+            context_manifest={
+                "budget_event": "builder_context_budget",
+                "user_sha256": hashlib.sha256(b"builder task").hexdigest(),
+                "system_sha256": hashlib.sha256(b"system").hexdigest(),
+            },
+        )
+
+        assert reply.ok is False
+        assert provider_calls == []
+        blocked = [
+            payload for kind, payload in events
+            if kind == "llm_context_blocked"
+        ]
+        assert blocked[0]["missing"] == ["role_identity_mismatch"]
+
+
 def test_builder_request_rejects_manifest_for_different_user_context(
     monkeypatch, tmp_path,
 ):

@@ -442,6 +442,7 @@ def test_llm_usage_hat_stabile_rolle_ohne_agent_zu_ueberschreiben(tmp_path):
             context_manifest={
                 "budget_event": "planner_split_context_budget",
                 "user_sha256": hashlib.sha256(b"USER").hexdigest(),
+                "system_sha256": hashlib.sha256(b"SYS").hexdigest(),
             },
         )
 
@@ -472,6 +473,7 @@ def test_builder_request_overrides_reasoner_to_flash_and_disables_thinking(tmp_p
             context_manifest={
                 "budget_event": "builder_context_budget",
                 "user_sha256": hashlib.sha256(b"USR").hexdigest(),
+                    "system_sha256": hashlib.sha256(b"SYS").hexdigest(),
             },
         )
 
@@ -499,6 +501,7 @@ def test_architect_request_uses_pro_thinking_without_temperature(tmp_path):
             context_manifest={
                 "budget_event": "planner_architect_context_budget",
                 "user_sha256": hashlib.sha256(b"USR").hexdigest(),
+                    "system_sha256": hashlib.sha256(b"SYS").hexdigest(),
             },
         )
 
