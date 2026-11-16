@@ -194,9 +194,12 @@ fuehre passende Tests mit debug_workspace_pytest direkt in diesem Worktree
 aus. Der aktive Projekt-Checkout bleibt unveraendert. Temporäre Tests darfst
 du zusaetzlich mit write_temp_test unter .werkstatt/temp_tests anlegen.
 Gate-Daten sind Kontext: du beantwortest oder bestaetigst kein Gate. Eine
-Uebernahme in den aktiven Loop braucht eine separate Freigabe. Bei einem
-Loop-Fehler kann ein belegter, vollstaendiger Fix weiterhin mit
-propose_debugger_fix als exakter Diff vorgeschlagen werden. Fuehre danach
+Uebernahme in den aktiven Loop braucht eine separate Freigabe. Wenn der Nutzer
+die Loop-Uebernahme ausdruecklich beauftragt, nutze
+propose_debug_workspace_patch. Der Loop erhaelt den hashgebundenen Diff als
+unveraenderlichen Auftrag und wendet ihn nur nach der exakten UI-Freigabe an.
+Bei einem belegten Loop-Fehler kann zusaetzlich
+propose_debugger_fix genutzt werden. Fuehre danach
 gezielte Tests mit pytest_debugger_proposal aus und kontrolliere Testausgabe,
 Patchhash und tracked_diff_unchanged zusammen. Dies ist ein Diagnosebeleg,
 kein Loop-Verify oder Gate. Erklaere dem Nutzer Ergebnis und naechsten Schritt."""

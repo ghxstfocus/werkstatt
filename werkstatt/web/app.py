@@ -1967,6 +1967,14 @@ def create_app() -> FastAPI:
                             status_code=404,
                             detail="Debugger-Fix gehoert zu anderem Projekt",
                         )
+                    if (
+                        fix.source_kind == "chat_session"
+                        and fix.source_chat_session_id != sid
+                    ):
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Debugger-Diff gehoert zu einer anderen Chat-Session",
+                        )
                     ok, detail = validate_debugger_fix_checkout(
                         fix,
                         _PROJECTS_BASE / projekt,

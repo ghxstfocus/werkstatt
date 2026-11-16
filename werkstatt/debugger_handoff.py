@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import uuid
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -59,11 +59,29 @@ class DebuggerFix:
     project: str
     run_id: str
     base_head: str
+    source_kind: str = "loop_run"
+    source_chat_session_id: str | None = None
+
+    def _hash_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "signatur": self.signatur,
+            "ursache_tag": self.ursache_tag,
+            "diff": self.diff,
+            "betroffene_dateien": list(self.betroffene_dateien),
+            "confidence": self.confidence,
+            "project": self.project,
+            "run_id": self.run_id,
+            "base_head": self.base_head,
+        }
+        if self.source_kind == "chat_session":
+            payload["source_kind"] = self.source_kind
+            payload["source_chat_session_id"] = self.source_chat_session_id
+        return payload
 
     @property
     def patch_hash(self) -> str:
         encoded = json.dumps(
-            asdict(self),
+            self._hash_payload(),
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -71,11 +89,7 @@ class DebuggerFix:
         return hashlib.sha256(encoded).hexdigest()
 
     def to_payload(self) -> dict[str, Any]:
-        return {
-            **asdict(self),
-            "betroffene_dateien": list(self.betroffene_dateien),
-            "patch_hash": self.patch_hash,
-        }
+        return {**self._hash_payload(), "patch_hash": self.patch_hash}
 
 
 def _safe_path(raw: Any) -> str:
@@ -179,7 +193,10 @@ def parse_debugger_fix(payload: Mapping[str, Any]) -> DebuggerFix:
         "base_head",
         "patch_hash",
     }
-    if set(payload) != required:
+    chat_source_fields = {"source_kind", "source_chat_session_id"}
+    if frozenset(payload) not in {
+        frozenset(required), frozenset(required | chat_source_fields),
+    }:
         raise DebuggerFixError("DebuggerFix hat fehlende oder unerwartete Felder.")
 
     signatur = payload["signatur"]
@@ -187,6 +204,8 @@ def parse_debugger_fix(payload: Mapping[str, Any]) -> DebuggerFix:
     diff = payload["diff"]
     project = payload["project"]
     run_id = payload["run_id"]
+    source_kind = payload.get("source_kind", "loop_run")
+    source_chat_session_id = payload.get("source_chat_session_id")
     base_head = payload["base_head"]
     confidence = payload["confidence"]
     files = payload["betroffene_dateien"]
@@ -197,12 +216,29 @@ def parse_debugger_fix(payload: Mapping[str, Any]) -> DebuggerFix:
         raise DebuggerFixError("ursache_tag ist ungueltig.")
     if not isinstance(project, str) or not _PROJECT.fullmatch(project):
         raise DebuggerFixError("Projektname ist ungueltig.")
-    if (
-        not isinstance(run_id, str)
-        or not run_id.startswith(project + "-")
-        or not _RUN_SUFFIX.fullmatch(run_id[len(project) + 1 :])
-    ):
-        raise DebuggerFixError("run_id muss zum Projekt gehoeren.")
+    if source_kind == "loop_run":
+        if source_chat_session_id is not None:
+            raise DebuggerFixError("Loop-Run-Debugger darf keine Chat-Session tragen.")
+        if (
+            not isinstance(run_id, str)
+            or not run_id.startswith(project + "-")
+            or not _RUN_SUFFIX.fullmatch(run_id[len(project) + 1 :])
+        ):
+            raise DebuggerFixError("run_id muss zum Projekt gehoeren.")
+    elif source_kind == "chat_session":
+        if (
+            not isinstance(source_chat_session_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", source_chat_session_id)
+        ):
+            raise DebuggerFixError("Chat-Session-Quelle ist ungueltig.")
+        expected_internal_id = (
+            f"{project}-chat-"
+            f"{hashlib.sha256(source_chat_session_id.encode('utf-8')).hexdigest()[:32]}"
+        )
+        if run_id != expected_internal_id:
+            raise DebuggerFixError("Interne Debug-Workspace-ID stimmt nicht mit Session ueberein.")
+    else:
+        raise DebuggerFixError("Debugger-Quelle ist unbekannt.")
     if not isinstance(base_head, str) or not _HEX_HEAD.fullmatch(base_head):
         raise DebuggerFixError("base_head muss ein voller Git-Commit-Hash sein.")
     if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
@@ -232,6 +268,8 @@ def parse_debugger_fix(payload: Mapping[str, Any]) -> DebuggerFix:
         project=project,
         run_id=run_id,
         base_head=base_head,
+        source_kind=source_kind,
+        source_chat_session_id=source_chat_session_id,
     )
     if not isinstance(payload["patch_hash"], str) or payload["patch_hash"] != fix.patch_hash:
         raise DebuggerFixError("Patch-Hash stimmt nicht mit dem freizugebenden Inhalt ueberein.")
@@ -246,23 +284,36 @@ def parse_debugger_loop_task(value: str) -> DebuggerFix | None:
         return None
     if not isinstance(payload, dict) or payload.get("type") != "debugger_fix":
         return None
+    version = payload.get("schema_version")
     if (
-        payload.get("schema_version") != 1
-        or payload.get("approval") != "exact_diff_hash"
+        payload.get("approval") != "exact_diff_hash"
+        or isinstance(version, bool)
+        or version not in {1, 2}
     ):
         raise DebuggerFixError("Debugger-Loop-Vertrag hat eine unbekannte Version.")
     try:
-        return parse_debugger_fix({
+        fix_payload = {
             "signatur": payload["signatur"],
             "ursache_tag": payload["ursache_tag"],
             "diff": payload["diff"],
             "betroffene_dateien": payload["betroffene_dateien"],
             "confidence": payload["confidence"],
             "project": payload["project"],
-            "run_id": payload["source_run_id"],
             "base_head": payload["base_head"],
             "patch_hash": payload["patch_hash"],
-        })
+        }
+        if version == 1:
+            fix_payload["run_id"] = payload["source_run_id"]
+        else:
+            if payload.get("source_kind") != "chat_session":
+                raise DebuggerFixError("Debugger-Loop-Vertrag hat keine Chat-Quelle.")
+            fix_payload["source_kind"] = "chat_session"
+            fix_payload["source_chat_session_id"] = payload["source_chat_session_id"]
+            fix_payload["run_id"] = (
+                f"{payload['project']}-chat-"
+                f"{hashlib.sha256(str(payload['source_chat_session_id']).encode('utf-8')).hexdigest()[:32]}"
+            )
+        return parse_debugger_fix(fix_payload)
     except KeyError as exc:
         raise DebuggerFixError(
             "Debugger-Loop-Vertrag enthaelt nicht alle Pflichtfelder."
@@ -278,10 +329,17 @@ def create_debugger_fix(
     betroffene_dateien: list[str],
     confidence: float,
     project: str,
-    run_id: str,
+    run_id: str | None,
     base_head: str,
+    source_chat_session_id: str | None = None,
 ) -> DebuggerFix:
     """Erzeugt einen geprueften Fix und berechnet dessen Freigabe-Hash."""
+    source_kind = "chat_session" if source_chat_session_id is not None else "loop_run"
+    if source_chat_session_id is not None:
+        run_id = (
+            f"{project}-chat-"
+            f"{hashlib.sha256(source_chat_session_id.encode('utf-8')).hexdigest()[:32]}"
+        )
     fix = DebuggerFix(
         signatur=signatur,
         ursache_tag=ursache_tag,
@@ -289,21 +347,22 @@ def create_debugger_fix(
         betroffene_dateien=tuple(betroffene_dateien),
         confidence=confidence,
         project=project,
-        run_id=run_id,
+        run_id=str(run_id or ""),
         base_head=base_head,
+        source_kind=source_kind,
+        source_chat_session_id=source_chat_session_id,
     )
     return parse_debugger_fix(fix.to_payload())
 
 
 def debugger_fix_loop_task(fix: DebuggerFix) -> str:
     """Formatiert den freigegebenen Fix als unveraenderlichen Loop-Auftrag."""
-    payload = {
+    payload: dict[str, Any] = {
         "type": "debugger_fix",
-        "schema_version": 1,
+        "schema_version": 2 if fix.source_kind == "chat_session" else 1,
         "approval": "exact_diff_hash",
         "patch_hash": fix.patch_hash,
         "project": fix.project,
-        "source_run_id": fix.run_id,
         "base_head": fix.base_head,
         "signatur": fix.signatur,
         "ursache_tag": fix.ursache_tag,
@@ -317,6 +376,11 @@ def debugger_fix_loop_task(fix: DebuggerFix) -> str:
             "Inhalt nur nach einer neuen ausdruecklichen Freigabe."
         ),
     }
+    if fix.source_kind == "chat_session":
+        payload["source_kind"] = fix.source_kind
+        payload["source_chat_session_id"] = fix.source_chat_session_id
+    else:
+        payload["source_run_id"] = fix.run_id
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 

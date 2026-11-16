@@ -14,6 +14,7 @@ from werkstatt.debugger_handoff import (
     DebuggerFixError,
     cleanup_debugger_workspace,
     debugger_fix_loop_patches,
+    debugger_fix_loop_task,
     materialize_debugger_workspace,
     parse_debugger_fix,
     parse_debugger_loop_task,
@@ -67,6 +68,33 @@ def test_debugger_fix_hash_binds_exact_diff_and_context() -> None:
     changed = {**payload, "diff": _DIFF.replace("value = 2", "value = 3")}
     with pytest.raises(DebuggerFixError, match="Patch-Hash"):
         parse_debugger_fix(changed)
+
+
+def test_chat_workspace_fix_uses_explicit_session_provenance() -> None:
+    from werkstatt.debugger_handoff import create_debugger_fix
+
+    fix = create_debugger_fix(
+        signatur="chat-workspace-test",
+        ursache_tag="chat_debug_workspace",
+        diff=_DIFF,
+        betroffene_dateien=["werkstatt/sample.py"],
+        confidence=0.8,
+        project="demo",
+        run_id=None,
+        base_head=_HEAD,
+        source_chat_session_id="chat-session-123",
+    )
+
+    assert fix.source_kind == "chat_session"
+    assert fix.source_chat_session_id == "chat-session-123"
+    parsed = parse_debugger_loop_task(debugger_fix_loop_task(fix))
+    assert parsed == fix
+    assert parsed is not None and parsed.run_id.startswith("demo-chat-")
+
+    forged = json.loads(debugger_fix_loop_task(fix))
+    forged["source_chat_session_id"] = "other-session"
+    with pytest.raises(DebuggerFixError):
+        parse_debugger_loop_task(json.dumps(forged))
 
 
 @pytest.mark.parametrize(
@@ -154,6 +182,8 @@ def test_create_debugger_fix_builds_hash_and_loop_task() -> None:
 
 
 def test_debugger_loop_patch_records_are_derived_from_exact_diff(tmp_path: Path) -> None:
+    from werkstatt.debugger_handoff import create_debugger_fix
+
     project = tmp_path / "project"
     project.mkdir()
     subprocess.run(["git", "init", str(project)], check=True, capture_output=True)
@@ -169,7 +199,17 @@ def test_debugger_loop_patch_records_are_derived_from_exact_diff(tmp_path: Path)
         ["git", "-C", str(project), "rev-parse", "HEAD"],
         check=True, capture_output=True, text=True,
     ).stdout.strip()
-    fix = parse_debugger_fix(_payload(base_head=head))
+    fix = create_debugger_fix(
+        signatur="chat-loop-patch",
+        ursache_tag="chat_debug_workspace",
+        diff=_DIFF,
+        betroffene_dateien=["werkstatt/sample.py"],
+        confidence=0.9,
+        project="demo",
+        run_id=None,
+        base_head=head,
+        source_chat_session_id="debugger-session",
+    )
 
     patches = debugger_fix_loop_patches(fix, project)
 
@@ -189,6 +229,8 @@ def test_debugger_loop_patch_records_are_derived_from_exact_diff(tmp_path: Path)
 
 
 def test_chat_patch_is_written_only_to_detached_debug_worktree(tmp_path: Path) -> None:
+    from werkstatt.debugger_handoff import create_debugger_fix
+
     project = tmp_path / "project"
     project.mkdir()
     subprocess.run(["git", "init", str(project)], check=True, capture_output=True)
@@ -204,7 +246,17 @@ def test_chat_patch_is_written_only_to_detached_debug_worktree(tmp_path: Path) -
         ["git", "-C", str(project), "rev-parse", "HEAD"],
         check=True, capture_output=True, text=True,
     ).stdout.strip()
-    fix = parse_debugger_fix(_payload(base_head=head))
+    fix = create_debugger_fix(
+        signatur="chat-workspace-handoff",
+        ursache_tag="chat_debug_workspace",
+        diff=_DIFF,
+        betroffene_dateien=["werkstatt/sample.py"],
+        confidence=0.9,
+        project="demo",
+        run_id=None,
+        base_head=head,
+        source_chat_session_id="debug-session-1",
+    )
     proposal_id = "b" * 32
 
     workspace = materialize_debugger_workspace(fix, project, proposal_id)

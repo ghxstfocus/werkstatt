@@ -237,9 +237,11 @@ def test_approved_debugger_diff_is_not_reinterpreted_as_busy_run_followup(
         betroffene_dateien=["sample.py"],
         confidence=0.9,
         project="demo",
-        run_id="demo-source-run",
+        run_id=None,
         base_head=head,
+        source_chat_session_id="1" * 32,
     )
+    assert fix.source_kind == "chat_session"
     db_path = tmp_path / "sessions.db"
     monkeypatch.setattr(app_modul, "_PROJECTS_BASE", tmp_path)
     monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db_path)
@@ -283,6 +285,33 @@ def test_approved_debugger_diff_is_not_reinterpreted_as_busy_run_followup(
         event["kind"] == "loop_action_not_started"
         for event in session.load()
     )
+
+    other_session_fix = create_debugger_fix(
+        signatur="sample-other-session",
+        ursache_tag="failed_test",
+        diff=diff,
+        betroffene_dateien=["sample.py"],
+        confidence=0.9,
+        project="demo",
+        run_id=None,
+        base_head=head,
+        source_chat_session_id="other-session",
+    )
+    other_proposal_id = "3" * 32
+    session.append("loop_action_proposed", {
+        "proposal_id": other_proposal_id,
+        "project": "demo",
+        "action": "start",
+        "arguments": {"debugger_fix": other_session_fix.to_payload()},
+        "summary": "Mismatched session patch",
+        "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+    })
+    mismatch = TestClient(app_modul.app).post(
+        f"/api/projects/demo/chat/actions/{other_proposal_id}",
+        json={"session_id": session_id, "decision": "confirm"},
+    )
+    assert mismatch.status_code == 409
+    assert "anderen Chat-Session" in mismatch.json()["detail"]
 
 
 def test_confirmed_start_replays_handoff_after_request_crash(

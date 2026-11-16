@@ -1,8 +1,9 @@
 """Projektgebundene Tool-Registry fuer den Chat-Agent.
 
-Repo-Tools bleiben read-only. request_loop_action speichert ausschliesslich
-einen befristeten Vorschlag; die Ausfuehrung verlangt eine separate UI-Freigabe.
-Kein write_file/apply_patch/git_commit/shell_exec.
+Der aktive Repo-Checkout bleibt read-only; Debug-Modus schreibt nur in einen
+isolierten Session-Worktree. Loop-Aktionen werden als befristeter Vorschlag
+gespeichert und verlangen eine separate UI-Freigabe. Kein freies
+write_file/apply_patch/git_commit/shell_exec.
 """
 from __future__ import annotations
 
@@ -1338,6 +1339,100 @@ def _debug_workspace_pytest(args: dict[str, Any]) -> str:
         return json.dumps({"status": "error", "detail": str(exc)[:1000]}, ensure_ascii=False)
 
 
+def _propose_debug_workspace_patch(args: dict[str, Any]) -> str:
+    """Prepare an exact-diff Loop proposal from this chat's Debug worktree."""
+    session_id = _CHAT_SESSION_ID_KONTEXT.get()
+    project = _PROJEKTNAME_KONTEXT.get()
+    if not session_id:
+        return json.dumps({"status": "error", "detail": "Chat-Session fehlt."}, ensure_ascii=False)
+    try:
+        from datetime import UTC, datetime, timedelta
+
+        from werkstatt.debug_workspace import debug_diff
+        from werkstatt.debugger_handoff import (
+            DebuggerFixError,
+            create_debugger_fix,
+            materialize_debugger_workspace,
+            validate_debugger_fix_checkout,
+        )
+        workspace, base_head = _debug_workspace(args)
+        source_root = _DEBUGGER_WORKTREE_ROOT_KONTEXT.get() or _aktives_projekt_dir()
+        current = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=source_root, capture_output=True, text=True,
+            check=True, timeout=_TIMEOUT_GIT_S,
+        ).stdout.strip()
+        if base_head != current:
+            return json.dumps({
+                "status": "stale_base",
+                "detail": "Debug-Workspace basiert nicht mehr auf dem aktuellen Projekt-HEAD.",
+                "workspace_base_head": base_head,
+                "current_head": current,
+            }, ensure_ascii=False)
+        diff_info = debug_diff(workspace)
+        diff = diff_info.get("diff")
+        files = sorted(set(
+            list(diff_info.get("changed_files") or [])
+            + list(diff_info.get("untracked_files") or [])
+        ))
+        if not isinstance(diff, str) or not diff.strip() or not files:
+            return json.dumps({"status": "no_changes", "detail": "Debug-Worktree enthaelt keinen uebergebbaren Diff."}, ensure_ascii=False)
+        if diff_info.get("truncated"):
+            return json.dumps({"status": "too_large", "detail": "Diff ist gekuerzt; fuer genaue Freigabe muss er unter das Debugger-Limit gebracht werden."}, ensure_ascii=False)
+        confidence = args.get("confidence")
+        if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+            return json.dumps({"status": "invalid", "detail": "confidence muss eine Zahl sein."}, ensure_ascii=False)
+        summary = args.get("summary")
+        if not isinstance(summary, str) or not summary.strip() or len(summary) > 240:
+            return json.dumps({"status": "invalid", "detail": "summary muss 1 bis 240 Zeichen enthalten."}, ensure_ascii=False)
+        fix = create_debugger_fix(
+            signatur="chat-debug-" + hashlib.sha256(
+                summary.strip().encode("utf-8"),
+            ).hexdigest()[:12],
+            ursache_tag="chat_debug_workspace",
+            diff=diff,
+            betroffene_dateien=files,
+            confidence=float(confidence),
+            project=project,
+            run_id=None,
+            base_head=base_head,
+            source_chat_session_id=session_id,
+        )
+        valid, reason = validate_debugger_fix_checkout(
+            fix, source_root, expected_project=project,
+        )
+        if not valid:
+            return json.dumps({"status": "stale_base", "detail": reason}, ensure_ascii=False)
+        proposal_id = uuid.uuid4().hex
+        materialize_debugger_workspace(fix, source_root, proposal_id)
+        now = datetime.now(UTC)
+        proposal = {
+            "proposal_id": proposal_id,
+            "action": "start",
+            "arguments": {"debugger_fix": fix.to_payload()},
+            "debug_workspace_prepared": True,
+            "workspace_diff_sha256": diff_info["diff_sha256"],
+            "summary": f"Chat-Debugdiff fuer Loop freigeben: {summary.strip()}",
+            "task_preview": (
+                f"Exakter Diff · {len(files)} Datei(en) · "
+                f"Basis {base_head[:12]} · Confidence {fix.confidence:.0%}"
+            ),
+            "selection_reason": {
+                "kind": "chat_debug_workspace_diff",
+                "summary": "Der Chat hat den aktuellen, hashgebundenen Worktree-Diff vorbereitet.",
+            },
+            "project": project,
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(minutes=15)).isoformat(),
+        }
+        from werkstatt.chat_session import ChatSession
+
+        ChatSession(project, session_id).append("loop_action_proposed", proposal)
+        return json.dumps({"status": "proposal", **proposal}, ensure_ascii=False)
+    except (DebuggerFixError, OSError, RuntimeError, TypeError, ValueError, subprocess.SubprocessError) as exc:
+        return json.dumps({"status": "error", "detail": str(exc)[:1000]}, ensure_ascii=False)
+
+
 def _diagnose(_args: dict[str, Any]) -> str:
     return json.dumps({
         "bekannte_fehlerklassen": [
@@ -2239,6 +2334,26 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["path"],
         },
         "fn": _debug_workspace_pytest,
+        "mode": "debugger",
+    },
+    "propose_debug_workspace_patch": {
+        "description": (
+            "Erstellt einen befristeten Loop-Startvorschlag aus dem "
+            "hashgebundenen Diff des aktuellen Debug-Worktrees. Verlangt "
+            "aktuellen Basis-HEAD, prueft den Diff und bereitet ihn in einem "
+            "separaten Worktree vor. Die UI zeigt den exakten Diff und fordert "
+            "eine eigene ausdrueckliche Freigabe; es wird nichts gestartet. "
+            "Nur verwenden, wenn der Nutzer die Loop-Uebernahme beauftragt."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "maxLength": 240},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            },
+            "required": ["summary", "confidence"],
+        },
+        "fn": _propose_debug_workspace_patch,
         "mode": "debugger",
     },
     "propose_debugger_fix": {

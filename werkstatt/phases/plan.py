@@ -1,6 +1,7 @@
 """Phase: _phase_plan_and_preflight (OP-139 Phase 2b)."""
 from __future__ import annotations
 
+import hashlib
 import time
 
 from werkstatt.render import (
@@ -101,7 +102,17 @@ def _phase_plan_and_preflight(
                 "loop_debugger_fix_plan",
                 {
                     "patch_hash": debugger_fix.patch_hash,
-                    "source_run_id": debugger_fix.run_id,
+                    "source_kind": debugger_fix.source_kind,
+                    "source_run_id": (
+                        debugger_fix.run_id
+                        if debugger_fix.source_kind == "loop_run" else None
+                    ),
+                    "source_chat_session_sha256": (
+                        hashlib.sha256(
+                            debugger_fix.source_chat_session_id.encode("utf-8"),
+                        ).hexdigest()
+                        if debugger_fix.source_chat_session_id else None
+                    ),
                     "files": list(debugger_fix.betroffene_dateien),
                 },
                 pd,

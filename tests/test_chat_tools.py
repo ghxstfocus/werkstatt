@@ -33,6 +33,7 @@ def test_chat_tools_registry_contains_project_actions() -> None:
         "pytest_debugger_proposal", "debug_workspace_open",
         "debug_workspace_read", "debug_workspace_write",
         "debug_workspace_diff", "debug_workspace_pytest",
+        "propose_debug_workspace_patch",
     })
     assert set(chat_tools.CHAT_TOOLS) == erwartet
 
@@ -57,17 +58,23 @@ def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
         "pytest_debugger_proposal", "debug_workspace_open",
         "debug_workspace_read", "debug_workspace_write",
         "debug_workspace_diff", "debug_workspace_pytest",
+        "propose_debug_workspace_patch",
     } <= debugger_names
-    assert len(debugger_names) == 23
+    assert len(debugger_names) == 24
 
 
-def test_debug_chat_writes_and_tests_only_in_session_worktree(tmp_path: Path) -> None:
+def test_debug_chat_writes_and_tests_only_in_session_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     project = tmp_path / "project"
     project.mkdir()
     subprocess.run(["git", "init", str(project)], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(project), "config", "user.email", "test@example.invalid"], check=True)
     subprocess.run(["git", "-C", str(project), "config", "user.name", "Test"], check=True)
     subprocess.run(["git", "-C", str(project), "config", "core.autocrlf", "false"], check=True)
+    from werkstatt import chat_session
+
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: tmp_path / "chat.db")
     (project / "sample.py").write_bytes(b"value = 1\n")
     subprocess.run(["git", "-C", str(project), "add", "."], check=True)
     subprocess.run(["git", "-C", str(project), "commit", "-m", "base"], check=True, capture_output=True)
@@ -143,6 +150,25 @@ def test_debug_chat_writes_and_tests_only_in_session_worktree(tmp_path: Path) ->
     assert accepted_diff.betroffene_dateien == (
         "sample.py", "tests/test_generated_debug_regression.py",
     )
+
+    proposal = json.loads(chat_tools.execute_tool(
+        "propose_debug_workspace_patch",
+        {"summary": "Fix sample regression", "confidence": 0.9}, **context,
+    ))
+    assert proposal["status"] == "proposal"
+    fix_payload = proposal["arguments"]["debugger_fix"]
+    assert fix_payload["source_kind"] == "chat_session"
+    assert fix_payload["source_chat_session_id"] == "session-123"
+    from werkstatt.debugger_handoff import (
+        cleanup_debugger_workspace,
+        debugger_fix_loop_task,
+        parse_debugger_fix,
+        parse_debugger_loop_task,
+    )
+
+    fix = parse_debugger_fix(fix_payload)
+    assert parse_debugger_loop_task(debugger_fix_loop_task(fix)) == fix
+    cleanup_debugger_workspace(fix, project, proposal["proposal_id"])
 
     worktree_root = project.parent / ".werkstatt-chat-workspaces" / "demo"
     matches = [
