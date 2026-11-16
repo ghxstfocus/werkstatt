@@ -11,6 +11,7 @@
     "auftrag_bereits_erfuellt",
     "auftrag_bereits_erfuellt_bestaetigt",
     "auftrag_bereits_erfuellt_quelle",
+    "budget_exhausted_reason",
     "last_reject_kind",
     "last_reject_reason",
     "last_verify_errors",

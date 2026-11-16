@@ -7489,5 +7489,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 # 2026-11-16 – Chat-Recovery-Aufgabenname unverändert an Builder übergeben (lokal)
 - **Befund:** Der Reflection-Chat-Validator akzeptiert Aufgabennamen bis 240 Zeichen; der Phase-End-Reflection-Kern kappte denselben Namen vor dem Builder auf 200 Zeichen. Damit war die Chat-Aufgabe am Übergabepunkt nicht mehr identisch.
 - **Änderung:** Das unbeabsichtigte Kürzen wurde entfernt. Regression übergibt einen 240-Zeichen-Aufgabennamen und vergleicht den exakten Wert am Builder-Eingang.
-- **Verifikation lokal:** `Reflection-Chat-/Reflection-Gruppe: 32 bestanden.
+- **Verifikation lokal:** Reflection-Chat-/Reflection-Gruppe: 32 bestanden.
 - **Grenze / Hauptziel:** Belegt ist nur die Erhaltung des Aufgabennamens auf diesem Handoff, nicht die semantische Korrektheit aller Recovery-Aufträge. Servernachweis fehlt; OP-398/405 bleiben offen.
+# 2026-11-16 – Planner-Kontextregressionen an vollständige Handoffs anpassen (lokal)
+- **Befund:** Die Main-CI für `3144ffd` zeigte drei veraltete Tests, die die inzwischen entfernten starren 2500-Zeichen-Cuts verlangten, sowie einen State-Flow-Baseline-Drift durch das aktuelle RunState-Feld `budget_exhausted_reason`.
+- **Änderung:** Die Quelltexttests wurden durch eine Verhaltensregression zur vollständigen Extraktion langer Architect-Abschnitte ersetzt; bestehende Planner-Requesttests verifizieren weiterhin den vollständigen Modellkontext. Die Baseline wurde mit `tools/state_flow.py --write-baseline` reproduzierbar aktualisiert.
+- **Verifikation lokal:** Planner-/State-Flow-Gruppe: 38 bestanden, 3 übersprungen; Ruff, State-Flow-, Audit-, Control-, strikter Doku-Drift und Diff-Check bestanden. Die Windows-Vollsuite brach separat im `pytest-timeout`-Capture ab (260 Tests bis dahin), also kein Vollsuite-Nachweis.
+- **Grenze / Hauptziel:** CI für den korrigierten Stand steht aus; OP-398/405 bleiben offen.
