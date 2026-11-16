@@ -9,9 +9,15 @@ import sys
 
 import pytest
 
-from tools.pytest_annotations import pytest_runtest_logreport  # noqa: F401
-
 sys.path.insert(0, "/opt/werkstatt")
+
+
+@pytest.hookimpl
+def pytest_runtest_logreport(report):
+    """Forward bounded failures to GitHub Actions annotations."""
+    from tools.pytest_annotations import pytest_runtest_logreport as annotate
+
+    annotate(report)
 
 
 @pytest.fixture(autouse=True)

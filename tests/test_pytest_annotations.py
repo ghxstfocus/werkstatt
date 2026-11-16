@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import sys
 from types import SimpleNamespace
 
 import pytest
 
 from tools import pytest_annotations
 from tools.pytest_annotations import emit_annotations
+
+
+def test_conftest_registers_pytest_failure_hook() -> None:
+    conftest = sys.modules["conftest"]
+    hook = conftest.pytest_runtest_logreport
+    assert getattr(hook, "pytest_impl", None) is not None
 
 
 def test_junit_failures_become_bounded_github_annotations(
