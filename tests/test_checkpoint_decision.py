@@ -208,6 +208,37 @@ def test_run_coordinator_dispatches_one_task_at_a_time(tmp_path) -> None:
     assert final["next_executor"] is None
 
 
+def test_coordinator_audit_payload_includes_task_verify_evidence() -> None:
+    from werkstatt.loop import _coordinator_decision_audit_payload
+
+    verification = {
+        "required_task_count": 2,
+        "current_count": 1,
+        "reverify_possible_count": 0,
+        "unverifiable_count": 1,
+        "current": ["task-1"],
+        "current_omitted_count": 0,
+        "reverify_possible": [],
+        "reverify_possible_omitted_count": 0,
+        "unverifiable": ["task-2"],
+        "unverifiable_omitted_count": 0,
+    }
+
+    payload = _coordinator_decision_audit_payload(
+        "demo-run-1",
+        {
+            "decision": "reject_criteria_verify_scope_missing",
+            "coordinator_action": "reject_checkpoint",
+            "criteria_task_verification": verification,
+            "private_prompt": "must not be copied",
+        },
+    )
+
+    assert payload["run_id"] == "demo-run-1"
+    assert payload["criteria_task_verification"] == verification
+    assert "private_prompt" not in payload
+
+
 def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     tmp_path,
 ) -> None:

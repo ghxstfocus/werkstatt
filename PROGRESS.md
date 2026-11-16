@@ -7527,3 +7527,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Der Validator fuer erforderliche Promptspannen blockiert nun auch explizit blockierte, fehlende, ausgelassene oder abgeschnittene Pflichtabschnitte. Der Block wird als `llm_context_blocked` mit Abschnittskennung und Status auditiert; Provider bleibt unangetastet. Optionale Auslassungen bleiben davon unberuehrt.
 - **Verifikation lokal:** Agent-/Loop-Ask-LLM-Gruppe: 52 bestanden; Ruff, Mypy fuer `agent.py`, Audit-Drift und Control-Drift bestanden.
 - **Grenze / Hauptziel:** Dies erkennt Widersprueche zwischen Vollstaendigkeitsattest und Manifest, bewertet aber nicht, ob die Auswahl der als Pflicht deklarierten Inhalte semantisch angemessen oder irrelevante Inhalte wirksam genug ausgefiltert sind. Keine Server-/Produktionsverifikation; OP-405 bleibt offen.
+
+# 2026-11-16 – Kriterien-Verify-Entscheidung auch im Control-Audit ablegen (lokal)
+- **Befund:** Der RunRecord und Chat-Status enthielten den begrenzten Snapshot der taskgebundenen Verify-Belege. Das separate `loop_run_coordinator_decision`-Ereignis, das Control zur Erklaerung der Entscheidung zeigt, liess diesen Beleg weg.
+- **Aenderung:** Das Koordinator-Audit-Payload enthaelt jetzt denselben Snapshot. Ein whitelisted Projektionstest belegt, dass der Snapshot verfuegbar ist und beliebige Zusatzfelder (einschliesslich moeglicher Promptinhalte) nicht in das Ereignis kopiert werden.
+- **Verifikation lokal:** Checkpoint-/Chat-/Loop-Gruppe: 124 bestanden, 2 uebersprungen; Ruff, Mypy fuer `loop.py`, Audit-Drift, Control-Drift und strikter Doku-Drift bestanden.
+- **Grenze / Hauptziel:** Der Snapshot dokumentiert Taskbelegstatus, nicht die semantische Angemessenheit der Verify-Stage. Server-/Produktionsnachweis fehlt; OP-396/397/398 bleiben offen.

@@ -626,6 +626,28 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
     }
 
 
+def _coordinator_decision_audit_payload(
+    run_id: str, decision: dict[str, Any],
+) -> dict[str, Any]:
+    """Project bounded coordinator evidence into the Control audit event."""
+    payload: dict[str, Any] = {
+        "run_id": run_id,
+        "decision": decision.get("decision"),
+        "action": decision.get("coordinator_action"),
+        "reason": decision.get("reason"),
+        "next_task_id": decision.get("next_task_id"),
+        "next_executor": decision.get("next_executor"),
+        "verification_only": decision.get("verification_only"),
+        "stale_tasks_queued": decision.get("stale_tasks_queued"),
+        "task_progress": decision.get("task_progress"),
+        "criteria_task_coverage": decision.get("criteria_task_coverage"),
+    }
+    verification = decision.get("criteria_task_verification")
+    if isinstance(verification, dict):
+        payload["criteria_task_verification"] = verification
+    return payload
+
+
 def _persist_run_coordinator_decision(
     store: EventStore,
     project_name: str,
@@ -935,20 +957,7 @@ def _run_pipeline_loop_impl(
         decision = _run_coordinator_action(phase_state, state)
         audit(
             "loop_run_coordinator_decision",
-            {
-                "run_id": get_run_id(),
-                "decision": decision.get("decision"),
-                "action": decision.get("coordinator_action"),
-                "reason": decision.get("reason"),
-                "next_task_id": decision.get("next_task_id"),
-                "next_executor": decision.get("next_executor"),
-                "verification_only": decision.get("verification_only"),
-                "stale_tasks_queued": decision.get("stale_tasks_queued"),
-                "task_progress": decision.get("task_progress"),
-                "criteria_task_coverage": decision.get(
-                    "criteria_task_coverage",
-                ),
-            },
+            _coordinator_decision_audit_payload(get_run_id(), decision),
             state.project_dir,
             project_name,
         )
