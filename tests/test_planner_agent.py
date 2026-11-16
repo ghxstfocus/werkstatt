@@ -84,6 +84,63 @@ def test_planner_erstellt_plan(tmp_path):
         assert len(st.tasks) == 1
 
 
+def test_planner_can_yield_after_each_required_role(tmp_path, monkeypatch):
+    from werkstatt import planner
+
+    state = _state(tmp_path)
+    report = {
+        "ziel": "Baue Feature X",
+        "relevante_dateien": [{"pfad": "feature.py", "warum": "Ziel"}],
+        "api_auszug": {},
+        "vorgeschlagene_aenderungen": ["Implementiere Feature X"],
+        "risiken": [],
+        "auftrag_prosa": "Implementiere Feature X in feature.py.",
+        "bereits_erfuellt": False,
+        "atomarer_plan": False,
+    }
+    calls = {"scout": 0, "architect": 0, "split": 0}
+
+    monkeypatch.setattr(
+        planner, "_deterministic_entfernen_precheck", lambda _state: False,
+    )
+    monkeypatch.setattr(
+        planner, "_scout_route_decision", lambda *_args: (None, "needs_scout"),
+    )
+    monkeypatch.setattr(planner, "_baue_api_index", lambda _path: {})
+    monkeypatch.setattr(
+        planner, "_run_scout",
+        lambda *_args: calls.__setitem__("scout", calls["scout"] + 1) or report,
+    )
+    monkeypatch.setattr(
+        planner, "_scout_report_hat_architect_auftrag", lambda _report: True,
+    )
+    monkeypatch.setattr(planner, "_pruefe_api_widerspruch", lambda *_args: [])
+    monkeypatch.setattr(
+        planner, "_validate_contract_or_audit", lambda *_args: True,
+    )
+
+    def architect(*_args):
+        calls["architect"] += 1
+        state.architect_prosa = "## Plan\nImplementiere feature.py."
+        return True
+
+    def split(*_args, **_kwargs):
+        calls["split"] += 1
+        raise AssertionError("Planner-Split darf vor seinem Checkpoint nicht laufen")
+
+    monkeypatch.setattr(planner, "run_architect", architect)
+    monkeypatch.setattr(planner, "_zerlege_in_sub_tasks", split)
+    monkeypatch.setattr(planner, "audit", lambda *_args, **_kwargs: None)
+
+    assert planner.run_planner(state, stop_after_role="scout") is True
+    assert state.planner_step_yielded is True
+    assert calls == {"scout": 1, "architect": 0, "split": 0}
+
+    assert planner.run_planner(state, stop_after_role="architect") is True
+    assert state.planner_step_yielded is True
+    assert calls == {"scout": 2, "architect": 1, "split": 0}
+
+
 def test_plan_gate_recovery_reuses_architect_evidence_and_preserves_criteria(
     tmp_path, monkeypatch,
 ) -> None:

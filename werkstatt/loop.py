@@ -770,17 +770,33 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
             "preserve_failed_tasks_on_setup": preserve_failed_tasks_on_setup,
         }
     if not plan_checkpoint_current:
+        planner_role_stage = None
+        if (
+            phase_state is not None
+            and phase_state.run_id == state.run_id
+            and phase_data.get("planner_role_goal_sha256")
+            == hashlib.sha256(state.aufgabe.encode("utf-8")).hexdigest()
+        ):
+            candidate_stage = phase_data.get("planner_role_stage")
+            if candidate_stage in {"scout", "architect"}:
+                planner_role_stage = candidate_stage
+        next_role = {
+            None: "scout",
+            "scout": "architect",
+            "architect": "split",
+        }[planner_role_stage]
         return {
             "decision": "prepare_approved_work_graph",
-            "coordinator_action": "plan_preflight",
-            "reason": "plan_checkpoint_missing",
-            "next_executor": "planner_and_preflight",
+            "coordinator_action": f"planner_{next_role}",
+            "reason": f"planner_{next_role}_checkpoint_missing",
+            "next_executor": f"planner_{next_role}",
             "decision_basis": {
                 "setup_context_ready": True,
                 "setup_checkpoint_complete": setup_checkpoint_complete,
                 "plan_checkpoint_complete": plan_checkpoint_complete,
                 "plan_goal_matches": plan_goal_matches,
                 "task_count": task_count,
+                "planner_role_stage": planner_role_stage,
             },
         }
     from werkstatt.phases.tasks import _checkpoint_decision_payload
@@ -926,6 +942,9 @@ def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
         and task_count >= 0
     ):
         safe["task_count"] = task_count
+    role_stage = raw.get("planner_role_stage")
+    if role_stage in {"scout", "architect"}:
+        safe["planner_role_stage"] = role_stage
     return safe or None
 
 
@@ -1170,6 +1189,28 @@ def _persist_planning_response_cache(
         run_id=run_id,
         goal=goal,
     )
+    phase_state.save()
+
+
+def _persist_planner_role_stage(
+    phase_state: PhaseState,
+    role: str,
+    *,
+    run_id: str,
+    goal: str,
+) -> None:
+    """Persist one completed role boundary for same-run coordinator resume."""
+    if role not in {"scout", "architect"}:
+        raise ValueError("Ungueltiger Planner-Rollenstage")
+    if not run_id or not goal:
+        raise ValueError("Planner-Rollenstage braucht Run-ID und Ziel")
+    if phase_state.run_id not in (None, run_id):
+        raise RuntimeError("Planner-Rollenstage gehoert zu einem anderen Run")
+    phase_state.run_id = run_id
+    phase_state.data["planner_role_stage"] = role
+    phase_state.data["planner_role_goal_sha256"] = hashlib.sha256(
+        goal.encode("utf-8"),
+    ).hexdigest()
     phase_state.save()
 
 
@@ -1458,7 +1499,10 @@ def _run_pipeline_loop_impl(
             phase_state.save()
             state.coordinator_setup_context_ready = True
             continue
-        if action == "plan_preflight":
+        if action in {
+            "plan_preflight", "planner_scout", "planner_architect",
+            "planner_split",
+        }:
             if phase_state is None:
                 _persist_run_result(
                     EventStore(), project_name, get_run_id(), 1,
@@ -1485,6 +1529,11 @@ def _run_pipeline_loop_impl(
             state.planning_response_cache_callback = (
                 persist_planning_response_cache
             )
+            stop_after_role = {
+                "planner_scout": "scout",
+                "planner_architect": "architect",
+            }.get(action)
+            state.planner_stop_after_role = stop_after_role
             try:
                 _rc_plan, _done = _phase_plan_and_preflight(
                     state, aufgabe, project_name, phase_state,
@@ -1492,6 +1541,49 @@ def _run_pipeline_loop_impl(
             finally:
                 state.planner_checkpoint_callback = None
                 state.planning_response_cache_callback = None
+                state.planner_stop_after_role = None
+            if state.planner_step_yielded:
+                if stop_after_role not in {"scout", "architect"}:
+                    _persist_run_result(
+                        EventStore(), project_name, get_run_id(), 1,
+                        run_state=state, phase_state=phase_state,
+                    )
+                    return 1
+                try:
+                    _persist_planner_role_stage(
+                        phase_state,
+                        stop_after_role,
+                        run_id=get_run_id(),
+                        goal=aufgabe,
+                    )
+                except Exception as exc:
+                    audit(
+                        "loop_failed",
+                        {
+                            "reason": "planner_role_stage_persist_failed",
+                            "role": stop_after_role,
+                            "error": str(exc)[:300],
+                        },
+                        state.project_dir,
+                        project_name,
+                    )
+                    _persist_run_result(
+                        EventStore(), project_name, get_run_id(), 1,
+                        run_state=state, phase_state=phase_state,
+                    )
+                    return 1
+                audit(
+                    "loop_phase",
+                    {
+                        "phase": f"planner_{stop_after_role}",
+                        "status": "checkpoint",
+                        "role": stop_after_role,
+                    },
+                    state.project_dir,
+                    project_name,
+                )
+                check_run_lease(state)
+                continue
             if _done or _rc_plan != 0:
                 check_run_lease(state)
                 _persist_run_result(

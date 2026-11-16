@@ -2615,8 +2615,15 @@ def _scout_skip_target(aufgabe: str, explorer_ctx: object, project_dir) -> str |
     return _scout_route_decision(aufgabe, explorer_ctx, project_dir)[0]
 
 
-def run_planner(state: RunState) -> bool:
+def run_planner(
+    state: RunState,
+    *,
+    stop_after_role: str | None = None,
+) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
+    if stop_after_role not in {None, "scout", "architect"}:
+        raise ValueError("ungueltiger Planner-Rollengrenzpunkt")
+    state.planner_step_yielded = False
     pd = state.project_dir
     pn = state.project_name
     api_key = state.api_key
@@ -3117,6 +3124,15 @@ def run_planner(state: RunState) -> bool:
         audit("planner_atomarer_plan_verworfen",
               {"grund": _atomar_grund}, pd, pn)
 
+    # Der Run-Koordinator kann nach Scout neu entscheiden, statt Scout,
+    # Architect und Planner-Split als einen ununterbrochenen Planlauf zu
+    # erzwingen. Bei Resume werden fruehere Requests nur aus dem exakt
+    # gebundenen Antwortcache wiederhergestellt und ihre Parser/Gates erneut
+    # ausgefuehrt.
+    if stop_after_role == "scout":
+        state.planner_step_yielded = True
+        return True
+
     # 2026-11-05: Selbst-Check-Block ENTFERNT.
     # Regress: das Reasoning-Modell interpretiert "pruefe vor dem Senden"
     # als CoT-Trigger, verbraucht max_tokens=16000 mit Reasoning und
@@ -3157,6 +3173,10 @@ def run_planner(state: RunState) -> bool:
             _arch_prosa,
         )
         return False
+
+    if stop_after_role == "architect":
+        state.planner_step_yielded = True
+        return True
 
     # CALL 2: Planner (JSON aus Prosa)
     _key_files: list[str] = []

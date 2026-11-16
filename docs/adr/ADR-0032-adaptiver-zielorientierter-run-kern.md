@@ -511,9 +511,20 @@ post-redaction Providerpayload (einschliesslich Modellparametern und
 Kontextmanifesthash) sowie den Antworthash; die normalen Parser, Contracts und
 Gates laufen danach erneut. Das schliesst die Wiederholung ab persistiertem
 Response-Cache, nicht das kleine Crashfenster zwischen Providerantwort und
-Cache-Schreiben. Die Rollen sind weiterhin Teil der gebuendelten
-`plan_preflight`-Aktion; echte adaptive Rollen-Dispatch-Entscheidungen und
+Cache-Schreiben. Echte adaptive Rollen-Dispatch-Entscheidungen und
 Worker-Neustarttests bleiben erforderlich.
+
+Lokaler Folgeschritt (noch nicht serververifiziert): Der Run-Koordinator
+dispatcht Scout, Architect und Planner-Split als getrennte
+Planner-Aktionen; nach Scout und Architect endet die Aktion am Checkpoint und
+der Koordinator waehlt erneut. Der Stage-Marker ist an Run-ID und Zielhash
+gebunden. Nach Resume werden fruehere Rollenantworten aus dem exakten
+Providerrequest-Cache rekonstruiert und ihre Parser/Contracts erneut
+ausgefuehrt. Das trennt Kontroll- und Freigabegrenzen, aber noch nicht die
+gemeinsame Planner-Kontextaufbereitung oder die Rollenimplementierungen in
+unabhaengige Worker. Der naechste Umbau muss validierte, aktuelle
+Rollenartefakte als direkte Eingabe des jeweils naechsten Executors verwenden,
+damit eine spaetere Rollenaktion vorherige Rollen nicht erneut ausfuehrt.
 
 ## Konsequenzen
 

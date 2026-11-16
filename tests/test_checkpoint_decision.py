@@ -368,6 +368,8 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     phase = PhaseState("demo", base_dir=tmp_path)
     phase.init_new("Goal", [], tests=[], akzeptanzkriterien=[])
     phase.data["setup_complete"] = True
+    phase.run_id = "run-1"
+    state.run_id = "run-1"
     phase.save()
     resumed_phase = PhaseState("demo", base_dir=tmp_path)
     assert resumed_phase.load()
@@ -379,9 +381,33 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     assert resumed_setup["decision_basis"]["plan_checkpoint_complete"] is False
     state.coordinator_setup_context_ready = True
     assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
-        "plan_preflight"
+        "planner_scout"
     )
 
+    resumed_phase.data["planner_role_stage"] = "scout"
+    resumed_phase.data["planner_role_goal_sha256"] = hashlib.sha256(
+        b"Goal",
+    ).hexdigest()
+    assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
+        "planner_architect"
+    )
+    resumed_phase.data["planner_role_stage"] = "architect"
+    assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
+        "planner_split"
+    )
+    # Role-stage progress is run and goal scoped; a stale stage cannot skip
+    # the Scout on another run or a changed goal.
+    state.run_id = "other-run"
+    assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
+        "planner_scout"
+    )
+    state.run_id = "run-1"
+    state.aufgabe = "Other goal"
+    assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
+        "planner_scout"
+    )
+
+    state.aufgabe = "Goal"
     resumed_phase.data["plan_complete"] = True
     resumed_phase.save()
     final_phase = PhaseState("demo", base_dir=tmp_path)
@@ -401,6 +427,34 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     assert selected["coordinator_action"] == "execute_task_checkpoint"
     assert selected["next_task_id"] == "task-1"
     assert resumed_state.tasks[0]["id"] == "task-1"
+
+
+def test_planner_role_stage_persists_for_same_run_and_goal(tmp_path) -> None:
+    import pytest
+
+    from werkstatt.loop import (
+        _persist_planner_role_stage,
+        _run_coordinator_action,
+    )
+
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.data = {"project": "demo", "aufgabe": "Goal", "tasks": []}
+    _persist_planner_role_stage(
+        phase, "scout", run_id="run-1", goal="Goal",
+    )
+
+    resumed = PhaseState("demo", base_dir=tmp_path)
+    assert resumed.load()
+    state = RunState(aufgabe="Goal", run_id="run-1")
+    state.coordinator_setup_context_ready = True
+    decision = _run_coordinator_action(resumed, state)
+    assert decision["coordinator_action"] == "planner_architect"
+    assert decision["decision_basis"]["planner_role_stage"] == "scout"
+
+    with pytest.raises(ValueError, match="Rollenstage"):
+        _persist_planner_role_stage(
+            resumed, "builder", run_id="run-1", goal="Goal",
+        )
 
 
 def _deterministic_explorer_context(tmp_path):
@@ -466,7 +520,7 @@ def test_resume_reuses_only_fresh_deterministic_explorer_checkpoint(
     )
     decision = _run_coordinator_action(resumed_phase, resumed_state)
 
-    assert decision["coordinator_action"] == "plan_preflight"
+    assert decision["coordinator_action"] == "planner_scout"
     assert resumed_state.coordinator_setup_context_ready is True
     assert resumed_state.explorer_context == checkpoint["context"]
 

@@ -39,6 +39,38 @@ def _state(tmp_path: Path, **overrides) -> RunState:
     return RunState(**kw)
 
 
+def test_plan_phase_yields_to_coordinator_after_selected_planner_role(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from types import SimpleNamespace
+
+    from werkstatt.phases import plan
+
+    state = _state(tmp_path, planner_stop_after_role="scout")
+    phase_state = SimpleNamespace(data={}, exists=lambda: False)
+    calls = []
+
+    monkeypatch.setattr(plan, "_check_plan_gate_current", lambda _state: False)
+    monkeypatch.setattr("werkstatt.planner._preflight_scan", lambda _state: [])
+
+    def run_role(current, *, stop_after_role):
+        calls.append(stop_after_role)
+        current.planner_step_yielded = True
+        return True
+
+    monkeypatch.setattr(plan, "run_planner", run_role)
+    monkeypatch.setattr(plan, "audit", lambda *_args, **_kwargs: None)
+
+    rc, done = plan._phase_plan_and_preflight(
+        state, state.aufgabe, state.project_name, phase_state,
+    )
+
+    assert (rc, done) == (0, False)
+    assert calls == ["scout"]
+    assert state.planner_step_yielded is True
+
+
 def _audit_events(tmp_path: Path) -> list[dict]:
     logs = tmp_path / "audit-logs"
     if not logs.is_dir():

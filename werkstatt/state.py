@@ -165,6 +165,10 @@ class RunState:
     # Runtime hook used by the Run coordinator to persist role boundaries
     # while the planning phase is executing. Never serialized into PhaseState.
     planner_checkpoint_callback: Any = None
+    # The planner may yield after a role so the run coordinator can checkpoint
+    # and choose the next required role. These are transient dispatch fields.
+    planner_stop_after_role: str | None = None
+    planner_step_yielded: bool = False
     # Exact-prompt response cache for resumable planning calls. Run-scoped
     # entries are persisted in PhaseState, never in the shared RunRecord.
     planning_response_cache: dict[str, dict[str, Any]] = field(

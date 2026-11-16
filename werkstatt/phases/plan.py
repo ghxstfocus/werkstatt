@@ -246,9 +246,27 @@ def _phase_plan_and_preflight(
                     },
                     pd, pn,
                 )
-        if not run_planner(state):
+        if state.planner_stop_after_role is not None:
+            planner_ok = run_planner(
+                state, stop_after_role=state.planner_stop_after_role,
+            )
+        else:
+            planner_ok = run_planner(state)
+        if not planner_ok:
             audit("loop_planner_failed", {}, pd, pn)
             return 1, False
+        if state.planner_step_yielded:
+            audit(
+                "loop_phase",
+                {
+                    "phase": f"planner_{state.planner_stop_after_role}",
+                    "status": "checkpoint",
+                },
+                pd,
+                pn,
+            )
+            group_end()
+            return 0, False
         _plan_text = getattr(state, "architect_prosa", "") or ""
         audit("loop_plan_shown",
               {"plan_text": _plan_text[:80_000],
