@@ -57,6 +57,7 @@ from werkstatt.hooks import _call_hook  # Fix AZ Stufe 2: Re-Export
 from werkstatt.phase_state import PhaseState
 from werkstatt.phases import (  # Fix AZ Stufe 11: Re-Export
     _normalize_tasks,
+    _phase_end_review_action,
     _phase_explorer_and_setup,
     _phase_finalize,
     _phase_plan_and_preflight,
@@ -410,6 +411,60 @@ def _persist_run_result(
         )
 
 
+def _run_phase_end_review_checkpoint(
+    state: RunState,
+    phase_state: PhaseState,
+    project_name: str,
+) -> int:
+    """Run one review action and bind its result to the current worktree."""
+    check_run_lease(state)
+    tasks_ok = len([
+        record for record in phase_state.data.get("tasks", [])
+        if isinstance(record, dict) and record.get("status") == "done"
+    ])
+    review_rc = _phase_end_review_action(state, tasks_ok, phase_state)
+    if review_rc != 0:
+        return review_rc
+    from werkstatt.failure_record import _worktree_fingerprint
+
+    fingerprint = (
+        _worktree_fingerprint(Path(state.project_dir))
+        if state.project_dir else None
+    )
+    if fingerprint is None:
+        audit(
+            "loop_failed",
+            {"reason": "phase_end_review_fingerprint_unavailable"},
+            state.project_dir,
+            project_name,
+        )
+        return 1
+    try:
+        phase_state.record_phase_end_review(worktree_fingerprint=fingerprint)
+    except (AttributeError, ValueError) as exc:
+        audit(
+            "loop_failed",
+            {
+                "reason": "phase_end_review_checkpoint_invalid",
+                "error": str(exc)[:300],
+            },
+            state.project_dir,
+            project_name,
+        )
+        return 1
+    audit(
+        "loop_phase",
+        {
+            "phase": "phase_end_review",
+            "status": "checkpointed",
+            "worktree_sha256": fingerprint,
+        },
+        state.project_dir,
+        project_name,
+    )
+    return 0
+
+
 def _continue_followup_with_coordinator(
     project_name: str,
     state: RunState,
@@ -445,15 +500,26 @@ def _continue_followup_with_coordinator(
             return 1
 
         action = decision.get("coordinator_action")
+        if action == "phase_end_review":
+            review_rc = _run_phase_end_review_checkpoint(
+                state, phase_state, project_name,
+            )
+            if review_rc != 0:
+                return review_rc
+            continue
         if action == "finalize_run":
             tasks = state.tasks
             tasks_ok = len([
                 record for record in phase_state.data.get("tasks", [])
                 if isinstance(record, dict) and record.get("status") == "done"
             ])
-            return _phase_finalize(
+            rc = _phase_finalize(
                 state, tasks_ok, tasks, project_name, phase_state,
+                phase_review_checkpointed=True,
             )
+            if rc == 3:
+                continue
+            return rc
 
         if action not in {
             "execute_task_checkpoint",
@@ -1175,7 +1241,31 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
     elif decision.get("decision") == "replan_failed_criteria":
         action = "replan_failed_criteria"
     elif decision.get("next_executor") == "phase_end_verify":
-        action = "finalize_run"
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        worktree_fingerprint = (
+            _worktree_fingerprint(Path(state.project_dir))
+            if state.project_dir else None
+        )
+        review_current = bool(
+            phase_state is not None
+            and callable(getattr(
+                phase_state, "phase_end_review_is_current", None,
+            ))
+            and phase_state.phase_end_review_is_current(
+                worktree_fingerprint=worktree_fingerprint,
+            )
+        )
+        if review_current:
+            action = "finalize_run"
+        else:
+            action = "phase_end_review"
+            decision = {
+                **decision,
+                "decision": "run_phase_end_review",
+                "next_executor": "reviewer",
+                "reason": "phase_end_review_checkpoint_missing_or_stale",
+            }
     else:
         action = "reject_checkpoint"
     return {
@@ -1814,6 +1904,7 @@ def _run_pipeline_loop_impl(
     # Aktionen. Der Persistenzmarker entscheidet nach Resume erneut, was fehlt.
     tasks_ok = 0
     tasks = state.tasks
+    finalize_rc: int | None = None
     while True:
         check_run_lease(state)
         decision = _run_coordinator_action(phase_state, state)
@@ -2091,12 +2182,31 @@ def _run_pipeline_loop_impl(
                 run_state=state, phase_state=None,
             )
             return 1
+        if action == "phase_end_review":
+            review_rc = _run_phase_end_review_checkpoint(
+                state, phase_state, project_name,
+            )
+            if review_rc != 0:
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), review_rc,
+                    run_state=state, phase_state=phase_state,
+                )
+                return review_rc
+            continue
         if action == "finalize_run":
             tasks = state.tasks
             tasks_ok = len([
                 record for record in phase_state.data.get("tasks", [])
                 if isinstance(record, dict) and record.get("status") == "done"
             ])
+            check_run_lease(state)
+            finalize_rc = _phase_finalize(
+                state, tasks_ok, tasks, project_name, phase_state,
+                phase_review_checkpointed=True,
+            )
+            if finalize_rc == 3:
+                finalize_rc = None
+                continue
             break
         if action not in {
             "execute_task_checkpoint",
@@ -2199,7 +2309,7 @@ def _run_pipeline_loop_impl(
 
     # Finalize only after the current checkpoint explicitly requests it.
     check_run_lease(state)
-    rc = _phase_finalize(state, tasks_ok, tasks, project_name, phase_state)
+    rc = finalize_rc if finalize_rc is not None else 1
     return _finish_run_after_followups(
         project_name, state, phase_state, rc,
     )

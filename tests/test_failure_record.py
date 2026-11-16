@@ -632,7 +632,7 @@ def test_phase_finalize_stops_when_worktree_does_not_change_even_if_error_text_c
 
 
 
-def test_failure_record_does_not_fabricate_git_provenance(
+def test_failure_record_hashes_non_git_tree_without_git_provenance(
     tmp_path: Path, monkeypatch,
 ) -> None:
     project = tmp_path / "project"
@@ -654,11 +654,12 @@ def test_failure_record_does_not_fabricate_git_provenance(
 
     assert result["artifact_ref"]
     assert result["work_sha"] is None
-    assert result["worktree_fingerprint"] is None
+    assert isinstance(result["worktree_fingerprint"], str)
+    assert len(result["worktree_fingerprint"]) == 64
     artifact = artifact_root / result["artifact_ref"]
     persisted = json.loads(artifact.read_text(encoding="utf-8"))
     assert persisted["work_sha"] is None
-    assert persisted["worktree_fingerprint"] is None
+    assert persisted["worktree_fingerprint"] == result["worktree_fingerprint"]
 
 
 def test_git_output_marks_command_failure_as_unavailable(

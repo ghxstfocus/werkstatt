@@ -108,6 +108,7 @@ from ._common import (
 
 # Phasen-Funktionen
 from .explorer import _phase_explorer_and_setup as _phase_explorer_and_setup
+from .finalize import _phase_end_review_action as _phase_end_review_action
 from .finalize import _phase_finalize as _phase_finalize
 from .plan import _phase_plan_and_preflight as _phase_plan_and_preflight
 from .review import _phase_review_gate as _phase_review_gate

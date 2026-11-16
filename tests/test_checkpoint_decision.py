@@ -417,7 +417,7 @@ def test_coordinator_audit_payload_includes_task_verify_evidence() -> None:
 
 
 def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
-    tmp_path,
+    tmp_path, monkeypatch,
 ) -> None:
     from werkstatt.loop import _run_coordinator_action
 
@@ -498,7 +498,25 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
     final_phase = PhaseState("demo", base_dir=tmp_path)
     assert final_phase.load()
     decision = _run_coordinator_action(final_phase, state)
+    assert decision["coordinator_action"] == "phase_end_review"
+
+    worktree_fingerprint = "a" * 64
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _project_dir: worktree_fingerprint,
+    )
+    final_phase.record_phase_end_review(
+        worktree_fingerprint=worktree_fingerprint,
+    )
+    decision = _run_coordinator_action(final_phase, state)
     assert decision["coordinator_action"] == "finalize_run"
+
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _project_dir: "b" * 64,
+    )
+    decision = _run_coordinator_action(final_phase, state)
+    assert decision["coordinator_action"] == "phase_end_review"
 
     planned_phase = _phase(
         tmp_path / "planned",
@@ -540,6 +558,42 @@ def test_planner_role_stage_persists_for_same_run_and_goal(tmp_path) -> None:
         _persist_planner_role_stage(
             resumed, "builder", run_id="run-1", goal="Goal",
         )
+
+
+def test_phase_end_review_action_persists_current_worktree_evidence(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt.loop import _run_phase_end_review_checkpoint
+
+    phase = _phase(
+        tmp_path,
+        [{"id": "t1", "name": "Inspect", "action": "read"}],
+        [],
+    )
+    phase.run_id = "run-1"
+    phase.bind_approved_plan()
+    phase.save()
+    state = RunState(
+        aufgabe="Ziel",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+    )
+    fingerprint = "c" * 64
+    monkeypatch.setattr(
+        "werkstatt.loop._phase_end_review_action",
+        lambda *_args: 0,
+    )
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _project_dir: fingerprint,
+    )
+    monkeypatch.setattr("werkstatt.loop.check_run_lease", lambda _state: None)
+
+    assert _run_phase_end_review_checkpoint(state, phase, "demo") == 0
+    assert phase.phase_end_review_is_current(
+        worktree_fingerprint=fingerprint,
+    )
 
 
 def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(

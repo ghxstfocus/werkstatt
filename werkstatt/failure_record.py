@@ -46,7 +46,9 @@ def _worktree_fingerprint(project_dir: Path) -> str | None:
     """Hash tracked diffs and contents of non-ignored untracked files.
 
     Untracked contents are hashed, never persisted. Symlink targets are
-    hashed as link text and are not followed outside the project tree.
+    hashed as link text and are not followed outside the project tree. A
+    non-Git project gets a complete file-tree hash; Git command failures in
+    or above a Git checkout remain unavailable rather than guessed.
     """
     status = _git_output(
         project_dir, "status", "--porcelain=v1", "--untracked-files=all",
@@ -56,7 +58,21 @@ def _worktree_fingerprint(project_dir: Path) -> str | None:
         project_dir, "ls-files", "--others", "--exclude-standard", "-z",
     )
     if status is None or diff is None or untracked is None:
-        return None
+        root = project_dir.resolve()
+        if any((parent / ".git").exists() for parent in (root, *root.parents)):
+            return None
+        try:
+            version = subprocess.run(
+                ["git", "--version"],
+                capture_output=True,
+                timeout=2,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if version.returncode != 0:
+            return None
+        return _unversioned_tree_fingerprint(root)
     digest = hashlib.sha256(status + b"\0" + diff)
     root = project_dir.resolve()
     paths = sorted(part for part in untracked.split(b"\0") if part)
@@ -86,6 +102,44 @@ def _worktree_fingerprint(project_dir: Path) -> str | None:
             digest.update(b"<unavailable>")
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def _unversioned_tree_fingerprint(root: Path) -> str | None:
+    """Hash every regular file in a non-Git project without following links."""
+    digest = hashlib.sha256(b"werkstatt-unversioned-tree-v1\0")
+    try:
+        for directory, dirnames, filenames in os.walk(root, followlinks=False):
+            symlink_dirs = []
+            retained_dirs = []
+            for name in sorted(dirnames):
+                path = Path(directory) / name
+                if name in {".git", ".werkstatt"}:
+                    continue
+                if path.is_symlink():
+                    symlink_dirs.append(name)
+                else:
+                    retained_dirs.append(name)
+            dirnames[:] = retained_dirs
+            for name in sorted([*filenames, *symlink_dirs]):
+                path = Path(directory) / name
+                relative = path.relative_to(root).as_posix()
+                mode = path.lstat().st_mode
+                digest.update(relative.encode("utf-8", errors="surrogateescape"))
+                digest.update(b"\0")
+                if stat.S_ISLNK(mode):
+                    digest.update(b"symlink\0")
+                    digest.update(os.fsencode(os.readlink(path)))
+                elif stat.S_ISREG(mode):
+                    digest.update(b"file\0")
+                    with path.open("rb") as handle:
+                        while chunk := handle.read(1024 * 1024):
+                            digest.update(chunk)
+                else:
+                    digest.update(b"non-regular\0")
+                digest.update(b"\0")
+        return digest.hexdigest()
+    except OSError:
+        return None
 
 
 def _redact_excerpt(value: Any) -> str:
