@@ -9,6 +9,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from werkstatt.roles.builder_direct import build_direct_edit_plan
+
 
 @dataclass(frozen=True)
 class PlannerRoleDecision:
@@ -148,12 +150,23 @@ def architect_reasoning_route(
     return False, "explorer_belegte_routine_einzeldatei"
 
 
+def direct_builder_route_decision(
+    task: str, scout_skip_path: str | None, project_dir,
+) -> tuple[bool, str]:
+    """Select deterministic Builder planning only with a unique source proof."""
+    if scout_skip_path is None:
+        return False, "kein_belegtes_einzeldateiziel"
+    plan, reason = build_direct_edit_plan(task, scout_skip_path, project_dir)
+    return plan is not None, reason
+
+
 def choose_next_planner_role(
     *,
     scout_skip_path: str | None,
     completed_role: str | None = None,
     scout_already_fulfilled: bool = False,
     deterministic_task_graph_ready: bool = False,
+    direct_builder_ready: bool = False,
     architect_output_ready: bool = False,
     task_graph_ready: bool = False,
 ) -> PlannerRoleDecision:
@@ -170,6 +183,10 @@ def choose_next_planner_role(
         return PlannerRoleDecision(None, "scout_reports_goal_already_fulfilled")
     if deterministic_task_graph_ready:
         return PlannerRoleDecision(None, "validated_deterministic_task_graph_ready")
+    if direct_builder_ready:
+        return PlannerRoleDecision(
+            "builder_direct", "unique_source_bound_edit_ready",
+        )
 
     if completed_role is None:
         if scout_skip_path:

@@ -112,7 +112,9 @@ Rekursiv, max 2 Ebenen (M-469/M-470/M-471).
 Der Planner-Orchestrator bleibt in `werkstatt/planner.py`; deterministische
 Taskgraph-Validierung und -Sortierung liegt in `werkstatt/task_graph.py`.
 `werkstatt/roles/planner_dispatch.py` entscheidet anhand aktueller Checkpoint-
-Belege, welche Planner-Rolle benoetigt wird. Die Extraktion dieser Module
+Belege, welche Planner-Rolle benoetigt wird. Eine eindeutig AST-bestaetigte
+Python-Literalzuweisung kann schon am Run-Checkpoint an builder_direct
+geroutet werden und Architect/Split auslassen. Die Extraktion dieser Module
 loest die verbleibende lineare Run-Phasenfolge noch nicht vollstaendig ab;
 ADR-0032 beschreibt das Zielverhalten.
 

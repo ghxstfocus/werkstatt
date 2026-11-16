@@ -782,15 +782,22 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 planner_role_stage = candidate_stage
         from werkstatt.roles.planner_dispatch import (
             choose_next_planner_role,
+            direct_builder_route_decision,
             scout_route_decision,
         )
 
         scout_skip_target, scout_route_reason = scout_route_decision(
             state.aufgabe, state.explorer_context, state.project_dir,
         )
+        direct_builder_ready, direct_builder_reason = (
+            direct_builder_route_decision(
+                state.aufgabe, scout_skip_target, state.project_dir,
+            )
+        )
         planner_decision = choose_next_planner_role(
             scout_skip_path=scout_skip_target,
             completed_role=planner_role_stage,
+            direct_builder_ready=direct_builder_ready,
             architect_output_ready=planner_role_stage == "architect",
         )
         if planner_decision.role is None:
@@ -804,6 +811,7 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 "scout": "scout",
                 "architect": "architect",
                 "planner_split": "split",
+                "builder_direct": "direct",
             }[planner_decision.role]
             reason = (
                 "scout_skipped:" + scout_route_reason
@@ -827,6 +835,8 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 "planner_role_decision": planner_decision.role,
                 "planner_role_decision_reason": planner_decision.reason,
                 "scout_route_reason": scout_route_reason,
+                "direct_builder_ready": direct_builder_ready,
+                "direct_builder_reason": direct_builder_reason,
             },
         }
     from werkstatt.phases.tasks import _checkpoint_decision_payload
@@ -1563,7 +1573,7 @@ def _run_pipeline_loop_impl(
             continue
         if action in {
             "plan_preflight", "planner_scout", "planner_architect",
-            "planner_split",
+            "planner_split", "planner_direct",
         }:
             if phase_state is None:
                 _persist_run_result(
@@ -1613,6 +1623,7 @@ def _run_pipeline_loop_impl(
                 "planner_scout": "scout",
                 "planner_architect": "architect",
                 "planner_split": "planner_split",
+                "planner_direct": "builder_direct",
             }.get(action)
             state.planner_yielded_after_role = None
             try:

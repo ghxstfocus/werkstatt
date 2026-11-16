@@ -2333,6 +2333,17 @@ def run_planner(
         _direct_report, _direct_reason = _deterministic_literal_replace_plan(
             aufgabe, _scout_skip_path, pd,
         )
+        if (
+            getattr(state, "planner_action_role", None) == "builder_direct"
+            and _direct_report is None
+        ):
+            audit("planner_role_dispatch_decision", {
+                "next_role": None,
+                "reason": "direct_builder_source_evidence_changed",
+                "direct_builder_reason": _direct_reason,
+                "basis": "revalidated_current_target",
+            }, pd, pn)
+            return False
         if _direct_report is not None:
             _code_index = {}
             _scout_report = _direct_report

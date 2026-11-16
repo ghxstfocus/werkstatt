@@ -494,6 +494,22 @@ def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(
         "scout_skipped:explizite_einzeldatei_mit_explorer_beleg"
     )
 
+    source = tmp_path / "src" / "feature.py"
+    source.write_text("TIMEOUT = 10\n", encoding="utf-8")
+    state.explorer_context["key_files"][0]["source_sha256"] = (
+        hashlib.sha256(source.read_bytes()).hexdigest()
+    )
+    direct_goal = "Setze TIMEOUT in src/feature.py auf 30"
+    phase.data["aufgabe"] = direct_goal
+    phase.save()
+    state.aufgabe = direct_goal
+    direct_decision = _run_coordinator_action(phase, state)
+    assert direct_decision["coordinator_action"] == "planner_direct"
+    assert direct_decision["decision_basis"]["planner_role_decision"] == (
+        "builder_direct"
+    )
+    assert direct_decision["decision_basis"]["direct_builder_ready"] is True
+
 
 def _deterministic_explorer_context(tmp_path):
     source = tmp_path / "src" / "feature.py"

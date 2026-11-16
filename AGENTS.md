@@ -33,8 +33,10 @@ Danach entscheidet der Planner anhand Auftrag, Scope und Beleglage:
   Explorer bestaetigt wurde.
 - Architect fuer Aenderungen mit Design-, Abhaengigkeits- oder
   Mehrdatei-Entscheidungen. Er kann entfallen, wenn eine einzelne,
-  wortwoertliche Ersetzung im aktuellen Dateiinhalt eindeutig belegt ist
-  oder ein gepruefter atomarer Scout-Plan die Aenderung vollstaendig nennt.
+  wortwoertliche Ersetzung oder eine eindeutige Python-Literalzuweisung im
+  aktuellen Dateiinhalt eindeutig belegt ist oder ein gepruefter atomarer
+  Scout-Plan die Aenderung vollstaendig nennt. In diesen Faellen waehlt der
+  Checkpoint builder_direct; Mehrdeutigkeit eskaliert an die Rollen.
 - Der aktuelle Planner-Split ist nach dem Architect-Prosa-Plan der normale
   Schritt zur Erzeugung des Task-JSON; er ist kein Fallback. Deterministische
   Taskgraph-Pruefungen validieren anschliessend IDs, Kriterien und

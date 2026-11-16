@@ -5,6 +5,7 @@ import pytest
 from werkstatt.roles.planner_dispatch import (
     architect_reasoning_route,
     choose_next_planner_role,
+    direct_builder_route_decision,
 )
 
 
@@ -46,6 +47,14 @@ from werkstatt.roles.planner_dispatch import (
             "validated_deterministic_task_graph_ready",
         ),
         (
+            {
+                "scout_skip_path": "src/settings.py",
+                "direct_builder_ready": True,
+            },
+            "builder_direct",
+            "unique_source_bound_edit_ready",
+        ),
+        (
             {"scout_skip_path": None, "scout_already_fulfilled": True},
             None,
             "scout_reports_goal_already_fulfilled",
@@ -82,3 +91,20 @@ def test_planner_dispatch_rejects_unknown_completed_role() -> None:
         choose_next_planner_role(
             scout_skip_path=None, completed_role="builder",
         )
+
+
+def test_direct_builder_route_requires_current_unique_source_edit(tmp_path) -> None:
+    source = tmp_path / "src" / "settings.py"
+    source.parent.mkdir()
+    source.write_text("TIMEOUT = 10\n", encoding="utf-8")
+
+    assert direct_builder_route_decision(
+        "Setze TIMEOUT in src/settings.py auf 30",
+        "src/settings.py",
+        tmp_path,
+    ) == (True, "eindeutige_ast_literalzuweisung")
+    assert direct_builder_route_decision(
+        "Pruefe src/settings.py und erklaere die Ursache",
+        "src/settings.py",
+        tmp_path,
+    ) == (False, "kein_expliziter_literalersetzungsausdruck")
