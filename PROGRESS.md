@@ -8050,6 +8050,12 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation lokal:** Checkpoint-/Loop-Phasen-/Planner-Dispatch-/Rollenworker-Gruppe: 211 bestanden, 3 uebersprungen; Ruff, gezieltes Mypy, State-Flow-, Audit-, Control- und Doku-Drift sowie `git diff --check` bestanden.
 - **Grenze:** Noch keine Server- oder Vollsuite-Verifikation. Der Taskausfuehrungscode und Setup/Plan/Finalize bleiben in den bestehenden Phasenmodulen; OP-398 bleibt offen.
 
+# 2026-11-16 – CI-Timeout im Phase-End-Review-Fingerprint beseitigen
+- **Befund:** PR-CI lief bei einem Resume-Test in `_worktree_fingerprint` ins Timeout: Vor dem bisherigen Non-Git-Fallback wurden drei Git-Kommandos ausgefuehrt; der Fallback scannte danach potentiell den vollstaendigen Projektbaum.
+- **Aenderung:** Der Code prueft zuerst auf ein `.git`-Repository und liefert ohne Git-Provenienz keinen Worktree-Fingerprint. Der unbeschraenkte Dateibaum-Scan ist entfernt. Test-Fixtures mit gemockten Git-Ausgaben kennzeichnen ihr Repository explizit; der Resume-Test setzt seinen Fingerprint kontrolliert.
+- **Verifikation lokal:** Betroffene Failure-Record-, Resume- und Phase-End-Review-Tests: 7 bestanden; Ruff und `git diff --check` bestanden. Der PR-CI-Retest steht aus.
+- **Grenze:** Kein Vollsuite-, Server- oder Produktionsnachweis. Human-Gate, Phase-End-Verify und Commit bleiben im Finalizer gebuendelt; Setup/Plan/Task/Finalize sind noch nicht vollstaendig aus der festen Handlerstruktur herausgeloest. OP-398 bleibt offen.
+
 # 2026-11-16 – Abschluss-Follow-ups durch den Checkpoint-Koordinator ausfuehren
 - **Befund:** Ein bestaetigter Chat-Folgeauftrag, der waehrend des terminalen Compare-and-Swap eintraf, wurde nach seiner Planfreigabe ueber `_phase_tasks_loop` ohne aeussere Koordinatorentscheidungen abgearbeitet. `append_followup_tasks` aktualisierte zudem nicht den Fingerprint des genehmigten kombinierten Plans.
 - **Aenderung:** Das Anhängen bindet nun den kombinierten Taskgraph erneut an den bereits durch Plan- und Human-Gate freigegebenen Plan. Die Abschluss-Race-Verarbeitung bewertet den Checkpoint danach erneut, persistiert jede Dispatchentscheidung, reicht genau eine Aktion an den Task-Worker und finalisiert erst nach einer neuen `finalize_run`-Entscheidung.

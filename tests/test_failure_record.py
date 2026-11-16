@@ -15,6 +15,7 @@ def test_failure_record_persists_bounded_sanitized_verify_evidence(
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
+    (project / ".git").mkdir()
     artifact_root = tmp_path / "werkstatt"
     monkeypatch.setattr(failure_record, "_audit_root", lambda: artifact_root)
 
@@ -62,6 +63,7 @@ def test_failure_record_fingerprint_tracks_untracked_file_contents(
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
+    (project / ".git").mkdir()
     artifact_root = tmp_path / "werkstatt"
     untracked = project / "new_source.py"
     untracked.write_text("value = 1\n", encoding="utf-8")
@@ -97,6 +99,7 @@ def test_failure_record_hashes_untrusted_run_id_for_artifact_path(
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
+    (project / ".git").mkdir()
     artifact_root = tmp_path / "werkstatt"
     monkeypatch.setattr(failure_record, "_audit_root", lambda: artifact_root)
     monkeypatch.setattr(failure_record, "_git_output", lambda *_args: b"")
@@ -632,7 +635,7 @@ def test_phase_finalize_stops_when_worktree_does_not_change_even_if_error_text_c
 
 
 
-def test_failure_record_hashes_non_git_tree_without_git_provenance(
+def test_failure_record_does_not_fabricate_non_git_worktree_fingerprint(
     tmp_path: Path, monkeypatch,
 ) -> None:
     project = tmp_path / "project"
@@ -654,17 +657,18 @@ def test_failure_record_hashes_non_git_tree_without_git_provenance(
 
     assert result["artifact_ref"]
     assert result["work_sha"] is None
-    assert isinstance(result["worktree_fingerprint"], str)
-    assert len(result["worktree_fingerprint"]) == 64
+    assert result["worktree_fingerprint"] is None
     artifact = artifact_root / result["artifact_ref"]
     persisted = json.loads(artifact.read_text(encoding="utf-8"))
     assert persisted["work_sha"] is None
-    assert persisted["worktree_fingerprint"] == result["worktree_fingerprint"]
+    assert persisted["worktree_fingerprint"] is None
 
 
 def test_git_output_marks_command_failure_as_unavailable(
     tmp_path: Path, monkeypatch,
 ) -> None:
+    (tmp_path / ".git").mkdir()
+
     def fail(*_args, **_kwargs):
         raise subprocess.TimeoutExpired("git status", 1)
 
