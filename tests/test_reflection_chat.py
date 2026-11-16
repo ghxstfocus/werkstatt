@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -973,6 +974,98 @@ def test_phase_end_core_uses_chat_task_without_rewriting_reviewer_evidence(
         "severity": "high",
         "description": "Original phase-review evidence.",
     }]
+
+
+def test_phase_end_chat_recovery_uses_one_builder_call_for_its_scoped_task(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt import reviewer
+
+    state = _state(tmp_path)
+    state.reviewer_bugs = [
+        {"file": "werkstatt/one.py", "severity": "high", "description": "Bug one."},
+        {"file": "werkstatt/two.py", "severity": "high", "description": "Bug two."},
+    ]
+    state.applied_count = 0
+    builder_tasks: list[dict[str, Any]] = []
+
+    def run_builder(current):
+        builder_tasks.append(dict(current.aktuelle_task))
+        current.patches = [{"file": "werkstatt/one.py"}, {"file": "werkstatt/two.py"}]
+        return True
+
+    monkeypatch.setattr(reflection, "run_builder", run_builder)
+    monkeypatch.setattr(reflection, "check_run_lease", lambda _state: None)
+    monkeypatch.setattr(
+        reflection, "_apply_patches_with_diagnose",
+        lambda *_args, **_kwargs: (2, {}),
+    )
+    monkeypatch.setattr(reflection, "_verify_patches", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(reviewer, "run_phase_end_review", lambda _state: True)
+    monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
+
+    assert reflection._phase_end_reflection_core(
+        state,
+        builder_task_override={
+            "name": "Repair both review findings",
+            "description": "Apply both source-backed fixes together.",
+            "task_files": ["werkstatt/one.py", "werkstatt/two.py"],
+        },
+    ) is True
+    assert len(builder_tasks) == 1
+    assert builder_tasks[0]["task_files"] == [
+        "werkstatt/one.py", "werkstatt/two.py",
+    ]
+
+
+def test_phase_end_chat_recovery_stops_after_reserved_reviewer_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt import reviewer
+    from werkstatt.phases import review
+
+    state = _state(tmp_path)
+    state.reviewer_bugs = [{
+        "file": "werkstatt/sample.py", "severity": "high",
+        "description": "Still broken after repair.",
+    }]
+    state.applied_count = 0
+    calls = {"builder": 0, "reviewer": 0}
+
+    def run_builder(current):
+        calls["builder"] += 1
+        current.patches = [{"file": "werkstatt/sample.py"}]
+        return True
+
+    def run_review(_state):
+        calls["reviewer"] += 1
+        return False
+
+    monkeypatch.setattr(reflection, "run_builder", run_builder)
+    monkeypatch.setattr(reflection, "check_run_lease", lambda _state: None)
+    monkeypatch.setattr(
+        reflection, "_apply_patches_with_diagnose",
+        lambda *_args, **_kwargs: (1, {}),
+    )
+    monkeypatch.setattr(reflection, "_verify_patches", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(reviewer, "run_phase_end_review", run_review)
+    monkeypatch.setattr(review, "_phase_review_gate", lambda _state: 0)
+    monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
+
+    assert reflection._phase_end_reflection_core(
+        state,
+        builder_task_override={
+            "name": "One bounded repair",
+            "description": "Fix the finding.",
+            "task_files": ["werkstatt/sample.py"],
+        },
+    ) is False
+    assert calls == {"builder": 1, "reviewer": 1}
+    assert state.reflection_chat_stop_reason == (
+        "recovery_reserve_exhausted_after_review_rejection"
+    )
 
 
 def test_phase_end_does_not_expand_chat_scope_beyond_planned_files(

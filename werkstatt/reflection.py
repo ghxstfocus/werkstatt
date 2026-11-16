@@ -1233,30 +1233,35 @@ def _phase_end_reflection_core(
               {"runde": _runde + 1, "dateien": _bug_files}, pd, pn)
 
         _repaired = 0
-        for _datei in _bug_files:
+        builder_file_groups = (
+            [_bug_files] if builder_task_override is not None
+            else [[path] for path in _bug_files]
+        )
+        for _builder_files in builder_file_groups:
             # Bugs dieser Datei als Fehler-Kontext.
             _datei_bugs = [
                 b for b in bugs
-                if isinstance(b, dict) and b.get("file") == _datei
+                if isinstance(b, dict) and b.get("file") in _builder_files
             ]
             _bug_text = "; ".join(
                 f"[{b.get('severity')}] {b.get('description', '')}"
                 for b in _datei_bugs
             )
-            # Synthetischer Task.
-            task_override_applies = (
-                builder_task_override is not None
-                and _datei in task_override_files
-            )
+            task_override_applies = builder_task_override is not None
+            _datei = ",".join(_builder_files)
             state.aktuelle_task = {
-                "id": f"phase-fix-{_datei}",
+                "id": (
+                    f"phase-fix-{state.run_id or pn}"
+                    if task_override_applies
+                    else f"phase-fix-{_datei}"
+                ),
                 "name": (
                     str(task_override.get("name", ""))
                     if task_override_applies
                     else f"Phase-Fix: {_datei}"
                 ),
                 "action": "update",
-                "task_files": [_datei],
+                "task_files": list(_builder_files),
                 "description": (
                     str(task_override.get("description", ""))[:4_000]
                     if task_override_applies
@@ -1272,22 +1277,32 @@ def _phase_end_reflection_core(
             check_run_lease(state)
             if not _phase_builder_ok:
                 audit("loop_phase_reflection_builder_failed",
-                      {"datei": _datei, "runde": _runde + 1}, pd, pn)
+                      {"dateien": _builder_files,
+                       "runde": _runde + 1}, pd, pn)
+                if task_override_applies:
+                    return False
                 continue
             _patches = state.patches or []
             if not _patches:
                 audit("loop_phase_reflection_kein_patch",
-                      {"datei": _datei, "runde": _runde + 1}, pd, pn)
+                      {"dateien": _builder_files,
+                       "runde": _runde + 1}, pd, pn)
+                if task_override_applies:
+                    return False
                 continue
             _applied, _diag_phase = _apply_patches_with_diagnose(
                 state, _patches,
-                phase_label=f"phase-fix-{_datei}-r{_runde + 1}",
+                phase_label=(
+                    f"phase-chat-fix-r{_runde + 1}"
+                    if task_override_applies
+                    else f"phase-fix-{_datei}-r{_runde + 1}"
+                ),
             )
             state.applied_count = state.applied_count + _applied
             if _applied > 0:
-                _repaired += 1
+                _repaired += len(_builder_files)
                 audit("loop_phase_reflection_patch_applied",
-                      {"datei": _datei, "anzahl": _applied,
+                      {"dateien": _builder_files, "anzahl": _applied,
                        "runde": _runde + 1}, pd, pn)
 
         # Verify nach Repair.
@@ -1310,6 +1325,18 @@ def _phase_end_reflection_core(
             # Chat may advise after autonomous exhaustion, but cannot restart
             # work the user explicitly stopped or failed to authorize.
             state.reflection_chat_stop_reason = "human_gate_not_approved"
+            return False
+        if builder_task_override is not None:
+            state.reflection_chat_stop_reason = (
+                "recovery_reserve_exhausted_after_review_rejection"
+            )
+            audit(
+                "loop_phase_reflection_erschoepft",
+                {"runde": _runde + 1,
+                 "reason": state.reflection_chat_stop_reason,
+                 "builder_calls": 1, "reviewer_calls": 1},
+                pd, pn,
+            )
             return False
         if _runde == 1:
             # Die letzte j-Antwort ist eine explizite menschliche
