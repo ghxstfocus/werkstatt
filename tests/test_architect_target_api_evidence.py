@@ -387,11 +387,13 @@ def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_p
     prompts: list[str] = []
     contents: list[str] = []
     limits: list[int] = []
+    reasoning_modes: list[bool | None] = []
 
     def ask_llm(_key, system, content, **kwargs):
         prompts.append(system)
         contents.append(content)
         limits.append(kwargs["max_tokens"])
+        reasoning_modes.append(kwargs.get("reasoning_override"))
         return next(replies)
 
     state = SimpleNamespace(
@@ -401,6 +403,7 @@ def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_p
         scout_auftrag={},
         architect_execution_context="Auftrag pruefen.",
         architect_skills_block="",
+        architect_reasoning_enabled=False,
     )
     monkeypatch.setattr(architect, "_planner_system", lambda *_args: "System")
     monkeypatch.setattr(architect, "_with_spinner", lambda _label, fn: fn())
@@ -423,6 +426,7 @@ def test_architect_revises_plan_after_api_preflight_rejection(monkeypatch, tmp_p
         architect.ARCHITECT_MAX_TOKENS,
         architect.ARCHITECT_MAX_TOKENS,
     ]
+    assert reasoning_modes == [False, False]
     assert state.architect_prosa == (
         "Nutze `EventStore.append(event)` fuer das vorhandene API. " * 4
     ).strip()

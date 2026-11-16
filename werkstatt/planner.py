@@ -185,6 +185,7 @@ def _architect_input_fingerprint(
             state, "architect_execution_context_manifest", {},
         ),
         "model": _get_architect_model(),
+        "thinking": getattr(state, "architect_reasoning_enabled", True),
         "endpoint": DEEPSEEK_API_URL,
         "temperature": 0.2,
         "max_tokens": ARCHITECT_MAX_TOKENS,
@@ -2825,6 +2826,16 @@ def run_planner(
     _scout_skip_path, _scout_route_reason = _scout_route_decision(
         aufgabe, _explorer_ctx, pd,
     )
+    state.architect_reasoning_enabled = _scout_skip_path is None
+    audit("planner_architect_reasoning_route", {
+        "thinking": state.architect_reasoning_enabled,
+        "reason": (
+            "uncertain_or_broad_request"
+            if state.architect_reasoning_enabled
+            else "explicit_explorer_confirmed_single_file_request"
+        ),
+        "scout_route_reason": _scout_route_reason,
+    }, pd, pn)
     _scout_source = "Scout"
     _code_index: dict = {}
     _scout_input_sha256: str | None = None

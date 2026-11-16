@@ -450,7 +450,8 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
             max_tokens: int = 4096,
             redact: bool = True,
             progress_context: dict[str, Any] | None = None,
-            context_manifest: dict[str, Any] | None = None) -> LLMReply:
+            context_manifest: dict[str, Any] | None = None,
+            reasoning_override: bool | None = None) -> LLMReply:
     """Fragt das LLM.
 
     Auflage 2125: Wenn `state` uebergeben wird, zaehlt
@@ -458,7 +459,9 @@ def _ask_llm_impl(api_key: str, system_prompt: str, user_content: str,
     ob der Call erfolgreich ist. Fehlschlaege zaehlen
     ebenfalls (konservativ, Budget-Schutz).
     """
-    route = route_for_role(rolle or aufgabe, model)
+    route = route_for_role(
+        rolle or aufgabe, model, reasoning=reasoning_override,
+    )
     model = route.model
     is_scoped_recovery_worker = False
     run_budget_exhausted = False
@@ -1372,10 +1375,13 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             max_tokens: int = 4096,
             redact: bool = True,
             progress_context: dict[str, Any] | None = None,
-            context_manifest: dict[str, Any] | None = None) -> LLMReply:
+            context_manifest: dict[str, Any] | None = None,
+            reasoning_override: bool | None = None) -> LLMReply:
     """Oeffentliche LLM-API mit Progress-Events (OP-111)."""
     from werkstatt.render import _emit_progress
-    route = route_for_role(rolle or aufgabe, model)
+    route = route_for_role(
+        rolle or aufgabe, model, reasoning=reasoning_override,
+    )
     model = route.model
     _label = _aufgabe_zu_label(aufgabe)
     _context = _progress_context(state, progress_context)
@@ -1397,7 +1403,9 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
                ),
                "next_step": "Modellantwort verarbeiten und den Task fortsetzen.",
                "system_len": len(system_prompt),
-               "user_len": len(user_content)},
+               "user_len": len(user_content),
+               "thinking": route.thinking,
+               "reasoning_effort": route.reasoning_effort},
               state.project_dir, state.project_name)
     try:
         reply = _ask_llm_impl(
@@ -1406,6 +1414,7 @@ def ask_llm(api_key: str, system_prompt: str, user_content: str,
             rolle=rolle, heartbeat=heartbeat, max_tokens=max_tokens,
             redact=redact, progress_context=_context,
             context_manifest=context_manifest,
+            reasoning_override=reasoning_override,
         )
     except Exception as exc:
         _emit_progress(_label, "response_failed", str(exc)[:80])

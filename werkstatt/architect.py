@@ -1946,6 +1946,9 @@ def run_architect(
                 api_key, _prompt, _content,
                 model=_get_architect_model(),
                 temperature=0.2,
+                reasoning_override=getattr(
+                    state, "architect_reasoning_enabled", True,
+                ),
                 max_tokens=ARCHITECT_MAX_TOKENS,
                 aufgabe="architect", heartbeat=False, state=state,
                 context_manifest={

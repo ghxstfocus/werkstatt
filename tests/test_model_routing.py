@@ -51,6 +51,22 @@ def test_architect_uses_pro_thinking_for_legacy_reasoner_alias(
     assert route.reasoning_effort == "high"
 
 
+@pytest.mark.parametrize(
+    ("reasoning", "thinking", "effort"),
+    [(False, "disabled", None), (True, "enabled", "high")],
+)
+def test_role_can_override_thinking_from_checkpoint_decision(
+    reasoning: bool,
+    thinking: str,
+    effort: str | None,
+) -> None:
+    route = route_for_role("architect", reasoning=reasoning)
+
+    assert route.model == "deepseek-v4-pro"
+    assert route.thinking == thinking
+    assert route.reasoning_effort == effort
+
+
 def test_role_override_is_scoped_and_keeps_role_thinking_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

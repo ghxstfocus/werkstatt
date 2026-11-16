@@ -82,6 +82,7 @@ def test_planner_erstellt_plan(tmp_path):
         result = run_planner(st)
         assert result is True
         assert len(st.tasks) == 1
+        assert st.architect_reasoning_enabled is True
 
 
 def test_planner_can_yield_after_each_required_role(tmp_path, monkeypatch):
@@ -333,6 +334,7 @@ def test_planner_skips_scout_but_keeps_architect_and_plan_path(tmp_path):
         assert run_planner(st) is True
 
     mock_architect.assert_called_once()
+    assert st.architect_reasoning_enabled is False
     assert st.tasks == split_tasks
     assert any(
         call.args[0] == "planner_scout_skipped"

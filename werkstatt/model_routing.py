@@ -61,7 +61,12 @@ def _role_label(role: str) -> str:
     return label
 
 
-def route_for_role(role: str, requested_model: str | None = None) -> ModelRoute:
+def route_for_role(
+    role: str,
+    requested_model: str | None = None,
+    *,
+    reasoning: bool | None = None,
+) -> ModelRoute:
     """Waehlt Modell und Thinking passend zur Rolle.
 
     Bekannte Rollen koennen nur durch ihre eigene WERKSTATT_MODEL_<ROLLE>
@@ -86,6 +91,15 @@ def route_for_role(role: str, requested_model: str | None = None) -> ModelRoute:
         # Unbekannte Agent-Labels erben nie versehentlich den Architect-Slot.
         model = "deepseek-flash"
 
+    if reasoning is not None:
+        if isinstance(reasoning, bool):
+            return ModelRoute(
+                label,
+                model,
+                "enabled" if reasoning else "disabled",
+                "high" if reasoning else None,
+            )
+        raise TypeError("reasoning muss bool oder None sein")
     if label == "architect":
         return ModelRoute(label, model, "enabled", "high")
     return ModelRoute(label, model, "disabled", None)
