@@ -8073,6 +8073,12 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation lokal:** Checkpoint-/Phase-State-/Loop-Phasen-/Loop-Main-/Failure-Record-Gruppe: 160 bestanden. Ruff, gezieltes Mypy fuer Loop/Phase-State/Finalizer, State-Flow-, Audit-, Control-Drift und `git diff --check` bestanden. Strikter Doku-Drift-Check nach dieser Doku-Aktualisierung erneut auszufuehren.
 - **Grenze:** Kein Vollsuite-, CI-, Server- oder Produktionsnachweis fuer diesen Schritt. Phase-End-Verify und Commit bleiben im Finalizer; Setup/Plan/Task/Finalize sind nicht insgesamt auf freie Checkpoint-Aktionen umgestellt. OP-398 bleibt offen.
 
+# 2026-11-16 – Control-Chatjobs fuer Schreibmodus zulassen
+- **Befund:** Die Control-UI sendet `mode="write"`, aber der asynchrone Chatjob-Endpunkt akzeptierte nur `read` und `debugger`; normale Chatfragen und der Projektkoordinator wurden dadurch direkt abgewiesen.
+- **Aenderung:** `/chat/jobs` akzeptiert jetzt `write` und uebergibt den Modus an den vorhandenen isolierten Chatjob-Pfad. Standalone-Job bleibt ohne Run-Inbox und wird an einen Projekt-Snapshot gebunden; Schreibwerkzeuge bleiben im sitzungsgebundenen Workspace, Loop-Uebernahme braucht weiter eine eigene Freigabe. Unbekannte Modi werden weiterhin fail-closed abgewiesen.
+- **Verifikation lokal:** Chatjob-API-/Chat-Agent-/Chat-Tool-Gruppe: 157 bestanden, 2 uebersprungen; Ruff fuer API und Tests sowie Diff-Check bestanden.
+- **Grenze:** Noch nicht auf den Server gepullt, kein Webserver-Neustart und kein Produktionsnachweis. OP-396 bleibt offen.
+
 # 2026-11-16 – Human-Gate-Checkpoint durch PR-CI bestaetigt
 - **Nachweis:** GitHub Actions Quality Gate fuer PR #64, Commit `4929575`, Run [43969419757](https://github.com/ghxstfocus/werkstatt/actions/runs/43969419757): 2.748 bestanden, 5 uebersprungen, 0 fehlgeschlagen; Ruff und Quality Gate bestanden. Die CI deckt die Checkpoint-Auswahl, persistierte Commit-Einwilligung, Stale-Worktree-Behandlung und Follow-up-Invalidierung ab.
 - **Grenze:** PR-CI bestaetigt den Branch, nicht Servercheckout, Webserver-Neustart oder Produktion. Phase-End-Verify/Commit bleiben Finalizer-Schritte; der Gesamtumbau OP-398 bleibt offen.
