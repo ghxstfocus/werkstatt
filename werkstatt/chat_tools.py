@@ -40,6 +40,12 @@ _PROJEKTNAME_KONTEXT: ContextVar[str] = ContextVar(
 _CHAT_SESSION_ID_KONTEXT: ContextVar[str] = ContextVar(
     "werkstatt_chat_session_id", default="",
 )
+_CHAT_HISTORY_CUTOFF_SEQ: ContextVar[int | None] = ContextVar(
+    "werkstatt_chat_history_cutoff_seq", default=None,
+)
+_CHAT_HISTORY_SESSION_ID_KONTEXT: ContextVar[str] = ContextVar(
+    "werkstatt_chat_history_session_id", default="",
+)
 _MAX_READ_BYTES = 50_000
 _MAX_GREP_TREFFER = 30
 _TIMEOUT_GREP_S = 10
@@ -948,6 +954,192 @@ def _diagnose(_args: dict[str, Any]) -> str:
     }, ensure_ascii=False)
 
 
+def _read_chat_history(args: dict[str, Any]) -> str:
+    """Read only the current session's older user-visible turns."""
+    session_id = (
+        _CHAT_HISTORY_SESSION_ID_KONTEXT.get()
+        or _CHAT_SESSION_ID_KONTEXT.get()
+    )
+    history_cutoff = _CHAT_HISTORY_CUTOFF_SEQ.get()
+    if not session_id:
+        return json.dumps({
+            "status": "unavailable",
+            "reason": "current_chat_session_missing",
+        }, ensure_ascii=False)
+    event_seq = args.get("event_seq")
+    requested_field = args.get("field")
+    start = args.get("start", 0)
+    before_seq = args.get("before_seq")
+    if before_seq is None:
+        before_seq = history_cutoff
+    limit = args.get("limit", 10)
+    if event_seq is not None:
+        allowed_fields = {"text", "user_text", "assistant_text"}
+        if (
+            isinstance(event_seq, bool) or not isinstance(event_seq, int)
+            or event_seq < 1 or requested_field not in allowed_fields
+            or isinstance(start, bool) or not isinstance(start, int) or start < 0
+        ):
+            return json.dumps({
+                "status": "invalid_request",
+                "reason": "event_seq_field_or_start_invalid",
+            }, ensure_ascii=False)
+        if history_cutoff is not None and event_seq >= history_cutoff:
+            return json.dumps({
+                "status": "outside_snapshot",
+                "snapshot_before_seq": history_cutoff,
+            }, ensure_ascii=False)
+        try:
+            from werkstatt.chat_session import ChatSession
+            event = ChatSession(
+                _PROJEKTNAME_KONTEXT.get(), session_id,
+            ).read_history_event(event_seq)
+            from redaction import redact_all
+        except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
+            return json.dumps({
+                "status": "unavailable",
+                "reason": type(exc).__name__,
+            }, ensure_ascii=False)
+        if event is None:
+            return json.dumps({"status": "not_found"}, ensure_ascii=False)
+        field_kind = event["kind"]
+        valid_for_kind = (
+            (requested_field == "text" and field_kind in {"user", "assistant"})
+            or (requested_field in {"user_text", "assistant_text"}
+                and field_kind == "job_turn")
+        )
+        raw_text = event["payload"].get(requested_field)
+        if not valid_for_kind or not isinstance(raw_text, str):
+            return json.dumps({
+                "status": "invalid_request",
+                "reason": "field_does_not_match_event_kind",
+            }, ensure_ascii=False)
+        safe_text, redacted = redact_all(
+            raw_text, max_len=max(len(raw_text) + 10_000, 10),
+        )
+        excerpt_end = min(start + 6_000, len(safe_text))
+        if start > len(safe_text):
+            return json.dumps({
+                "status": "invalid_request",
+                "reason": "start_exceeds_sanitized_text_length",
+                "sanitized_chars": len(safe_text),
+            }, ensure_ascii=False)
+        return json.dumps({
+            "status": "ok",
+            "scope": "current_project_and_current_session_only",
+            "event": {"seq": event["seq"], "ts": event["ts"], "kind": field_kind},
+            "field": requested_field,
+            "text": safe_text[start:excerpt_end],
+            "sanitized_span": {
+                "unit": "unicode_codepoints",
+                "start": start,
+                "end": excerpt_end,
+                "total_chars": len(safe_text),
+                "sha256": hashlib.sha256(safe_text.encode("utf-8")).hexdigest(),
+            },
+            "source_sha256": hashlib.sha256(
+                raw_text.encode("utf-8"),
+            ).hexdigest(),
+            "redaction_applied": redacted,
+            "truncated": excerpt_end < len(safe_text),
+            "next_start": excerpt_end if excerpt_end < len(safe_text) else None,
+        }, ensure_ascii=False)
+    if before_seq is not None and (
+        isinstance(before_seq, bool)
+        or not isinstance(before_seq, int)
+        or before_seq < 1
+    ):
+        return json.dumps({
+            "status": "invalid_request",
+            "reason": "before_seq_must_be_positive_integer",
+        }, ensure_ascii=False)
+    if (
+        history_cutoff is not None
+        and before_seq is not None
+        and before_seq > history_cutoff
+    ):
+        return json.dumps({
+            "status": "invalid_request",
+            "reason": "before_seq_must_be_older_than_current_turn",
+            "snapshot_before_seq": history_cutoff,
+        }, ensure_ascii=False)
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
+        return json.dumps({
+            "status": "invalid_request",
+            "reason": "limit_must_be_between_1_and_20",
+        }, ensure_ascii=False)
+    try:
+        from werkstatt.chat_session import ChatSession
+        page = ChatSession(
+            _PROJEKTNAME_KONTEXT.get(), session_id,
+        ).read_history_page(before_seq=before_seq, limit=limit)
+        from redaction import redact_all
+    except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
+        return json.dumps({
+            "status": "unavailable",
+            "reason": type(exc).__name__,
+        }, ensure_ascii=False)
+
+    safe_events: list[dict[str, Any]] = []
+    remaining_chars = 9_000
+    for event in page["events"]:
+        payload = event.get("payload", {})
+        kind = event.get("kind")
+        fields = (
+            ("user_text", "assistant_text") if kind == "job_turn"
+            else ("text",) if kind in {"user", "assistant"}
+            else ()
+        )
+        if remaining_chars <= 700 + 10 * len(fields):
+            break
+        safe_payload: dict[str, dict[str, Any]] = {}
+        field_budget = min(
+            1_400, max(10, (remaining_chars - 700) // max(1, len(fields))),
+        )
+        for field in fields:
+            value = payload.get(field)
+            if not isinstance(value, str):
+                continue
+            sanitized, redacted = redact_all(
+                value, max_len=max(len(value) + 10_000, 10),
+            )
+            excerpt = sanitized[:field_budget]
+            safe_payload[field] = {
+                "text": excerpt,
+                "sanitized_chars": len(sanitized),
+                "sanitized_sha256": hashlib.sha256(
+                    sanitized.encode("utf-8"),
+                ).hexdigest(),
+                "source_sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+                "redaction_applied": redacted,
+                "truncated": len(excerpt) < len(sanitized),
+                "next_start": len(excerpt) if len(excerpt) < len(sanitized) else None,
+            }
+            remaining_chars -= len(excerpt)
+        safe_events.append({
+            "seq": event["seq"],
+            "ts": event["ts"],
+            "kind": kind,
+            "payload": safe_payload,
+        })
+        if remaining_chars <= 700:
+            break
+    has_more = bool(page["has_more"]) or len(safe_events) < len(page["events"])
+    next_before_seq = (
+        safe_events[-1]["seq"] if has_more and safe_events
+        else page["next_before_seq"] if has_more
+        else None
+    )
+    return json.dumps({
+        "status": "ok",
+        "scope": "current_project_and_current_session_only",
+        "events": safe_events,
+        "has_more": has_more,
+        "next_before_seq": next_before_seq,
+        "omissions_are_not_negative_evidence": True,
+    }, ensure_ascii=False)
+
+
 def _op_block(status_text: str, op_id: str) -> str:
     """Return one complete, exact OP section from STATUS.md."""
     if not re.fullmatch(r"OP-[0-9]+", op_id):
@@ -1410,6 +1602,36 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
 
 
 CHAT_TOOLS: dict[str, dict[str, Any]] = {
+    "read_chat_history": {
+        "description": (
+            "Liest fruehere Nutzer-/Assistant-Turns ausschliesslich aus der "
+            "aktuellen Chat-Session. Verwende es, wenn der Kontextmarker "
+            "aeltere Turns als gekuerzt meldet oder der Nutzer auf fruehere "
+            "Absprachen verweist. Optional before_seq aus einem vorherigen "
+            "Ergebnis fuer die naechste aeltere Seite; limit 1-20. Tool-Traces "
+            "werden nicht ausgegeben. Turn-Auszuge enthalten Hash, Umfang und "
+            "next_start. Lade den Rest eines Turns mit event_seq, field und "
+            "start nach; dieser Abruf gibt einen redigierten 6000-Zeichen-Chunk "
+            "mit exakter Codepoint-Spanne zurueck. next_before_seq blaettert "
+            "zu aelteren Turns; Auslassungen sind kein Negativbeleg."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "before_seq": {"type": "integer", "minimum": 1},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                "event_seq": {"type": "integer", "minimum": 1},
+                "field": {
+                    "type": "string",
+                    "enum": ["text", "user_text", "assistant_text"],
+                },
+                "start": {"type": "integer", "minimum": 0},
+            },
+        },
+        "fn": _read_chat_history,
+        "mode": "read",
+        "reflection_allowed": False,
+    },
     "server_status": {
         "description": (
             "Liest den festen Zustand des Werkstatt-Webdienstes: systemd-Unit, "
@@ -1700,6 +1922,8 @@ def execute_tool(
     source_project_dir: Path | str | None = None,
     project_name: str | None = None,
     session_id: str | None = None,
+    history_before_seq: int | None = None,
+    history_session_id: str | None = None,
 ) -> str:
     src = tools if tools is not None else CHAT_TOOLS
     spec = src.get(name)
@@ -1730,11 +1954,17 @@ def execute_tool(
     worktree_token = _DEBUGGER_WORKTREE_ROOT_KONTEXT.set(worktree_root)
     name_token = _PROJEKTNAME_KONTEXT.set(project_name or "werkstatt")
     session_token = _CHAT_SESSION_ID_KONTEXT.set(session_id or "")
+    history_token = _CHAT_HISTORY_CUTOFF_SEQ.set(history_before_seq)
+    history_session_token = _CHAT_HISTORY_SESSION_ID_KONTEXT.set(
+        history_session_id or session_id or "",
+    )
     try:
         return str(fn(args))
     except Exception as exc:
         return f"Tool-Fehler ({name}): {type(exc).__name__}: {exc}"
     finally:
+        _CHAT_HISTORY_SESSION_ID_KONTEXT.reset(history_session_token)
+        _CHAT_HISTORY_CUTOFF_SEQ.reset(history_token)
         _CHAT_SESSION_ID_KONTEXT.reset(session_token)
         _PROJEKTNAME_KONTEXT.reset(name_token)
         _DEBUGGER_WORKTREE_ROOT_KONTEXT.reset(worktree_token)

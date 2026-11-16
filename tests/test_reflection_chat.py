@@ -300,7 +300,9 @@ def test_reflection_mode_exposes_only_read_tools(tmp_path: Path) -> None:
         item["function"]["name"]
         for item in chat_tools.openai_schemas(mode="read")
     }
-    assert reflection_names == read_names - {"request_loop_action"}
+    assert reflection_names == read_names - {
+        "request_loop_action", "read_chat_history",
+    }
     assert "request_loop_action" not in reflection_names
     assert "request_loop_action" in read_names
     assert chat_tools.execute_tool(

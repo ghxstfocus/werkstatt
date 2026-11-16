@@ -38,6 +38,7 @@ def test_prompt_directs_recent_append_only_reads_to_tail_evidence():
     assert "read_file mit tail_chars" in chat_agent._SYSTEM_PROMPT
     assert "Eine gekuerzte oder partielle Ausgabe belegt niemals" in chat_agent._SYSTEM_PROMPT
     assert "Behaupte Vollstaendigkeit nur fuer den tatsaechlich gelesenen Bereich" in chat_agent._SYSTEM_PROMPT
+    assert "read_chat_history seitenweise nach" in chat_agent._SYSTEM_PROMPT
 
 
 def test_large_pasted_jsonl_is_compacted_but_session_event_stays_unchanged():

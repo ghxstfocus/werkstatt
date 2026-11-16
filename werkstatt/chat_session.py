@@ -244,6 +244,77 @@ class ChatSession:
             })
         return ergebnis
 
+    def read_history_page(
+        self, *, before_seq: int | None = None, limit: int = 10,
+    ) -> dict[str, Any]:
+        """Read a bounded page of prior user-visible turns by sequence."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
+            raise ValueError("limit must be between 1 and 20")
+        if before_seq is not None and (
+            isinstance(before_seq, bool)
+            or not isinstance(before_seq, int)
+            or before_seq < 1
+        ):
+            raise ValueError("before_seq must be a positive integer")
+        with closing(self._connect()) as conn:
+            if before_seq is None:
+                rows = conn.execute(
+                    "SELECT seq,ts,kind,payload FROM events "
+                    "WHERE session_id=? AND kind IN ('user','assistant','job_turn') "
+                    "ORDER BY seq DESC LIMIT ?",
+                    (self.session_id, limit + 1),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT seq,ts,kind,payload FROM events "
+                    "WHERE session_id=? AND seq<? "
+                    "AND kind IN ('user','assistant','job_turn') "
+                    "ORDER BY seq DESC LIMIT ?",
+                    (self.session_id, before_seq, limit + 1),
+                ).fetchall()
+        has_more = len(rows) > limit
+        selected = rows[:limit]
+        events: list[dict[str, Any]] = []
+        for seq, ts, kind, raw_payload in selected:
+            try:
+                payload = json.loads(raw_payload)
+            except (json.JSONDecodeError, TypeError):
+                payload = {}
+            events.append({
+                "seq": int(seq),
+                "ts": str(ts),
+                "kind": str(kind),
+                "payload": payload if isinstance(payload, dict) else {},
+            })
+        return {
+            "events": events,
+            "has_more": has_more,
+            "next_before_seq": int(selected[-1][0]) if has_more else None,
+        }
+
+    def read_history_event(self, seq: int) -> dict[str, Any] | None:
+        """Read one event by sequence, scoped to this session."""
+        if isinstance(seq, bool) or not isinstance(seq, int) or seq < 1:
+            raise ValueError("seq must be a positive integer")
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT seq,ts,kind,payload FROM events "
+                "WHERE session_id=? AND seq=?",
+                (self.session_id, seq),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            payload = json.loads(row[3])
+        except (json.JSONDecodeError, TypeError):
+            payload = {}
+        return {
+            "seq": int(row[0]),
+            "ts": str(row[1]),
+            "kind": str(row[2]),
+            "payload": payload if isinstance(payload, dict) else {},
+        }
+
     def max_seq(self) -> int:
         """Hoechste gespeicherte Event-Sequenz dieser Session."""
         with closing(self._connect()) as conn:

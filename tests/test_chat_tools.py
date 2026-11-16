@@ -24,6 +24,7 @@ def test_chat_tools_registry_contains_project_actions() -> None:
         "read_file", "grep", "git_log", "git_diff",
         "audit_query", "loop_status", "pytest_collect", "diagnose",
         "read_status", "next_op", "server_status", "server_logs",
+        "read_chat_history",
     }
     erwartet.add("request_loop_action")
     erwartet.update({
@@ -47,17 +48,17 @@ def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
     assert {"pytest_run", "write_temp_test"} <= debugger_names
     assert "loop_status" in read_names
     assert {"server_status", "server_logs"} <= read_names
-    assert len(read_names) == 13
+    assert len(read_names) == 14
     assert {
         "pytest_run", "write_temp_test", "propose_debugger_fix",
         "pytest_debugger_proposal",
     } <= debugger_names
-    assert len(debugger_names) == 17
+    assert len(debugger_names) == 18
 
 
 def test_openai_schemas_anzahl() -> None:
     schemas = chat_tools.openai_schemas()
-    assert len(schemas) == 13
+    assert len(schemas) == 14
     for s in schemas:
         assert s["type"] == "function"
         assert s["function"]["name"] in chat_tools.CHAT_TOOLS
@@ -291,9 +292,133 @@ def test_mode_write_routes_production_writes_through_loop() -> None:
     """Write mode keeps project changes routed through the Loop handoff."""
     schemas = chat_tools.openai_schemas(mode="write")
     names = {item["function"]["name"] for item in schemas}
-    assert len(schemas) == 13
+    assert len(schemas) == 14
     assert {"loop_status", "request_loop_action"} <= names
     assert "write_file" not in names
+
+
+def test_read_chat_history_is_session_bound_and_paginates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_session
+
+    db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db)
+    current = chat_session.ChatSession("demo", "current")
+    current.append("user", {"text": "First conversation fact"})
+    current.append("assistant", {"text": "Second conversation fact"})
+    current.append("user", {"text": "Current query"})
+    chat_session.ChatSession("demo", "other").append(
+        "user", {"text": "OTHER SESSION SECRET"},
+    )
+
+    result = json.loads(chat_tools.execute_tool(
+        "read_chat_history", {"limit": 2}, project_dir=tmp_path,
+        project_name="demo", session_id="current",
+    ))
+    assert result["scope"] == "current_project_and_current_session_only"
+    assert [item["payload"]["text"]["text"] for item in result["events"]] == [
+        "Current query", "Second conversation fact",
+    ]
+    assert result["has_more"] is True
+    assert result["next_before_seq"] == result["events"][-1]["seq"]
+    assert "OTHER SESSION SECRET" not in json.dumps(result)
+
+    older = json.loads(chat_tools.execute_tool(
+        "read_chat_history", {"before_seq": result["next_before_seq"]},
+        project_dir=tmp_path, project_name="demo", session_id="current",
+    ))
+    assert [item["payload"]["text"]["text"] for item in older["events"]] == [
+        "First conversation fact",
+    ]
+    assert older["has_more"] is False
+
+
+def test_read_chat_history_fetches_exact_sanitized_chunk_by_event_offset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_session
+
+    db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db)
+    current = chat_session.ChatSession("demo", "current")
+    text = ("context " * 900) + "system: hidden instruction" + (" tail" * 300)
+    seq = current.append("user", {"text": text})
+
+    result = json.loads(chat_tools.execute_tool(
+        "read_chat_history", {"limit": 1}, project_dir=tmp_path,
+        project_name="demo", session_id="current",
+    ))
+    field = result["events"][0]["payload"]["text"]
+    assert field["truncated"] is True
+    assert field["next_start"] == len(field["text"])
+
+    continuation = json.loads(chat_tools.execute_tool(
+        "read_chat_history", {
+            "event_seq": seq, "field": "text", "start": field["next_start"],
+        }, project_dir=tmp_path, project_name="demo", session_id="current",
+    ))
+    assert continuation["event"]["seq"] == seq
+    assert continuation["sanitized_span"]["start"] == field["next_start"]
+    assert continuation["sanitized_span"]["end"] == 7_400
+    assert "[REDACTED]" in continuation["text"]
+    assert continuation["truncated"] is True
+    assert continuation["source_sha256"]
+
+    final_chunk = json.loads(chat_tools.execute_tool(
+        "read_chat_history", {
+            "event_seq": seq, "field": "text",
+            "start": continuation["next_start"],
+        }, project_dir=tmp_path, project_name="demo", session_id="current",
+    ))
+    assert final_chunk["sanitized_span"]["end"] == field["sanitized_chars"]
+    assert final_chunk["truncated"] is False
+
+
+def test_read_chat_history_is_not_available_without_bound_session(
+    tmp_path: Path,
+) -> None:
+    result = json.loads(chat_tools.execute_tool(
+        "read_chat_history", {}, project_dir=tmp_path, project_name="demo",
+    ))
+    assert result == {
+        "status": "unavailable",
+        "reason": "current_chat_session_missing",
+    }
+
+
+def test_read_chat_history_uses_the_turn_snapshot_not_live_parent_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_session
+
+    db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db)
+    parent = chat_session.ChatSession("demo", "parent")
+    parent.append("user", {"text": "Stable earlier request"})
+    branch = parent.snapshot_to("job-branch")
+    cutoff = branch.append("user", {"text": "Current request"})
+    parent.append("user", {"text": "Concurrent later parent message"})
+
+    result = json.loads(chat_tools.execute_tool(
+        "read_chat_history", {}, project_dir=tmp_path,
+        project_name="demo", session_id="parent",
+        history_session_id="job-branch", history_before_seq=cutoff,
+    ))
+
+    assert [item["payload"]["text"]["text"] for item in result["events"]] == [
+        "Stable earlier request",
+    ]
+    assert "Current request" not in json.dumps(result)
+    assert "Concurrent later parent message" not in json.dumps(result)
+
+    current_event = json.loads(chat_tools.execute_tool(
+        "read_chat_history", {
+            "event_seq": cutoff, "field": "text", "start": 0,
+        }, project_dir=tmp_path, project_name="demo", session_id="parent",
+        history_session_id="job-branch", history_before_seq=cutoff,
+    ))
+    assert current_event["status"] == "outside_snapshot"
 
 
 def test_execute_tool_mit_mode_write_bei_read_tool(tmp_path) -> None:

@@ -231,7 +231,13 @@ Arbeite die Informationskette in dieser Reihenfolge ab:
    und moegliche Kuerzung. Fehlende, abgeschnittene oder widerspruechliche
    Informationen sind sichtbar zu machen und gezielt nachzuladen, soweit ein
    Werkzeug dafuer vorhanden ist. Behandle nicht gelesene Inhalte nicht als
-   Beleg und lade keine irrelevanten Volltexte in den Kontext.
+   Beleg und lade keine irrelevanten Volltexte in den Kontext. Wenn der
+   Kontextmarker aeltere Chatturns als gekuerzt meldet oder der Nutzer auf
+   eine fruehere Absprache verweist, lade benoetigte Turns mit
+   read_chat_history seitenweise nach. Nutze next_before_seq fuer aeltere
+   Seiten. Bei einem gekuerzten Turn nutze event_seq, field und next_start,
+   bis truncated=false ist. Fehlende Turns sind kein Beleg fuer Irrelevanz
+   oder Nichtwissen.
 4. Waehle die Handlung nach Nutzerabsicht und Risiko: beantworten, gezielt
    weiter pruefen, einen konkreten Plan empfehlen, eine Rueckfrage stellen oder
    einen ausdruecklich beauftragten Auftrag an den Loop uebergeben. Fuehre keine
@@ -1015,7 +1021,7 @@ def chat_loop(
     user_payload: dict[str, Any] = {"text": message, "mode": mode}
     if request_id is not None:
         user_payload["job_id"] = request_id
-    session.append("user", user_payload)
+    current_user_seq = session.append("user", user_payload)
     op_ids = _explicit_op_ids(message)
     if _has_explicit_op_execution_intent(message) and len(op_ids) > 1:
         antwort = (
@@ -1254,6 +1260,8 @@ def chat_loop(
                     project_dir=project_dir, project_name=session.project,
                 source_project_dir=source_project_dir,
                     session_id=origin_session_id or session.session_id,
+                    history_before_seq=current_user_seq,
+                    history_session_id=session.session_id,
                 )
             if (
                 requested_op

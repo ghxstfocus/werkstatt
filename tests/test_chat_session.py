@@ -30,6 +30,44 @@ def test_append_und_load_runde(db: Path) -> None:
     assert geladen[0]["seq"] < geladen[1]["seq"]
 
 
+def test_read_history_page_is_bounded_latest_first_and_session_scoped(
+    db: Path,
+) -> None:
+    current = ChatSession("demo", "current", db_pfad=db)
+    first_seq = current.append("user", {"text": "turn-1"})
+    current.append("tool_result", {"content": "not a user-visible turn"})
+    second_seq = current.append("assistant", {"text": "turn-2"})
+    current.append_job_turn("job-1", "job request", "job answer")
+    ChatSession("demo", "other", db_pfad=db).append(
+        "user", {"text": "other-session"},
+    )
+
+    latest = current.read_history_page(limit=2)
+    assert [item["seq"] for item in latest["events"]] == [
+        current.max_seq(), second_seq,
+    ]
+    assert latest["has_more"] is True
+    older = current.read_history_page(
+        before_seq=latest["next_before_seq"], limit=2,
+    )
+    assert [item["seq"] for item in older["events"]] == [
+        first_seq,
+    ]
+    assert older["has_more"] is False
+    assert older["next_before_seq"] is None
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"limit": 0}, {"limit": 21}, {"limit": True}, {"before_seq": 0},
+    {"before_seq": True},
+])
+def test_read_history_page_rejects_invalid_cursor_or_limit(
+    db: Path, kwargs: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        ChatSession("demo", "current", db_pfad=db).read_history_page(**kwargs)
+
+
 def test_persistenz_ueber_neue_instanz(db: Path) -> None:
     ChatSession("demo", "s1", db_pfad=db).append("user", {"text": "x"})
     wieder = ChatSession("demo", "s1", db_pfad=db)
