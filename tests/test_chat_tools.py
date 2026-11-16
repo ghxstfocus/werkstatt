@@ -655,6 +655,24 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                 "executor": "builder",
                 "task_id": "task-2",
                 "checkpoint_version": 4,
+                "evidence": {
+                    "task_progress": {
+                        "total": 4, "pending": 2, "running": 0,
+                        "done": 1, "failed": 1, "blocked": 0,
+                        "private_prompt": "never expose",
+                    },
+                    "criteria_task_coverage": {
+                        "tracked": True,
+                        "valid": True,
+                        "covered_count": 1,
+                        "covered": ["AC1"],
+                        "covered_omitted_count": 0,
+                        "uncovered_count": 23,
+                        "uncovered": [f"AC{n}" for n in range(2, 22)],
+                        "uncovered_omitted_count": 3,
+                        "private_prompt": "never expose",
+                    },
+                },
                 "private_prompt": "never expose",
             },
             "safe_point": {
@@ -682,6 +700,12 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
         "execute_task_checkpoint"
     )
     assert parsed["checkpoint"]["coordinator_decision"]["executor"] == "builder"
+    dispatch_evidence = parsed["checkpoint"]["coordinator_decision"]["evidence"]
+    assert dispatch_evidence["task_progress"]["failed"] == 1
+    coverage = dispatch_evidence["criteria_task_coverage"]
+    assert coverage["uncovered_count"] == 23
+    assert coverage["uncovered_omitted_count"] == 3
+    assert "private_prompt" not in json.dumps(dispatch_evidence)
     assert "private_prompt" not in result
     assert "never expose" not in result
     assert parsed["recent_events"][0]["summary"] == "Builder laeuft"

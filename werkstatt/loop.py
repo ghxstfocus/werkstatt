@@ -14,7 +14,7 @@ import signal
 import subprocess  # noqa: F401  # re-export: Tests patchen werkstatt.loop.subprocess
 import time  # noqa: F401  # re-export: Tests patchen werkstatt.loop.time
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from werkstatt.apply_patches import (  # Fix AZ Stufe 4: Re-Export
     _apply_one_patch,
@@ -642,7 +642,7 @@ def _persist_run_coordinator_decision(
         if record is None or record.get("status") not in {"starting", "running"}:
             raise RuntimeError("Aktiver RunCheckpoint fuer Dispatch fehlt")
         checkpoint = dict(record.get("checkpoint") or {})
-        checkpoint["coordinator_decision"] = {
+        persisted_decision: dict[str, Any] = {
             "decision": str(decision.get("decision") or "")[:120],
             "action": str(decision.get("coordinator_action") or "")[:120],
             "reason": str(decision.get("reason") or "")[:500],
@@ -650,6 +650,44 @@ def _persist_run_coordinator_decision(
             "task_id": str(decision.get("next_task_id") or "")[:120],
             "checkpoint_version": int(record["checkpoint_version"]) + 1,
         }
+        raw_progress = decision.get("task_progress")
+        if isinstance(raw_progress, dict):
+            progress = {
+                key: raw_progress[key]
+                for key in (
+                    "total", "pending", "running", "done", "failed",
+                    "blocked",
+                )
+                if isinstance(raw_progress.get(key), int)
+                and not isinstance(raw_progress.get(key), bool)
+            }
+        else:
+            progress = {}
+        raw_coverage = decision.get("criteria_task_coverage")
+        coverage: dict[str, Any] = {}
+        if isinstance(raw_coverage, dict):
+            for key in ("tracked", "valid"):
+                if isinstance(raw_coverage.get(key), bool):
+                    coverage[key] = raw_coverage[key]
+            for key in ("covered", "uncovered"):
+                value = raw_coverage.get(key)
+                if isinstance(value, list) and all(
+                    isinstance(item, str) for item in value
+                ):
+                    coverage[f"{key}_count"] = len(value)
+                    coverage[key] = value[:20]
+                    coverage[f"{key}_omitted_count"] = max(
+                        0, len(value) - 20,
+                    )
+            error = raw_coverage.get("error")
+            if isinstance(error, str):
+                coverage["error"] = error[:120]
+        if progress or coverage:
+            persisted_decision["evidence"] = {
+                "task_progress": progress,
+                "criteria_task_coverage": coverage,
+            }
+        checkpoint["coordinator_decision"] = persisted_decision
         try:
             store.update_run_checkpoint(
                 project_name,

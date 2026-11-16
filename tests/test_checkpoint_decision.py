@@ -244,6 +244,15 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
         "reason": "Builder needed for the next dependency-free task.",
         "next_executor": "builder",
         "next_task_id": "task-1",
+        "task_progress": {
+            "total": 3, "pending": 1, "running": 0,
+            "done": 1, "failed": 1, "blocked": 0,
+        },
+        "criteria_task_coverage": {
+            "tracked": True, "valid": True,
+            "covered": ["AC1"], "uncovered": [f"AC{n}" for n in range(2, 27)],
+            "error": None,
+        },
     }
 
     _persist_run_coordinator_decision(
@@ -259,6 +268,20 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
         "executor": "builder",
         "task_id": "task-1",
         "checkpoint_version": 1,
+        "evidence": {
+            "task_progress": {
+                "total": 3, "pending": 1, "running": 0,
+                "done": 1, "failed": 1, "blocked": 0,
+            },
+            "criteria_task_coverage": {
+                "tracked": True, "valid": True,
+                "covered_count": 1, "covered": ["AC1"],
+                "covered_omitted_count": 0,
+                "uncovered_count": 25,
+                "uncovered": [f"AC{n}" for n in range(2, 22)],
+                "uncovered_omitted_count": 5,
+            },
+        },
     }
 
 

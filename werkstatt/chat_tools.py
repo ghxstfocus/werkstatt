@@ -725,7 +725,7 @@ def _read_active_run(_args: dict[str, Any]) -> str:
             }
             dispatch = checkpoint.get("coordinator_decision")
             if isinstance(dispatch, dict):
-                dispatch_summary: dict[str, str | int] = {}
+                dispatch_summary: dict[str, Any] = {}
                 for key, limit in (
                     ("decision", 120), ("action", 120), ("reason", 500),
                     ("executor", 120), ("task_id", 120),
@@ -736,6 +736,49 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                 version = dispatch.get("checkpoint_version")
                 if isinstance(version, int) and not isinstance(version, bool):
                     dispatch_summary["checkpoint_version"] = version
+                evidence = dispatch.get("evidence")
+                if isinstance(evidence, dict):
+                    evidence_summary: dict[str, Any] = {}
+                    progress = evidence.get("task_progress")
+                    if isinstance(progress, dict):
+                        evidence_summary["task_progress"] = {
+                            key: value
+                            for key, value in progress.items()
+                            if key in {
+                                "total", "pending", "running", "done",
+                                "failed", "blocked",
+                            }
+                            and isinstance(value, int)
+                            and not isinstance(value, bool)
+                        }
+                    coverage = evidence.get("criteria_task_coverage")
+                    if isinstance(coverage, dict):
+                        safe_coverage: dict[str, Any] = {}
+                        for key in ("tracked", "valid"):
+                            if isinstance(coverage.get(key), bool):
+                                safe_coverage[key] = coverage[key]
+                        for key in ("covered", "uncovered"):
+                            refs = coverage.get(key)
+                            if isinstance(refs, list) and all(
+                                isinstance(ref, str) for ref in refs
+                            ):
+                                safe_coverage[key] = refs[:20]
+                                for suffix in ("_count", "_omitted_count"):
+                                    count = coverage.get(f"{key}{suffix}")
+                                    if (
+                                        isinstance(count, int)
+                                        and not isinstance(count, bool)
+                                        and count >= 0
+                                    ):
+                                        safe_coverage[f"{key}{suffix}"] = count
+                        error = coverage.get("error")
+                        if isinstance(error, str):
+                            safe_coverage["error"] = error[:120]
+                        evidence_summary[
+                            "criteria_task_coverage"
+                        ] = safe_coverage
+                    if evidence_summary:
+                        dispatch_summary["evidence"] = evidence_summary
                 result["checkpoint"]["coordinator_decision"] = dispatch_summary
             safe_point = checkpoint.get("safe_point")
             if isinstance(safe_point, dict):

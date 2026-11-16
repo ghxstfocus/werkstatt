@@ -76,6 +76,8 @@ Letzte Aktualisierung: 2026-11-16.
 - **Audit-Abfrage-Folgeschritt (lokal, noch nicht serververifiziert):** `audit_query` schnitt bisher nach 50 Events bzw. 30.000 Zeichen die serialisierte Ausgabe still ab und filterte Events nicht explizit nach Projekt. Die Ausgabe ist jetzt projektgefiltert, cursorbasiert und als gueltiges JSON mit `has_more`/`next_since` markiert. Einzelne grosse Payloads werden mit Zeichenumfang und SHA-256 ausgewiesen und ueber `event_seq` in lueckenlos adressierbaren, hashgebundenen Zeichenbereichen nachladbar. Das finale Seitenlimit von 22.000 Zeichen bleibt unter dem 24.000-Zeichen-Aktivturnbudget des Chats; Regression prueft viele Ereignisse bis zum Cursor und Folgeseitenabruf. Chat-Tool-/Chat-Agent-Gruppe: 128 bestanden, 2 uebersprungen; Ruff, Mypy, Audit-Drift, Control-Drift und strikter Doku-Drift bestanden. Servernachweis fehlt; OP-396/397 bleiben offen.
 - **Blockiert von:** —
 
+- **Dispatch-Evidenz-Folgeschritt (lokal, noch nicht serververifiziert):** Der persistierte `coordinator_decision`-Checkpoint speichert jetzt neben Executor, Task und Begruendung einen begrenzten Snapshot der Taskfortschritte und Kriterienabdeckung; Chat `loop_status` gibt nur typisierte, bekannte Felder aus, begrenzt Referenzlisten auf 20 und kennzeichnet Auslassungen. Regressionen pruefen Checkpoint-CAS-Persistenz, Chat-Projektion und dass private Promptfelder nicht durchgereicht werden. Gezielt: 77 bestanden, 2 uebersprungen; Ruff, Mypy, Audit-Drift und Control-Drift bestanden. Der vom Nutzer bestaetigte Serverlauf auf `b78935d` (2.472 bestanden, 5 uebersprungen) enthaelt diese Aenderung nicht. Servernachweis fehlt; OP-396/397 bleiben offen.
+
 ### OP-397: Hintergrundjobs und Checkpoint-Steuerung
 - **Status:** open
 - **Typ:** async-jobs
