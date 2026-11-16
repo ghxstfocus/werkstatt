@@ -7285,3 +7285,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** `budget_event`, `user_sha256` und `system_sha256` werden vor optionalen Diagnosedaten bereinigt. Zusatzmetadaten bleiben weiter begrenzt und werden als gekuerzt markiert; Prompts oder Quelltext werden nicht ins Audit kopiert.
 - **Verifikation lokal:** Agent-/Builder-/Architect-/Explorer-/Scout-/Reviewer-/Planner-Gruppe: 93 bestanden, 3 uebersprungen; Ruff, Mypy, Audit-Drift und Control-Drift bestanden.
 - **Grenze / Hauptziel:** Das sichert die Aufbewahrung der Provenienz, beweist weiterhin nicht semantische Relevanz oder Vollstaendigkeit des Rollenprompts. OP-405/398 bleiben offen; kein Server- oder Produktionsnachweis.
+
+## 2026-11-16 – Phase-End-Chat-Recovery bewahrt Reviewer-Provenienz
+- **Befund:** Nach ausgeschoepfter Phase-End-Reflection wurde die vom Chat vorgeschlagene Builder-Aufgabe temporaer in `state.reviewer_bugs` umgeschrieben. Endete die Recovery vor einer erneuten Review, konnte die Chat-Interpretation spaeter als echter Reviewer-Befund erscheinen.
+- **Aenderung:** Die Recovery uebergibt den verifizierten Chat-Task nun explizit an `_phase_end_reflection_core`. Der Builder bearbeitet nur dessen Dateiliste in Schnittmenge mit den tatsaechlichen Phase-Review-Dateien; ein leerer Schnitt stoppt fail-closed. `reviewer_bugs` bleibt bis zur naechsten echten Review unveraendert und wird nicht mit Chat-Prosa vermischt.
+- **Verifikation lokal:** Reflection-/Phase-End-/Builder-Gruppe: 87 bestanden; Ruff, Mypy, Audit- und Control-Drift bestanden. Strikter Doku-Drift folgt nach dieser Eintragung.
+- **Grenze / Hauptziel:** Dies sichert den Phase-End-Handoff; die breitere Recovery-/Rollen-Eval- und Serververifikation bleiben offen. OP-398/405 bleiben offen.

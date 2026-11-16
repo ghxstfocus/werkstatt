@@ -615,11 +615,12 @@ def test_phase_end_exhaustion_asks_chat_then_retries_scoped_file(
     original_task = state.aktuelle_task
     core_calls: list[dict[str, object]] = []
 
-    def fake_core(_state):
+    def fake_core(_state, *, builder_task_override=None):
         core_calls.append({
             "task": dict(_state.aktuelle_task),
             "bugs": list(_state.reviewer_bugs),
             "source_evidence": list(_state.reflection_chat_evidence),
+            "builder_task_override": builder_task_override,
         })
         return len(core_calls) == 2
 
@@ -640,11 +641,66 @@ def test_phase_end_exhaustion_asks_chat_then_retries_scoped_file(
     assert len(core_calls) == 2
     assert core_calls[1]["task"]["name"] == "Repair phase-review finding"
     assert core_calls[1]["bugs"][0]["description"] == (
+        "The sample fails the phase review."
+    )
+    assert core_calls[1]["builder_task_override"]["description"] == (
         "Correct the reported phase-review defect."
     )
     assert core_calls[1]["source_evidence"] == _source_evidence()
     assert state.aktuelle_task is original_task
     assert state.reflection_chat_evidence == []
+    assert state.reviewer_bugs[0]["description"] == (
+        "The sample fails the phase review."
+    )
+
+
+def test_phase_end_core_uses_chat_task_without_rewriting_reviewer_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt import reviewer
+
+    state = _state(tmp_path)
+    state.reviewer_bugs = [{
+        "file": "werkstatt/sample.py",
+        "severity": "high",
+        "description": "Original phase-review evidence.",
+    }]
+    state.applied_count = 0
+    state.patches = []
+    override = {
+        "name": "Evidence-driven repair",
+        "description": "Apply the source-backed correction.",
+        "task_files": ["werkstatt/sample.py"],
+    }
+    builder_tasks = []
+
+    def run_builder(_state):
+        builder_tasks.append(dict(_state.aktuelle_task))
+        _state.patches = [{"file": "werkstatt/sample.py"}]
+        return True
+
+    monkeypatch.setattr(reflection, "run_builder", run_builder)
+    monkeypatch.setattr(reflection, "check_run_lease", lambda _state: None)
+    monkeypatch.setattr(
+        reflection, "_apply_patches_with_diagnose",
+        lambda *_args, **_kwargs: (1, {}),
+    )
+    monkeypatch.setattr(reflection, "_verify_patches", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(reviewer, "run_phase_end_review", lambda _state: True)
+    monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
+
+    assert reflection._phase_end_reflection_core(
+        state, builder_task_override=override,
+    ) is True
+    assert builder_tasks[0]["name"] == "Evidence-driven repair"
+    assert builder_tasks[0]["description"] == "Apply the source-backed correction."
+    assert builder_tasks[0]["task_files"] == ["werkstatt/sample.py"]
+    assert state.reviewer_bugs == [{
+        "file": "werkstatt/sample.py",
+        "severity": "high",
+        "description": "Original phase-review evidence.",
+    }]
 
 
 def test_phase_end_does_not_expand_chat_scope_beyond_planned_files(
@@ -658,7 +714,10 @@ def test_phase_end_does_not_expand_chat_scope_beyond_planned_files(
         "description": "Outside the plan.",
     }]
     state.tasks = [{"task_files": ["werkstatt/sample.py"]}]
-    monkeypatch.setattr(reflection, "_phase_end_reflection_core", lambda _s: False)
+    monkeypatch.setattr(
+        reflection, "_phase_end_reflection_core",
+        lambda _s, **_kwargs: False,
+    )
     monkeypatch.setattr(
         reflection_chat, "ask_project_chat_for_builder_task",
         lambda _state, **_kwargs: pytest.fail("Chat must not receive out-of-plan file scope"),

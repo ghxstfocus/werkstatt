@@ -20,6 +20,7 @@ wenn er nicht schon in `last_verify_errors` steckt. Die Standard-Variante
 from __future__ import annotations
 
 from itertools import count
+from typing import Any
 
 from werkstatt.prompts import format_letzter_test_fehler_block
 from werkstatt.render import log_line  # Fix BA
@@ -1130,7 +1131,11 @@ def _reflection_loop(
     return bool(recovered)
 
 
-def _phase_end_reflection_core(state: RunState) -> bool:
+def _phase_end_reflection_core(
+    state: RunState,
+    *,
+    builder_task_override: dict[str, Any] | None = None,
+) -> bool:
     """K23d: Phase-End-Reflection. Repariert Phase-Review-Bugs pro Datei.
 
     Anders als _reflection_loop: kein aktueller Task im State.
@@ -1143,6 +1148,8 @@ def _phase_end_reflection_core(state: RunState) -> bool:
     pd = state.project_dir
     pn = state.project_name
     state.reflection_chat_stop_reason = ""
+    task_override = builder_task_override or {}
+    task_override_files = task_override.get("task_files", [])
     bugs = state.reviewer_bugs or []
     for _runde in range(2):
         if not bugs:
@@ -1160,6 +1167,22 @@ def _phase_end_reflection_core(state: RunState) -> bool:
             _f = _b.get("file")
             if _f and _f not in _bug_files:
                 _bug_files.append(_f)
+        if builder_task_override is not None:
+            requested_files = task_override_files
+            if not isinstance(requested_files, list):
+                return False
+            requested_set = {
+                item for item in requested_files if isinstance(item, str)
+            }
+            _bug_files = [path for path in _bug_files if path in requested_set]
+            if not _bug_files:
+                audit(
+                    "loop_reflection_chat_skipped",
+                    {"trigger": "phase_end",
+                     "reason": "chat_task_has_no_matching_review_file"},
+                    pd, pn,
+                )
+                return False
         # K37b: Wenn keine file-Felder in bugs (LLM hat Schema verletzt),
         # Fallback auf alle Task-Dateien.
         if not _bug_files:
@@ -1192,14 +1215,26 @@ def _phase_end_reflection_core(state: RunState) -> bool:
                 for b in _datei_bugs
             )
             # Synthetischer Task.
+            task_override_applies = (
+                builder_task_override is not None
+                and _datei in task_override_files
+            )
             state.aktuelle_task = {
                 "id": f"phase-fix-{_datei}",
-                "name": f"Phase-Fix: {_datei}",
+                "name": (
+                    str(task_override.get("name", ""))[:200]
+                    if task_override_applies
+                    else f"Phase-Fix: {_datei}"
+                ),
                 "action": "update",
                 "task_files": [_datei],
                 "description": (
-                    f"Behebe die vom Phase-Review gemeldeten Bugs in "
-                    f"{_datei}: {_bug_text[:1000]}"
+                    str(task_override.get("description", ""))[:4_000]
+                    if task_override_applies
+                    else (
+                        f"Behebe die vom Phase-Review gemeldeten Bugs in "
+                        f"{_datei}: {_bug_text[:1000]}"
+                    )
                 ),
             }
             # Builder rufen.
@@ -1417,14 +1452,6 @@ def _phase_end_reflection(state: RunState) -> bool:
         )
         return False
 
-    state.reviewer_bugs = [
-        {
-            "file": scoped_file,
-            "severity": "high",
-            "description": proposed["description"],
-        }
-        for scoped_file in proposed["task_files"]
-    ]
     state.reflection_chat_evidence = list(proposed["source_evidence"])
     state.aktuelle_task = {
         **state.aktuelle_task,
@@ -1444,7 +1471,9 @@ def _phase_end_reflection(state: RunState) -> bool:
         state.project_dir, state.project_name,
     )
     try:
-        recovered = _phase_end_reflection_core(state)
+        recovered = _phase_end_reflection_core(
+            state, builder_task_override=proposed,
+        )
     finally:
         state.aktuelle_task = original_task
         state.reflection_chat_evidence = original_chat_evidence
