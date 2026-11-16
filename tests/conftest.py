@@ -12,6 +12,40 @@ import pytest
 sys.path.insert(0, "/opt/werkstatt")
 
 
+@pytest.hookimpl
+def pytest_runtest_logreport(report):
+    """Buffer concise failures until pytest has resumed terminal output."""
+    global _GITHUB_PYTEST_LIMIT_WARNING
+    import os
+
+    if os.environ.get("GITHUB_ACTIONS") != "true" or not report.failed:
+        return
+    if len(_GITHUB_PYTEST_ANNOTATIONS) >= 30:
+        if not _GITHUB_PYTEST_LIMIT_WARNING:
+            _GITHUB_PYTEST_ANNOTATIONS.append(
+                "::warning::More than 30 pytest failures; additional failures "
+                "remain in the Actions log."
+            )
+            _GITHUB_PYTEST_LIMIT_WARNING = True
+        return
+    from tools.pytest_annotations import format_report
+
+    annotation = format_report(report)
+    if annotation:
+        _GITHUB_PYTEST_ANNOTATIONS.append(annotation)
+
+
+_GITHUB_PYTEST_ANNOTATIONS: list[str] = []
+_GITHUB_PYTEST_LIMIT_WARNING = False
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_terminal_summary(terminalreporter):
+    """Emit annotations outside per-test capture for GitHub to parse."""
+    for annotation in _GITHUB_PYTEST_ANNOTATIONS:
+        terminalreporter.write_line(annotation)
+
+
 @pytest.fixture(autouse=True)
 def _isolate_audit(tmp_path, monkeypatch):
     """Audit-Isolierung: kein Test schreibt ins echte Log.

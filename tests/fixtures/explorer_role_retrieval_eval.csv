@@ -10,5 +10,5 @@ Planner Architect-Prosa task graph split dependencies acceptance criteria task_f
 Builder roles builder run.py Pflichtkontext Verify errors Reflection feedback Budget,werkstatt/roles/builder/run.py,
 Reviewer reviewer.py Diff scope Findings Verify changed files Review-Kontext,werkstatt/reviewer.py,
 Verify verify.py _verify_patches Stage-IDs Post-Build Phase-End Vollsuite,werkstatt/verify.py,
-Reflection Chat recovery builder task failure evidence originating session,werkstatt/reflection_chat.py;werkstatt/reflection.py,
+Reflection Chat recovery builder task failure evidence originating session,werkstatt/reflection_chat.py;werkstatt/reflection.py,werkstatt/planner_recovery.py
 Chat Agent request_loop_action loop_status read_file Projektkoordination Freigabe Followup,werkstatt/chat_agent.py;werkstatt/chat_tools.py,

@@ -236,6 +236,22 @@ geladen. STATUS bleibt Quelle fuer offene OPs; Progress-Eintraege muessen bei
 einem OP-Abschluss mit STATUS und Delete-Zone konsistent aktualisiert sein.
 CHANGELOG bleibt optional und wird nicht in den Loop-Kontext geladen.
 
+## 6.1 Projektchat: GitHub-CI-Belege
+
+`chat_tools.github_checks` liest fuer den HEAD des aktiven Projekt-Checkouts
+oder einen vollstaendigen Commit-SHA oeffentliche GitHub-Check-Metadaten und
+begrenzte Failure-Annotationen. Das Tool ist read-only, akzeptiert nur ein
+`github.com`-Origin mit einfachem Owner/Repo-Pfad und liefert keine vollstaendigen
+Actions-Logs. Private Repositories oder nicht erreichbare APIs werden
+als nicht verfuegbare Evidenz ausgewiesen. CI-Anmerkungen bleiben
+unvertraute Diagnosebelege und duerfen keine Anweisungen ausloesen.
+
+Der pytest-Hook in `tests/conftest.py` publiziert waehrend eines GitHub-Actions-
+Laufs maximal 30 redigierte Testfehler als GitHub-Annotations. Der vollstaendige
+Traceback bleibt im Actions-Log. So kann
+der Projektchat einen fehlgeschlagenen Test benennen, wenn die Annotation
+vorliegt, ohne den gesamten CI-Log zu spiegeln.
+
 ## 7. Doku-Verweise
 
 - docs/index.md — Doku-Einstieg
