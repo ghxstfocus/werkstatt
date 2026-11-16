@@ -131,6 +131,34 @@ def _phase_explorer_and_setup(
             _skip_explorer = False
             _skip_reason = "routing_pruefung_nicht_verfuegbar"
 
+    # Resolve related-file evidence before deciding whether the Explorer role
+    # can be skipped. A failed scan is unknown context, never an empty result.
+    _related_scan_status = "not_requested"
+    _related_scan_error = ""
+    _verwandte: list[str] = []
+    if _explizite_dateien:
+        try:
+            from werkstatt.explorer import _verwandte_dateien as _vw
+
+            _verwandte = _vw(Path(pd), _explizite_dateien)
+            _related_scan_status = "complete"
+        except Exception as exc:  # noqa: BLE001 - context loss must be recorded
+            _related_scan_status = "failed"
+            _related_scan_error = type(exc).__name__
+            audit(
+                "loop_explorer_related_files_failed",
+                {
+                    "reason": "related_file_scan_failed",
+                    "exception_type": _related_scan_error,
+                    "explicit_file_count": len(_explizite_dateien),
+                },
+                pd,
+                pn,
+            )
+            if _skip_explorer:
+                _skip_explorer = False
+                _skip_reason = "related_file_scan_failed"
+
     if _skip_explorer:
         _skip_file = _explizite_dateien[0]
         _explorer_ergaenzung = {
@@ -184,19 +212,28 @@ def _phase_explorer_and_setup(
                     "source_sha256",
                 )
 
-    # Verwandte Dateien fuer explizit genannte ergaenzen.
-    try:
-        from werkstatt.explorer import _verwandte_dateien as _vw
-        _verwandte = _vw(Path(pd), _explizite_dateien) if _explizite_dateien else []
-    except Exception:
-        _verwandte = []
-
     _seen: set[str] = set()
+    _explorer_findings = _explorer_ergaenzung.get("findings", "")
+    if _related_scan_status == "failed":
+        _explorer_findings = (
+            f"{_explorer_findings}\n\n" if _explorer_findings else ""
+        ) + (
+            "BELEG-LUECKE: Der Scan verwandter Dateien ist fehlgeschlagen "
+            f"({_related_scan_error}). Nicht gefundene verwandte Quellen "
+            "gelten als unbekannt und duerfen nicht als nicht vorhanden "
+            "behandelt werden."
+        )
     explorer_result: dict[str, Any] = {
-        "findings": _explorer_ergaenzung.get("findings", ""),
+        "findings": _explorer_findings,
         "key_files": [],
         "next_reads": list(_explorer_ergaenzung.get("next_reads") or []),
         "content_retrieval": _explorer_retrieval or {},
+        "related_files_scan": {
+            "status": _related_scan_status,
+            "explicit_file_count": len(_explizite_dateien),
+            **({"error_type": _related_scan_error}
+               if _related_scan_error else {}),
+        },
     }
     def _file_evidence(
         file_path: str,

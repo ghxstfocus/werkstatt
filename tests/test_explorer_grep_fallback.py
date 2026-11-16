@@ -303,6 +303,61 @@ def test_eng_einzeldatei_aenderung_ueberspringt_explorer_llm(tmp_path):
     assert "werkstatt/sample.py" in files
 
 
+def test_failed_related_file_scan_is_visible_and_disables_explorer_skip(
+    tmp_path, monkeypatch,
+):
+    target = tmp_path / "werkstatt" / "sample.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("value = 1\n", encoding="utf-8")
+    from werkstatt import explorer as explorer_module
+    from werkstatt.phases import explorer as phase_explorer
+
+    monkeypatch.setattr(
+        explorer_module,
+        "_verwandte_dateien",
+        lambda *_args: (_ for _ in ()).throw(OSError("private path detail")),
+    )
+    explorer_calls = []
+    audit_events = []
+    task = "Aendere den Wert in werkstatt/sample.py"
+    state = _state(tmp_path, task)
+
+    with (
+        patch.object(
+            phase_explorer, "run_explorer",
+            side_effect=lambda *_args: explorer_calls.append(True) or {
+                "findings": "Explorer context",
+            },
+        ),
+        patch.object(phase_explorer, "group_start"),
+        patch.object(phase_explorer, "group_end"),
+        patch.object(phase_explorer, "step"),
+        patch.object(
+            phase_explorer,
+            "audit",
+            side_effect=lambda *args: audit_events.append(args),
+        ),
+    ):
+        rc, _phase_state = phase_explorer._phase_explorer_and_setup(
+            state, task, "test", None,
+        )
+
+    assert rc == 0
+    assert explorer_calls == [True]
+    assert state.explorer_context["related_files_scan"] == {
+        "status": "failed",
+        "explicit_file_count": 1,
+        "error_type": "OSError",
+    }
+    assert "gelten als unbekannt" in state.explorer_context["findings"]
+    assert "private path detail" not in state.explorer_context["findings"]
+    assert any(
+        event[0] == "loop_explorer_related_files_failed"
+        and event[1]["exception_type"] == "OSError"
+        for event in audit_events
+    )
+
+
 def test_diagnostische_einzeldatei_laesst_explorer_llm_aktiv(tmp_path):
     """Diagnoseauftraege bleiben trotz explizitem Pfad im Explorationspfad."""
     target = tmp_path / "werkstatt" / "sample.py"

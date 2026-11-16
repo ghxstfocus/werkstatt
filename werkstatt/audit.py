@@ -87,6 +87,7 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "chat_job_research_budget_reached",
         "loop_explorer_required",
         "loop_explorer_skipped",
+        "loop_explorer_related_files_failed",
         "loop_reflection_chat_skipped",
         "loop_reflection_chat_requested",
         "loop_reflection_chat_rejected",

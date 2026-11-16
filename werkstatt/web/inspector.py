@@ -759,6 +759,7 @@ _TL_LABELS: dict[str, str] = {
     "loop_explorer_leer": "Explorer: leer",
     "loop_explorer_ergaenzt": "Explorer: ergaenzt",
     "loop_explorer_suchbegriffe": "Explorer: Suchbegriffe",
+    "loop_explorer_related_files_failed": "Explorer: Related-File-Scan fehlgeschlagen",
     "loop_skills_geladen": "Skills geladen",
     "builder_import_context": "Builder: Import-Kontext",
     "builder_file_context": "Builder: Datei-Kontext",
