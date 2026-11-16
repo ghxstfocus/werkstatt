@@ -8073,6 +8073,10 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Verifikation lokal:** Checkpoint-/Phase-State-/Loop-Phasen-/Loop-Main-/Failure-Record-Gruppe: 160 bestanden. Ruff, gezieltes Mypy fuer Loop/Phase-State/Finalizer, State-Flow-, Audit-, Control-Drift und `git diff --check` bestanden. Strikter Doku-Drift-Check nach dieser Doku-Aktualisierung erneut auszufuehren.
 - **Grenze:** Kein Vollsuite-, CI-, Server- oder Produktionsnachweis fuer diesen Schritt. Phase-End-Verify und Commit bleiben im Finalizer; Setup/Plan/Task/Finalize sind nicht insgesamt auf freie Checkpoint-Aktionen umgestellt. OP-398 bleibt offen.
 
+# 2026-11-16 – Human-Gate-Checkpoint durch PR-CI bestaetigt
+- **Nachweis:** GitHub Actions Quality Gate fuer PR #64, Commit `4929575`, Run [43969419757](https://github.com/ghxstfocus/werkstatt/actions/runs/43969419757): 2.748 bestanden, 5 uebersprungen, 0 fehlgeschlagen; Ruff und Quality Gate bestanden. Die CI deckt die Checkpoint-Auswahl, persistierte Commit-Einwilligung, Stale-Worktree-Behandlung und Follow-up-Invalidierung ab.
+- **Grenze:** PR-CI bestaetigt den Branch, nicht Servercheckout, Webserver-Neustart oder Produktion. Phase-End-Verify/Commit bleiben Finalizer-Schritte; der Gesamtumbau OP-398 bleibt offen.
+
 # 2026-11-16 – Abschluss-Follow-ups durch den Checkpoint-Koordinator ausfuehren
 - **Befund:** Ein bestaetigter Chat-Folgeauftrag, der waehrend des terminalen Compare-and-Swap eintraf, wurde nach seiner Planfreigabe ueber `_phase_tasks_loop` ohne aeussere Koordinatorentscheidungen abgearbeitet. `append_followup_tasks` aktualisierte zudem nicht den Fingerprint des genehmigten kombinierten Plans.
 - **Aenderung:** Das Anhängen bindet nun den kombinierten Taskgraph erneut an den bereits durch Plan- und Human-Gate freigegebenen Plan. Die Abschluss-Race-Verarbeitung bewertet den Checkpoint danach erneut, persistiert jede Dispatchentscheidung, reicht genau eine Aktion an den Task-Worker und finalisiert erst nach einer neuen `finalize_run`-Entscheidung.
