@@ -49,6 +49,25 @@ def _setze_runde_patches(state, patches: list) -> None:
         pass
 
 
+def _append_reflection_history(
+    state: Any, *, round_number: int, task_id: Any, patches_applied: int,
+) -> None:
+    """Persist complete round evidence for recovery and stagnation checks."""
+    history = getattr(state, "reflection_history", None)
+    if not isinstance(history, list):
+        history = []
+    verify_errors = getattr(state, "last_verify_errors", None) or []
+    reviewer_bugs = getattr(state, "reviewer_bugs", None) or []
+    history.append({
+        "runde": round_number,
+        "task_id": task_id,
+        "patches_applied": patches_applied,
+        "verify_errors": list(verify_errors),
+        "reviewer_bugs": list(reviewer_bugs),
+    })
+    state.reflection_history = history[-5:]
+
+
 def _klassifiziere_fehler(errors: list) -> str:
     """M-WelleF (2026-11-02): dominante Fehlerklasse + Repair-Hint."""
     if not errors:
@@ -765,19 +784,12 @@ def _reflection_loop_core(
             audit("loop_reflection_patch_unwirksam",
                   {"runde": runde, "diagnosen": _diagnosen}, pd, pn)
             # K47: auch hier History-Eintrag (Patches=0).
-            _refl_hist = getattr(state, "reflection_history", None)
-            if _refl_hist is None:
-                state.reflection_history = []
-                _refl_hist = state.reflection_history
-            _refl_hist.append({
-                "runde": runde,
-                "task_id": _refl_task_id,
-                "patches_applied": 0,
-                "verify_errors": list(state.last_verify_errors or [])[:3],
-                "reviewer_bugs": list(state.reviewer_bugs or [])[:3],
-            })
-            if len(_refl_hist) > 5:
-                state.reflection_history = _refl_hist[-5:]
+            _append_reflection_history(
+                state,
+                round_number=runde,
+                task_id=_refl_task_id,
+                patches_applied=0,
+            )
             # GOLD 2026-10-30: patch_nicht_angewendet ZAEHLT als
             # Stagnation, wenn es mehrfach in Folge passiert.
             # Live-Beleg 2026-10-30 22:28: 5x patch_nicht_angewendet,
@@ -871,19 +883,12 @@ def _reflection_loop_core(
         log_line(f"[reflection] {_applied} Patches angewendet (Runde {runde})")
 
         # K47: Reflection-History Eintrag.
-        _refl_hist = getattr(state, "reflection_history", None)
-        if _refl_hist is None:
-            state.reflection_history = []
-            _refl_hist = state.reflection_history
-        _refl_hist.append({
-            "runde": runde,
-            "task_id": _refl_task_id,
-            "patches_applied": _applied,
-            "verify_errors": list(state.last_verify_errors or [])[:3],
-            "reviewer_bugs": list(state.reviewer_bugs or [])[:3],
-        })
-        if len(_refl_hist) > 5:
-            state.reflection_history = _refl_hist[-5:]
+        _append_reflection_history(
+            state,
+            round_number=runde,
+            task_id=_refl_task_id,
+            patches_applied=_applied,
+        )
 
         # K39a: Verify NACH jeder Runde pruefen (nicht nur am Ende).
         # Sonst reparieren die Runden 1-3 nur Reviewer-Bugs und bauen

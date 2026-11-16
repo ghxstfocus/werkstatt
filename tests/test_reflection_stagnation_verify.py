@@ -69,6 +69,33 @@ def _mk_history_state(tmp_path):
     return s
 
 
+def test_reflection_history_keeps_all_errors_for_stagnation_and_handoff(
+    tmp_path,
+) -> None:
+    s = _mk_history_state(tmp_path)
+    errors = [
+        "other check: first",
+        "other check: second",
+        "other check: third",
+        "pytest_regression: fourth marker",
+    ]
+    bugs = [
+        {"severity": "HIGH", "description": f"review marker {index}"}
+        for index in range(5)
+    ]
+    s.last_verify_errors = errors
+    s.reviewer_bugs = bugs
+
+    reflection._append_reflection_history(
+        s, round_number=1, task_id="task-1", patches_applied=1,
+    )
+    s.last_verify_errors = ["pytest_regression: a new failure"]
+
+    assert s.reflection_history[0]["verify_errors"] == errors
+    assert s.reflection_history[0]["reviewer_bugs"] == bugs
+    assert reflection._verify_fehler_zwischen_runden_gleich(s) is True
+
+
 def test_zwischen_runden_gleich_false_ohne_history(tmp_path) -> None:
     s = _mk_history_state(tmp_path)
     assert reflection._verify_fehler_zwischen_runden_gleich(s) is False
