@@ -374,6 +374,11 @@ def ask_project_chat_for_builder_task(
     if len(prompt) > REFLECTION_PROMPT_MAX_CHARS:
         state.reflection_chat_error = "prompt_over_budget"
         return None
+    evidence_prompt_start = len(prompt) - len(evidence_json)
+    if prompt[evidence_prompt_start:] != evidence_json:
+        state.reflection_chat_error = "evidence_prompt_span_mismatch"
+        return None
+    prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
     parent = None
     worker = None
@@ -432,6 +437,14 @@ def ask_project_chat_for_builder_task(
                     "session_id": session_id,
                     "task_id": str(task.get("id", "")),
                     "evidence_sha256": evidence_hash,
+                    "evidence_prompt_span": {
+                        "unit": "unicode_codepoints",
+                        "start": evidence_prompt_start,
+                        "end": len(prompt),
+                        "sha256": evidence_hash,
+                    },
+                    "chat_prompt_chars": len(prompt),
+                    "chat_prompt_sha256": prompt_sha256,
                 },
                 state.project_dir,
                 project,

@@ -7350,3 +7350,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Die Zusammensetzung verwendet echte Zeilenumbrueche. Ein Regressionstest faengt die tatsaechliche Nachricht am Modelladapter ab und prueft Debuggerprompt, Projektname und Projektwurzel samt Trennung.
 - **Verifikation lokal:** Chat-Agent-/Tool-/Job-Gruppe: 152 bestanden, 2 uebersprungen. Noch keine Serververifikation.
 - **Grenze / Hauptziel:** Die Korrektur belegt Formatierung und Uebergabe an den lokalen Adapter, nicht die semantische Eignung/Vollstaendigkeit des Chatkontexts oder Produktionsbetrieb. OP-405/398 bleiben offen.
+# 2026-11-16 – Reflection-Belegblock an den Chatrequest binden (lokal)
+- **Befund:** Der Reflection-Recovery-Audit enthielt den Hash des strukturierten Belegblocks und den Providerrequesthash, zeigte aber nicht, an welcher Stelle der Belegblock im Chat-Userprompt uebergeben wurde.
+- **Aenderung:** Audit und Regressionstest binden nun Zeichenbereich, Unicode-Codepoint-Einheit, exakten Belegblockhash sowie Groesse und Hash des vollstaendigen Chatprompts. Der Test schneidet den Belegbereich aus dem an chat_loop uebergebenen Prompt aus und berechnet beide Hashes erneut.
+- **Verifikation lokal:** Reflection-/Builder-/Chat-Agent-/Tool-/Job-Gruppe: 189 bestanden, 2 uebersprungen; Ruff, gezieltes Mypy fuer reflection_chat.py mit Linux-Plattformtypisierung sowie Audit-, Control-, Doku-Drift und Diff-Check bestanden. Keine Serververifikation.
+- **Grenze / Hauptziel:** Bytegenaue Zuordnung fuer diesen Handoff ist belegt; semantische Suffizienz/Relevanz, andere Rollen und Produktionsbetrieb bleiben offen. OP-405/398 bleiben offen.

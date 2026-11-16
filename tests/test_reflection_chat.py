@@ -407,6 +407,21 @@ def test_chat_request_uses_read_only_snapshot_and_records_turn(
     assert calls["max_rounds"] == reflection_chat.REFLECTION_CHAT_MAX_CALLS - 1
     assert calls["max_elapsed_s"] == reflection_chat.REFLECTION_CHAT_MAX_ELAPSED_S
     assert calls["allow_time_budget_finalize"] is False
+    prompt = calls["message"]
+    assert isinstance(prompt, str)
+    evidence_start = prompt.index("\n\nBELEGE:\n") + len("\n\nBELEGE:\n")
+    evidence_text = prompt[evidence_start:]
+    request_audit = audit_events[0][1]
+    assert request_audit["evidence_prompt_span"] == {
+        "unit": "unicode_codepoints",
+        "start": evidence_start,
+        "end": len(prompt),
+        "sha256": hashlib.sha256(evidence_text.encode("utf-8")).hexdigest(),
+    }
+    assert request_audit["chat_prompt_chars"] == len(prompt)
+    assert request_audit["chat_prompt_sha256"] == hashlib.sha256(
+        prompt.encode("utf-8"),
+    ).hexdigest()
     assert state.reflection_chat_calls == 1
     assert store.get_run_record("alpha", "alpha-run-1")["checkpoint"][
         "reflection_chat_recovery_calls"
