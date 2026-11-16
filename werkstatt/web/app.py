@@ -13,7 +13,6 @@ import signal
 import sqlite3
 import subprocess
 import sys
-import threading
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
@@ -31,6 +30,7 @@ from werkstatt.web.op_selector import (
     parse_completed_op_ids,
     select_next_op,
 )
+from werkstatt.web.project_lock import project_loop_lock
 
 __all__ = ["app", "create_app"]
 
@@ -48,8 +48,6 @@ _LOOP_PROCESS_STATES = ("running", "paused", "pausing", "resuming", "stopping")
 _LOOP_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2] / ".werkstatt" / "web-loop-registry.db"
 )
-_LOOP_LOCKS: dict[str, Any] = {}
-_LOOP_LOCKS_GUARD = threading.Lock()
 _WEB_START_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar(
     "werkstatt_web_start_context", default=None,
 )
@@ -57,8 +55,7 @@ _WEB_START_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar(
 
 def _projekt_loop_lock(projektname: str) -> Any:
     """Serialisiert Start/Stop fuer ein Projekt ueber Threadpool-Requests."""
-    with _LOOP_LOCKS_GUARD:
-        return _LOOP_LOCKS.setdefault(projektname, threading.RLock())
+    return project_loop_lock(projektname)
 
 
 def _loop_registry() -> Any:

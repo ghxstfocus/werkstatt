@@ -24,7 +24,7 @@ def test_chat_tools_registry_contains_project_actions() -> None:
     erwartet = {
         "read_file", "grep", "git_log", "git_diff", "github_checks",
         "audit_query", "loop_status", "pytest_collect", "diagnose",
-        "read_status", "next_op", "server_status", "server_logs",
+        "read_status", "next_op", "server_status", "server_logs", "server_restart",
         "read_chat_history",
     }
     erwartet.add("request_loop_action")
@@ -68,7 +68,7 @@ def test_write_mode_exposes_only_isolated_workspace_write_tools() -> None:
         item["function"]["name"]
         for item in chat_tools.openai_schemas(mode="write")
     }
-    assert len(names) == 21
+    assert len(names) == 22
     assert {
         "debug_workspace_open", "debug_workspace_read",
         "debug_workspace_write", "debug_workspace_diff",
@@ -78,6 +78,7 @@ def test_write_mode_exposes_only_isolated_workspace_write_tools() -> None:
         "pytest_run", "write_temp_test", "propose_debugger_fix",
         "pytest_debugger_proposal", "write_file", "shell_exec",
     }.isdisjoint(names)
+    assert "server_restart" in names
 
 
 def test_github_checks_reads_current_commit_and_bounded_failure_annotations(
@@ -546,12 +547,13 @@ def test_mode_write_routes_production_writes_through_loop() -> None:
     """Write mode confines edits to an isolated workspace or Loop handoff."""
     schemas = chat_tools.openai_schemas(mode="write")
     names = {item["function"]["name"] for item in schemas}
-    assert len(schemas) == 21
+    assert len(schemas) == 22
     assert {
         "loop_status", "request_loop_action", "debug_workspace_write",
         "debug_workspace_diff", "propose_debug_workspace_patch",
     } <= names
     assert {"write_file", "shell_exec", "pytest_run"}.isdisjoint(names)
+    assert "server_restart" in names
 
 
 def test_read_chat_history_is_session_bound_and_paginates(
@@ -1367,6 +1369,7 @@ def test_server_status_is_allowlisted_read_only_snapshot(monkeypatch) -> None:
         return {"ok": True, "returncode": 0, "output": output, "truncated": False}
 
     monkeypatch.setattr(chat_tools, "_server_command", fake_command)
+    monkeypatch.setattr(chat_tools, "_server_http_probe", lambda _port: {"ok": True, "status": 401})
     monkeypatch.setattr(
         chat_tools, "_server_runtime_config",
         lambda: ({"service": "demo-web.service", "port": 8123}, None),
@@ -1382,9 +1385,83 @@ def test_server_status_is_allowlisted_read_only_snapshot(monkeypatch) -> None:
     assert result["expected_port"] == 8123
     assert result["checks"]["service"]["output"].startswith("ActiveState=active")
     assert result["checks"]["listener"]["output"].endswith("pid=456,fd=3))")
+    assert result["checks"]["http"] == {"ok": True, "status": 401}
     assert {"123", "456"} <= {item["pid"] for item in result["checks"]["processes"]}
     assert all(item[0] in {"systemctl", "ss", "git", "ps"} for item in calls)
     assert all("kill" not in item and "restart" not in item for item in calls)
+
+
+def test_server_restart_refuses_active_or_unknown_loop(monkeypatch, tmp_path) -> None:
+    commands: list[list[str]] = []
+
+    def command(argv, **_kwargs):
+        commands.append(argv)
+        return {"ok": True, "returncode": 0, "output": "", "truncated": False}
+
+    monkeypatch.setattr(chat_tools, "_server_runtime_config", lambda: ({"service": "demo.service", "port": 8123}, None))
+    monkeypatch.setattr(chat_tools, "_read_active_run", lambda _args: '{"status":"running"}')
+    monkeypatch.setattr(chat_tools, "_server_command", command)
+    result = json.loads(chat_tools.execute_tool(
+        "server_restart", {}, mode="write", project_dir=tmp_path,
+        project_name="demo",
+    ))
+    assert result["zustand"] == "blocked"
+    assert commands == []
+
+
+def test_server_restart_refuses_mismatched_listener_without_mutation(monkeypatch, tmp_path) -> None:
+    commands: list[list[str]] = []
+
+    def command(argv, **_kwargs):
+        commands.append(argv)
+        if argv[0] == "systemctl":
+            return {"ok": True, "returncode": 0, "output": "ActiveState=active\nSubState=running\nMainPID=123", "truncated": False}
+        if argv[0] == "ss":
+            return {"ok": True, "returncode": 0, "output": 'LISTEN users:(("python",pid=456,fd=3))', "truncated": False}
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(chat_tools, "_server_runtime_config", lambda: ({"service": "demo.service", "port": 8123}, None))
+    monkeypatch.setattr(chat_tools, "_read_active_run", lambda _args: '{"status":"idle"}')
+    monkeypatch.setattr(chat_tools, "_server_command", command)
+    result = json.loads(chat_tools.execute_tool(
+        "server_restart", {}, mode="write", project_dir=tmp_path,
+        project_name="demo",
+    ))
+    assert result["zustand"] == "blocked"
+    assert all(not (call[0] == "systemctl" and "restart" in call) for call in commands)
+
+
+def test_server_restart_returns_unverified_ack_for_followup_check(monkeypatch, tmp_path) -> None:
+    commands: list[list[str]] = []
+    unit_reads = 0
+
+    def command(argv, **_kwargs):
+        nonlocal unit_reads
+        commands.append(argv)
+        if argv[0] == "systemctl" and "restart" in argv:
+            return {"ok": True, "returncode": 0, "output": "", "truncated": False}
+        if argv[0] == "systemctl":
+            unit_reads += 1
+            pid = "123" if unit_reads == 1 else "789"
+            return {"ok": True, "returncode": 0, "output": f"ActiveState=active\nSubState=running\nMainPID={pid}", "truncated": False}
+        if argv[0] == "ss":
+            pid = "123" if unit_reads == 1 else "789"
+            return {"ok": True, "returncode": 0, "output": f'LISTEN users:(("python",pid={pid},fd=3))', "truncated": False}
+        if argv[0] == "ps":
+            return {"ok": True, "returncode": 0, "output": "123 Ssl", "truncated": False}
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(chat_tools, "_server_runtime_config", lambda: ({"service": "demo.service", "port": 8123}, None))
+    monkeypatch.setattr(chat_tools, "_read_active_run", lambda _args: '{"status":"idle"}')
+    monkeypatch.setattr(chat_tools, "_server_command", command)
+    result = json.loads(chat_tools.execute_tool(
+        "server_restart", {}, mode="write", project_dir=tmp_path,
+        project_name="demo",
+    ))
+    assert result["zustand"] == "restart_requested_unverified"
+    assert result["previous_pid"] == "123"
+    assert result["port"] == 8123
+    assert [call for call in commands if call[0] == "systemctl" and "restart" in call] == [["systemctl", "--no-block", "restart", "demo.service"]]
 
 
 def test_server_runtime_mapping_is_project_configured_and_path_bound(
