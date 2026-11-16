@@ -154,6 +154,33 @@ def _phase_explorer_and_setup(
             "grund": _skip_reason,
         }, pd, pn)
     _explorer_key = _explorer_ergaenzung.get("key_files") or []
+    if not isinstance(_explorer_key, list):
+        _explorer_key = []
+    _explorer_retrieval = _explorer_ergaenzung.get("content_retrieval")
+    if isinstance(_explorer_retrieval, dict):
+        _retrieved_sources = _explorer_retrieval.get("selected_sources") or []
+        for _source in _retrieved_sources:
+            if not isinstance(_source, dict):
+                continue
+            _source_path = _source.get("file")
+            if not isinstance(_source_path, str):
+                continue
+            _existing = next((
+                item for item in _explorer_key
+                if isinstance(item, dict) and item.get("file") == _source_path
+            ), None)
+            if _existing is None:
+                _explorer_key.append({
+                    "file": _source_path,
+                    "why": _source.get("why") or "Inhaltstreffer",
+                    "confidence": _source.get("confidence") or "medium",
+                    "matched_terms": _source.get("matched_terms", []),
+                    "retrieval_source_sha256": _source.get("source_sha256"),
+                })
+            elif isinstance(_existing, dict):
+                _existing["retrieval_source_sha256"] = _source.get(
+                    "source_sha256",
+                )
 
     # Verwandte Dateien fuer explizit genannte ergaenzen.
     try:
@@ -167,7 +194,7 @@ def _phase_explorer_and_setup(
         "findings": _explorer_ergaenzung.get("findings", ""),
         "key_files": [],
         "next_reads": list(_explorer_ergaenzung.get("next_reads") or []),
-        "content_retrieval": {},
+        "content_retrieval": _explorer_retrieval or {},
     }
     def _file_evidence(
         file_path: str,
@@ -222,16 +249,36 @@ def _phase_explorer_and_setup(
     for k in _explorer_key:
         if isinstance(k, dict) and k.get("file") and k["file"] not in _seen:
             _explorer_path = str(k["file"]).replace("\\", "/")
-            _seen.add(_explorer_path)
-            explorer_result["key_files"].append(_file_evidence(
+            _retrieval_source_hash = k.get("retrieval_source_sha256")
+            _evidence = _file_evidence(
                 _explorer_path,
                 str(k.get("why") or "Explorer-Vorschlag"),
                 str(k.get("confidence") or "low"),
                 6000,
-            ))
+                search_terms=(
+                    k.get("matched_terms")
+                    if isinstance(k.get("matched_terms"), list) else None
+                ),
+            )
+            if (
+                isinstance(_retrieval_source_hash, str)
+                and _evidence.get("source_sha256") != _retrieval_source_hash
+            ):
+                audit(
+                    "loop_explorer_grep_fallback",
+                    {"file": _explorer_path, "result": "stale_source_rejected"},
+                    pd, pn,
+                )
+                continue
+            _seen.add(_explorer_path)
+            explorer_result["key_files"].append(_evidence)
     # Retrieve matching source by content as a bounded supplement to path-only
     # Explorer results. Missing files/index entries remain unknown, not negative.
-    if not _skip_explorer and len(explorer_result["key_files"]) < 5:
+    if (
+        not _skip_explorer
+        and not isinstance(_explorer_retrieval, dict)
+        and len(explorer_result["key_files"]) < 5
+    ):
         from werkstatt.explorer import _rank_python_source_files
 
         _source_matches, _retrieval_manifest = _rank_python_source_files(

@@ -123,6 +123,57 @@ def test_inhaltssuche_findet_auftragsbegriff_ohne_pfad_oder_backticks(tmp_path):
     assert retrieval["indexed_file_scope"] == "Python-Dateien, kein Vollindex des Projekts"
 
 
+def test_content_retrieval_from_explorer_is_reused_for_architect_handoff(
+    tmp_path: Path,
+    monkeypatch,
+):
+    target = tmp_path / "src" / "beta.py"
+    target.parent.mkdir()
+    target.write_text(
+        "def quasarledger_sync():\n    return 2\n", encoding="utf-8",
+    )
+    from werkstatt import explorer as explorer_module
+    from werkstatt.phases import explorer as phase_explorer
+
+    task = "Finde die QuasarLedger synchronization logic"
+    source_candidates, retrieval = explorer_module._rank_python_source_files(
+        tmp_path, task, limit=5,
+    )
+    assert source_candidates[0]["file"] == "src/beta.py"
+    state = _state(tmp_path, task)
+
+    def retrieval_must_not_run_again(*_args, **_kwargs):
+        raise AssertionError("Explorer-Inhaltssuche darf nicht doppelt laufen")
+
+    monkeypatch.setattr(
+        explorer_module, "_rank_python_source_files", retrieval_must_not_run_again,
+    )
+    with (
+        patch.object(
+            phase_explorer,
+            "run_explorer",
+            return_value={
+                "findings": "content retrieval complete",
+                "key_files": [],
+                "content_retrieval": retrieval,
+            },
+        ),
+        patch.object(phase_explorer, "group_start"),
+        patch.object(phase_explorer, "group_end"),
+        patch.object(phase_explorer, "step"),
+        patch.object(phase_explorer, "audit"),
+    ):
+        phase_explorer._phase_explorer_and_setup(state, task, "test", None)
+
+    evidence = next(
+        item for item in state.explorer_context["key_files"]
+        if item["file"] == "src/beta.py"
+    )
+    assert evidence["source_sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
+    assert "000001 | def quasarledger_sync():" in evidence["preview"]
+    assert state.explorer_context["content_retrieval"] == retrieval
+
+
 def test_leerer_retrievalbericht_bleibt_fuer_scout_erhalten(tmp_path):
     (tmp_path / "alpha.py").write_text("def alpha():\n    pass\n", encoding="utf-8")
     (tmp_path / "beta.py").write_text("def beta():\n    pass\n", encoding="utf-8")

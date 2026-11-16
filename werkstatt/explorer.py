@@ -1146,6 +1146,8 @@ def run_explorer(state: RunState, frage: str) -> dict:
             "key_files": [],
             "next_reads": [],
             "context_budget": context_budget,
+            **({"content_retrieval": content_retrieval_manifest}
+               if content_retrieval_manifest is not None else {}),
         }
     reply = ask_llm(
         api_key, system_prompt, context,
@@ -1182,6 +1184,9 @@ def run_explorer(state: RunState, frage: str) -> dict:
     except json.JSONDecodeError:
         audit("explorer_json_fehler", {"raw": raw[:200]}, pd, pn)
         return {"findings": "", "key_files": [], "next_reads": []}
+
+    if content_retrieval_manifest is not None:
+        result["content_retrieval"] = content_retrieval_manifest
 
     _emittiere_explorer_result(
         pd, pn,

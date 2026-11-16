@@ -235,11 +235,12 @@ def test_explorer_wires_content_retrieval_into_actual_role_request(tmp_path):
         content = '{"findings":"candidate found","key_files":[],"next_reads":[]}'
 
     with patch("werkstatt.explorer.ask_llm", return_value=FakeReply()) as ask:
-        run_explorer(state, "Explain QuasarLedger synchronization")
+        result = run_explorer(state, "Explain QuasarLedger synchronization")
 
     user = ask.call_args.args[2]
     manifest = ask.call_args.kwargs["context_manifest"]
     retrieval = manifest["content_retrieval"]
+    assert result["content_retrieval"] == retrieval
     assert retrieval["indexed_file_scope"] == (
         "Python-Dateien, kein Vollindex des Projekts"
     )
