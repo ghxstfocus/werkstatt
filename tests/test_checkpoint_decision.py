@@ -1367,6 +1367,40 @@ def test_task_dispatch_returns_at_next_persisted_boundary(
     assert phase.get_task("t2")["status"] == "pending"
 
 
+def test_task_worker_rechecks_coordinator_choice_before_dispatch(
+    tmp_path, monkeypatch,
+) -> None:
+    phase = _phase(
+        tmp_path,
+        [{"id": "t1", "action": "read", "criterion_refs": ["AC1"]}],
+        ["Inventory is complete"],
+    )
+    state = RunState(
+        project_dir=tmp_path,
+        project_name="demo",
+        aufgabe="Inventory is complete",
+        tasks=phase.data["tasks"],
+    )
+    monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "")
+    monkeypatch.setattr(task_phase, "audit", lambda *_a, **_kw: True)
+
+    result = task_phase._phase_tasks_loop(
+        state,
+        phase,
+        max_task_steps=1,
+        coordinator_decision={
+            "coordinator_action": "execute_task_checkpoint",
+            "decision": "execute_planned_task",
+            "next_task_id": "stale-task",
+            "next_executor": "read_only_task",
+        },
+    )
+
+    assert result[0] == 0
+    assert state.coordinator_dispatch_stale is True
+    assert phase.get_task("t1")["status"] == "pending"
+
+
 def test_read_task_is_redispatched_when_source_hash_changes(tmp_path) -> None:
     phase = _phase(
         tmp_path,

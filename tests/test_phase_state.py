@@ -275,6 +275,7 @@ def test_init_new_verwirft_ungueltige_criterion_refs(tmp_path):
 def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
     ps = PhaseState("testprojekt", base_dir=tmp_path)
     ps.init_new("Hauptziel", [{"id": "t1"}], akzeptanzkriterien=["Basis"])
+    ps.bind_approved_plan()
     added = [{
         "id": "fu_task1",
         "name": "Zwischenauftrag",
@@ -290,6 +291,7 @@ def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
         phases=[{"id": "phase_fu", "titel": "Follow-up", "tasks": ["fu_task1"]}],
         followup_id="proposal-1",
     ) == ["fu_task1"]
+    assert ps.approved_plan_is_current()
     assert ps.append_followup_tasks(
         added,
         criteria=["Basis", "Folgekriterium"],
@@ -307,6 +309,7 @@ def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
     assert resumed.data["phasen"] == [
         {"id": "phase_fu", "titel": "Follow-up", "tasks": ["fu_task1"]},
     ]
+    assert resumed.approved_plan_is_current()
 
 
 def test_append_followup_tasks_rejects_unknown_dependency_without_mutation(tmp_path):

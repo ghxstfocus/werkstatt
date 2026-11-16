@@ -14,3 +14,10 @@ def test_code_reader_resolves_chat_and_web_audit_wrappers() -> None:
     assert "chat_job_queued" in kinds
     assert "chat_job_tool_call" in kinds
     assert "web_loop_paused" in kinds
+
+
+def test_code_reader_resolves_role_worker_audit_callbacks() -> None:
+    kinds = audit_drift.finde_code_kinds()
+
+    assert "planner_role_artifact_rejected" in kinds
+    assert "planner_role_artifact_reused" in kinds

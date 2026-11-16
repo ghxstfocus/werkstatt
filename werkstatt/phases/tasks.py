@@ -1024,6 +1024,8 @@ def _phase_tasks_loop(
     phase_state,
     max_task_steps: int | None = None,
     task_index_offset: int = 0,
+    *,
+    coordinator_decision: dict[str, Any] | None = None,
 ) -> tuple[int, int, list]:
     """Phase 3 (Fix AZ Stufe 8-C, 2026-10-31): Autonomer Task-Loop.
 
@@ -1152,6 +1154,49 @@ def _phase_tasks_loop(
             if audit_result is False:
                 phase_state.save()
                 return 1, tasks_ok, tasks
+        if coordinator_decision is not None:
+            fresh_decision = decision_payload.get("decision")
+            fresh_action = {
+                "execute_planned_task": "execute_task_checkpoint",
+                "resolve_blocked_graph": "resolve_task_graph",
+                "replan_unassigned_criteria": "replan_unassigned_criteria",
+                "replan_failed_criteria": "replan_failed_criteria",
+            }.get(fresh_decision) if isinstance(fresh_decision, str) else None
+            dispatch_matches = (
+                coordinator_decision.get("coordinator_action") == fresh_action
+                and coordinator_decision.get("decision")
+                == decision_payload.get("decision")
+                and coordinator_decision.get("next_task_id")
+                == decision_payload.get("next_task_id")
+                and coordinator_decision.get("next_executor")
+                == decision_payload.get("next_executor")
+            )
+            if not dispatch_matches:
+                audit(
+                    "loop_coordinator_dispatch_stale",
+                    {
+                        "requested_action": coordinator_decision.get(
+                            "coordinator_action",
+                        ),
+                        "current_action": fresh_action,
+                        "requested_task_id": coordinator_decision.get(
+                            "next_task_id",
+                        ),
+                        "current_task_id": decision_payload.get(
+                            "next_task_id",
+                        ),
+                    },
+                    pd,
+                    pn,
+                )
+                phase_state.save()
+                state.coordinator_dispatch_stale = True
+                return 0, tasks_ok, tasks
+            # The run coordinator owns the action choice. This worker only
+            # revalidates that choice against the latest persisted checkpoint
+            # after follow-up reconciliation, then executes the exact task.
+            decision_payload = coordinator_decision
+
         decision = decision_payload["decision"]
         if (
             max_task_steps is not None

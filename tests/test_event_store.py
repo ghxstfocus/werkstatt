@@ -817,7 +817,32 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
     monkeypatch.setattr(store, "finish_run_checkpoint", enqueue_at_finish)
     monkeypatch.setattr(loop, "EventStore", lambda: store)
     monkeypatch.setattr(loop, "get_run_id", lambda: "run-final-race")
-    monkeypatch.setattr(loop, "_phase_tasks_loop", lambda *_args: (0, 1, []))
+    decisions = iter([
+        {
+            "decision": "execute_planned_task",
+            "coordinator_action": "execute_task_checkpoint",
+            "next_task_id": "followup-t1",
+            "next_executor": "read_only_task",
+        },
+        {
+            "decision": "run_phase_end_verify",
+            "coordinator_action": "finalize_run",
+            "next_task_id": None,
+            "next_executor": "phase_end_verify",
+        },
+    ])
+    monkeypatch.setattr(
+        loop, "_run_coordinator_action", lambda *_args: next(decisions),
+    )
+    monkeypatch.setattr(loop, "_persist_run_coordinator_decision", lambda *_a, **_k: None)
+    dispatched = []
+
+    def execute_followup(_state, phase, max_steps, _offset, *, coordinator_decision):
+        dispatched.append((max_steps, coordinator_decision["next_task_id"]))
+        phase.data["tasks"][0]["status"] = "done"
+        return 0, 1, phase.data["tasks"]
+
+    monkeypatch.setattr(loop, "_phase_tasks_loop", execute_followup)
     monkeypatch.setattr(loop, "_phase_finalize", lambda *_args: 0)
     monkeypatch.setattr(loop, "check_run_lease", lambda _state: None)
     monkeypatch.setattr(loop, "audit", lambda *_args, **_kwargs: True)
@@ -838,10 +863,12 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
 
     monkeypatch.setattr(run_followups, "reconcile_chat_followups", reconcile)
     run_state = SimpleNamespace(project_dir=tmp_path, run_lease_check=None)
-    phase_state = SimpleNamespace(data={"tasks": []})
+    phase_state = SimpleNamespace(data={"tasks": [{"id": "followup-t1", "status": "pending"}]})
+    run_state.tasks = phase_state.data["tasks"]
     assert loop._finish_run_after_followups(
         "demo", run_state, phase_state, 0,
     ) == 0
+    assert dispatched == [(1, "followup-t1")]
 
     record = store.get_run_record("demo", "run-final-race")
     assert record is not None

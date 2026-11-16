@@ -2496,124 +2496,35 @@ def run_planner(
         return False
     if not getattr(state, "api_index_cache", None):
         state.api_index_cache = _code_index or _baue_api_index(pd)
-    # Architect currently has no role skills; match its own input reset before
-    # rebuilding the prompt fingerprint used to validate a saved handoff.
-    state.architect_skills_block = ""
-    _architect_input_sha256 = _architect_input_fingerprint(
-        state, aufgabe, user_content, _explorer_ctx,
-        _scout_input_sha256,
+    from werkstatt.roles.architect_execution import (
+        ArchitectRoleServices,
+        run_architect_checkpoint,
     )
-    _saved_architect = None
-    if _architect_input_sha256 and isinstance(_role_artifacts, dict):
-        _saved_architect = validate_role_artifact(
-            _role_artifacts.get("architect"),
-            role="architect",
-            run_id=getattr(state, "run_id", "") or "",
-            goal=aufgabe,
-            input_sha256=_architect_input_sha256,
-        )
-    if _saved_architect is not None:
-        from werkstatt.architect import _pruefe_architect_api_referenzen
 
-        _cached_architect_output = _saved_architect["output"]
-        _cached_api_findings = _pruefe_architect_api_referenzen(
-            _cached_architect_output,
-            getattr(state, "api_index_cache", {}) or {},
-        )
-        if (
-            len(_cached_architect_output.strip()) < 50
-            or _cached_api_findings
-        ):
-            audit("planner_role_artifact_rejected", {
-                "role": "architect",
-                "reason": (
-                    "architect_output_too_short"
-                    if len(_cached_architect_output.strip()) < 50
-                    else "current_api_preflight_failed"
-                ),
-                "finding_count": len(_cached_api_findings),
-            }, pd, pn)
-            _saved_architect = None
-    if _saved_architect is not None:
-        _arch_prosa = _saved_architect["output"]
-        state.architect_prosa = _arch_prosa
-        audit("planner_role_artifact_reused", {
-            "role": "architect",
-            "input_sha256": _architect_input_sha256,
-            "output_sha256": _saved_architect["output_sha256"],
-        }, pd, pn)
-        _publish_role_checkpoint(
-            state, "architect", "completed", "validated_checkpoint_artifact",
-            {"input_sha256": _architect_input_sha256}, _arch_prosa,
-        )
-    else:
-        _publish_role_checkpoint(
-            state, "architect", "running", "scout_handoff_ready",
-            {"goal": aufgabe, "user_context": user_content,
-             "scout_report": _scout_report},
-        )
-        if not run_architect(
-            state, aufgabe, user_content, api_key, _explorer_ctx,
-        ):
-            _publish_role_checkpoint(
-                state, "architect", "failed", "architect_call_failed",
-                _scout_report,
-            )
-            return False
-        _arch_prosa = state.architect_prosa
-        _publish_role_checkpoint(
-            state, "architect", "completed", "architect_prose_received",
-            {"goal": aufgabe, "user_context": user_content,
-             "scout_report": _scout_report}, _arch_prosa,
-        )
-    # OP-136b: Contract-Validierung architect->planner.
-    if not _validate_contract_or_audit("architect", "planner", state, pd, pn):
-        _publish_role_checkpoint(
-            state, "planner_split", "failed", "architect_contract_rejected",
-            _arch_prosa,
-        )
+    architect_result = run_architect_checkpoint(
+        state,
+        goal=aufgabe,
+        user_content=user_content,
+        explorer_context=_explorer_ctx,
+        scout_report=_scout_report,
+        scout_input_sha256=_scout_input_sha256,
+        services=ArchitectRoleServices(
+            input_fingerprint=_architect_input_fingerprint,
+            validate_artifact=validate_role_artifact,
+            make_artifact=make_role_artifact,
+            run_architect=run_architect,
+            validate_contract=_validate_contract_or_audit,
+            publish_checkpoint=_publish_role_checkpoint,
+            audit_call=audit,
+        ),
+    )
+    _arch_prosa = architect_result.output
+    _architect_input_sha256 = architect_result.input_sha256
+    _saved_architect = architect_result.saved_artifact
+    _architect_artifact_persisted = architect_result.artifact_persisted
+    if architect_result.failure_reason is not None:
         return False
 
-    _architect_artifact_persisted = False
-    if (
-        _saved_architect is None
-        and _architect_input_sha256
-        and getattr(state, "run_id", None)
-    ):
-        _architect_artifact = make_role_artifact(
-            "architect",
-            _arch_prosa,
-            run_id=state.run_id,
-            goal=aufgabe,
-            input_sha256=_architect_input_sha256,
-        )
-        _artifact_callback = getattr(
-            state, "planner_role_artifact_callback", None,
-        )
-        if _architect_artifact is not None and callable(_artifact_callback):
-            _artifact_callback(_architect_artifact)
-            _architect_artifact_persisted = True
-            _role_artifacts = dict(_role_artifacts or {})
-            _role_artifacts["architect"] = _architect_artifact
-            state.planner_role_artifacts = _role_artifacts
-            audit("planner_role_artifact_persisted", {
-                "role": "architect",
-                "input_sha256": _architect_input_sha256,
-                "output_sha256": _architect_artifact["output_sha256"],
-            }, pd, pn)
-
-    if (
-        _planner_action_role in {
-            "architect", "planner_split", "planner_dispatch",
-        }
-        and _saved_architect is None
-        and not _architect_artifact_persisted
-    ):
-        audit("planner_role_artifact_unbound", {
-            "role": "architect",
-            "reason": "current_inputs_or_persistence_unavailable",
-        }, pd, pn)
-        return False
     if (
         stop_after_role == "architect"
         or _planner_action_role in {"scout", "architect"}
