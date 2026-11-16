@@ -400,6 +400,10 @@ class PhaseState:
             self.data.get("criteria_tracking")
             or any(task.get("criterion_refs") for task in normalized)
         )
+        # The caller reaches this method only after the combined follow-up
+        # plan passed validation and its human plan gate. Bind that approved
+        # graph before saving so the run coordinator can resume it directly.
+        self.bind_approved_plan()
         self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
         self.save()
         return [str(task["id"]) for task in normalized]

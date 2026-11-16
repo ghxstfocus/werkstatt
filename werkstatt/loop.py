@@ -410,6 +410,116 @@ def _persist_run_result(
         )
 
 
+def _continue_followup_with_coordinator(
+    project_name: str,
+    state: RunState,
+    phase_state: PhaseState,
+) -> int:
+    """Resume approved follow-up work through persisted coordinator actions."""
+    store = EventStore()
+    run_id = get_run_id()
+    while True:
+        check_run_lease(state)
+        decision = _run_coordinator_action(phase_state, state)
+        audit(
+            "loop_run_coordinator_decision",
+            _coordinator_decision_audit_payload(run_id, decision),
+            state.project_dir,
+            project_name,
+        )
+        try:
+            _persist_run_coordinator_decision(
+                store, project_name, run_id, decision, run_state=state,
+            )
+        except RuntimeError as exc:
+            audit(
+                "loop_failed",
+                {
+                    "reason": "coordinator_decision_persist_failed",
+                    "error": str(exc)[:300],
+                    "followup_resume": True,
+                },
+                state.project_dir,
+                project_name,
+            )
+            return 1
+
+        action = decision.get("coordinator_action")
+        if action == "finalize_run":
+            tasks = state.tasks
+            tasks_ok = len([
+                record for record in phase_state.data.get("tasks", [])
+                if isinstance(record, dict) and record.get("status") == "done"
+            ])
+            return _phase_finalize(
+                state, tasks_ok, tasks, project_name, phase_state,
+            )
+
+        if action not in {
+            "execute_task_checkpoint",
+            "resolve_task_graph",
+            "replan_unassigned_criteria",
+            "replan_failed_criteria",
+        }:
+            audit(
+                "loop_failed",
+                {
+                    "reason": "unsupported_followup_checkpoint_action",
+                    "action": str(action or "")[:120],
+                },
+                state.project_dir,
+                project_name,
+            )
+            return 1
+
+        def progress_snapshot() -> tuple[tuple[str, str, str], ...]:
+            records = phase_state.data.get("tasks", [])
+            if not isinstance(records, list):
+                return ()
+            return tuple(
+                (
+                    str(item.get("id", "")),
+                    str(item.get("status", "")),
+                    str(item.get("failure", "")),
+                )
+                for item in records if isinstance(item, dict)
+            )
+
+        before = progress_snapshot()
+        task_index_offset = len([
+            record for record in phase_state.data.get("tasks", [])
+            if isinstance(record, dict)
+            and record.get("status") in {
+                "done", "failed", "blocked", "vetoed", "split",
+            }
+        ])
+        state.coordinator_dispatch_stale = False
+        rc, _tasks_ok, _tasks = _phase_tasks_loop(
+            state,
+            phase_state,
+            1,
+            task_index_offset,
+            coordinator_decision=decision,
+        )
+        check_run_lease(state)
+        if state.coordinator_dispatch_stale:
+            continue
+        if rc != 0:
+            return rc
+        if before == progress_snapshot():
+            audit(
+                "loop_failed",
+                {
+                    "reason": "followup_checkpoint_no_progress",
+                    "action": action,
+                    "next_task_id": decision.get("next_task_id"),
+                },
+                state.project_dir,
+                project_name,
+            )
+            return 1
+
+
 def _finish_run_after_followups(
     project_name: str,
     state: RunState,
@@ -537,17 +647,15 @@ def _finish_run_after_followups(
             continue
 
         check_run_lease(state)
-        _rc_task, tasks_ok, tasks = _phase_tasks_loop(state, phase_state)
-        if _rc_task != 0:
+        rc = _continue_followup_with_coordinator(
+            project_name, state, phase_state,
+        )
+        if rc != 0:
             _persist_run_result(
-                store, project_name, run_id, _rc_task,
+                store, project_name, run_id, rc,
                 run_state=state, phase_state=phase_state,
             )
-            return _rc_task
-        check_run_lease(state)
-        rc = _phase_finalize(
-            state, tasks_ok, tasks, project_name, phase_state,
-        )
+            return rc
 
 
 _SETUP_CONTEXT_CHECKPOINT_VERSION = 1
