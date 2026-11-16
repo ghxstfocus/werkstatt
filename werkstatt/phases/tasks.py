@@ -2143,7 +2143,44 @@ def _phase_tasks_loop(
             # deterministic_fail, sonst wird Task sofort gefailt).
             _rev_ok = False
         else:
-            _rev_ok = _with_spinner(f"Reviewer t{i}", lambda: run_reviewer(state))
+            from werkstatt.review_dispatch import reviewer_dispatch_decision
+            from werkstatt.reviewer import _get_git_diff
+
+            _review_diff = None
+            _diff_error = ""
+            try:
+                _review_diff = _get_git_diff(
+                    project_dir=pd,
+                    task_files=task_obj.get("task_files"),
+                )
+            except (OSError, RuntimeError, ValueError) as _exc:
+                _diff_error = type(_exc).__name__
+            _review_decision = reviewer_dispatch_decision(
+                task_obj,
+                _review_diff,
+                verify_warnings=_v_weich,
+                recovery=(
+                    bool(getattr(state, "reflection_chat_builder_reserve_active", False))
+                    or bool(getattr(state, "reflection_chat_evidence", None))
+                ),
+            )
+            audit(
+                "loop_reviewer_dispatch_decision",
+                {
+                    "task_id": str(task_id)[:160],
+                    **_review_decision,
+                    **({"diff_error": _diff_error} if _diff_error else {}),
+                },
+                pd,
+                pn,
+            )
+            if _review_decision["invoke_reviewer"]:
+                _rev_ok = _with_spinner(
+                    f"Reviewer t{i}", lambda: run_reviewer(state),
+                )
+            else:
+                state.reviewer_bugs = []
+                _rev_ok = True
         check_run_lease(state)
         # K40: Historie pushen (unabhaengig vom Ergebnis).
         _cur_bugs = state.reviewer_bugs or []
