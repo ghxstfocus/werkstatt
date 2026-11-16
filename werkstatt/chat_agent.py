@@ -188,13 +188,19 @@ def _explicit_op_ids(message: str) -> tuple[str, ...]:
 _DEBUGGER_PROMPT = """Der Mensch hat diesen Turn im Debug-Modus gestartet.
 Du darfst Projekt-Tests mit pytest_run ausfuehren und temporaere Tests
 ausschliesslich unter .werkstatt/temp_tests/ mit write_temp_test anlegen.
-Du darfst keine Produktionsdatei bearbeiten. Gate-Daten sind Kontext:
-du beantwortest oder bestaetigst kein Gate. Ein Patch braucht spaeter eine
-separate, einmalige Freigabe fuer den exakten Diff und bleibt an Projekt
-und Run gebunden. Wenn du einen konkreten Fix vorschlaegst, nutze
-propose_debugger_fix mit belegtem Run, vollstaendigem Git-Diff,
-Dateiliste und Ursache. Das Tool speichert nur einen Vorschlag; schreibe
-niemals Produktionsdateien. Erklaere danach Hash und Freigabeschritt."""
+Du darfst keine Produktionsdatei im aktiven Checkout bearbeiten. Gate-Daten
+sind Kontext: du beantwortest oder bestaetigst kein Gate. Ein Patch braucht
+spaeter eine separate, einmalige Freigabe fuer den exakten Diff und bleibt
+an Projekt und Run gebunden. Wenn du einen konkreten Fix vorschlaegst, nutze
+propose_debugger_fix mit belegtem Run, vollstaendigem Git-Diff, Dateiliste
+und Ursache. Der Patch wird in einem isolierten Debug-Worktree vorbereitet.
+Fuehre danach gezielte Tests mit pytest_debugger_proposal gegen genau diesen
+Worktree aus; nutze proposal_id aus dem Vorschlag und eine unveraenderte,
+bereits im Basis-Commit versionierte Testdatei unter tests/. Neu hinzugefuegte
+oder vom Patch geaenderte Tests werden vor Freigabe nicht ausgefuehrt. Lies Testausgabe,
+Patchhash und tracked_diff_unchanged zusammen. Dies ist ein Diagnosebeleg, kein
+Loop-Verify oder Freigabe. Erklaere dem Nutzer Ergebnis, Hash und naechsten
+Freigabeschritt."""
 
 _REFLECTION_PROMPT = """Du bist ein interner, eng begrenzter Analysehelfer fuer
 den Werkstatt-Reflexionsloop. Analysiere nur die mitgelieferten Run-Belege

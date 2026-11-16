@@ -92,6 +92,7 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "loop_reflection_chat_rejected",
         "loop_reflection_chat_task",
         "loop_reflection_chat_builder_result",
+        "debugger_fix_tests_run",
         "builder_context_budget",
         "loop_checkpoint_decision",
         "scout_context_budget",

@@ -6,17 +6,19 @@ Kein write_file/apply_patch/git_commit/shell_exec.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import uuid
 from collections import deque
 from collections.abc import Callable, Mapping
 from contextvars import ContextVar
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -634,6 +636,248 @@ def _pytest_run(args: dict[str, Any]) -> str:
     }, ensure_ascii=False)
 
 
+def _debugger_proposal_pytest(args: dict[str, Any]) -> str:
+    """Run a bounded test against a pending fix in its isolated worktree."""
+    session_id = _CHAT_SESSION_ID_KONTEXT.get()
+    project = _PROJEKTNAME_KONTEXT.get()
+    proposal_id = str(args.get("proposal_id") or "").strip()
+    if not session_id:
+        return json.dumps({"zustand": "error", "detail": "Chat-Session fehlt."})
+    if not re.fullmatch(r"[a-f0-9]{32}", proposal_id):
+        return json.dumps({"zustand": "invalid", "detail": "proposal_id ist ungueltig."})
+    try:
+        from werkstatt.chat_session import ChatSession
+        from werkstatt.debugger_handoff import (
+            DebuggerFixError,
+            debugger_workspace_path,
+            parse_debugger_fix,
+        )
+
+        events = ChatSession(project, session_id).load()
+    except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
+        return json.dumps({
+            "zustand": "error",
+            "detail": f"Chat-Vorschlag konnte nicht gelesen werden ({type(exc).__name__}).",
+        }, ensure_ascii=False)
+    proposals: list[dict[str, Any]] = []
+    for event in events:
+        payload = event.get("payload")
+        if (
+            event.get("kind") == "loop_action_proposed"
+            and isinstance(payload, dict)
+            and payload.get("proposal_id") == proposal_id
+        ):
+            proposals.append(payload)
+    if len(proposals) != 1:
+        return json.dumps({
+            "zustand": "needs_input",
+            "detail": "Der Vorschlag ist in dieser Chat-Session nicht eindeutig vorhanden.",
+        }, ensure_ascii=False)
+    proposal = proposals[0]
+    if (
+        proposal.get("project") != project
+        or proposal.get("action") != "start"
+        or proposal.get("debug_workspace_prepared") is not True
+    ):
+        return json.dumps({
+            "zustand": "invalid",
+            "detail": "Der Vorschlag besitzt keinen passenden Debug-Arbeitsbaum.",
+        }, ensure_ascii=False)
+    arguments = proposal.get("arguments")
+    fix_payload = arguments.get("debugger_fix") if isinstance(arguments, dict) else None
+    if not isinstance(fix_payload, dict):
+        return json.dumps({"zustand": "invalid", "detail": "Debugger-Fix fehlt."})
+    try:
+        fix = parse_debugger_fix(fix_payload)
+        if fix.project != project:
+            raise DebuggerFixError("Debugger-Fix gehoert zu einem anderen Projekt.")
+        workspace = debugger_workspace_path(fix, proposal_id).resolve(strict=True)
+        managed_root = (
+            Path(tempfile.gettempdir()) / "werkstatt-debugger-workspaces"
+        ).resolve()
+        workspace.relative_to(managed_root)
+    except (DebuggerFixError, OSError, RuntimeError, ValueError) as exc:
+        return json.dumps({
+            "zustand": "needs_input",
+            "detail": f"Isolierter Debug-Arbeitsbaum ist nicht verfuegbar/gueltig ({type(exc).__name__}).",
+        }, ensure_ascii=False)
+    if not workspace.is_dir():
+        return json.dumps({"zustand": "needs_input", "detail": "Debug-Arbeitsbaum fehlt."})
+
+    test_selector = str(args.get("test") or "").strip()
+    if len(test_selector) > 200:
+        return json.dumps({"zustand": "invalid", "detail": "Testauswahl ist zu lang."}, ensure_ascii=False)
+    raw_path = args.get("path")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return json.dumps({"zustand": "invalid", "detail": "Ein vorhandener Testpfad ist erforderlich."}, ensure_ascii=False)
+    raw_path = raw_path.strip()
+    relative = PurePosixPath(raw_path)
+    if (
+        "\\" in raw_path
+        or "\x00" in raw_path
+        or relative.is_absolute()
+        or any(part in {"", ".."} for part in relative.parts)
+        or not relative.parts
+        or not raw_path.endswith(".py")
+        or relative.parts[0] != "tests"
+    ):
+        return json.dumps({"zustand": "invalid", "detail": "Testpfad muss eine Python-Testdatei unter tests/ sein."}, ensure_ascii=False)
+    try:
+        test_path = (workspace / raw_path).resolve(strict=True)
+        test_path.relative_to(workspace)
+    except (OSError, RuntimeError, ValueError):
+        return json.dumps({"zustand": "invalid", "detail": "Testpfad fehlt oder liegt ausserhalb des Debug-Arbeitsbaums."}, ensure_ascii=False)
+    if not test_path.is_file():
+        return json.dumps({"zustand": "invalid", "detail": "Testpfad ist keine Testdatei."}, ensure_ascii=False)
+    try:
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", raw_path],
+            cwd=workspace, capture_output=True, text=True,
+            check=False, timeout=_TIMEOUT_GIT_S,
+        )
+        unchanged_test = subprocess.run(
+            ["git", "diff", "--quiet", "HEAD", "--", raw_path],
+            cwd=workspace, capture_output=True, text=True,
+            check=False, timeout=_TIMEOUT_GIT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return json.dumps({"zustand": "error", "detail": f"Testpfad konnte nicht sicher geprueft werden ({type(exc).__name__})."}, ensure_ascii=False)
+    if tracked.returncode != 0 or tracked.stdout.strip() != raw_path:
+        return json.dumps({"zustand": "invalid", "detail": "Nur bereits im Basis-Commit versionierte Tests sind erlaubt."}, ensure_ascii=False)
+    if unchanged_test.returncode != 0:
+        return json.dumps({"zustand": "invalid", "detail": "Der ausgewaehlte Test wurde im vorgeschlagenen Patch geaendert; unfreigegebene Testaenderungen werden nicht ausgefuehrt."}, ensure_ascii=False)
+    relative_path = test_path.relative_to(workspace).as_posix()
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=workspace, capture_output=True, text=True,
+            check=False, timeout=_TIMEOUT_GIT_S,
+        )
+        patch_snapshot = subprocess.run(
+            ["git", "diff", "--binary", "HEAD"],
+            cwd=workspace, capture_output=True,
+            check=False, timeout=_TIMEOUT_GIT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return json.dumps({"zustand": "error", "detail": f"Debug-Arbeitsbaumpruefung fehlgeschlagen ({type(exc).__name__})."}, ensure_ascii=False)
+    expected_patch_hash = proposal.get("workspace_diff_sha256")
+    patch_bytes = patch_snapshot.stdout or b""
+    if isinstance(patch_bytes, str):
+        patch_bytes = patch_bytes.encode("utf-8")
+    actual_patch_hash = hashlib.sha256(patch_bytes).hexdigest()
+    if (
+        head.returncode != 0
+        or head.stdout.strip() != fix.base_head
+        or patch_snapshot.returncode != 0
+        or not isinstance(expected_patch_hash, str)
+        or actual_patch_hash != expected_patch_hash
+    ):
+        return json.dumps({
+            "zustand": "needs_input",
+            "detail": "Debug-Arbeitsbaum weicht vom gespeicherten Fixstand ab; Test wurde nicht ausgefuehrt.",
+        }, ensure_ascii=False)
+
+    command = [sys.executable, "-m", "pytest", "-q", str(test_path)]
+    if test_selector:
+        command.extend(["-k", test_selector])
+    from redaction import redact_text
+
+    timed_out = False
+    test_exit_code: int | None = None
+    raw_output = ""
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=False,
+            timeout=120, cwd=workspace,
+        )
+        test_exit_code = result.returncode
+        raw_output = (result.stdout or "") + (result.stderr or "")
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        raw_output = "\n".join(
+            item.decode("utf-8", errors="replace") if isinstance(item, bytes)
+            else item
+            for item in (exc.stdout, exc.stderr)
+            if isinstance(item, (str, bytes)) and item
+        )
+    except OSError as exc:
+        return json.dumps({"zustand": "error", "detail": f"pytest konnte nicht gestartet werden ({type(exc).__name__})."}, ensure_ascii=False)
+    output, output_redacted = redact_text(raw_output, max_len=20_000)
+    after_hash = "unavailable"
+    after_ok = False
+    try:
+        after = subprocess.run(
+            ["git", "diff", "--binary", "HEAD"],
+            cwd=workspace, capture_output=True,
+            check=False, timeout=_TIMEOUT_GIT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    else:
+        after_ok = after.returncode == 0
+        after_bytes = after.stdout or b""
+        if isinstance(after_bytes, str):
+            after_bytes = after_bytes.encode("utf-8")
+        after_hash = hashlib.sha256(after_bytes).hexdigest()
+    workspace_unchanged = (
+        after_ok
+        and after_hash == expected_patch_hash
+    )
+    session_event = {
+        "proposal_id": proposal_id,
+        "project": project,
+        "run_id": fix.run_id,
+        "patch_hash": fix.patch_hash,
+        "path": relative_path,
+        "test": test_selector,
+        "exit_code": test_exit_code,
+        "timed_out": timed_out,
+        "output_sha256": hashlib.sha256(raw_output.encode("utf-8")).hexdigest(),
+        "output_redacted_or_truncated": output_redacted,
+        "workspace_diff_sha256_before": actual_patch_hash,
+        "workspace_diff_sha256_after": after_hash,
+        "tracked_diff_unchanged": workspace_unchanged,
+    }
+    try:
+        ChatSession(project, session_id).append("debugger_fix_tests_run", session_event)
+    except (OSError, RuntimeError, sqlite3.Error):
+        return json.dumps({
+            "zustand": "error",
+            "detail": "Test lief, aber das Ergebnis konnte nicht in der Chat-Session protokolliert werden.",
+            "exit_code": test_exit_code,
+            "ausgabe": output,
+        }, ensure_ascii=False)
+    from werkstatt.audit import audit
+
+    if not audit(
+        "debugger_fix_tests_run",
+        session_event,
+        _aktives_projekt_dir(),
+        project,
+        run_id=fix.run_id,
+    ):
+        return json.dumps({
+            "zustand": "error",
+            "detail": "Test lief, aber der Control-Audit-Beleg konnte nicht dauerhaft geschrieben werden.",
+            "exit_code": test_exit_code,
+            "ausgabe": output,
+        }, ensure_ascii=False)
+    return json.dumps({
+        "zustand": (
+            "timeout" if timed_out
+            else "passed"
+            if test_exit_code == 0 and workspace_unchanged
+            else "failed"
+        ),
+        **session_event,
+        "ausgabe": output,
+        "hinweis": (
+            "Test lief im isolierten Debug-Arbeitsbaum; das ist kein Loop-Verify "
+            "und aendert weder Projektcheckout noch freizugebenden Diff."
+        ),
+    }, ensure_ascii=False)
+
+
 def _write_temp_test(args: dict[str, Any]) -> str:
     """Schreibt einen isolierten Debug-Test nur in .werkstatt/temp_tests."""
     content = args.get("content")
@@ -1087,11 +1331,35 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
             "detail": str(exc),
         }, ensure_ascii=False)
     proposal_id = uuid.uuid4().hex
+    workspace: Path | None = None
     try:
-        materialize_debugger_workspace(
+        workspace = materialize_debugger_workspace(
             fix, worktree_root, proposal_id,
         )
+        workspace_diff = subprocess.run(
+            ["git", "diff", "--binary", "HEAD"],
+            cwd=workspace,
+            capture_output=True,
+            check=False,
+            timeout=_TIMEOUT_GIT_S,
+        )
+        if workspace_diff.returncode != 0:
+            from werkstatt.debugger_handoff import cleanup_debugger_workspace
+
+            cleanup_debugger_workspace(fix, worktree_root, proposal_id)
+            return json.dumps({
+                "zustand": "error",
+                "detail": "Der isolierte Debug-Diff konnte nicht gebunden werden.",
+            }, ensure_ascii=False)
+        workspace_diff_bytes = workspace_diff.stdout or b""
+        if isinstance(workspace_diff_bytes, str):
+            workspace_diff_bytes = workspace_diff_bytes.encode("utf-8")
+        workspace_diff_sha256 = hashlib.sha256(workspace_diff_bytes).hexdigest()
     except (DebuggerFixError, OSError, subprocess.TimeoutExpired) as exc:
+        if workspace is not None:
+            from werkstatt.debugger_handoff import cleanup_debugger_workspace
+
+            cleanup_debugger_workspace(fix, worktree_root, proposal_id)
         return json.dumps({
             "zustand": "error",
             "detail": f"Isolierter Debug-Schreibvorgang fehlgeschlagen: {str(exc)[:1000]}",
@@ -1103,6 +1371,7 @@ def _propose_debugger_fix(args: dict[str, Any]) -> str:
         "action": "start",
         "arguments": {"debugger_fix": fix.to_payload()},
         "debug_workspace_prepared": True,
+        "workspace_diff_sha256": workspace_diff_sha256,
         "summary": f"Debugger-Fix freigeben: {fix.signatur}",
         "task_preview": (
             f"{fix.ursache_tag} · {len(fix.betroffene_dateien)} Datei(en) · "
@@ -1281,6 +1550,28 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             ],
         },
         "fn": _propose_debugger_fix,
+        "mode": "debugger",
+    },
+    "pytest_debugger_proposal": {
+        "description": (
+            "Fuehrt im Debug-Modus einen gezielten pytest-Pfad gegen den "
+            "hashgebundenen, isolierten Worktree eines Chat-Fixvorschlags aus. "
+            "Nutze proposal_id aus propose_debugger_fix und einen unveraenderten, "
+            "bereits versionierten Testpfad unter tests/. Neu hinzugefuegte oder "
+            "vom Patch geaenderte Tests werden abgelehnt. Timeout 120 Sekunden. Protokolliert "
+            "Exitcode, Patchhash und Unveraendertheit des getrackten Diffs. Dies ersetzt "
+            "weder Loop-Verify noch Freigabe."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "proposal_id": {"type": "string"},
+                "path": {"type": "string"},
+                "test": {"type": "string"},
+            },
+            "required": ["proposal_id", "path"],
+        },
+        "fn": _debugger_proposal_pytest,
         "mode": "debugger",
     },
     "diagnose": {

@@ -26,7 +26,10 @@ def test_chat_tools_registry_contains_project_actions() -> None:
         "read_status", "next_op", "server_status", "server_logs",
     }
     erwartet.add("request_loop_action")
-    erwartet.update({"pytest_run", "write_temp_test", "propose_debugger_fix"})
+    erwartet.update({
+        "pytest_run", "write_temp_test", "propose_debugger_fix",
+        "pytest_debugger_proposal",
+    })
     assert set(chat_tools.CHAT_TOOLS) == erwartet
 
 
@@ -45,8 +48,11 @@ def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
     assert "loop_status" in read_names
     assert {"server_status", "server_logs"} <= read_names
     assert len(read_names) == 13
-    assert {"pytest_run", "write_temp_test", "propose_debugger_fix"} <= debugger_names
-    assert len(debugger_names) == 16
+    assert {
+        "pytest_run", "write_temp_test", "propose_debugger_fix",
+        "pytest_debugger_proposal",
+    } <= debugger_names
+    assert len(debugger_names) == 17
 
 
 def test_openai_schemas_anzahl() -> None:
@@ -1001,3 +1007,134 @@ def test_propose_debugger_fix_creates_project_run_bound_proposal(
     ))
     assert missing_evidence["zustand"] == "needs_input"
     assert len(save_count) == 1
+
+
+def test_debugger_proposal_tests_run_in_hash_bound_worktree(
+    tmp_path, monkeypatch,
+):
+    import hashlib
+
+    from werkstatt import debugger_handoff
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    monkeypatch.setattr(chat_tools.tempfile, "gettempdir", lambda: str(tmp_path))
+    proposal_id = "d" * 32
+    base_head = "a" * 40
+    diff = (
+        "diff --git a/pkg/demo.py b/pkg/demo.py\n"
+        "--- a/pkg/demo.py\n+++ b/pkg/demo.py\n"
+        "@@ -1 +1 @@\n-old = 1\n+new = 2\n"
+    )
+    fix = debugger_handoff.create_debugger_fix(
+        signatur="debug-test",
+        ursache_tag="regression",
+        diff=diff,
+        betroffene_dateien=["pkg/demo.py"],
+        confidence=0.9,
+        project="demo",
+        run_id="demo-run-123",
+        base_head=base_head,
+    )
+    workspace = debugger_handoff.debugger_workspace_path(fix, proposal_id)
+    (workspace / "tests").mkdir(parents=True)
+    (workspace / "tests" / "test_target.py").write_text(
+        "def test_existing():\n    assert True\n", encoding="utf-8",
+    )
+    proposal = {
+        "proposal_id": proposal_id,
+        "action": "start",
+        "project": "demo",
+        "debug_workspace_prepared": True,
+        "workspace_diff_sha256": hashlib.sha256(b"pinned-patch").hexdigest(),
+        "arguments": {"debugger_fix": fix.to_payload()},
+    }
+    session_events = []
+
+    class FakeSession:
+        def __init__(self, project, session_id):
+            assert project == "demo"
+            assert session_id == "b" * 32
+
+        def load(self):
+            return [{"kind": "loop_action_proposed", "payload": proposal}]
+
+        def append(self, kind, payload):
+            session_events.append((kind, payload))
+
+    monkeypatch.setattr("werkstatt.chat_session.ChatSession", FakeSession)
+    audit_events = []
+    monkeypatch.setattr(
+        "werkstatt.audit.audit",
+        lambda kind, payload, project_dir, project_name, **kwargs: (
+            audit_events.append((kind, payload, project_name, kwargs)) or True
+        ),
+    )
+    calls = []
+    unchanged_test_rc = [0]
+
+    def fake_run(command, *, cwd, **kwargs):
+        calls.append((command, Path(cwd), kwargs))
+        if command[:3] == ["git", "ls-files", "--error-unmatch"]:
+            return SimpleNamespace(returncode=0, stdout="tests/test_target.py\n")
+        if command[:3] == ["git", "diff", "--quiet"]:
+            return SimpleNamespace(returncode=unchanged_test_rc[0], stdout="")
+        if command[:3] == ["git", "rev-parse", "--verify"]:
+            return SimpleNamespace(returncode=0, stdout=base_head)
+        if command[:3] == ["git", "diff", "--binary"]:
+            return SimpleNamespace(returncode=0, stdout=b"pinned-patch")
+        if command[1:3] == ["-m", "pytest"]:
+            test_path = Path(command[4])
+            assert test_path.is_file()
+            return SimpleNamespace(
+                returncode=0, stdout="1 passed", stderr="",
+            )
+        raise AssertionError(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(chat_tools.subprocess, "run", fake_run)
+    result = json.loads(chat_tools.execute_tool(
+        "pytest_debugger_proposal",
+        {"proposal_id": proposal_id, "path": "tests/test_target.py"},
+        mode="debugger",
+        project_dir=project_root,
+        source_project_dir=project_root,
+        project_name="demo",
+        session_id="b" * 32,
+    ))
+
+    assert result["zustand"] == "passed"
+    assert result["tracked_diff_unchanged"] is True
+    assert result["patch_hash"] == fix.patch_hash
+    assert result["path"] == "tests/test_target.py"
+    assert calls[4][1] == workspace
+    assert calls[4][0][1:3] == ["-m", "pytest"]
+    assert session_events[0][0] == "debugger_fix_tests_run"
+    assert session_events[0][1]["tracked_diff_unchanged"] is True
+    assert audit_events[0][0] == "debugger_fix_tests_run"
+    assert audit_events[0][1]["output_sha256"] == result["output_sha256"]
+    assert audit_events[0][2] == "demo"
+    assert audit_events[0][3]["run_id"] == "demo-run-123"
+
+    invalid_path = json.loads(chat_tools.execute_tool(
+        "pytest_debugger_proposal",
+        {"proposal_id": proposal_id, "path": "."},
+        mode="debugger",
+        project_dir=project_root,
+        source_project_dir=project_root,
+        project_name="demo",
+        session_id="b" * 32,
+    ))
+    assert invalid_path["zustand"] == "invalid"
+
+    unchanged_test_rc[0] = 1
+    changed_test = json.loads(chat_tools.execute_tool(
+        "pytest_debugger_proposal",
+        {"proposal_id": proposal_id, "path": "tests/test_target.py"},
+        mode="debugger",
+        project_dir=project_root,
+        source_project_dir=project_root,
+        project_name="demo",
+        session_id="b" * 32,
+    ))
+    assert changed_test["zustand"] == "invalid"
+    assert len([call for call in calls if call[0][1:3] == ["-m", "pytest"]]) == 1
