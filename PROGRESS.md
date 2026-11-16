@@ -7291,3 +7291,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Die Recovery uebergibt den verifizierten Chat-Task nun explizit an `_phase_end_reflection_core`. Der Builder bearbeitet nur dessen Dateiliste in Schnittmenge mit den tatsaechlichen Phase-Review-Dateien; ein leerer Schnitt stoppt fail-closed. `reviewer_bugs` bleibt bis zur naechsten echten Review unveraendert und wird nicht mit Chat-Prosa vermischt.
 - **Verifikation lokal:** Reflection-/Phase-End-/Builder-Gruppe: 87 bestanden; Ruff, Mypy, Audit- und Control-Drift bestanden. Strikter Doku-Drift folgt nach dieser Eintragung.
 - **Grenze / Hauptziel:** Dies sichert den Phase-End-Handoff; die breitere Recovery-/Rollen-Eval- und Serververifikation bleiben offen. OP-398/405 bleiben offen.
+
+## 2026-11-16 – Projektchat liest konsistenten Loop-Status
+- **Befund:** `loop_status` las Registry, RunRecord/Checkpoint und Ereignis-Timeline getrennt. Bei parallelem Checkpoint- oder Run-Ende konnte die Antwort Werte aus verschiedenen Zeitpunkten kombinieren und einen terminalen Run aus der Prozess-Registry noch als laufend melden.
+- **Aenderung:** `EventStore.get_run_snapshot` liest RunRecord und letzte Events in einer SQLite-Lesetransaktion und begrenzt beide auf das aktive Projekt. `loop_status` gibt den dauerhaften RunRecord-Status zusaetzlich aus und zeigt einen Widerspruch zwischen aktiver Prozess-Registry und terminalem RunRecord als `reconciling` mit Erklaerung.
+- **Verifikation lokal:** Chat-Tool-/Event-Store-Gruppe: 80 bestanden, 2 uebersprungen. Audit-/Control-/Doku-Drift und Ruff/Mypy fuer die geaenderten Module folgen.
+- **Grenze / Hauptziel:** Der SQLite-Snapshot ist konsistent, die separate Prozess-Registry bleibt eine eigene Quelle und kann waehrend eines Uebergangs abweichen; dieser Widerspruch wird sichtbar, nicht verschwiegen. OP-396/397/398 bleiben offen; kein Server- oder Produktionsnachweis.

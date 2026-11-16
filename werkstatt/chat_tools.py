@@ -449,6 +449,11 @@ def _read_active_run(_args: dict[str, Any]) -> str:
     result: dict[str, Any] = {
         "project": project,
         "status": status,
+        "status_source": (
+            "durable_run_record_fallback"
+            if status == "checkpoint_running_unconfirmed"
+            else "process_registry"
+        ),
         "run_id": run_id,
         "updated_at": registry_record.get("updated_at"),
     }
@@ -463,10 +468,28 @@ def _read_active_run(_args: dict[str, Any]) -> str:
             from werkstatt.event_store import EventStore
 
             store = EventStore()
-        record = store.get_run_record(project, run_id)
-        if record is None:
+        snapshot = store.get_run_snapshot(project, run_id, event_limit=20)
+        if snapshot is None:
             result["checkpoint_status"] = "missing"
             return json.dumps(result, ensure_ascii=False)
+        record = snapshot["record"]
+        durable_status = record.get("status")
+        result["run_record_status"] = durable_status
+        if (
+            status in {"starting", "running", "paused", "pausing", "resuming"}
+            and durable_status in {"completed", "failed"}
+        ):
+            result["status"] = "reconciling"
+            result["status_detail"] = (
+                "Prozess-Registry und dauerhafter Run-Status weichen ab; "
+                "der RunRecord ist terminal."
+            )
+        elif (
+            status == "checkpoint_running_unconfirmed"
+            and durable_status in {"completed", "failed"}
+        ):
+            result["status"] = durable_status
+            result["status_source"] = "durable_run_record"
         start_context = record.get("start_context")
         start_context = start_context if isinstance(start_context, dict) else {}
         goal = record.get("target") or start_context.get("goal")
@@ -564,7 +587,7 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                 ]
         # Keep only compact event metadata. Raw prompts, file contents,
         # tool arguments, and model responses remain available via audit_query.
-        events = store.tail(run_id, limit=20, project=project)
+        events = snapshot["events"]
         result["recent_events"] = [
             {
                 "seq": event.get("seq"),

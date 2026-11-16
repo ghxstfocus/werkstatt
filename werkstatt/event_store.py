@@ -294,6 +294,52 @@ class EventStore:
             ).fetchone()
         return self._run_record_from_row(row) if row is not None else None
 
+    def get_run_snapshot(
+        self, project: str, run_id: str, *, event_limit: int = 20,
+    ) -> dict[str, Any] | None:
+        """Read one run record and its recent events from one SQLite snapshot."""
+        if not 1 <= event_limit <= 500:
+            raise ValueError("event_limit muss zwischen 1 und 500 liegen")
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN")
+            row = conn.execute(
+                "SELECT project, run_id, status, target, base_commit, "
+                "checkpoint_json, checkpoint_version, updated_at, "
+                "start_context_json FROM run_records WHERE project=? AND run_id=?",
+                (project, run_id),
+            ).fetchone()
+            if row is None:
+                conn.commit()
+                return None
+            event_rows = conn.execute(
+                "SELECT seq, run_id, kind, phase, status, payload, ts, project "
+                "FROM events WHERE run_id=? AND project=? "
+                "ORDER BY seq DESC LIMIT ?",
+                (run_id, project, event_limit),
+            ).fetchall()
+            conn.commit()
+        event_rows.reverse()
+        events: list[dict[str, Any]] = []
+        for event_row in event_rows:
+            try:
+                payload = json.loads(event_row[5])
+            except (TypeError, json.JSONDecodeError):
+                payload = {}
+            events.append({
+                "seq": event_row[0],
+                "run_id": event_row[1],
+                "kind": event_row[2],
+                "phase": event_row[3],
+                "status": event_row[4],
+                "payload": payload,
+                "ts": event_row[6],
+                "project": event_row[7],
+            })
+        return {
+            "record": self._run_record_from_row(row),
+            "events": events,
+        }
+
     def get_active_run_record(self, project: str) -> dict[str, Any] | None:
         """Return the newest durable run not yet recorded as terminal."""
         with closing(self._connect()) as conn:

@@ -79,6 +79,38 @@ def test_tail_liefert_neueste_events_chronologisch(tmp_path: Path) -> None:
         store.tail("run-tail", limit=0)
 
 
+def test_run_snapshot_binds_checkpoint_and_timeline_to_one_run(tmp_path: Path) -> None:
+    store = EventStore(db_pfad=tmp_path / "events.db")
+    run = store.create_run_record(
+        "demo", "demo-run-snapshot", "Inspect checkpoint",
+    )
+    store.update_run_checkpoint(
+        "demo", "demo-run-snapshot", {"current_task_id": "task-1"},
+        expected_version=run["checkpoint_version"],
+    )
+    store.append(
+        "demo-run-snapshot", "loop_task_started", payload={"summary": "Task 1"},
+        project="demo",
+    )
+    store.append(
+        "demo-run-snapshot", "private_project_event",
+        payload={"summary": "must not mix projects"}, project="other",
+    )
+
+    snapshot = store.get_run_snapshot(
+        "demo", "demo-run-snapshot", event_limit=20,
+    )
+
+    assert snapshot is not None
+    assert snapshot["record"]["checkpoint"]["current_task_id"] == "task-1"
+    assert [event["kind"] for event in snapshot["events"]] == [
+        "loop_task_started",
+    ]
+    assert store.get_run_snapshot("demo", "missing-run") is None
+    with pytest.raises(ValueError, match="event_limit"):
+        store.get_run_snapshot("demo", "demo-run-snapshot", event_limit=0)
+
+
 def test_query_since_seq_export(tmp_path: Path) -> None:
     store = EventStore(db_pfad=tmp_path / "events.db")
 

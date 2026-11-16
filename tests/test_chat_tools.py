@@ -498,6 +498,43 @@ def test_loop_status_falls_back_to_durable_cli_run(monkeypatch, tmp_path):
     assert parsed["run_id"] == "alpha-cli-1"
 
 
+def test_loop_status_reports_registry_runrecord_mismatch_as_reconciling(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import app
+
+    run_id = "alpha-run-finished"
+    monkeypatch.setattr(
+        app, "_loop_registry",
+        lambda: SimpleNamespace(read=lambda _project: {
+            "run_id": run_id,
+            "state": "running",
+            "updated_at": 20.0,
+        }),
+    )
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record("alpha", run_id, "Verify completion")
+    assert store.transition_run_status(
+        "alpha", run_id, expected_status="running", status="completed",
+    )
+    store.append(
+        run_id, "loop_ended", status="ok",
+        payload={"summary": "Run abgeschlossen"}, project="alpha",
+    )
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+
+    parsed = json.loads(chat_tools.execute_tool(
+        "loop_status", {}, project_dir=tmp_path, project_name="alpha",
+    ))
+
+    assert parsed["status"] == "reconciling"
+    assert parsed["status_source"] == "process_registry"
+    assert parsed["run_record_status"] == "completed"
+    assert "weichen ab" in parsed["status_detail"]
+    assert parsed["recent_events"][0]["kind"] == "loop_ended"
+
+
 
 def test_read_file_utf8_output_is_capped_even_with_large_end(tmp_path):
     datei = tmp_path / "large.txt"
