@@ -637,6 +637,19 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
 
     next_task = phase_state.get_next_task()
     stale_tasks_queued: list[str] = []
+    if isinstance(next_task, dict):
+        queue_stale_dependencies = getattr(
+            phase_state, "queue_stale_read_dependencies", None,
+        )
+        if callable(queue_stale_dependencies):
+            queued = queue_stale_dependencies(str(next_task.get("id", "")))
+            if isinstance(queued, list):
+                stale_tasks_queued = [
+                    task_id for task_id in queued
+                    if isinstance(task_id, str)
+                ]
+            if stale_tasks_queued:
+                next_task = phase_state.get_next_task()
     task_progress = phase_state.progress()
     if next_task is None and task_progress.get("pending", 0) == 0:
         queue_stale = getattr(
@@ -645,10 +658,10 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         if callable(queue_stale):
             queued = queue_stale()
             if isinstance(queued, list):
-                stale_tasks_queued = [
+                stale_tasks_queued.extend(
                     task_id for task_id in queued
                     if isinstance(task_id, str)
-                ]
+                )
             if stale_tasks_queued:
                 next_task = phase_state.get_next_task()
     decision = _checkpoint_decision_payload(

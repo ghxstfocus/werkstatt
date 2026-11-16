@@ -130,6 +130,63 @@ def test_builder_sends_source_hash_and_complete_current_file(tmp_path):
     )
 
 
+def test_builder_receives_required_hash_bound_checkpoint_read_sources(tmp_path):
+    import hashlib
+
+    target = tmp_path / "target.py"
+    target.write_text("value = 1\n", encoding="utf-8")
+    read_source = {
+        "read_task_id": "inspect",
+        "file": "src/context.py",
+        "source_sha256": hashlib.sha256(b"context = True\n").hexdigest(),
+        "source_bytes": 15,
+        "line_ranges": [[1, 1]],
+        "total_lines": 1,
+        "complete": True,
+        "excerpt": "000001 | context = True",
+    }
+    state = RunState(
+        api_key="test-key",
+        project_dir=tmp_path,
+        project_name="demo",
+        aktuelle_task={
+            "id": "implement",
+            "name": "Use inspected context",
+            "description": "Apply the discovered behavior.",
+            "action": "update",
+            "task_files": ["target.py"],
+            "checkpoint_read_source_evidence": [read_source],
+        },
+    )
+    reply = type("Reply", (), {
+        "ok": True,
+        "content": '{"patches": []}',
+        "error": "",
+    })()
+    with patch(
+        "werkstatt.roles.builder._common.ask_llm",
+        return_value=reply,
+    ) as ask_llm, patch("werkstatt.roles.builder._common.audit"):
+        _build_patches_fuer_datei(
+            state, "target.py", "Use the inspected behavior.", "test-key",
+        )
+
+    prompt = ask_llm.call_args.args[2]
+    assert "CHECKPOINT-LESEBELEGE" in prompt
+    assert "context = True" in prompt
+    assert read_source["source_sha256"] in prompt
+    manifest = ask_llm.call_args.kwargs["context_manifest"]["budget"]
+    section = next(
+        item for item in manifest["section_manifest"]
+        if item["name"] == "CHECKPOINT_READ_SOURCE_EVIDENCE"
+    )
+    assert section["status"] == "required"
+    start, end = section["prompt_start"], section["prompt_end"]
+    assert hashlib.sha256(prompt[start:end].encode("utf-8")).hexdigest() == (
+        section["sha256"]
+    )
+
+
 def test_builder_api_context_has_no_silent_file_symbol_or_line_slices(tmp_path):
     target = tmp_path / "a.py"
     target.write_text("def update(): return True\n", encoding="utf-8")

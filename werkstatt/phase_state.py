@@ -404,8 +404,11 @@ class PhaseState:
                 and task.get("status") in ("done", "pending", "running")
             ):
                 verification_task = dict(task)
-                verification_task["action"] = "verify"
-                verification_task["verification_only"] = True
+                if task.get("action") == "read":
+                    verification_task["read_reverification"] = True
+                else:
+                    verification_task["action"] = "verify"
+                    verification_task["verification_only"] = True
                 return verification_task
         for task in self.data.get("tasks", []):
             if task.get("status") not in ("pending", "running"):
@@ -423,17 +426,29 @@ class PhaseState:
         return None
 
     def queue_stale_task_reverification(self) -> list[str]:
-        """Queue completed criterion tasks whose file evidence went stale."""
+        """Queue completed tasks whose persisted file evidence went stale."""
         queued: list[str] = []
         for task in self.data.get("tasks", []):
             if (
                 not isinstance(task, dict)
                 or task.get("status") != "done"
-                or not task.get("criterion_refs")
                 or task.get("verification_pending") is True
             ):
                 continue
             task_id = task.get("id")
+            if task.get("action") == "read":
+                if (
+                    not isinstance(task_id, str)
+                    or self.task_read_evidence_is_current(
+                        task_id, task.get("read_evidence"),
+                    )
+                ):
+                    continue
+                task["verification_pending"] = True
+                queued.append(task_id)
+                continue
+            if not task.get("criterion_refs"):
+                continue
             evidence = task.get("verify_evidence")
             if (
                 not isinstance(task_id, str)
@@ -447,6 +462,154 @@ class PhaseState:
             self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
             self.save()
         return queued
+
+    def queue_stale_read_dependencies(self, task_id: str) -> list[str]:
+        """Re-read stale read-task ancestors before dispatching a dependent."""
+        target = self.get_task(task_id)
+        if not isinstance(target, dict):
+            return []
+        by_id = {
+            task.get("id"): task
+            for task in self.data.get("tasks", [])
+            if isinstance(task, dict) and isinstance(task.get("id"), str)
+        }
+        pending = list(target.get("dependencies") or [])
+        seen: set[str] = set()
+        read_dependencies: list[dict[str, Any]] = []
+        while pending:
+            dependency_id = pending.pop()
+            if not isinstance(dependency_id, str) or dependency_id in seen:
+                continue
+            seen.add(dependency_id)
+            dependency = by_id.get(dependency_id)
+            if not isinstance(dependency, dict):
+                continue
+            pending.extend(dependency.get("dependencies") or [])
+            if dependency.get("action") == "read":
+                read_dependencies.append(dependency)
+
+        queued: list[str] = []
+        for dependency in read_dependencies:
+            dependency_id = dependency.get("id")
+            if (
+                dependency.get("status") != "done"
+                or dependency.get("verification_pending") is True
+                or not isinstance(dependency_id, str)
+                or self.task_read_evidence_is_current(
+                    dependency_id, dependency.get("read_evidence"),
+                )
+            ):
+                continue
+            dependency["verification_pending"] = True
+            queued.append(dependency_id)
+        if queued:
+            self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+            self.save()
+        return queued
+
+    def record_task_read_evidence(
+        self,
+        task_id: str,
+        files: list[dict[str, Any]],
+    ) -> bool:
+        """Persist provenance for every file actually read by a read task."""
+        task = self.get_task(task_id)
+        if not isinstance(task, dict) or task.get("action") != "read":
+            return False
+        task_files = task.get("task_files")
+        if not isinstance(task_files, list) or not task_files:
+            return False
+        normalized = [
+            item.replace("\\", "/")
+            for item in task_files
+            if isinstance(item, str)
+        ]
+        if len(normalized) != len(task_files) or len(set(normalized)) != len(
+            normalized
+        ):
+            return False
+        evidence_files: dict[str, dict[str, Any]] = {}
+        for item in files:
+            path = item.get("file")
+            digest = item.get("sha256")
+            size = item.get("bytes")
+            lines = item.get("lines")
+            if (
+                not isinstance(path, str)
+                or path not in normalized
+                or not isinstance(digest, str)
+                or len(digest) != 64
+                or not isinstance(size, int)
+                or isinstance(size, bool)
+                or size < 0
+                or not isinstance(lines, int)
+                or isinstance(lines, bool)
+                or lines < 0
+                or path in evidence_files
+            ):
+                return False
+            evidence_files[path] = {
+                "sha256": digest,
+                "bytes": size,
+                "lines": lines,
+            }
+        if set(evidence_files) != set(normalized):
+            return False
+        current_hashes = self._task_file_hashes(normalized)
+        if current_hashes is None or current_hashes != {
+            path: value["sha256"] for path, value in evidence_files.items()
+        }:
+            return False
+        task["read_evidence"] = {
+            "schema_version": 1,
+            "task_id": task_id,
+            "run_id": self.run_id,
+            "task_files": sorted(normalized),
+            "files": evidence_files,
+            "read_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        }
+        task.pop("verification_pending", None)
+        self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+        self.save()
+        return True
+
+    def task_read_evidence_is_current(
+        self,
+        task_id: str,
+        evidence: object,
+    ) -> bool:
+        """Validate read evidence against this task and current source bytes."""
+        task = self.get_task(task_id)
+        if not isinstance(task, dict) or not isinstance(evidence, dict):
+            return False
+        task_files = task.get("task_files")
+        recorded_files = evidence.get("files")
+        normalized = (
+            [item.replace("\\", "/") for item in task_files]
+            if isinstance(task_files, list)
+            and all(isinstance(item, str) for item in task_files)
+            else None
+        )
+        if (
+            task.get("action") != "read"
+            or evidence.get("schema_version") != 1
+            or evidence.get("task_id") != task_id
+            or evidence.get("run_id") != self.run_id
+            or normalized is None
+            or not normalized
+            or evidence.get("task_files") != sorted(normalized)
+            or not isinstance(recorded_files, dict)
+            or set(recorded_files) != set(normalized)
+        ):
+            return False
+        current_hashes = self._task_file_hashes(normalized)
+        if current_hashes is None:
+            return False
+        return all(
+            isinstance(recorded_files.get(path), dict)
+            and recorded_files[path].get("sha256") == digest
+            for path, digest in current_hashes.items()
+        )
 
     def mark_blocked(
         self, task_id: str, *, grund: str = "unknown",

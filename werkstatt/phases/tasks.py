@@ -240,6 +240,94 @@ def _record_task_verify_evidence(
     return recorded
 
 
+def _read_dependency_sources(
+    state: RunState,
+    phase_state: Any,
+    task: dict[str, Any],
+) -> tuple[list[dict[str, Any]], str]:
+    """Build exact current excerpts from this task's completed read ancestors."""
+    dependencies = task.get("dependencies")
+    if not isinstance(dependencies, list):
+        return [], "task_dependencies_invalid"
+    by_id = {
+        record.get("id"): record
+        for record in phase_state.data.get("tasks", [])
+        if isinstance(record, dict) and isinstance(record.get("id"), str)
+    }
+    ordered: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def visit(task_id: object) -> bool:
+        if not isinstance(task_id, str) or task_id in seen:
+            return True
+        seen.add(task_id)
+        dependency = by_id.get(task_id)
+        if not isinstance(dependency, dict):
+            return False
+        ancestors = dependency.get("dependencies") or []
+        if not isinstance(ancestors, list):
+            return False
+        if not all(visit(ancestor) for ancestor in ancestors):
+            return False
+        if dependency.get("action") == "read":
+            ordered.append(dependency)
+        return True
+
+    if not all(visit(task_id) for task_id in dependencies):
+        return [], "read_dependency_missing"
+    if not ordered:
+        return [], ""
+
+    from werkstatt.explorer import (
+        _datei_inhalt_mit_fundstellen,
+        _source_content_tokens,
+    )
+
+    recorder = getattr(phase_state, "task_read_evidence_is_current", None)
+    if not callable(recorder):
+        return [], "read_dependency_evidence_unavailable"
+    task_text = " ".join((
+        str(task.get("name", "")), str(task.get("description", "")),
+    ))
+    search_terms = sorted(_source_content_tokens(task_text))[:40]
+    sources: list[dict[str, Any]] = []
+    for dependency in ordered:
+        dependency_id = dependency.get("id")
+        evidence = dependency.get("read_evidence")
+        if (
+            not isinstance(dependency_id, str)
+            or recorder(dependency_id, evidence) is not True
+            or not isinstance(evidence, dict)
+        ):
+            return [], "read_dependency_evidence_stale"
+        files = evidence.get("files")
+        if not isinstance(files, dict):
+            return [], "read_dependency_evidence_invalid"
+        for relative_path in evidence.get("task_files", []):
+            recorded = files.get(relative_path)
+            if not isinstance(recorded, dict):
+                return [], "read_dependency_file_evidence_missing"
+            excerpt = _datei_inhalt_mit_fundstellen(
+                Path(state.project_dir), relative_path, search_terms,
+            )
+            if (
+                excerpt.get("source_sha256") != recorded.get("sha256")
+                or excerpt.get("reason") == "source_unavailable"
+            ):
+                return [], "read_dependency_source_changed_or_unavailable"
+            sources.append({
+                "read_task_id": dependency_id,
+                "file": relative_path,
+                "source_sha256": recorded.get("sha256"),
+                "source_bytes": recorded.get("bytes"),
+                "line_ranges": excerpt.get("line_ranges", []),
+                "total_lines": excerpt.get("total_lines"),
+                "complete": excerpt.get("complete") is True,
+                "excerpt": excerpt.get("text", ""),
+            })
+    return sources, ""
+
+
 def _checkpoint_decision_payload(
     phase_state: Any,
     next_task: dict[str, Any] | None,
@@ -1116,7 +1204,7 @@ def _phase_tasks_loop(
             )
             phase_state.save()
             return 1, tasks_ok, tasks
-        task_obj = next_task  # Sub-Tasks werden direkt aus PhaseState geholt.
+        task_obj = dict(next_task)  # Ephemere Handoff-Daten nicht persistieren.
         _verification_only = task_obj.get("verification_only") is True
         if not _verification_only:
             i += 1
@@ -1139,10 +1227,133 @@ def _phase_tasks_loop(
         # vorherigen Tasks in Reflection (Loop-Test-4 t7-Bug).
         _reset_task_state(state)
 
+        if next_executor == "builder":
+            read_sources, read_context_error = _read_dependency_sources(
+                state, phase_state, task_obj,
+            )
+            if read_context_error:
+                queue_stale_dependencies = getattr(
+                    phase_state, "queue_stale_read_dependencies", None,
+                )
+                stale_dependencies = (
+                    queue_stale_dependencies(task_id)
+                    if callable(queue_stale_dependencies) else []
+                )
+                if stale_dependencies:
+                    phase_state.update_task(task_id, "pending")
+                    phase_state.save()
+                    audit(
+                        "loop_task_read_dependency_stale",
+                        {"task_id": task_id,
+                         "read_task_ids": stale_dependencies,
+                         "reason": read_context_error},
+                        pd, pn,
+                    )
+                    group_end()
+                    return 0, tasks_ok, tasks
+                audit(
+                    "loop_task_read_dependency_failed",
+                    {"task_id": task_id, "reason": read_context_error},
+                    pd, pn,
+                )
+                _task_ende(
+                    state, phase_state, task_id, ok=False, name=task_name,
+                    failure=read_context_error,
+                )
+                group_end()
+                continue
+            if read_sources:
+                task_obj["checkpoint_read_source_evidence"] = read_sources
+                audit(
+                    "loop_task_read_context",
+                    {
+                        "task_id": task_id,
+                        "sources": [
+                            {
+                                "read_task_id": item["read_task_id"],
+                                "file": item["file"],
+                                "source_sha256": item["source_sha256"],
+                                "line_ranges": item["line_ranges"],
+                                "complete": item["complete"],
+                            }
+                            for item in read_sources
+                        ],
+                    },
+                    pd, pn,
+                )
+
         # M-306d Fix 1: Pro-Task action-Check. read-only Tasks
-        # erzeugen keinen Patch, markieren sich direkt als ok.
+        # read their approved source scope and persist exact provenance.
         if next_executor == "read_only_task":
-            audit("loop_task_read_only", {"task_id": task_id, "name": task_name}, pd, pn)
+            read_files = task_obj.get("task_files")
+            read_evidence: list[dict[str, Any]] = []
+            read_error = ""
+            if not isinstance(read_files, list) or not read_files:
+                read_error = "read_task_scope_missing"
+            elif len(read_files) > 50:
+                read_error = "read_task_scope_too_large"
+            else:
+                try:
+                    root = Path(pd).resolve(strict=True)
+                    total_bytes = 0
+                    seen_paths: set[str] = set()
+                    for raw_path in read_files:
+                        if not isinstance(raw_path, str) or not raw_path.strip():
+                            raise ValueError("read_task_path_invalid")
+                        relative = Path(raw_path)
+                        if (
+                            relative.is_absolute()
+                            or ".." in relative.parts
+                            or raw_path.replace("\\", "/").startswith("/")
+                        ):
+                            raise ValueError("read_task_path_outside_project")
+                        target = (root / relative).resolve(strict=True)
+                        target.relative_to(root)
+                        if not target.is_file():
+                            raise ValueError("read_task_source_not_file")
+                        normalized = target.relative_to(root).as_posix()
+                        if normalized in seen_paths:
+                            raise ValueError("read_task_duplicate_path")
+                        seen_paths.add(normalized)
+                        source_bytes = target.read_bytes()
+                        total_bytes += len(source_bytes)
+                        if len(source_bytes) > 1_000_000 or total_bytes > 4_000_000:
+                            raise ValueError("read_task_source_over_budget")
+                        read_evidence.append({
+                            "file": normalized,
+                            "sha256": sha256(source_bytes).hexdigest(),
+                            "bytes": len(source_bytes),
+                            "lines": source_bytes.count(b"\n")
+                            + int(bool(source_bytes) and not source_bytes.endswith(b"\n")),
+                        })
+                    recorder = getattr(
+                        phase_state, "record_task_read_evidence", None,
+                    )
+                    if not callable(recorder) or recorder(
+                        task_id, read_evidence,
+                    ) is not True:
+                        read_error = "read_task_evidence_not_persisted"
+                except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                    read_error = str(exc)[:120]
+            if read_error:
+                audit(
+                    "loop_task_read_only",
+                    {"task_id": task_id, "name": task_name,
+                     "status": "failed", "reason": read_error},
+                    pd, pn,
+                )
+                _task_ende(
+                    state, phase_state, task_id, ok=False, name=task_name,
+                    failure=read_error,
+                )
+                group_end()
+                continue
+            audit(
+                "loop_task_read_only",
+                {"task_id": task_id, "name": task_name,
+                 "status": "read", "source_evidence": read_evidence},
+                pd, pn,
+            )
             _el_task = time.monotonic() - _t_task
             task_ok(i, len(tasks), elapsed_s=_el_task)
             group_end()

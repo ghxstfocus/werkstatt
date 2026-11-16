@@ -78,6 +78,9 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
     {
         "loop_criteria_task_verify_evidence",
         "loop_criteria_task_verify_evidence_missing",
+        "loop_task_read_context",
+        "loop_task_read_dependency_failed",
+        "loop_task_read_dependency_stale",
         "loop_builder_recovery_start",
         "loop_builder_recovery_result",
         "loop_builder_recovery_skipped",

@@ -668,18 +668,22 @@ def test_loop_task_read_only(tmp_path):
     st = _state(tmp_path)
     st.tasks = [
         {"id": "t1", "name": "Lesen", "action": "read",
-         "task_files": []},
-        {"id": "t2", "name": "Schreiben", "action": "update",
          "task_files": ["app/foo.py"]},
+        {"id": "t2", "name": "Schreiben", "action": "update",
+         "task_files": ["app/foo.py"], "dependencies": ["t1"]},
     ]
     st.tests = ["Test 1"]
     st.akzeptanzkriterien = []
     (tmp_path / "app").mkdir()
     (tmp_path / "app" / "foo.py").write_text("value = 1\n", encoding="utf-8")
+    ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=[])
 
     builder_calls = []
+    builder_tasks = []
     def _mock_builder(state):
         builder_calls.append(state.aktuelle_task.get("id"))
+        builder_tasks.append(dict(state.aktuelle_task))
         state.patches = []
         return True
 
@@ -691,13 +695,26 @@ def test_loop_task_read_only(tmp_path):
          patch("werkstatt.loop.run_reviewer", return_value=True), \
              patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
          patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st])
+        rc = run_pipeline_loop("p", "a", [st], phase_state=ps)
 
     assert rc == 0
+    read_task = next(
+        item for item in ps.data["tasks"]
+        if item["id"] == "t1"
+    )
+    assert read_task["read_evidence"]["files"]["app/foo.py"]["bytes"] > 0
+    assert len(read_task["read_evidence"]["files"]["app/foo.py"]["sha256"]) == 64
     # t1 (read) sollte NICHT im builder_calls sein
     assert "t1" not in builder_calls
     # t2 (write) sollte drin sein
     assert "t2" in builder_calls
+    builder_task = next(item for item in builder_tasks if item["id"] == "t2")
+    passed_sources = builder_task["checkpoint_read_source_evidence"]
+    assert passed_sources[0]["read_task_id"] == "t1"
+    assert passed_sources[0]["source_sha256"] == read_task["read_evidence"][
+        "files"
+    ]["app/foo.py"]["sha256"]
+    assert "value = 1" in passed_sources[0]["excerpt"]
 
 
 def test_loop_reviewer_after_reflection(tmp_path):

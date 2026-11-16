@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from types import SimpleNamespace
 
 from werkstatt import run_followups
@@ -10,10 +11,39 @@ from werkstatt.state import RunState
 
 
 def _phase(tmp_path, tasks, criteria):
-    phase = PhaseState("demo", base_dir=tmp_path)
+    has_read_tasks = any(
+        isinstance(task, dict) and task.get("action") == "read"
+        for task in tasks
+    )
+    base_dir = tmp_path / ".werkstatt" if has_read_tasks else tmp_path
+    phase = PhaseState("demo", base_dir=base_dir)
     phase.init_new("Ziel", tasks, akzeptanzkriterien=criteria)
     phase.data["setup_complete"] = True
     phase.data["plan_complete"] = True
+    if has_read_tasks:
+        phase.run_id = "fixture-read-run"
+        for task in phase.data["tasks"]:
+            if task.get("action") != "read":
+                continue
+            task_files = task.get("task_files")
+            if not task_files:
+                task_files = [f"read_scope/{task['id']}.txt"]
+                task["task_files"] = task_files
+            file_evidence = []
+            for relative in task_files:
+                target = tmp_path / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if not target.exists():
+                    target.write_text("fixture source\n", encoding="utf-8")
+                content = target.read_bytes()
+                file_evidence.append({
+                    "file": relative,
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                    "bytes": len(content),
+                    "lines": content.count(b"\n"),
+                })
+            assert phase.record_task_read_evidence(task["id"], file_evidence)
+        phase.save()
     return phase
 
 
@@ -794,6 +824,52 @@ def test_task_dispatch_returns_at_next_persisted_boundary(
     assert result[0] == 0
     assert phase.get_task("t1")["status"] == "done"
     assert phase.get_task("t2")["status"] == "pending"
+
+
+def test_read_task_is_redispatched_when_source_hash_changes(tmp_path) -> None:
+    phase = _phase(
+        tmp_path,
+        [{"id": "read", "action": "read"}],
+        [],
+    )
+    phase.mark_done("read")
+    source = tmp_path / "read_scope" / "read.txt"
+    source.write_text("changed source\n", encoding="utf-8")
+
+    assert phase.queue_stale_task_reverification() == ["read"]
+    queued = phase.get_next_task()
+    assert queued is not None
+    assert queued["id"] == "read"
+    assert queued["action"] == "read"
+    assert queued["read_reverification"] is True
+
+
+def test_changed_read_dependency_precedes_pending_builder(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [
+            {"id": "read", "action": "read"},
+            {
+                "id": "build", "action": "update", "dependencies": ["read"],
+                "task_files": ["src/feature.py"],
+            },
+        ],
+        [],
+    )
+    phase.mark_done("read")
+    (tmp_path / "read_scope" / "read.txt").write_text(
+        "changed source\n", encoding="utf-8",
+    )
+
+    decision = _run_coordinator_action(
+        phase, _state_after_setup(str(phase.data["aufgabe"])),
+    )
+
+    assert decision["next_task_id"] == "read"
+    assert decision["next_executor"] == "read_only_task"
+    assert decision["stale_tasks_queued"] == ["read"]
 
 
 def test_task_dispatch_rejects_empty_step_limit(tmp_path) -> None:
