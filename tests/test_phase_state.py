@@ -331,6 +331,11 @@ def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
         worktree_fingerprint=fingerprint,
         commit_requested=True,
     )
+    ps.record_phase_end_verify(
+        worktree_fingerprint=fingerprint,
+        evidence_sha256="b" * 64,
+        stage_ids=["pytest_full"],
+    )
     added = [{
         "id": "fu_task1",
         "name": "Zwischenauftrag",
@@ -349,6 +354,7 @@ def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
     assert ps.approved_plan_is_current()
     assert "phase_end_review_checkpoint" not in ps.data
     assert "human_gate_checkpoint" not in ps.data
+    assert "phase_end_verify_checkpoint" not in ps.data
     assert ps.append_followup_tasks(
         added,
         criteria=["Basis", "Folgekriterium"],
