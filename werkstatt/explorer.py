@@ -1049,12 +1049,23 @@ def run_explorer(state: RunState, frage: str) -> dict:
     inventory_manifest["path_normalization_failures"] = path_normalization_failures
     content_retrieval_manifest: dict[str, Any] | None = None
     content_retrieval_section: str | None = None
-    if (
-        inventory_manifest["query_matched_file_count"] == 0
-        and _explorer_query_tokens(frage)
-    ):
+    remaining_source_slots = max(
+        0,
+        5 - min(5, int(inventory_manifest["query_matched_file_count"])),
+    )
+    path_matched_files = {
+        str(item["path"])
+        for item in inventory_manifest["path_manifest"]
+        if item["status"] in {"included", "omitted_prompt_cap"}
+    }
+    if remaining_source_slots and _explorer_query_tokens(frage):
         content_candidates, content_retrieval_manifest = (
-            _rank_source_files(Path(pd), frage, limit=5)
+            _rank_source_files(
+                Path(pd),
+                frage,
+                exclude=path_matched_files,
+                limit=remaining_source_slots,
+            )
         )
         content_lines = [
             (

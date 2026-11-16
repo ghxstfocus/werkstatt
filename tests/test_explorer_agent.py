@@ -291,6 +291,37 @@ def test_explorer_wires_content_retrieval_into_actual_role_request(tmp_path):
     assert "Keine gueltigen spezifischen Quell-/Texttreffer" not in user
 
 
+def test_explorer_supplements_path_matches_with_distinct_content_evidence(
+    tmp_path,
+):
+    (tmp_path / "quasarledger_client.py").write_text(
+        "def client(): return None\n", encoding="utf-8",
+    )
+    relevant = tmp_path / "sync_engine.py"
+    source = "def quasarledger_sync(): return True\n"
+    relevant.write_text(source, encoding="utf-8")
+    state = _state(tmp_path)
+
+    class FakeReply:
+        ok = True
+        content = '{"findings":"found","key_files":[],"next_reads":[]}'
+
+    with patch("werkstatt.explorer.ask_llm", return_value=FakeReply()) as ask:
+        result = run_explorer(state, "Explain QuasarLedger synchronization")
+
+    retrieval = result["content_retrieval"]
+    assert retrieval["selected_files"] == ["sync_engine.py"]
+    assert retrieval["matching_file_count"] == 1
+    assert retrieval["indexed_file_count"] == 2
+    user = ask.call_args.args[2]
+    candidate = retrieval["selected_sources"][0]
+    excerpt = user[
+        candidate["source_excerpt_prompt_start"]:
+        candidate["source_excerpt_prompt_end"]
+    ]
+    assert json.loads(excerpt) == "000001 | def quasarledger_sync(): return True"
+
+
 def test_content_retrieval_reports_total_byte_budget_omissions(tmp_path):
     (tmp_path / "alpha.py").write_text("x" * 10, encoding="utf-8")
     (tmp_path / "beta.py").write_text(
