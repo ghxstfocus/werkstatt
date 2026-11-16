@@ -552,17 +552,17 @@ Rolle bedarfsgerecht abwaehlbar; die Auswahl aller Planner-Rollen und der
 Builder-/Reviewer-/Verify-/Reflection-Aktionen ist noch nicht vollstaendig
 adaptiv. Der Folgeschritt ist lokal getestet und noch nicht serververifiziert.
 
-Lokaler Folgeschritt (noch nicht serververifiziert): Planner-Split-Aufruf und
-seine Systeminstruktionen fuer Taskgraph und bedarfsgesteuerten Einzel-Task
-liegen jetzt in `werkstatt/roles/planner_split.py`. Der Koordinator uebergibt
-ein abgegrenztes Promptpaket; der Worker vergleicht Rollen-Scope, Laenge und
-SHA-256 des tatsaechlichen System-/Usertexts mit dem Manifest vor dem
-Provideraufruf und liefert ausschliesslich die Antwort zurueck. Kriterien,
-Taskgraph, Abhaengigkeiten, Quellbelege und Dateiscope werden weiterhin
-ausserhalb des Workers geprueft. Damit ist Planner-Split als Aufruf getrennt,
-aber seine Kontextaufbereitung ist noch nicht aus `planner.py` herausgeloest.
-Scout-/Architect-/Split-Auswahl ist noch nicht vollstaendig semantisch
-adaptiv; Server- und Vollsuitebeleg fehlen.
+Lokaler Folgeschritt (noch nicht serververifiziert): Planner-Split-Promptaufbau,
+JIT-Lesen der Scout-Quellbelege, Hashabgleich, Systeminstruktionen fuer
+Taskgraph und bedarfsgesteuerten Einzel-Task sowie Modellaufruf liegen jetzt
+in `werkstatt/roles/planner_split.py`. Der Koordinator uebergibt Auftrag,
+Architect-Prosa, Zielpfade, freigegebene Kriterien und Plan-Gate-Befund als
+getrennte Felder. Der Worker vergleicht Rollen-Scope, Laenge und SHA-256 des
+tatsaechlichen System-/Usertexts mit dem Manifest vor dem Provideraufruf und
+liefert ausschliesslich die Antwort zurueck. Kriterien, Taskgraph,
+Abhaengigkeiten und Dateiscope werden weiterhin ausserhalb des Workers
+deterministisch geprueft. Scout-/Architect-/Split-Auswahl ist noch nicht
+vollstaendig semantisch adaptiv; Server- und Vollsuitebeleg fehlen.
 
 ## Konsequenzen
 
