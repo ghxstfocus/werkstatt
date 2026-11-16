@@ -46,23 +46,32 @@ def extract_audit_bug_summary(bugs: list) -> list[dict]:
 
 
 def _reviewer_history_block(state: RunState) -> str:
-    """K40: Formatiert die Historie der vorherigen Reviewer-Runden.
-
-    Verhindert, dass der Reviewer behobene Bugs erneut meldet.
-    Max 3 Runden -- aeltere sind meist schon repariert.
-    """
+    """Render recent reviewer history with explicit omission boundaries."""
     _history = state.reviewer_bugs_history or []
     if not _history:
         return ""
+    recent = _history[-3:]
+    omitted_rounds = len(_history) - len(recent)
     _lines = ["\n## REVIEWER-HISTORIE (vorherige Runden):\n"]
-    for i, bugs in enumerate(_history[-3:], 1):
-        _lines.append(f"\n### Runde {i} ({len(bugs)} Bugs):\n")
+    _lines.append(
+        f"\nGrenze: {len(recent)} neueste von {len(_history)} Runden enthalten; "
+        f"{omitted_rounds} aeltere Runden ausgelassen.\n"
+    )
+    for index, bugs in enumerate(recent, len(_history) - len(recent) + 1):
+        if not isinstance(bugs, list):
+            _lines.append(
+                f"\n### Runde {index}: ungueltige Historienstruktur; "
+                f"Rohwert: {bugs!r}\n"
+            )
+            continue
+        _lines.append(f"\n### Runde {index} ({len(bugs)} Bugs):\n")
         for b in bugs:
             if not isinstance(b, dict):
+                _lines.append(f"- Nicht strukturiertes Ereignis: {b!r}\n")
                 continue
             _sev = b.get("severity", "?")
             _file = b.get("file", "?")
-            _desc = (b.get("description") or b.get("beschreibung") or "")[:200]
+            _desc = b.get("description") or b.get("beschreibung") or ""
             _lines.append(f"- [{_sev}] {_file} - {_desc}\n")
     _lines.append(
         "\nPruefe, ob diese Bugs behoben sind. Melde NUR noch "

@@ -160,6 +160,29 @@ def test_budgeted_context_marks_optional_omission_without_overflow() -> None:
     ).hexdigest()
 
 
+def test_reviewer_history_keeps_full_text_and_marks_older_rounds_omitted(
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path, [])
+    full_description = "A detailed reviewer finding. " * 40
+    state.reviewer_bugs_history = [
+        [{"severity": "HIGH", "description": "older finding"}],
+        [{"severity": "MEDIUM", "description": "second finding"}],
+        [None, {"severity": "LOW", "file": "src/x.py",
+                "description": full_description}],
+        [{"severity": "HIGH", "description": "latest finding"}],
+    ]
+
+    history = reviewer._reviewer_history_block(state)
+
+    assert "3 neueste von 4 Runden enthalten; 1 aeltere Runden ausgelassen" in history
+    assert "older finding" not in history
+    assert "second finding" in history
+    assert "Nicht strukturiertes Ereignis: None" in history
+    assert full_description in history
+    assert "latest finding" in history
+
+
 def test_phase_end_review_budgets_and_proves_every_task_file(tmp_path: Path) -> None:
     files = [f"src/module_{index}.py" for index in range(4)]
     for index, relative in enumerate(files):
