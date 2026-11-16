@@ -9,6 +9,8 @@ import sys
 
 import pytest
 
+from tools.pytest_annotations import pytest_runtest_logreport  # noqa: F401
+
 sys.path.insert(0, "/opt/werkstatt")
 
 

@@ -8018,3 +8018,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Nicht angefragte Rollenpfade werden jetzt auch bei mehreren expliziten Rollen abgewertet. Die Rollen-Retrieval-Eval verbietet `planner_recovery.py` fuer den Reflection-Chat-Handoff explizit.
 - **Verifikation lokal:** `tests/test_explorer_retrieval_eval.py`: 2 bestanden; Dispatcher-/Planner-/Checkpoint-/Scout-Gruppe: 123 bestanden, 3 uebersprungen.
 - **Grenze:** Der PR-CI-Lauf muss nach dem Fix erneut gruen werden; der breite Phasenrahmen ist weiterhin offen.
+
+# 2026-11-16 – Projektchat kann GitHub-CI-Belege abfragen
+- **Befund:** Der Chat konnte lokalen Repo-/Run-/Serverzustand lesen, aber keinen GitHub-Checkstatus fuer den aktiven Commit. Die verbundene CI-Ansicht lieferte nur einen generischen Prozess-Exitcode; der Actions-Log selbst war ueber die verfuegbare Verbindung nicht abrufbar.
+- **Aenderung:** `github_checks` liest read-only Check-Metadaten und begrenzte, redigierte Fehlerannotationen fuer den validierten `github.com`-Origin und HEAD oder einen vollstaendigen Commit-SHA. Der pytest-Hook publiziert waehrend GitHub Actions maximal 30 Fehlerannotationen ohne Workflowdatei-Eingriff. Der Chatprompt weist den Agenten an, diese Evidenz bei CI-Fragen zu laden und Fehlermeldungen als nicht vertrauenswuerdige Diagnose zu behandeln.
+- **Verifikation lokal:** Chat-/Tool-/Frontend-/Annotation-Gruppe: 167 bestanden, 2 uebersprungen; GitHub-Check-Smoke-Test las den realen Status fuer `1060474`; Ruff, gezieltes Mypy und `git diff --check` bestanden. Check-Annotations fuer den neuen Workflow sind noch nicht server-/CI-verifiziert.
+- **Grenze:** Private Repos, vollstaendige Actions-Logs, Chat-Schreibzugriff auf den aktiven Checkout und die vollstaendige Ablösung des Loop-Phasenrahmens bleiben offen.
