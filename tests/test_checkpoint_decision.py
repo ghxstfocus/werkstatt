@@ -509,6 +509,13 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
         worktree_fingerprint=worktree_fingerprint,
     )
     decision = _run_coordinator_action(final_phase, state)
+    assert decision["coordinator_action"] == "human_gate"
+
+    final_phase.record_human_gate(
+        worktree_fingerprint=worktree_fingerprint,
+        commit_requested=True,
+    )
+    decision = _run_coordinator_action(final_phase, state)
     assert decision["coordinator_action"] == "finalize_run"
 
     monkeypatch.setattr(
@@ -594,6 +601,66 @@ def test_phase_end_review_action_persists_current_worktree_evidence(
     assert phase.phase_end_review_is_current(
         worktree_fingerprint=fingerprint,
     )
+
+
+def test_human_gate_checkpoint_action_persists_commit_consent(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt.loop import _run_human_gate_checkpoint
+
+    phase = _phase(tmp_path, [{"id": "t1", "name": "Implement"}], [])
+    phase.run_id = "run-human-gate"
+    fingerprint = "d" * 64
+    phase.record_phase_end_review(worktree_fingerprint=fingerprint)
+    state = RunState(
+        aufgabe="Ziel",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-human-gate",
+    )
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _path: fingerprint,
+    )
+    monkeypatch.setattr(
+        "werkstatt.loop._phase_human_gate_action",
+        lambda _state: (2, True),
+    )
+    monkeypatch.setattr("werkstatt.loop.check_run_lease", lambda _state: None)
+
+    assert _run_human_gate_checkpoint(state, phase, "demo") == 0
+    assert phase.human_gate_is_current(worktree_fingerprint=fingerprint)
+    assert phase.data["human_gate_checkpoint"]["commit_requested"] is True
+
+
+def test_human_gate_checkpoint_rejects_worktree_change_during_gate(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt.loop import _run_human_gate_checkpoint
+
+    phase = _phase(tmp_path, [{"id": "t1", "name": "Implement"}], [])
+    phase.run_id = "run-human-gate"
+    before, after = "e" * 64, "f" * 64
+    phase.record_phase_end_review(worktree_fingerprint=before)
+    fingerprints = iter((before, after))
+    state = RunState(
+        aufgabe="Ziel",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-human-gate",
+    )
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _path: next(fingerprints),
+    )
+    monkeypatch.setattr(
+        "werkstatt.loop._phase_human_gate_action",
+        lambda _state: (2, True),
+    )
+    monkeypatch.setattr("werkstatt.loop.check_run_lease", lambda _state: None)
+
+    assert _run_human_gate_checkpoint(state, phase, "demo") == 3
+    assert "human_gate_checkpoint" not in phase.data
 
 
 def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(

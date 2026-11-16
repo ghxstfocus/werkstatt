@@ -60,6 +60,7 @@ from werkstatt.phases import (  # Fix AZ Stufe 11: Re-Export
     _phase_end_review_action,
     _phase_explorer_and_setup,
     _phase_finalize,
+    _phase_human_gate_action,
     _phase_plan_and_preflight,
     _phase_tasks_loop,
 )
@@ -465,6 +466,101 @@ def _run_phase_end_review_checkpoint(
     return 0
 
 
+def _run_human_gate_checkpoint(
+    state: RunState,
+    phase_state: PhaseState,
+    project_name: str,
+) -> int:
+    """Run the Human Gate only from a current phase-review checkpoint."""
+    check_run_lease(state)
+    from werkstatt.failure_record import _worktree_fingerprint
+
+    before = (
+        _worktree_fingerprint(Path(state.project_dir))
+        if state.project_dir else None
+    )
+    if (
+        before is None
+        or not phase_state.phase_end_review_is_current(
+            worktree_fingerprint=before,
+        )
+    ):
+        audit(
+            "loop_phase",
+            {
+                "phase": "human_gate",
+                "status": "checkpoint_stale",
+                "reason": "phase_end_review_missing_or_stale",
+            },
+            state.project_dir,
+            project_name,
+        )
+        return 3
+
+    gate_rc, commit_requested = _phase_human_gate_action(state)
+    if gate_rc not in (0, 2):
+        return gate_rc
+    after = (
+        _worktree_fingerprint(Path(state.project_dir))
+        if state.project_dir else None
+    )
+    if (
+        after != before
+        or not phase_state.phase_end_review_is_current(
+            worktree_fingerprint=after,
+        )
+    ):
+        audit(
+            "loop_phase",
+            {
+                "phase": "human_gate",
+                "status": "checkpoint_stale",
+                "reason": "worktree_changed_during_human_gate",
+            },
+            state.project_dir,
+            project_name,
+        )
+        return 3
+    from werkstatt.phases.finalize import _hat_human_review_tasks
+
+    if gate_rc == 0 and _hat_human_review_tasks(phase_state):
+        audit(
+            "loop_human_review_offen",
+            {"phase": "human_gate"},
+            state.project_dir,
+            project_name,
+        )
+        return 2
+    try:
+        phase_state.record_human_gate(
+            worktree_fingerprint=after,
+            commit_requested=commit_requested,
+        )
+    except (AttributeError, ValueError) as exc:
+        audit(
+            "loop_failed",
+            {
+                "reason": "human_gate_checkpoint_invalid",
+                "error": str(exc)[:300],
+            },
+            state.project_dir,
+            project_name,
+        )
+        return 1
+    audit(
+        "loop_phase",
+        {
+            "phase": "human_gate",
+            "status": "checkpointed",
+            "worktree_sha256": after,
+            "commit_requested": commit_requested,
+        },
+        state.project_dir,
+        project_name,
+    )
+    return 0
+
+
 def _continue_followup_with_coordinator(
     project_name: str,
     state: RunState,
@@ -507,6 +603,15 @@ def _continue_followup_with_coordinator(
             if review_rc != 0:
                 return review_rc
             continue
+        if action == "human_gate":
+            gate_rc = _run_human_gate_checkpoint(
+                state, phase_state, project_name,
+            )
+            if gate_rc == 3:
+                continue
+            if gate_rc != 0:
+                return gate_rc
+            continue
         if action == "finalize_run":
             tasks = state.tasks
             tasks_ok = len([
@@ -516,6 +621,7 @@ def _continue_followup_with_coordinator(
             rc = _phase_finalize(
                 state, tasks_ok, tasks, project_name, phase_state,
                 phase_review_checkpointed=True,
+                human_gate_checkpointed=True,
             )
             if rc == 3:
                 continue
@@ -526,6 +632,7 @@ def _continue_followup_with_coordinator(
             "resolve_task_graph",
             "replan_unassigned_criteria",
             "replan_failed_criteria",
+            "human_gate",
         }:
             audit(
                 "loop_failed",
@@ -1257,7 +1364,16 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
             )
         )
         if review_current:
-            action = "finalize_run"
+            gate_current = bool(
+                phase_state is not None
+                and callable(getattr(
+                    phase_state, "human_gate_is_current", None,
+                ))
+                and phase_state.human_gate_is_current(
+                    worktree_fingerprint=worktree_fingerprint,
+                )
+            )
+            action = "finalize_run" if gate_current else "human_gate"
         else:
             action = "phase_end_review"
             decision = {
@@ -2193,6 +2309,19 @@ def _run_pipeline_loop_impl(
                 )
                 return review_rc
             continue
+        if action == "human_gate":
+            gate_rc = _run_human_gate_checkpoint(
+                state, phase_state, project_name,
+            )
+            if gate_rc == 3:
+                continue
+            if gate_rc != 0:
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), gate_rc,
+                    run_state=state, phase_state=phase_state,
+                )
+                return gate_rc
+            continue
         if action == "finalize_run":
             tasks = state.tasks
             tasks_ok = len([
@@ -2203,6 +2332,7 @@ def _run_pipeline_loop_impl(
             finalize_rc = _phase_finalize(
                 state, tasks_ok, tasks, project_name, phase_state,
                 phase_review_checkpointed=True,
+                human_gate_checkpointed=True,
             )
             if finalize_rc == 3:
                 finalize_rc = None
@@ -2213,6 +2343,7 @@ def _run_pipeline_loop_impl(
             "resolve_task_graph",
             "replan_unassigned_criteria",
             "replan_failed_criteria",
+            "human_gate",
         }:
             phase_state.save()
             _persist_run_result(
