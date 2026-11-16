@@ -116,6 +116,15 @@ def test_builder_sends_source_hash_and_complete_current_file(tmp_path):
         "ZIELDATEI", "TASK", "ARCHITECT", "ZIELDATEI_INHALT",
         "CHAT_RECOVERY_SOURCE_EVIDENCE",
     ]
+    required_section = next(
+        section for section in manifest["budget"]["section_manifest"]
+        if section["name"] == "ZIELDATEI_INHALT"
+    )
+    start, end = required_section["prompt_start"], required_section["prompt_end"]
+    assert "builder_source_" in prompt[start:end]
+    assert hashlib.sha256(prompt[start:end].encode("utf-8")).hexdigest() == (
+        required_section["sha256"]
+    )
 
 
 def test_builder_rejects_stale_chat_recovery_evidence_before_model_call(tmp_path):
@@ -164,6 +173,12 @@ def test_builder_context_keeps_required_and_omits_optional_as_whole() -> None:
     assert "NICHT GELADENE KONTEXTABSCHNITTE" in prompt
     assert meta["omitted_optional"] == ["OPTIONAL"]
     assert meta["blocked"] is False
+    sections = {item["name"]: item for item in meta["section_manifest"]}
+    assert sections["TASK"]["status"] == "required"
+    assert prompt[sections["TASK"]["prompt_start"]:sections["TASK"]["prompt_end"]] == "TASK-EVIDENCE"
+    assert sections["URGENT"]["status"] == "included_optional"
+    assert sections["OPTIONAL"]["status"] == "omitted_optional"
+    assert "prompt_start" not in sections["OPTIONAL"]
 
 
 def test_builder_context_blocks_without_truncating_required_evidence() -> None:
@@ -177,6 +192,11 @@ def test_builder_context_blocks_without_truncating_required_evidence() -> None:
     assert meta["blocked"] is True
     assert meta["required_chars"] == 42
     assert meta["required_sections"] == ["TASK", "FILE"]
+    assert all(
+        item["status"] == "blocked_required"
+        for item in meta["section_manifest"]
+        if item["name"] in {"TASK", "FILE"}
+    )
 
 
 def test_builder_does_not_call_model_when_required_context_exceeds_budget(

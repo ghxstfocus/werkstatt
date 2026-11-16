@@ -149,6 +149,23 @@ def _budget_builder_context(
             "required_sections": required_names,
             "included_optional": [],
             "omitted_optional": [name for name, text in optional if text],
+            "section_manifest": [
+                {
+                    "name": name,
+                    "status": "blocked_required",
+                    "chars": len(text),
+                    "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                }
+                for name, text in required if text
+            ] + [
+                {
+                    "name": name,
+                    "status": "omitted_optional",
+                    "chars": len(text),
+                    "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                }
+                for name, text in optional if text
+            ],
             "blocked": True,
         }
 
@@ -177,12 +194,55 @@ def _budget_builder_context(
     )
     parts = [required_text, *(text for _, text in selected), notice]
     prompt = "\n\n".join(part for part in parts if part)
+    section_manifest: list[dict[str, object]] = []
+    cursor = 0
+    for name, text in required:
+        if not text:
+            continue
+        start = prompt.find(text, cursor)
+        if start < 0:
+            raise ValueError("required_builder_section_not_in_prompt")
+        end = start + len(text)
+        section_manifest.append({
+            "name": name,
+            "status": "required",
+            "chars": len(text),
+            "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "prompt_start": start,
+            "prompt_end": end,
+        })
+        cursor = end
+    for name, text in selected:
+        start = prompt.find(text, cursor)
+        if start < 0:
+            raise ValueError("included_builder_section_not_in_prompt")
+        end = start + len(text)
+        section_manifest.append({
+            "name": name,
+            "status": "included_optional",
+            "chars": len(text),
+            "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "prompt_start": start,
+            "prompt_end": end,
+        })
+        cursor = end
+    section_manifest.extend(
+        {
+            "name": name,
+            "status": "omitted_optional",
+            "chars": len(text),
+            "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        }
+        for name, text in optional
+        if text and (name, text) not in selected
+    )
     metadata: dict[str, object] = {
         "max_chars": max_chars,
         "required_chars": len(required_text),
         "required_sections": required_names,
         "included_optional": [name for name, _ in selected],
         "omitted_optional": omitted,
+        "section_manifest": section_manifest,
         "prompt_chars": len(prompt),
         "blocked": len(prompt) > max_chars,
     }
