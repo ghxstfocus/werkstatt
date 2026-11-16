@@ -992,6 +992,32 @@ def test_run_coordinator_requeues_stale_criterion_evidence(tmp_path) -> None:
     assert decision["stale_tasks_queued"] == ["t1"]
 
 
+def test_coordinator_does_not_hydrate_plan_from_another_run(tmp_path) -> None:
+    from werkstatt.loop import _run_coordinator_action
+
+    phase = _phase(
+        tmp_path,
+        [{"id": "t1", "action": "read", "criterion_refs": ["AC1"]}],
+        ["Inspect the current source"],
+    )
+    phase.run_id = "prior-run"
+    phase.data["run_id"] = "prior-run"
+    phase.save()
+    state = RunState(
+        aufgabe="Ziel",
+        project_name="demo",
+        project_dir=tmp_path,
+        run_id="new-run",
+    )
+
+    decision = _run_coordinator_action(phase, state)
+
+    assert decision["coordinator_action"] == "explore_setup"
+    assert state.tasks == []
+    assert state.tests == []
+    assert state.akzeptanzkriterien == []
+
+
 def test_run_coordinator_resolves_blocked_graph_before_stale_verify(tmp_path) -> None:
     from werkstatt.loop import _run_coordinator_action
 

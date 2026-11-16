@@ -703,6 +703,17 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
     setup_checkpoint_complete = phase_data.get("setup_complete") is True
     plan_checkpoint_complete = phase_data.get("plan_complete") is True
     plan_goal_matches = phase_data.get("aufgabe") == state.aufgabe
+    checkpoint_run_id = (
+        getattr(phase_state, "run_id", None)
+        or phase_data.get("run_id")
+    )
+    plan_run_matches = (
+        not state.run_id or checkpoint_run_id == state.run_id
+    )
+    plan_project_matches = (
+        not state.project_name
+        or getattr(phase_state, "project_name", None) == state.project_name
+    )
     task_records = phase_data.get("tasks")
     task_count = len(task_records) if isinstance(task_records, list) else 0
     plan_checkpoint_current = bool(
@@ -710,6 +721,8 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         and setup_checkpoint_complete
         and plan_checkpoint_complete
         and plan_goal_matches
+        and plan_run_matches
+        and plan_project_matches
     )
     if plan_checkpoint_current and phase_state is not None:
         # A persisted plan survives process restarts; hydrate the current

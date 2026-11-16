@@ -186,6 +186,8 @@ Letzte Aktualisierung: 2026-11-16.
 
 - **Planner-Split-Kompilierung getrennt (lokal, noch nicht serververifiziert):** Antwortinterpretation, Kriterien-/Dateiscope-Pruefung, bedarfsbezogene Teilung und Graphaufbereitung liegen in `werkstatt/planner_task_compiler.py`; `planner.py` bleibt Orchestrator und Kompatibilitaetsadapter. Planner-/Taskgraph-/Checkpoint-/Loop-Gruppe: 175 bestanden, 3 uebersprungen; Ruff/Mypy bestanden. Vollsuite und Servernachweis offen; OP-398 bleibt offen.
 
+- **Plan-Checkpoint an Run-/Projektidentitaet binden (lokal, noch nicht serververifiziert):** Plan-Hydrierung prueft jetzt neben Ziel/Status auch aktive Run-ID und Projekt; ein fremder Checkpoint laedt keine Tasks und dispatcht zur aktuellen Setup-Vorbereitung. Checkpoint-/Loop-Phasen-Gruppe: 93 bestanden; Ruff/Mypy bestanden. Vollsuite/Servernachweis offen; OP-398 bleibt offen.
+
 ### OP-399: Projekt-Hub fuer GitHub- und lokale Quellen
 - **Status:** open
 - **Typ:** project-platform

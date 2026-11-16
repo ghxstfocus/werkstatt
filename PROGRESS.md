@@ -7907,3 +7907,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Diese Kompilierung liegt jetzt in `werkstatt/planner_task_compiler.py`. Sie erhaelt Rollen-/Validator-Hooks explizit; `planner.py` behaelt nur einen duennen Kompatibilitaetsadapter, damit bestehende Aufrufer, Audit-Mocks und Parser-Seams erhalten bleiben. Der Compiler nutzt weiterhin den isolierten `planner_split`-Worker und den separaten deterministischen `task_graph`-Validator.
 - **Verifikation lokal:** Planner-/Taskgraph-/Split-/Checkpoint-/Loop-Gruppe: 175 bestanden, 3 uebersprungen. Ruff und gezieltes Mypy fuer `planner.py` und `planner_task_compiler.py` bestanden.
 - **Grenze:** Keine Vollsuite oder Serververifikation. Der Orchestrator enthaelt noch Kontextaufbau und Rollenfortschritt; die globale lineare Run-Migration aus ADR-0032 bleibt offen.
+
+# 2026-11-16 – Plan-Checkpoint an Run-ID und Projekt binden
+- **Befund:** `_run_coordinator_action` wertete gespeicherte Planmarker und Zieltext als ausreichend aktuell und hydratisierte Tasks, bevor es die Run-ID des Checkpoints mit dem aktiven Run verglich.
+- **Aenderung:** Ein persistierter Plan wird nur noch wiederverwendet, wenn Ziel, Setup-/Planmarker sowie Run-ID und Projekt zum aktiven Run passen. Bei abweichender Run-ID laedt der Dispatcher keine Tasks/Kriterien und verlangt Setup fuer den aktuellen Run; die bestehenden Ausfuehrungs-/Evidence-Gates bleiben danach massgeblich.
+- **Verifikation lokal:** `tests/test_checkpoint_decision.py tests/test_loop_phases.py`: 93 bestanden. Ruff und gezieltes Mypy fuer `loop.py` bestanden.
+- **Grenze:** Nur lokaler Nachweis; keine Vollsuite, Server- oder Live-Resume-Verifikation. Das ersetzt nicht die weiter offene vollstaendige Migration vom linearen Phasenablauf.
