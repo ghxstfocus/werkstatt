@@ -225,6 +225,48 @@ class PhaseState:
             and self.approved_plan_is_current()
         )
 
+    def record_human_gate(
+        self, *, worktree_fingerprint: str, commit_requested: bool,
+    ) -> None:
+        """Persist an approval bound to the active run, plan, and worktree."""
+        plan_fingerprint = self.approved_plan_fingerprint()
+        if (
+            not self.run_id
+            or plan_fingerprint is None
+            or not self.approved_plan_is_current()
+            or len(worktree_fingerprint) != 64
+            or any(char not in "0123456789abcdef" for char in worktree_fingerprint)
+            or not isinstance(commit_requested, bool)
+        ):
+            raise ValueError("Human-Gate kann nicht sicher gebunden werden")
+        self.data["human_gate_checkpoint"] = {
+            "schema_version": 1,
+            "run_id": self.run_id,
+            "plan_sha256": plan_fingerprint,
+            "worktree_sha256": worktree_fingerprint,
+            "status": "approved",
+            "commit_requested": commit_requested,
+        }
+        self.save()
+
+    def human_gate_is_current(
+        self, *, worktree_fingerprint: str | None,
+    ) -> bool:
+        """Check that approval still applies to this run and exact worktree."""
+        gate = self.data.get("human_gate_checkpoint")
+        plan_fingerprint = self.approved_plan_fingerprint()
+        return bool(
+            isinstance(gate, dict)
+            and gate.get("schema_version") == 1
+            and gate.get("status") == "approved"
+            and gate.get("run_id") == self.run_id
+            and gate.get("plan_sha256") == plan_fingerprint
+            and gate.get("worktree_sha256") == worktree_fingerprint
+            and isinstance(worktree_fingerprint, str)
+            and isinstance(gate.get("commit_requested"), bool)
+            and self.approved_plan_is_current()
+        )
+
     def init_new(
         self,
         aufgabe: str,
@@ -436,6 +478,7 @@ class PhaseState:
         self.data["tests"] = current_tests + list(tests)
         self.data["phasen"] = current_phases + phases
         self.data.pop("phase_end_review_checkpoint", None)
+        self.data.pop("human_gate_checkpoint", None)
         self.data["criteria_tracking"] = bool(
             self.data.get("criteria_tracking")
             or any(task.get("criterion_refs") for task in normalized)

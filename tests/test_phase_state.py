@@ -88,6 +88,27 @@ def test_phase_end_review_checkpoint_is_bound_to_run_plan_and_worktree(
     )
 
 
+def test_human_gate_checkpoint_binds_commit_consent_to_run_plan_and_tree(
+    tmp_path,
+):
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.run_id = "run-1"
+    phase.init_new("Goal", [{"id": "t1", "name": "Edit"}])
+    phase.bind_approved_plan()
+    fingerprint = "b" * 64
+
+    phase.record_human_gate(
+        worktree_fingerprint=fingerprint,
+        commit_requested=True,
+    )
+
+    assert phase.human_gate_is_current(worktree_fingerprint=fingerprint)
+    assert phase.data["human_gate_checkpoint"]["commit_requested"] is True
+    assert not phase.human_gate_is_current(worktree_fingerprint="c" * 64)
+    phase.run_id = "other-run"
+    assert not phase.human_gate_is_current(worktree_fingerprint=fingerprint)
+
+
 @pytest.mark.parametrize(
     ("mutation", "expected"),
     [
@@ -301,8 +322,15 @@ def test_init_new_verwirft_ungueltige_criterion_refs(tmp_path):
 
 def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
     ps = PhaseState("testprojekt", base_dir=tmp_path)
+    ps.run_id = "run-followup"
     ps.init_new("Hauptziel", [{"id": "t1"}], akzeptanzkriterien=["Basis"])
     ps.bind_approved_plan()
+    fingerprint = "a" * 64
+    ps.record_phase_end_review(worktree_fingerprint=fingerprint)
+    ps.record_human_gate(
+        worktree_fingerprint=fingerprint,
+        commit_requested=True,
+    )
     added = [{
         "id": "fu_task1",
         "name": "Zwischenauftrag",
@@ -319,6 +347,8 @@ def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):
         followup_id="proposal-1",
     ) == ["fu_task1"]
     assert ps.approved_plan_is_current()
+    assert "phase_end_review_checkpoint" not in ps.data
+    assert "human_gate_checkpoint" not in ps.data
     assert ps.append_followup_tasks(
         added,
         criteria=["Basis", "Folgekriterium"],

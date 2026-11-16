@@ -865,6 +865,17 @@ def _phase_end_review_action(
     return 0
 
 
+def _phase_human_gate_action(state: RunState) -> tuple[int, bool]:
+    """Run the human gate independently; return rc and commit consent."""
+    pd = state.project_dir
+    pn = state.project_name
+    group_start("Phase 5: Human-Gate")
+    audit("loop_phase", {"phase": "human_gate", "status": "start"}, pd, pn)
+    gate_rc = _human_gate(state, defer_commit=True)
+    group_end()
+    return gate_rc, gate_rc == 2
+
+
 def _phase_finalize(
     state: RunState,
     tasks_ok: int,
@@ -873,6 +884,7 @@ def _phase_finalize(
     phase_state,
     *,
     phase_review_checkpointed: bool = False,
+    human_gate_checkpointed: bool = False,
 ) -> int:
     """Phase 4+5: Phase-End-Review, Human-Gate, Verify, Commit, PROGRESS.
 
@@ -907,14 +919,36 @@ def _phase_finalize(
     elif _phase_end_review_action(state, tasks_ok, phase_state) != 0:
         return 1
 
-    # 5. Human-Gate (eigenes, fail-closed)
-    group_start("Phase 5: Human-Gate")
-    audit("loop_phase", {"phase": "human_gate", "status": "start"}, pd, pn)
-    # 2 = explizit freigegeben, Commit wird bis nach Verify aufgeschoben.
-    _gate_rc = _human_gate(state, defer_commit=True)
-    _commit_requested = _gate_rc == 2
-    rc = 0 if _commit_requested else _gate_rc
-    group_end()
+    if human_gate_checkpointed:
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        gate_fingerprint = _worktree_fingerprint(Path(pd))
+        if (
+            not phase_state.human_gate_is_current(
+                worktree_fingerprint=gate_fingerprint,
+            )
+            or not phase_state.phase_end_review_is_current(
+                worktree_fingerprint=gate_fingerprint,
+            )
+        ):
+            audit(
+                "loop_phase",
+                {
+                    "phase": "human_gate",
+                    "status": "checkpoint_stale",
+                    "reason": "worktree_or_plan_changed_before_finalize",
+                },
+                pd,
+                pn,
+            )
+            return 3
+        gate_checkpoint = phase_state.data["human_gate_checkpoint"]
+        _commit_requested = bool(gate_checkpoint["commit_requested"])
+        rc = 0
+    else:
+        _gate_rc, _commit_requested = _phase_human_gate_action(state)
+        # 2 means an explicit commit approval; commit remains after Verify.
+        rc = 0 if _commit_requested else _gate_rc
 
     if phase_review_checkpointed:
         from werkstatt.failure_record import _worktree_fingerprint
@@ -929,6 +963,25 @@ def _phase_finalize(
                     "phase": "phase_end_review",
                     "status": "checkpoint_stale",
                     "reason": "worktree_or_plan_changed_during_human_gate",
+                },
+                pd,
+                pn,
+            )
+            return 3
+
+    if human_gate_checkpointed:
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        gate_fingerprint = _worktree_fingerprint(Path(pd))
+        if not phase_state.human_gate_is_current(
+            worktree_fingerprint=gate_fingerprint,
+        ):
+            audit(
+                "loop_phase",
+                {
+                    "phase": "human_gate",
+                    "status": "checkpoint_stale",
+                    "reason": "worktree_changed_during_human_gate",
                 },
                 pd,
                 pn,
