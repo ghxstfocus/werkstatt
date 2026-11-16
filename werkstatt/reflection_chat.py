@@ -178,8 +178,20 @@ def _readable_evidence(
 
     evidence: dict[str, Any] = dict(required)
     omitted: list[str] = []
+    context_budget: dict[str, Any] = {
+        "max_chars": REFLECTION_EVIDENCE_MAX_CHARS,
+        "sources": manifests,
+        "omitted_optional": omitted,
+        "omissions_are_not_negative_evidence": True,
+        "used_chars": 0,
+    }
+    evidence["context_status"] = "complete_required"
+    evidence["context_budget"] = context_budget
     for name, value in optional.items():
         candidate = {**evidence, name: value}
+        candidate_budget = dict(context_budget)
+        candidate_budget["omitted_optional"] = list(omitted)
+        candidate["context_budget"] = candidate_budget
         size = len(json.dumps(
             candidate, ensure_ascii=False, sort_keys=True, default=str,
         ))
@@ -187,17 +199,44 @@ def _readable_evidence(
             evidence[name] = value
         else:
             omitted.append(name)
-    evidence["context_status"] = "complete_required"
-    context_budget: dict[str, Any] = {
-        "max_chars": REFLECTION_EVIDENCE_MAX_CHARS,
-        "sources": manifests,
-        "omitted_optional": omitted,
-        "omissions_are_not_negative_evidence": True,
-    }
-    evidence["context_budget"] = context_budget
-    context_budget["used_chars"] = len(json.dumps(
-        evidence, ensure_ascii=False, sort_keys=True, default=str,
-    ))
+
+    context_budget["omitted_optional"] = omitted
+
+    def measure_complete_evidence() -> int:
+        """Measure the actual serialized object, including its own count."""
+        for _ in range(4):
+            measured = len(json.dumps(
+                evidence, ensure_ascii=False, sort_keys=True, default=str,
+            ))
+            if context_budget["used_chars"] == measured:
+                return measured
+            context_budget["used_chars"] = measured
+        return len(json.dumps(
+            evidence, ensure_ascii=False, sort_keys=True, default=str,
+        ))
+
+    used_chars = measure_complete_evidence()
+    if used_chars > REFLECTION_EVIDENCE_MAX_CHARS:
+        # Budget accounting overhead can push a just-fitting optional section
+        # over the cap. Remove optional sections whole, least recent/priority
+        # last, and keep the omission explicit in the manifest.
+        for name in reversed(tuple(optional)):
+            if name not in evidence:
+                continue
+            del evidence[name]
+            omitted.append(name)
+            context_budget["omitted_optional"] = omitted
+            used_chars = measure_complete_evidence()
+            if used_chars <= REFLECTION_EVIDENCE_MAX_CHARS:
+                break
+    if used_chars > REFLECTION_EVIDENCE_MAX_CHARS:
+        return {
+            "context_status": "blocked_required_context_over_budget",
+            "required_chars": used_chars,
+            "max_chars": REFLECTION_EVIDENCE_MAX_CHARS,
+            "sources": manifests,
+            "omitted_optional": omitted,
+        }
     return evidence
 
 

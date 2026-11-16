@@ -121,6 +121,35 @@ def test_reflection_evidence_keeps_required_sources_whole_and_marks_optional_omi
     assert evidence["context_budget"]["omissions_are_not_negative_evidence"]
     assert evidence["context_budget"]["sources"]["architect_constraints"]["chars"] > 24_000
     assert evidence["context_budget"]["sources"]["architect_constraints"]["sha256"]
+    serialized = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+    assert evidence["context_budget"]["used_chars"] == len(serialized)
+    assert len(serialized) <= evidence["context_budget"]["max_chars"]
+
+
+def test_reflection_budget_counts_manifest_and_drops_optional_whole(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    baseline = reflection_chat._readable_evidence(state)
+    baseline_size = len(json.dumps(
+        baseline, ensure_ascii=False, sort_keys=True,
+    ))
+    budget = baseline_size + 100
+    monkeypatch.setattr(
+        reflection_chat, "REFLECTION_EVIDENCE_MAX_CHARS", budget,
+    )
+    state.architect_prosa = "optional architecture " * 100
+
+    evidence = reflection_chat._readable_evidence(state)
+
+    assert evidence["context_status"] == "complete_required"
+    assert evidence["context_budget"]["omitted_optional"] == [
+        "architect_constraints",
+    ]
+    serialized = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+    assert len(serialized) <= budget
+    assert evidence["context_budget"]["used_chars"] == len(serialized)
 
 
 def test_reflection_handoff_includes_exact_recovery_failure_context(
