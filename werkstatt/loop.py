@@ -681,7 +681,14 @@ def _persist_run_coordinator_decision(
                     )
             error = raw_coverage.get("error")
             if isinstance(error, str):
-                coverage["error"] = error[:120]
+                if error in {
+                    "criteria_not_assigned",
+                    "invalid_acceptance_criteria",
+                    "invalid_task_record",
+                }:
+                    coverage["error"] = error
+                elif error.startswith("invalid_criterion_refs:"):
+                    coverage["error"] = "invalid_criterion_refs"
         if progress or coverage:
             persisted_decision["evidence"] = {
                 "task_progress": progress,

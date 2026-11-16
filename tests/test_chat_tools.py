@@ -670,6 +670,7 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                         "uncovered_count": 23,
                         "uncovered": [f"AC{n}" for n in range(2, 22)],
                         "uncovered_omitted_count": 3,
+                        "error": "SECRET prompt content must not leak",
                         "private_prompt": "never expose",
                     },
                 },
@@ -705,6 +706,7 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
     coverage = dispatch_evidence["criteria_task_coverage"]
     assert coverage["uncovered_count"] == 23
     assert coverage["uncovered_omitted_count"] == 3
+    assert "error" not in coverage
     assert "private_prompt" not in json.dumps(dispatch_evidence)
     assert "private_prompt" not in result
     assert "never expose" not in result

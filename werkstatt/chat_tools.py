@@ -772,8 +772,13 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                                     ):
                                         safe_coverage[f"{key}{suffix}"] = count
                         error = coverage.get("error")
-                        if isinstance(error, str):
-                            safe_coverage["error"] = error[:120]
+                        if error in {
+                            "criteria_not_assigned",
+                            "invalid_acceptance_criteria",
+                            "invalid_task_record",
+                            "invalid_criterion_refs",
+                        }:
+                            safe_coverage["error"] = error
                         evidence_summary[
                             "criteria_task_coverage"
                         ] = safe_coverage

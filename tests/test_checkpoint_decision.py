@@ -251,7 +251,7 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
         "criteria_task_coverage": {
             "tracked": True, "valid": True,
             "covered": ["AC1"], "uncovered": [f"AC{n}" for n in range(2, 27)],
-            "error": None,
+            "error": "invalid_criterion_refs:SECRET prompt text",
         },
     }
 
@@ -280,6 +280,7 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
                 "uncovered_count": 25,
                 "uncovered": [f"AC{n}" for n in range(2, 22)],
                 "uncovered_omitted_count": 5,
+                "error": "invalid_criterion_refs",
             },
         },
     }

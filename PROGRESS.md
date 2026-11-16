@@ -7503,3 +7503,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Änderung:** Der Checkpoint speichert nun einen typisierten, begrenzten Snapshot der Taskzahlen und Kriterienzuordnungen samt Auslassungszahlen. `loop_status` lässt nur bekannte primitive Felder durch, kappt Referenzlisten und gibt keine verschachtelten Promptdaten aus.
 - **Verifikation lokal:** Checkpoint-Entscheidung-/Chat-Tool-Gruppe: 77 bestanden, 2 übersprungen; Ruff, Mypy für `loop.py` und `chat_tools.py`, Audit-Drift, Control-Drift und `git diff --check` bestanden.
 - **Grenze / Hauptziel:** Der Serverlauf auf `b78935d` verifiziert diese Änderung nicht; der aktuelle Server-/Produktionsbetrieb ist nicht belegt. Die breitere Informationskette und adaptive Rollenwahl bleiben offen; OP-396/397/398/405 sind nicht abgeschlossen.
+
+# 2026-11-16 – Freie Checkpoint-Fehlertexte nicht an den Chat durchreichen (lokal)
+- **Befund:** Die Chatprojektion gab einen beliebigen String aus dem persistenten Kriterienstatus weiter. Ein manipulierter oder veralteter Checkpoint konnte damit sachfremden Text in die Koordinatorantwort einspeisen.
+- **Änderung:** Dispatch-Persistenz und `loop_status` akzeptieren nur die bekannten Kriterien-Fehlercodes; Task-ID-Suffixe werden auf einen festen Fehlercode normalisiert. Unbekannte Inhalte werden ausgelassen. Regression prüft freie Prompttexte sowohl beim Persistieren als auch beim Chat-Read.
+- **Verifikation lokal:** Checkpoint-/Chat-Tool-Gruppe: 77 bestanden, 2 übersprungen; Ruff, Mypy für `loop.py` und `chat_tools.py`, Audit-Drift, Control-Drift und strikter Doku-Drift bestanden.
+- **Grenze / Hauptziel:** Der Serverlauf auf `b78935d` betrifft nicht den danach gepushten `f030158` oder diesen Sanitizer-Folgeschritt. Kein Produktionsnachweis; OP-396/397/398/405 bleiben offen.
