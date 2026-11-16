@@ -683,6 +683,16 @@ def test_architect_blocks_oversized_complete_prompt_and_audits_handoff(
             "truncated": [],
             "omitted": ["VORHERIGE FEHLSCHLAEGE"],
         },
+        architect_project_docs_manifest={
+            "schema": "architect_project_docs_v1",
+            "sections": [{
+                "name": "status",
+                "status": "included_optional",
+                "source_sha256": "source-hash",
+                "source_chars": 100,
+                "selection": "open-points section",
+            }],
+        },
     )
     monkeypatch.setattr(architect, "ask_llm", lambda *a, **k: calls.append(a))
     monkeypatch.setattr(architect, "audit", lambda *a, **k: audits.append((a[0], a[1])))
@@ -759,6 +769,16 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
             "truncated": [],
             "omitted": ["VORHERIGE FEHLSCHLAEGE"],
         },
+        architect_project_docs_manifest={
+            "schema": "architect_project_docs_v1",
+            "sections": [{
+                "name": "status",
+                "status": "included_optional",
+                "source_sha256": "source-hash",
+                "source_chars": 100,
+                "selection": "open-points section",
+            }],
+        },
     )
     monkeypatch.setattr(architect, "_with_spinner", lambda _label, call: call())
     monkeypatch.setattr(architect, "ask_llm", ask_llm)
@@ -807,6 +827,15 @@ def test_architect_llm_receives_complete_scout_report_and_audits_its_hash(
     assert manifest["source_evidence"] == event["source_evidence"]
     assert manifest["scout_report_sha256"] == event["scout_source_sha256"]
     assert manifest["execution_context"] == state.architect_execution_context_manifest
+    assert manifest["project_docs"]["status"] == "omitted_optional"
+    assert manifest["project_docs"]["sections"] == [{
+        "name": "status",
+        "status": "omitted_optional",
+        "reason": "not present in Scout execution-context prompt",
+        "source_sha256": "source-hash",
+        "source_chars": 100,
+        "selection": "open-points section",
+    }]
 
 
 def test_architect_source_retrieval_is_project_confined_and_marks_rejection(

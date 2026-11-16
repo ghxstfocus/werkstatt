@@ -21,8 +21,16 @@ def eligible_failed_task_ids(
     uncovered: object,
 ) -> list[str]:
     """Return failed criterion tasks safe for a gated replacement plan."""
-    if not isinstance(uncovered, list) or not uncovered or any(
-        not isinstance(ref, str) for ref in uncovered
+    if (
+        not isinstance(uncovered, list) or not uncovered
+        or any(
+            not isinstance(ref, str)
+            or not ref.startswith("AC")
+            or not ref[2:].isdigit()
+            or int(ref[2:]) <= 0
+            for ref in uncovered
+        )
+        or len(set(uncovered)) != len(uncovered)
     ):
         return []
     tasks = phase_state.data.get("tasks")
@@ -35,7 +43,6 @@ def eligible_failed_task_ids(
     if not failed:
         return []
     task_ids: list[str] = []
-    failed_refs: set[str] = set()
     for task in failed:
         task_id = task.get("id")
         refs = task.get("criterion_refs")
@@ -48,9 +55,16 @@ def eligible_failed_task_ids(
         ):
             return []
         task_ids.append(task_id)
-        failed_refs.update(refs)
-    if not set(uncovered).issubset(failed_refs):
+    if not any(
+        isinstance(ref, str) and ref.startswith("AC")
+        and ref[2:].isdigit() and int(ref[2:]) > 0
+        for ref in uncovered
+    ):
         return []
+    # Recovery may leave both failed criteria and criteria the approved plan
+    # never assigned. Re-plan the complete uncovered set; retain failed tasks
+    # as superseded history only after the replacement plan is approved.
+    # Unknown failure classes remain a hard stop.
     return sorted(task_ids)
 
 
@@ -76,10 +90,11 @@ def replan_unassigned_criteria(
     state: RunState,
     phase_state: PhaseState,
 ) -> bool:
-    """Append and approve tasks only for criteria omitted by a finished plan.
+    """Re-plan uncovered approved criteria after an exhausted safe graph.
 
-    Existing completed task records and their evidence remain untouched. The
-    candidate graph is plan-gated before it is appended to the phase checkpoint.
+    Existing completed task records and their evidence remain untouched.
+    Allowlisted failed records are retained as superseded history only after
+    the candidate graph passes both approval gates.
     """
     records = phase_state.data.get("criteria_replans", [])
     phase_tasks = phase_state.data.get("tasks", [])
@@ -123,17 +138,24 @@ def replan_unassigned_criteria(
     progress = phase_state.criteria_progress()
     task_progress = phase_state.progress()
     uncovered = progress.get("uncovered")
+    graph_terminal = (
+        task_progress.get("pending", 0) == 0
+        and task_progress.get("blocked", 0) == 0
+    )
     unassigned_case = (
         progress.get("valid") is False
         and progress.get("error") == "criteria_not_assigned"
-        and task_progress.get("done", 0) == task_progress.get("total", 0)
+        and graph_terminal
     )
     replaced_task_ids = (
         eligible_failed_task_ids(phase_state, uncovered)
         if (
-            progress.get("valid") is True
+            (
+                progress.get("valid") is True
+                or progress.get("error") == "criteria_not_assigned"
+            )
             and task_progress.get("failed", 0) > 0
-            and task_progress.get("blocked", 0) == 0
+            and graph_terminal
         )
         else []
     )
@@ -147,7 +169,8 @@ def replan_unassigned_criteria(
     ):
         return False
     replan_mode = (
-        "failed_criteria_recovery" if failed_case
+        "failed_and_unassigned_criteria" if failed_case and unassigned_case
+        else "failed_criteria_recovery" if failed_case
         else "unassigned_criteria"
     )
 

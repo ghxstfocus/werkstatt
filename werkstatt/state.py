@@ -142,6 +142,11 @@ class RunState:
     architect_execution_context_manifest: dict[str, Any] = field(
         default_factory=dict,
     )
+    # Provenance for the selected living-document excerpt in the Architect
+    # prompt. Provider offsets are bound and verified by agent.ask_llm.
+    architect_project_docs_manifest: dict[str, Any] = field(
+        default_factory=dict,
+    )
     # Project-local Scout-selected source excerpts passed to Architect,
     # including line/hash and omission manifest for the LLM-request audit.
     architect_scout_source_manifest: dict[str, Any] = field(default_factory=dict)

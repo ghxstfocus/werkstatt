@@ -345,7 +345,10 @@ def _checkpoint_decision_payload(
 
             replannable = (
                 criteria.get("tracked") is True
-                and criteria.get("valid") is True
+                and (
+                    criteria.get("valid") is True
+                    or criteria.get("error") == "criteria_not_assigned"
+                )
                 and eligible_failed_task_ids(
                     phase_state, criteria.get("uncovered"),
                 )
@@ -355,8 +358,8 @@ def _checkpoint_decision_payload(
                 decision = "replan_failed_criteria"
                 reason = (
                     "Alle Tasks sind terminal; fehlgeschlagene, "
-                    "kriteriumsgebundene Builder-Recovery ist erschoepft. "
-                    "Nur die dadurch offenen bestehenden Kriterien duerfen "
+                    "kriteriumsgebundene Recovery ist erschoepft. "
+                    "Nur bereits freigegebene offene Kriterien duerfen "
                     "neu geplant und erneut freigegeben werden."
                 )
             else:

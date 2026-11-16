@@ -15,6 +15,7 @@ import json
 import re
 from html import escape
 from pathlib import Path
+from typing import Any
 
 
 def _source_line_ranges(text: str) -> list[list[int]]:
@@ -1686,6 +1687,68 @@ def _reduce_architecture(text: str, max_chars: int = 3400) -> str:
     return "\n\n".join(parts)[:max_chars]
 
 
+def build_architect_docs_context_v2(
+    docs: dict,
+) -> tuple[str, dict[str, Any]]:
+    """Build the Architect's selected project docs and provenance manifest."""
+    import hashlib
+
+    if not docs:
+        return "", {"schema": "architect_project_docs_v1", "sections": []}
+    definitions = (
+        ("entry", "PROJEKT-ENTRY (Zweck + Struktur)",
+         lambda value: _reduce_entry(value, max_chars=700),
+         "Purpose and structure excerpt, capped at 700 characters."),
+        ("status", "PROJEKT-STATUS (offene Punkte)", _reduce_status,
+         "Open-points section selection."),
+        ("roadmap", "PROJEKT-ROADMAP (nur Phasen-Header)", _reduce_roadmap,
+         "Phase headers only."),
+        ("architecture", "PROJEKT-ARCHITEKTUR (implementierter Ist-Zustand)",
+         _reduce_architecture,
+         "Selected implementation/verification sections, capped per section."),
+    )
+    parts: list[str] = []
+    entries: list[dict[str, Any]] = []
+    for key, heading, reducer, selection in definitions:
+        source = docs.get(key, "")
+        if not isinstance(source, str) or not source:
+            continue
+        excerpt = reducer(source)
+        if not excerpt:
+            entries.append({
+                "name": key, "status": "omitted_optional",
+                "source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+                "source_chars": len(source), "selection": selection,
+                "reason": "selection produced no excerpt",
+            })
+            continue
+        block = f"### {heading}\n{excerpt}"
+        parts.append(block)
+        entries.append({
+            "name": key, "status": "included_optional",
+            "source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+            "source_chars": len(source),
+            "excerpt_sha256": hashlib.sha256(block.encode("utf-8")).hexdigest(),
+            "excerpt_chars": len(block), "selection": selection,
+            "transformed": excerpt != source,
+            "prompt_start": -1, "prompt_end": -1, "sha256": "",
+        })
+
+    content = "\n\n".join(parts)
+    cursor = 0
+    for entry, block in zip(
+        (item for item in entries if item.get("status") == "included_optional"),
+        parts,
+    ):
+        start = content.find(block, cursor)
+        end = start + len(block)
+        entry["prompt_start"] = start
+        entry["prompt_end"] = end
+        entry["sha256"] = hashlib.sha256(block.encode("utf-8")).hexdigest()
+        cursor = end
+    return content, {"schema": "architect_project_docs_v1", "sections": entries}
+
+
 def build_architect_docs_section_v2(docs: dict) -> str:
     """Strukturierter Docs-Kontext fuer den Architect (Prototyp v2).
 
@@ -1693,30 +1756,7 @@ def build_architect_docs_section_v2(docs: dict) -> str:
     Entry, offenen OPs, Roadmap und implementierter Architektur. Die aktuelle
     Progress-Historie wird separat und ebenfalls begrenzt uebergeben.
     """
-    if not docs:
-        return ""
-    parts: list[str] = []
-
-    entry = _reduce_entry(docs.get("entry", ""), max_chars=700)
-    if entry:
-        parts.append("### PROJEKT-ENTRY (Zweck + Struktur)\n" + entry)
-
-    status = _reduce_status(docs.get("status", ""))
-    if status:
-        parts.append("### PROJEKT-STATUS (offene Punkte)\n" + status)
-
-    roadmap = _reduce_roadmap(docs.get("roadmap", ""))
-    if roadmap:
-        parts.append("### PROJEKT-ROADMAP (nur Phasen-Header)\n" + roadmap)
-
-    architecture = _reduce_architecture(docs.get("architecture", ""))
-    if architecture:
-        parts.append(
-            "### PROJEKT-ARCHITEKTUR (implementierter Ist-Zustand)\n"
-            + architecture
-        )
-
-    return "\n\n".join(parts)
+    return build_architect_docs_context_v2(docs)[0]
 
 
 def run_architect(
@@ -1820,6 +1860,10 @@ def run_architect(
             "source_evidence": getattr(
                 state, "architect_scout_source_manifest", {},
             ),
+            "project_docs_sent": not bool(_scout_auftrag),
+            "project_docs_manifest": getattr(
+                state, "architect_project_docs_manifest", {},
+            ),
             "required_context_complete": _request_fits,
             "omitted": [],
             "truncated": [],
@@ -1844,6 +1888,29 @@ def run_architect(
                     "attempt": _attempt + 1,
                     "source_evidence": getattr(
                         state, "architect_scout_source_manifest", {},
+                    ),
+                    "project_docs": (
+                        {
+                            "schema": "architect_project_docs_v1",
+                            "status": "omitted_optional",
+                            "reason": "Scout handoff replaces the Planner user prompt; project-doc excerpt was not sent.",
+                            "sections": [
+                                {
+                                    "name": item.get("name"),
+                                    "status": "omitted_optional",
+                                    "reason": "not present in Scout execution-context prompt",
+                                    "source_sha256": item.get("source_sha256"),
+                                    "source_chars": item.get("source_chars"),
+                                    "selection": item.get("selection"),
+                                }
+                                for item in getattr(
+                                    state, "architect_project_docs_manifest", {},
+                                ).get("sections", [])
+                            ],
+                        }
+                        if _scout_auftrag else getattr(
+                            state, "architect_project_docs_manifest", {},
+                        )
                     ),
                     "scout_report_sha256": _scout_report_hash,
                     "required_context_complete": True,
@@ -1927,6 +1994,7 @@ __all__ = [
     '_reduce_entry',
     '_reduce_roadmap',
     '_reduce_status',
+    'build_architect_docs_context_v2',
     'build_architect_docs_section_v2',
     'run_architect',
 ]

@@ -12,6 +12,7 @@ from werkstatt.architect import (
     _reduce_entry,
     _reduce_roadmap,
     _reduce_status,
+    build_architect_docs_context_v2,
     build_architect_docs_section_v2,
 )
 
@@ -146,6 +147,37 @@ def test_build_v2_roadmap_behaelt_alle_phasenheader():
     assert "## Phase 199: Titel" in result
 
 
+def test_build_v2_manifest_belegt_quelle_auswahl_und_exakten_prompt_span():
+    import hashlib
+
+    docs = {"entry": "# Projekt\n\n## Zweck\nEin belegter Zweck.\n"}
+    excerpt, manifest = build_architect_docs_context_v2(docs)
+    section = manifest["sections"][0]
+    start, end = section["prompt_start"], section["prompt_end"]
+    assert section["name"] == "entry"
+    assert section["source_sha256"] == hashlib.sha256(
+        docs["entry"].encode("utf-8"),
+    ).hexdigest()
+    assert section["sha256"] == hashlib.sha256(
+        excerpt[start:end].encode("utf-8"),
+    ).hexdigest()
+    assert section["selection"]
+    assert section["status"] == "included_optional"
+
+
+def test_build_v2_manifest_marks_source_projection():
+    import hashlib
+
+    source = "# Projekt\n\n## Zweck\n" + "wichtiger Kontext " * 100
+    _, manifest = build_architect_docs_context_v2({"entry": source})
+    section = manifest["sections"][0]
+    assert section["source_sha256"] == hashlib.sha256(
+        source.encode("utf-8"),
+    ).hexdigest()
+    assert section["source_chars"] > section["excerpt_chars"]
+    assert section["transformed"] is True
+
+
 # --- Selbst-Check ---
 
 def test_selbst_check_block_format():
@@ -163,7 +195,7 @@ def test_planner_hat_env_schalter():
     src = (Path(__file__).resolve().parents[1] / "werkstatt" / "planner.py").read_text(encoding="utf-8")
     assert "WERKSTATT_ARCHITECT_PROMPT" in src
     assert '!= "v1"' in src
-    assert "build_architect_docs_section_v2" in src
+    assert "build_architect_docs_context_v2" in src
     assert "_build_selbst_check_block" in src
 
 

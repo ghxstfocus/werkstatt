@@ -120,6 +120,28 @@ def test_checkpoint_replans_only_eligible_failed_criterion_tasks(tmp_path) -> No
     assert decision["criteria_task_coverage"]["uncovered"] == ["AC2"]
 
 
+def test_checkpoint_replans_safe_failed_and_unassigned_criteria_together(
+    tmp_path,
+) -> None:
+    phase = _phase(
+        tmp_path,
+        [
+            {"id": "done", "criterion_refs": ["AC1"]},
+            {"id": "failed", "criterion_refs": ["AC2"]},
+        ],
+        ["First", "Second", "Third"],
+    )
+    phase.mark_done("done")
+    phase.mark_failed("failed", failure="builder_failed")
+
+    decision = _checkpoint_decision_payload(phase, None)
+
+    assert decision["decision"] == "replan_failed_criteria"
+    assert decision["next_executor"] == "planner_and_plan_gate"
+    assert decision["criteria_task_coverage"]["error"] == "criteria_not_assigned"
+    assert decision["criteria_task_coverage"]["uncovered"] == ["AC2", "AC3"]
+
+
 def test_checkpoint_does_not_replan_unapproved_failure_classes(tmp_path) -> None:
     phase = _phase(
         tmp_path,

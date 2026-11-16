@@ -2579,13 +2579,21 @@ def run_planner(state: RunState) -> bool:
     # ROADMAP-Reduktion (50011 -> 800 Z., nur Phasen-Header).
     import os as _os_proto
     if _os_proto.environ.get("WERKSTATT_ARCHITECT_PROMPT") != "v1":
-        from werkstatt.architect import build_architect_docs_section_v2
-        _v2_docs = build_architect_docs_section_v2(
+        from werkstatt.architect import build_architect_docs_context_v2
+        _v2_docs, _docs_manifest = build_architect_docs_context_v2(
             state.docs or {},
         )
-        user_content = (
+        _docs_prefix = (
             f"## AUFGABE\n{aufgabe}\n\n"
-            f"## KONTEXT (nur relevanter Auszug)\n{_v2_docs}"
+            "## KONTEXT (nur relevanter Auszug)\n"
+        )
+        for _section in _docs_manifest.get("sections", []):
+            if _section.get("status") == "included_optional":
+                _section["prompt_start"] += len(_docs_prefix)
+                _section["prompt_end"] += len(_docs_prefix)
+        state.architect_project_docs_manifest = _docs_manifest
+        user_content = (
+            _docs_prefix + _v2_docs
         )
     else:
         user_content = f"Aufgabe: {aufgabe}\n\nKontext:\n{docs_ctx}"

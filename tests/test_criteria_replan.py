@@ -242,6 +242,74 @@ def test_replans_failed_criterion_after_recovery_and_supersedes_history(
     }
 
 
+def test_replans_unassigned_criteria_alongside_safe_failed_recovery(
+    tmp_path, monkeypatch,
+):
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.init_new(
+        "Goal",
+        [
+            {"id": "done", "action": "read", "criterion_refs": ["AC1"]},
+            {"id": "failed", "action": "update", "criterion_refs": ["AC2"]},
+        ],
+        akzeptanzkriterien=["First", "Second", "Third"],
+    )
+    phase.mark_done("done")
+    phase.mark_failed(
+        "failed", failure="builder_failed", detail="First recovery exhausted",
+    )
+    state = RunState(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-mixed-criteria-gap",
+        aufgabe="Goal",
+        api_key="test-key",
+        tasks=list(phase.data["tasks"]),
+        akzeptanzkriterien=list(phase.data["akzeptanzkriterien"]),
+        budget={"max_llm_calls": 20},
+    )
+
+    def fake_planner(addition):
+        assert "AC2: Second" in addition.aufgabe
+        assert "AC3: Third" in addition.aufgabe
+        addition.tasks = [{
+            "id": "replacement",
+            "name": "Complete remaining criteria",
+            "description": "Address both remaining approved criteria.",
+            "action": "update",
+            "task_files": ["src/remaining.py"],
+            "dependencies": [],
+            "criterion_refs": ["AC1", "AC2"],
+            "phase_id": None,
+            "parent_id": None,
+        }]
+        addition.tests = []
+        addition.akzeptanzkriterien = ["Second", "Third"]
+        addition.phasen = []
+        addition.architect_prosa = "Target the uncovered approved criteria."
+        return True
+
+    monkeypatch.setattr("werkstatt.planner.run_planner", fake_planner)
+    monkeypatch.setattr("werkstatt.gates._plan_gate", lambda _state: True)
+    monkeypatch.setattr(
+        "werkstatt.gates._human_gate_plan", lambda *_args, **_kwargs: 0,
+    )
+
+    assert criteria_replan.replan_unassigned_criteria(state, phase) is True, (
+        phase.data.get("criteria_replans", [{}])[0].get("reason")
+    )
+    assert phase.get_task("failed")["status"] == "superseded"
+    replacement = next(
+        task for task in phase.data["tasks"] if task.get("source_followup_id")
+    )
+    assert replacement["criterion_refs"] == ["AC2", "AC3"]
+    assert phase.criteria_progress()["valid"] is True
+    assert phase.criteria_progress()["uncovered"] == ["AC2", "AC3"]
+    assert phase.data["criteria_replans"][0]["mode"] == (
+        "failed_and_unassigned_criteria"
+    )
+
+
 def test_replan_recovers_append_before_ledger_update_for_failed_task(
     tmp_path, monkeypatch,
 ):
