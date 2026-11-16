@@ -1046,15 +1046,34 @@ def _run_scout(
     pn = state.project_name
 
     _index_str = _format_api_index_for_prompt(code_index, max_files=40)
-    _files_str = "\n".join(f"- {f}" for f in (key_files or [])[:20])
+    _files_str = "\n".join(f"- {f}" for f in (key_files or []))
 
     # GOLD 2026-10-30: Datei-Inhalte aus explorer_context holen.
     # Ohne Inhalt kann der Scout nicht pruefen, ob die Aufgabe
     # schon erfuellt ist.
     _previews_parts = []
     _explorer_ctx = state.explorer_context
+    _explorer_key_files = (
+        _explorer_ctx.get("key_files") or []
+        if isinstance(_explorer_ctx, dict) else []
+    )
+    _omitted_preview_evidence: list[dict[str, object]] = []
+    if isinstance(_explorer_key_files, list):
+        for _omitted_key in _explorer_key_files[8:]:
+            if not isinstance(_omitted_key, dict):
+                _omitted_preview_evidence.append({"status": "invalid_record"})
+                continue
+            _omitted_preview_evidence.append({
+                "file": _omitted_key.get("file"),
+                "source_sha256": _omitted_key.get("source_sha256"),
+                "preview_source_chars": _omitted_key.get(
+                    "preview_source_chars",
+                ),
+                "source_complete": _omitted_key.get("source_complete"),
+                "source_line_ranges": _omitted_key.get("source_line_ranges"),
+            })
     if isinstance(_explorer_ctx, dict):
-        for _k in (_explorer_ctx.get("key_files") or [])[:8]:
+        for _k in _explorer_key_files[:8]:
             if not isinstance(_k, dict):
                 continue
             _pf = _k.get("file", "")
@@ -1137,6 +1156,17 @@ def _run_scout(
         _context_sections.append((
             "EXPLORER-INHALTSSUCHE (Abdeckung und Grenzen; kein Negativbeleg)",
             json.dumps(_retrieval_report, ensure_ascii=False, sort_keys=True),
+        ))
+    if _omitted_preview_evidence:
+        _context_sections.append((
+            (
+                "EXPLORER-QUELLTEXTAUSZUEGE NICHT GELADEN "
+                "(kein Negativbeleg; bei Bedarf gezielt nachladen)"
+            ),
+            json.dumps({
+                "omitted_count": len(_omitted_preview_evidence),
+                "files": _omitted_preview_evidence,
+            }, ensure_ascii=False, sort_keys=True),
         ))
     for _k in ("status", "adr_index"):
         _value = _docs_state.get(_k)

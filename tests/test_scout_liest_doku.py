@@ -118,6 +118,60 @@ def test_scout_receives_explorer_content_search_coverage(monkeypatch, tmp_path):
     assert scout._run_scout(state, "Pruefe das Ziel", {}, [], "key")
     assert "EXPLORER-INHALTSSUCHE" in prompts[0]
     assert '"read_failures": 1' in prompts[0]
+
+
+def test_scout_marks_unloaded_explorer_sources_and_keeps_all_paths(
+    monkeypatch, tmp_path,
+):
+    source_files = [
+        {
+            "file": f"src/file_{index}.py",
+            "preview": f"000001 | def item_{index}(): pass",
+            "source_line_ranges": [[1, 1]],
+            "source_total_lines": 1,
+            "source_complete": True,
+            "preview_source_chars": 32,
+            "source_sha256": f"{index:064x}",
+        }
+        for index in range(10)
+    ]
+    state = mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        explorer_context={"key_files": source_files},
+    )
+    prompts: list[str] = []
+    monkeypatch.setattr(scout, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(
+        scout,
+        "ask_llm",
+        lambda _key, _system, user, **_kwargs: (
+            prompts.append(user) or SimpleNamespace(
+                ok=True,
+                content=json.dumps({
+                    "ziel": "Ziel", "relevante_dateien": [],
+                    "api_auszug": {}, "vorgeschlagene_aenderungen": [],
+                    "risiken": [], "auftrag_prosa": "Pruefe das Ziel.",
+                    "bereits_erfuellt": False,
+                }),
+            )
+        ),
+    )
+    monkeypatch.setattr(scout, "audit", lambda *_args, **_kwargs: None)
+
+    result = scout._run_scout(
+        state,
+        "Pruefe das Projektziel",
+        {},
+        [f"src/file_{index}.py" for index in range(25)],
+        "key",
+    )
+
+    assert result is not None
+    assert "EXPLORER-QUELLTEXTAUSZUEGE NICHT GELADEN" in prompts[0]
+    assert '"omitted_count": 2' in prompts[0]
+    assert '"file": "src/file_9.py"' in prompts[0]
+    assert "- src/file_24.py" in prompts[0]
     assert "kein Negativbeleg" in scout.SCOUT_SYSTEM
 
 
