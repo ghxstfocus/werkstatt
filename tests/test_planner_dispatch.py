@@ -227,6 +227,98 @@ def test_architect_single_file_task_requires_complete_current_evidence(
     assert test_reason == "ziel_verlangt_weitere_testplanung"
 
 
+def test_architect_independent_file_set_skips_split_only_with_fresh_proofs(
+    tmp_path,
+) -> None:
+    from werkstatt.roles.planner_dispatch import (
+        architect_independent_file_tasks_decision,
+    )
+
+    contents = {
+        "src/one.py": "def one():\n    return 1\n",
+        "src/two.py": "def two():\n    return 2\n",
+    }
+    sources = []
+    for relative, content in contents.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        sources.append({
+            "path": relative,
+            "complete": True,
+            "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+    prose = (
+        "3. Loesung\n"
+        "## src/one.py\nAendere one wie beschrieben.\n"
+        "## src/two.py\nAendere two wie beschrieben.\n"
+        "5. Welche Dateien haengen voneinander ab? (PFLICHT)\n"
+        "- src/one.py: (keine)\n- src/two.py: (keine)\n"
+    )
+    tasks, reason = architect_independent_file_tasks_decision(
+        goal="Implementiere die beschriebenen Aenderungen in zwei Modulen",
+        architect_prose=prose,
+        key_files=list(contents),
+        source_manifest={"sources": sources},
+        project_dir=tmp_path,
+    )
+
+    assert reason == "kleiner_unabhaengiger_architect_dateisatz"
+    assert tasks is not None
+    assert [task["task_files"] for task in tasks] == [
+        ["src/one.py"], ["src/two.py"],
+    ]
+    assert all(task["dependencies"] == [] for task in tasks)
+    assert all(task["criterion_refs"] == ["AC1"] for task in tasks)
+
+
+def test_architect_independent_file_set_escalates_dependency_and_test_work(
+    tmp_path,
+) -> None:
+    from werkstatt.roles.planner_dispatch import (
+        architect_independent_file_tasks_decision,
+    )
+
+    contents = {
+        "src/one.py": "def one():\n    return 1\n",
+        "src/two.py": "def two():\n    return 2\n",
+    }
+    sources = []
+    for relative, content in contents.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        sources.append({
+            "path": relative,
+            "complete": True,
+            "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+    prose = (
+        "3. Loesung\n"
+        "## src/one.py\nAendere one.\n"
+        "## src/two.py\nAendere two.\n"
+        "5. Welche Dateien haengen voneinander ab?\n"
+        "- src/one.py: (keine)\n- src/two.py: src/one.py\n"
+    )
+    kwargs = {
+        "goal": "Implementiere die beschriebenen Aenderungen in zwei Modulen",
+        "architect_prose": prose,
+        "key_files": list(contents),
+        "source_manifest": {"sources": sources},
+        "project_dir": tmp_path,
+    }
+
+    tasks, reason = architect_independent_file_tasks_decision(**kwargs)
+    assert tasks is None
+    assert reason == "architect_abhaengigkeiten_nicht_eindeutig_unabhaengig"
+
+    test_tasks, test_reason = architect_independent_file_tasks_decision(
+        **{**kwargs, "goal": kwargs["goal"] + " und Regressionstest"},
+    )
+    assert test_tasks is None
+    assert test_reason == "ziel_verlangt_weitere_testplanung"
+
+
 @pytest.mark.parametrize(
     ("prose_suffix", "manifest_complete", "reason"),
     [

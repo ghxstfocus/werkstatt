@@ -22,6 +22,7 @@ from werkstatt.roles.builder_direct import (
     build_direct_edit_plan as _deterministic_literal_replace_plan,
 )
 from werkstatt.roles.planner_dispatch import (
+    architect_independent_file_tasks_decision,
     architect_reasoning_route,
     architect_single_file_task_decision,
     choose_next_planner_role,
@@ -2601,6 +2602,71 @@ def run_planner(
                 _f = k["file"]
                 if _f not in _key_files:
                     _key_files.append(_f)
+    _independent_file_tasks, _independent_files_reason = (
+        architect_independent_file_tasks_decision(
+            goal=aufgabe,
+            architect_prose=_arch_prosa,
+            key_files=_key_files,
+            source_manifest=getattr(
+                state, "architect_scout_source_manifest", {},
+            ),
+            project_dir=pd,
+        )
+    )
+    if _independent_file_tasks is not None:
+        _independent_criteria = [aufgabe.strip()]
+        try:
+            for _task in _independent_file_tasks:
+                _task["criterion_refs"] = ["AC1"]
+            _independent_file_tasks = _normalisiere_task_files(
+                _independent_file_tasks, _explorer_ctx, pd, pn,
+            )
+            if len(_independent_file_tasks) < 2:
+                raise TaskGraphError(
+                    "Der unabhaengige Architect-Dateisatz wurde nicht eindeutig normalisiert."
+                )
+            _validate_criteria_coverage(
+                _independent_file_tasks, _independent_criteria,
+            )
+            _validate_read_task_scopes(_independent_file_tasks, pd)
+        except TaskGraphError as exc:
+            _independent_file_tasks = None
+            _independent_files_reason = (
+                f"taskgraph_validation_failed:{str(exc)[:180]}"
+            )
+        else:
+            state.tasks = _independent_file_tasks
+            state.akzeptanzkriterien = _independent_criteria
+            state.phasen = []
+            state.tests = []
+            _role_decision = choose_next_planner_role(
+                scout_skip_path=_scout_skip_path,
+                completed_role="architect",
+                deterministic_task_graph_ready=True,
+            )
+            _output_hash = hashlib.sha256(
+                _arch_prosa.encode("utf-8"),
+            ).hexdigest()
+            audit("planner_role_dispatch_decision", {
+                "next_role": _role_decision.role,
+                "reason": _role_decision.reason,
+                "basis": "validated_independent_architect_file_set",
+                "task_count": len(state.tasks),
+                "architect_output_sha256": _output_hash,
+            }, pd, pn)
+            _publish_role_checkpoint(
+                state, "planner_split", "skipped",
+                _independent_files_reason,
+                {"architect_output_sha256": _output_hash},
+                {"tasks": state.tasks, "criteria": state.akzeptanzkriterien},
+            )
+            audit("planner_plan_erstellt", {
+                "tasks": len(state.tasks),
+                "prosa_len": len(_arch_prosa),
+                "compiler": "validated_independent_architect_file_set",
+            }, pd, pn)
+            return True
+
     _single_file_task, _single_file_reason = (
         architect_single_file_task_decision(
             goal=aufgabe,
@@ -2670,7 +2736,10 @@ def run_planner(
     audit("planner_role_dispatch_decision", {
         "next_role": _after_architect_decision.role,
         "reason": (
-            _single_file_reason
+            _independent_files_reason
+            if _independent_file_tasks is None
+            and _independent_files_reason.startswith("taskgraph_validation_failed:")
+            else _single_file_reason
             if _single_file_task is None
             else _after_architect_decision.reason
         ),

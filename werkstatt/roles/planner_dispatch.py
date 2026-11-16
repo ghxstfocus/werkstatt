@@ -269,6 +269,125 @@ def architect_single_file_task_decision(
     }, "einzelner_unabhaengiger_architect_dateiblock"
 
 
+def architect_independent_file_tasks_decision(
+    *,
+    goal: str,
+    architect_prose: str,
+    key_files: list[str],
+    source_manifest: object,
+    project_dir,
+) -> tuple[list[dict] | None, str]:
+    """Compile a small independent Architect file set without another LLM.
+
+    This is deliberately narrower than the Planner-Split: each file must be
+    an Explorer-confirmed Python source, have a complete current source hash,
+    and be explicitly declared dependency-free by Architect. Test planning,
+    dependencies, stale evidence, and oversized plans remain role work.
+    """
+    if not isinstance(goal, str) or not goal.strip() or len(goal) > 500:
+        return None, "ziel_fehlt_oder_uebersteigt_einzel_task_limit"
+    if re.search(
+        r"\b(?:tests?|pytest|regress\w*|unit[- ]tests?)\b",
+        goal,
+        flags=re.IGNORECASE,
+    ):
+        return None, "ziel_verlangt_weitere_testplanung"
+    if not isinstance(architect_prose, str) or len(architect_prose) > 12_000:
+        return None, "architect_prosa_fehlt_oder_zu_gross"
+    sections = list(re.finditer(
+        r"^##\s+([^\s`]+\.py)\s*$", architect_prose, re.MULTILINE,
+    ))
+    if not 2 <= len(sections) <= 5:
+        return None, "architect_plan_hat_nicht_zwei_bis_fuenf_dateibloecke"
+    targets = [match.group(1) for match in sections]
+    if len(set(targets)) != len(targets):
+        return None, "architect_plan_hat_doppelte_dateibloecke"
+    for target in targets:
+        relative = Path(target)
+        if (
+            relative.is_absolute()
+            or PureWindowsPath(target).is_absolute()
+            or ".." in relative.parts
+            or target.startswith("tests/")
+        ):
+            return None, "architect_zieldatei_ausserhalb_einzel_task_scope"
+        if target not in key_files:
+            return None, "architect_zieldatei_nicht_durch_explorer_bestaetigt"
+
+    from werkstatt.task_graph import (
+        _check_explicit_keine_in_prosa,
+        _parse_architect_deps_block,
+    )
+
+    found_dependencies, dependencies = _parse_architect_deps_block(
+        architect_prose,
+    )
+    explicitly_independent = (
+        dependencies == {target: [] for target in targets}
+        or (
+            not dependencies
+            and _check_explicit_keine_in_prosa(architect_prose)
+        )
+    )
+    if not found_dependencies or not explicitly_independent:
+        return None, "architect_abhaengigkeiten_nicht_eindeutig_unabhaengig"
+
+    if not isinstance(source_manifest, dict):
+        return None, "architect_quellmanifest_fehlt"
+    sources = source_manifest.get("sources")
+    if not isinstance(sources, list):
+        return None, "architect_quellbelege_fehlen"
+    try:
+        root = Path(project_dir).resolve(strict=True)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None, "architect_quellbeleg_nicht_lesbar"
+
+    import hashlib
+
+    tasks: list[dict] = []
+    for index, (target, section) in enumerate(zip(targets, sections, strict=True)):
+        source_record = next((
+            record for record in sources
+            if isinstance(record, dict) and record.get("path") == target
+        ), None)
+        if (
+            not isinstance(source_record, dict)
+            or source_record.get("complete") is not True
+        ):
+            return None, "architect_quellbeleg_unvollstaendig"
+        source_sha256 = source_record.get("source_sha256")
+        if (
+            not isinstance(source_sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", source_sha256)
+        ):
+            return None, "architect_quellhash_ungueltig"
+        try:
+            source_path = (root / Path(target)).resolve(strict=True)
+            source_path.relative_to(root)
+            source_bytes = source_path.read_bytes()
+        except (OSError, RuntimeError, ValueError, TypeError):
+            return None, "architect_quellbeleg_nicht_lesbar"
+        if hashlib.sha256(source_bytes).hexdigest() != source_sha256:
+            return None, "architect_quellbeleg_veraltet"
+        section_end = (
+            sections[index + 1].start()
+            if index + 1 < len(sections) else len(architect_prose)
+        )
+        description = architect_prose[section.start():section_end].strip()
+        if not description or len(description) > 12_000:
+            return None, "architect_dateiblock_fehlt_oder_zu_gross"
+        tasks.append({
+            "id": f"t{index + 1}",
+            "name": f"Architect: {target}",
+            "action": "update",
+            "task_files": [target],
+            "dependencies": [],
+            "criterion_refs": ["AC1"],
+            "description": description,
+        })
+    return tasks, "kleiner_unabhaengiger_architect_dateisatz"
+
+
 def choose_next_planner_role(
     *,
     scout_skip_path: str | None,

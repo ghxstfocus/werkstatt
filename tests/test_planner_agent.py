@@ -502,6 +502,73 @@ def test_architect_single_file_plan_skips_planner_split_with_current_evidence(
     )
 
 
+def test_architect_independent_file_set_skips_planner_split_with_current_evidence(
+    tmp_path,
+):
+    import hashlib
+
+    paths = ["src/one.py", "src/two.py"]
+    contents = {
+        paths[0]: "def one():\n    return 1\n",
+        paths[1]: "def two():\n    return 2\n",
+    }
+    sources = []
+    for relative, content in contents.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        sources.append({
+            "path": relative,
+            "complete": True,
+            "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+
+    st = _state(tmp_path)
+    st.aufgabe = "Implementiere die beschriebenen Aenderungen in zwei Modulen"
+    st.explorer_context = {
+        "key_files": [{"file": relative} for relative in paths],
+    }
+    prose = (
+        "3. Loesung\n"
+        "## src/one.py\nAendere one wie beschrieben.\n"
+        "## src/two.py\nAendere two wie beschrieben.\n"
+        "5. Welche Dateien haengen voneinander ab? (PFLICHT)\n"
+        "- src/one.py: (keine)\n- src/two.py: (keine)\n"
+    )
+
+    def scout(_state, *_args):
+        return {
+            "ziel": st.aufgabe,
+            "relevante_dateien": [
+                {"pfad": relative, "zeilen": [1], "warum": "aktuell"}
+                for relative in paths
+            ],
+            "api_auszug": {},
+            "vorgeschlagene_aenderungen": ["Aendere beide unabhaengigen Module"],
+            "risiken": [],
+            "auftrag_prosa": st.aufgabe,
+        }
+
+    def architect(_state, *_args):
+        _state.architect_prosa = prose
+        _state.architect_scout_source_manifest = {"sources": sources}
+        return True
+
+    with patch("werkstatt.planner._run_scout", side_effect=scout), patch(
+        "werkstatt.planner.run_architect", side_effect=architect,
+    ), patch(
+        "werkstatt.planner._zerlege_in_sub_tasks",
+        side_effect=AssertionError("Unabhaengiger Dateisatz braucht keinen Split"),
+    ), patch("werkstatt.planner.audit"):
+        assert run_planner(st) is True
+
+    assert [task["task_files"] for task in st.tasks] == [
+        ["src/one.py"], ["src/two.py"],
+    ]
+    assert st.akzeptanzkriterien == [st.aufgabe]
+    assert all(task["criterion_refs"] == ["AC1"] for task in st.tasks)
+
+
 def test_complex_single_file_request_keeps_architect_reasoning_enabled(tmp_path):
     target = tmp_path / "src" / "auth.py"
     target.parent.mkdir()
