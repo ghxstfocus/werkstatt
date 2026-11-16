@@ -2122,10 +2122,39 @@ def run_planner(
                 if _kf not in _key_files_scan:
                     _key_files_scan.append(_kf)
 
-    _scout_report: dict | None
-    _scout_skip_path, _scout_route_reason = _scout_route_decision(
-        aufgabe, _explorer_ctx, pd,
+    from werkstatt.roles.scout_execution import (
+        ScoutRoleServices,
+        run_scout_checkpoint,
     )
+
+    _role_artifacts = getattr(state, "planner_role_artifacts", {})
+    _scout_result = run_scout_checkpoint(
+        state,
+        goal=aufgabe,
+        api_key=api_key,
+        key_files=_key_files_scan,
+        services=ScoutRoleServices(
+            route=_scout_route_decision,
+            direct_plan=_deterministic_literal_replace_plan,
+            build_index=_baue_api_index,
+            input_fingerprint=_scout_input_fingerprint,
+            validate_artifact=validate_role_artifact,
+            run_scout=_run_scout,
+            publish_checkpoint=_publish_role_checkpoint,
+            audit_call=audit,
+        ),
+    )
+    _scout_report = _scout_result.report
+    _scout_skip_path = _scout_result.skip_path
+    _scout_route_reason = _scout_result.route_reason
+    _scout_source = _scout_result.source
+    _code_index = _scout_result.code_index
+    _scout_input_sha256 = _scout_result.input_sha256
+    _scout_reused_artifact = _scout_result.reused_artifact
+    _scout_artifact_persisted = _scout_result.artifact_persisted
+    if _scout_result.failure_reason is not None:
+        return False
+
     (
         state.architect_reasoning_enabled,
         _architect_reasoning_reason,
@@ -2137,116 +2166,6 @@ def run_planner(
         "scout_skip_path": _scout_skip_path,
         "scout_route_reason": _scout_route_reason,
     }, pd, pn)
-    _scout_source = "Scout"
-    _code_index: dict = {}
-    _scout_input_sha256: str | None = None
-    _scout_reused_artifact = False
-    _scout_artifact_persisted = False
-    _role_artifacts = getattr(state, "planner_role_artifacts", {})
-    if _scout_skip_path:
-        _direct_report, _direct_reason = _deterministic_literal_replace_plan(
-            aufgabe, _scout_skip_path, pd,
-        )
-        if (
-            getattr(state, "planner_action_role", None) == "builder_direct"
-            and _direct_report is None
-        ):
-            audit("planner_role_dispatch_decision", {
-                "next_role": None,
-                "reason": "direct_builder_source_evidence_changed",
-                "direct_builder_reason": _direct_reason,
-                "basis": "revalidated_current_target",
-            }, pd, pn)
-            return False
-        if _direct_report is not None:
-            _code_index = {}
-            _scout_report = _direct_report
-            _scout_source = "deterministische_literal_ersetzung"
-            _scout_route_reason = _direct_reason
-        else:
-            _code_index = {}
-            state.architect_required_source_files = [_scout_skip_path]
-            _scout_report = {
-                "ziel": aufgabe,
-                "relevante_dateien": [{
-                    "pfad": _scout_skip_path,
-                    "warum": "explorer_hat_explizites_einzeldateiziel_bestaetigt",
-                }],
-                "api_auszug": {},
-                "vorgeschlagene_aenderungen": [],
-                "risiken": [],
-                "auftrag_prosa": aufgabe,
-                "bereits_erfuellt": False,
-                "atomarer_plan": False,
-            }
-        audit("planner_scout_skipped", {
-            "grund": _scout_route_reason,
-            "datei": _scout_skip_path,
-            "architect": (
-                "wird_nach_evidenzpruefung_uebersprungen"
-                if _direct_report is not None else "wird_aufgerufen"
-            ),
-        }, pd, pn)
-        _publish_role_checkpoint(
-            state, "scout", "skipped", _scout_route_reason,
-            {"goal": aufgabe, "explorer": _explorer_ctx},
-            _scout_report,
-        )
-    else:
-        audit("planner_scout_required", {
-            "grund": _scout_route_reason,
-        }, pd, pn)
-        _code_index = _baue_api_index(pd)
-        _scout_input_sha256 = _scout_input_fingerprint(
-            state, aufgabe, _code_index, _key_files_scan,
-        )
-        _saved_scout = None
-        if _scout_input_sha256 and isinstance(_role_artifacts, dict):
-            _saved_scout = validate_role_artifact(
-                _role_artifacts.get("scout"),
-                role="scout",
-                run_id=getattr(state, "run_id", "") or "",
-                goal=aufgabe,
-                input_sha256=_scout_input_sha256,
-            )
-        if _saved_scout is not None:
-            _scout_reused_artifact = True
-            _scout_report = _saved_scout["output"]
-            audit("planner_role_artifact_reused", {
-                "role": "scout",
-                "input_sha256": _scout_input_sha256,
-                "output_sha256": _saved_scout["output_sha256"],
-            }, pd, pn)
-            _publish_role_checkpoint(
-                state, "scout", "completed", "validated_checkpoint_artifact",
-                {"input_sha256": _scout_input_sha256}, _scout_report,
-            )
-        else:
-            _publish_role_checkpoint(
-                state, "scout", "running", _scout_route_reason,
-                {"goal": aufgabe, "explorer": _explorer_ctx,
-                 "input_sha256": _scout_input_sha256},
-            )
-            _scout_report = _run_scout(
-                state, aufgabe, _code_index, _key_files_scan, api_key,
-            )
-    if not isinstance(_scout_report, dict):
-        _publish_role_checkpoint(
-            state, "scout", "failed", "structured_report_missing",
-            {"goal": aufgabe, "explorer": _explorer_ctx},
-        )
-        audit("planner_scout_json_fehler",
-              {"grund": "kein_structured_scout_report"}, pd, pn)
-        return False
-    if not _scout_skip_path:
-        _publish_role_checkpoint(
-            state, "scout", "completed",
-            (
-                "validated_checkpoint_artifact"
-                if _scout_reused_artifact else "structured_report_received"
-            ),
-            {"goal": aufgabe, "explorer": _explorer_ctx}, _scout_report,
-        )
 
     # GOLD 2026-10-30: Scout kann "bereits_erfuellt" melden.
     # Dann brechen wir ab: kein Architect, kein Planner, kein Builder.
