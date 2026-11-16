@@ -62,6 +62,8 @@ Letzte Aktualisierung: 2026-11-16.
 
 - **Zentrale Pflichtkontext-Vollstaendigkeitspruefung (lokal, noch nicht serververifiziert):** `ask_llm` blockiert aktive Loop-Rollen jetzt, wenn deren typisiertes Rollenmanifest `required_context_complete` nicht explizit auf `true` setzt. Builder, Scout und Reviewer leiten den Wert aus ihrem jeweiligen Budgetbericht ab; Architect erreicht den Aufruf erst nach bestandenem Requestbudget; Planner-Split und Explorer melden ihren berechneten Vollstaendigkeitsstatus. Ein Regressionstest belegt, dass ein unvollstaendiger Bericht vor jedem Provideraufruf fail-closed abgewiesen und auditiert wird. Rollen-/Adapter-/Chat-Recovery-Gruppe: 302 bestanden, 2 uebersprungen; Ruff, Mypy fuer `agent.py`, `architect.py`, `scout.py`, `reviewer.py`, Audit-Drift, Control-Drift und Doku-Drift bestanden. Servertest fehlt; OP-405 bleibt offen, da semantische Suffizienz und Retrieval-Qualitaet noch evaluiert werden muessen.
 
+- **Widerspruechliche Pflichtabschnitt-Belege am Provideradapter (lokal, noch nicht serververifiziert):** `ask_llm` blockiert jetzt auch dann, wenn das Rollenmanifest `required_context_complete=true` meldet, aber ein enthaltenes Abschnittsmanifest `blocked_required`, `missing_required`, `omitted_required` oder `truncated_required` ausweist. Der Block wird vor dem Provideraufruf auditiert; Regression belegt den Widerspruchsfall. Agent-/Loop-Ask-LLM-Gruppe: 52 bestanden; Ruff, Mypy fuer `agent.py`, Audit- und Control-Drift bestanden. Semantische Angemessenheit der erforderlichen Abschnitte muss weiter evaluiert werden; OP-405 bleibt offen.
+
 ### OP-396: Chat als projektbezogene Hauptoberflaeche
 - **Status:** open
 - **Typ:** ui-orchestration

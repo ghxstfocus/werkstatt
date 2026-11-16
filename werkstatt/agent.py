@@ -337,6 +337,13 @@ def _unverified_required_spans(
     def visit(node: Any) -> None:
         if isinstance(node, dict):
             status = node.get("status")
+            failed_required_section = (
+                isinstance(status, str)
+                and status in {
+                    "blocked_required", "missing_required",
+                    "omitted_required", "truncated_required",
+                }
+            )
             required_section = (
                 isinstance(status, str)
                 and status in {"required", "required_included"}
@@ -346,7 +353,13 @@ def _unverified_required_spans(
                 and isinstance(node.get("path"), str)
                 and isinstance(node.get("source_sha256"), str)
             )
-            if (
+            if failed_required_section:
+                identifier = node.get("name") or node.get("path") or "unnamed"
+                failures.append({
+                    "section": str(identifier)[:160],
+                    "status": str(status)[:80],
+                })
+            elif (
                 (required_section or architect_source)
                 and node.get("sent_status") != "verified"
             ):

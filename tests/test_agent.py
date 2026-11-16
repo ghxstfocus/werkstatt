@@ -435,6 +435,59 @@ def test_role_request_without_run_state_is_blocked(monkeypatch):
     assert provider_calls == []
 
 
+def test_role_request_rejects_incomplete_required_section_manifest(
+    monkeypatch, tmp_path,
+):
+    state = mk_state(project_dir=tmp_path, project_name="incomplete-section")
+    events = []
+    provider_calls = []
+    monkeypatch.setattr(
+        agent, "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests, "post",
+        lambda *_args, **_kwargs: provider_calls.append(True),
+    )
+    system = "system"
+    user = "builder task"
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt=system,
+        user_content=user,
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="builder",
+        context_manifest={
+            "budget_event": "builder_context_budget",
+            "required_context_complete": True,
+            "user_sha256": hashlib.sha256(user.encode()).hexdigest(),
+            "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+            "budget": {
+                "section_manifest": [{
+                    "name": "FEEDBACK_UND_VERIFY",
+                    "status": "blocked_required",
+                }],
+            },
+        },
+    )
+
+    assert not reply.ok
+    assert reply.error == (
+        "required_context_span_unverified; provider request was not sent"
+    )
+    assert provider_calls == []
+    blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
+    assert blocked[0]["reason"] == (
+        "required_context_span_not_bound_to_provider_text"
+    )
+    assert blocked[0]["spans"] == [{
+        "section": "FEEDBACK_UND_VERIFY",
+        "status": "blocked_required",
+    }]
+
+
 def test_role_request_rejects_another_roles_budget_manifest(monkeypatch, tmp_path):
     state = mk_state(project_dir=tmp_path, project_name="wrong-role-context")
     events = []
