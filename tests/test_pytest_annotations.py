@@ -13,6 +13,36 @@ def test_conftest_registers_pytest_failure_hook() -> None:
     conftest = sys.modules["conftest"]
     hook = conftest.pytest_runtest_logreport
     assert getattr(hook, "pytest_impl", None) is not None
+    assert getattr(sys.modules["conftest"].pytest_terminal_summary, "pytest_impl", None) is not None
+
+
+def test_conftest_buffers_annotations_until_terminal_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conftest = sys.modules["conftest"]
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(conftest, "_GITHUB_PYTEST_ANNOTATIONS", [])
+    monkeypatch.setattr(conftest, "_GITHUB_PYTEST_LIMIT_WARNING", False)
+    report = SimpleNamespace(
+        failed=True,
+        location=("tests/test_x.py", 4, "test"),
+        nodeid="tests/test_x.py::test_bad",
+        longrepr=SimpleNamespace(
+            reprcrash=SimpleNamespace(message="assert expected"),
+        ),
+    )
+
+    conftest.pytest_runtest_logreport(report)
+
+    assert conftest._GITHUB_PYTEST_ANNOTATIONS == [
+        (
+            "::error file=tests/test_x.py,line=5,title=pytest failure::"
+            "tests/test_x.py::test_bad: assert expected"
+        )
+    ]
+    lines: list[str] = []
+    conftest.pytest_terminal_summary(SimpleNamespace(write_line=lines.append))
+    assert lines == conftest._GITHUB_PYTEST_ANNOTATIONS
 
 
 def test_junit_failures_become_bounded_github_annotations(

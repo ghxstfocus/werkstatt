@@ -876,6 +876,9 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
         }],
         phase="post_build",
     )
+    phase_state.data["setup_complete"] = True
+    phase_state.data["plan_complete"] = True
+    phase_state.bind_approved_plan()
     phase_state.save()
 
     verify_phases: list[str | None] = []

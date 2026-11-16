@@ -69,19 +69,10 @@ def emit_test_failure(
     print(format_annotation(path, name, line, detail))
 
 
-def pytest_runtest_logreport(report: object) -> None:
-    """Annotate bounded failures directly from pytest on GitHub Actions."""
-    global _GITHUB_ANNOTATION_COUNT, _GITHUB_LIMIT_WARNING_EMITTED
-    if os.environ.get("GITHUB_ACTIONS") != "true" or not getattr(report, "failed", False):
-        return
-    if _GITHUB_ANNOTATION_COUNT >= _MAX_ANNOTATIONS:
-        if not _GITHUB_LIMIT_WARNING_EMITTED:
-            print(
-                f"::warning::More than {_MAX_ANNOTATIONS} pytest failures; "
-                "additional failures remain in the Actions log."
-            )
-            _GITHUB_LIMIT_WARNING_EMITTED = True
-        return
+def format_report(report: object) -> str | None:
+    """Format one pytest report without writing into pytest's capture."""
+    if not getattr(report, "failed", False):
+        return None
     location = getattr(report, "location", None)
     if not isinstance(location, tuple) or len(location) < 2:
         path, line = "tests", None
@@ -94,9 +85,33 @@ def pytest_runtest_logreport(report: object) -> None:
     failure = getattr(report, "longrepr", None)
     crash = getattr(failure, "reprcrash", None)
     detail = str(getattr(crash, "message", "pytest failure"))
-    emit_test_failure(
+    return format_annotation(
         path, str(getattr(report, "nodeid", "pytest test")), line, detail,
     )
+
+
+def pytest_runtest_logreport(report: object) -> None:
+    """Annotate bounded failures directly from pytest on GitHub Actions.
+
+    This compatibility helper is useful to standalone pytest plugins. The
+    repository conftest buffers annotations and emits them from
+    ``pytest_terminal_summary`` so pytest's output capture cannot swallow the
+    GitHub workflow commands.
+    """
+    global _GITHUB_ANNOTATION_COUNT, _GITHUB_LIMIT_WARNING_EMITTED
+    if os.environ.get("GITHUB_ACTIONS") != "true" or not getattr(report, "failed", False):
+        return
+    if _GITHUB_ANNOTATION_COUNT >= _MAX_ANNOTATIONS:
+        if not _GITHUB_LIMIT_WARNING_EMITTED:
+            print(
+                f"::warning::More than {_MAX_ANNOTATIONS} pytest failures; "
+                "additional failures remain in the Actions log."
+            )
+            _GITHUB_LIMIT_WARNING_EMITTED = True
+        return
+    annotation = format_report(report)
+    if annotation is not None:
+        print(annotation)
     _GITHUB_ANNOTATION_COUNT += 1
 
 

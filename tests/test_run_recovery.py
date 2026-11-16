@@ -634,6 +634,9 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         }],
         phase="post_build",
     )
+    phase_state.data["setup_complete"] = True
+    phase_state.data["plan_complete"] = True
+    phase_state.bind_approved_plan()
     phase_state.save()
 
     store = EventStore()
