@@ -759,15 +759,15 @@ def test_phase_review_skip_prueft_applied_count():
     import inspect
 
     from werkstatt import loop as loop_mod
-    # Fix AZ Stufe 8-D: Logik liegt jetzt in _phase_finalize.
+    # Review skip policy belongs to its independent checkpoint action.
     src = (
         inspect.getsource(loop_mod.run_pipeline_loop)
-        + inspect.getsource(loop_mod._phase_finalize)
+        + inspect.getsource(loop_mod._phase_end_review_action)
     )
     # Der Skip-Block muss applied_count pruefen
     assert "applied_count" in src
-    # und _patches_leer aus applied_count ableiten
-    assert "_patches_leer = _applied == 0" in src or            "_patches_leer = _applied" in src
+    # and skip only when no changes were actually applied.
+    assert "int(state.applied_count or 0) == 0" in src
 
 
 def test_alle_done_aus_phasestate():
@@ -780,10 +780,10 @@ def test_alle_done_aus_phasestate():
     import inspect
 
     from werkstatt import loop as loop_mod
-    # Fix AZ Stufe 8-D: Logik liegt jetzt in _phase_finalize.
+    # Completion state is read by the independent review checkpoint action.
     src = (
         inspect.getsource(loop_mod.run_pipeline_loop)
-        + inspect.getsource(loop_mod._phase_finalize)
+        + inspect.getsource(loop_mod._phase_end_review_action)
     )
     # Pruefe, dass phase_state.get_task aufgerufen wird
     assert "phase_state.get_task" in src
@@ -1440,6 +1440,40 @@ def test_finalizer_rejects_task_verify_for_stale_file_content(tmp_path):
 
     assert rows[0]["verify_stage_ids"] == []
     assert gaps == ["AC1:task_verify_evidence_missing"]
+
+def test_phase_finalize_rejects_review_checkpoint_after_worktree_change(
+    tmp_path, monkeypatch,
+):
+    from werkstatt.phase_state import PhaseState
+
+    phase_state = PhaseState("testproj", base_dir=tmp_path / ".werkstatt")
+    phase_state.run_id = "run-review"
+    phase_state.init_new("Goal", [{"id": "t1", "name": "Change"}])
+    phase_state.bind_approved_plan()
+    phase_state.record_phase_end_review(worktree_fingerprint="a" * 64)
+    state = _state(tmp_path, run_id="run-review")
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _project_dir: "b" * 64,
+    )
+    monkeypatch.setattr(
+        "werkstatt.phases.finalize._human_gate",
+        lambda *_args, **_kwargs: pytest.fail(
+            "stale review must stop before gate",
+        ),
+    )
+
+    rc = loop._phase_finalize(
+        state,
+        0,
+        [],
+        "testproj",
+        phase_state,
+        phase_review_checkpointed=True,
+    )
+
+    assert rc == 3
+
 
 def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
     tmp_path, monkeypatch,

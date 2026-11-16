@@ -61,6 +61,33 @@ def test_approved_plan_fingerprint_binds_plan_but_allows_runtime_progress():
     assert phase.approved_plan_fingerprint() != original
 
 
+def test_phase_end_review_checkpoint_is_bound_to_run_plan_and_worktree(
+    tmp_path,
+):
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.run_id = "run-1"
+    phase.init_new(
+        "Goal",
+        [{"id": "t1", "name": "Edit", "action": "update"}],
+    )
+    phase.bind_approved_plan()
+    fingerprint = "a" * 64
+
+    phase.record_phase_end_review(worktree_fingerprint=fingerprint)
+
+    assert phase.phase_end_review_is_current(
+        worktree_fingerprint=fingerprint,
+    )
+    assert not phase.phase_end_review_is_current(
+        worktree_fingerprint="b" * 64,
+    )
+
+    phase.data["tasks"][0]["description"] = "Changed plan"
+    assert not phase.phase_end_review_is_current(
+        worktree_fingerprint=fingerprint,
+    )
+
+
 @pytest.mark.parametrize(
     ("mutation", "expected"),
     [

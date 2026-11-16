@@ -843,7 +843,7 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
         return 0, 1, phase.data["tasks"]
 
     monkeypatch.setattr(loop, "_phase_tasks_loop", execute_followup)
-    monkeypatch.setattr(loop, "_phase_finalize", lambda *_args: 0)
+    monkeypatch.setattr(loop, "_phase_finalize", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(loop, "check_run_lease", lambda _state: None)
     monkeypatch.setattr(loop, "audit", lambda *_args, **_kwargs: True)
 

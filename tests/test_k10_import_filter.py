@@ -11,7 +11,7 @@ def test_venv_wird_gefiltert(tmp_path: Path) -> None:
     (tmp_path / ".venv" / "lib" / "site-packages" / "pkg" / "y.py").write_text("x")
 
     files = _sammle_projekt_py_files(tmp_path)
-    names = [str(f.relative_to(tmp_path)) for f in files]
+    names = [f.relative_to(tmp_path).as_posix() for f in files]
     assert "app/x.py" in names
     assert not any(".venv" in n for n in names), names
 
@@ -23,7 +23,7 @@ def test_pycache_wird_gefiltert(tmp_path: Path) -> None:
     (tmp_path / "app" / "__pycache__" / "x.cpython.py").write_text("x")
 
     files = _sammle_projekt_py_files(tmp_path)
-    names = [str(f.relative_to(tmp_path)) for f in files]
+    names = [f.relative_to(tmp_path).as_posix() for f in files]
     assert "app/x.py" in names
     assert not any("__pycache__" in n for n in names), names
 

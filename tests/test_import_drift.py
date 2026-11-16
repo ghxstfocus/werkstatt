@@ -16,10 +16,13 @@ def test_wrapper_existiert():
 
 
 def test_importlinter_installiert():
-    lint = Path(sys.executable).parent / "lint-imports"
-    if not lint.exists():
-        lint = shutil.which("lint-imports")
-    assert lint is not None, "import-linter nicht installiert"
+    candidates = (
+        Path(sys.executable).parent / "lint-imports",
+        Path(sys.executable).parent / "Scripts" / "lint-imports.exe",
+    )
+    assert any(path.exists() for path in candidates) or shutil.which(
+        "lint-imports",
+    ), "import-linter nicht installiert"
 
 
 def test_wrapper_ist_gruen():

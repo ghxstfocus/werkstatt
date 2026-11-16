@@ -186,6 +186,45 @@ class PhaseState:
             and self.data.get("approved_plan_sha256") == fingerprint
         )
 
+    def record_phase_end_review(
+        self, *, worktree_fingerprint: str,
+    ) -> None:
+        """Bind completed phase review to this run, plan, and exact worktree."""
+        plan_fingerprint = self.approved_plan_fingerprint()
+        if (
+            not self.run_id
+            or plan_fingerprint is None
+            or not self.approved_plan_is_current()
+            or len(worktree_fingerprint) != 64
+            or any(char not in "0123456789abcdef" for char in worktree_fingerprint)
+        ):
+            raise ValueError("Phase-Review kann nicht sicher gebunden werden")
+        self.data["phase_end_review_checkpoint"] = {
+            "schema_version": 1,
+            "run_id": self.run_id,
+            "plan_sha256": plan_fingerprint,
+            "worktree_sha256": worktree_fingerprint,
+            "status": "approved",
+        }
+        self.save()
+
+    def phase_end_review_is_current(
+        self, *, worktree_fingerprint: str | None,
+    ) -> bool:
+        """Check the phase-review checkpoint against current plan and bytes."""
+        review = self.data.get("phase_end_review_checkpoint")
+        plan_fingerprint = self.approved_plan_fingerprint()
+        return bool(
+            isinstance(review, dict)
+            and review.get("schema_version") == 1
+            and review.get("status") == "approved"
+            and review.get("run_id") == self.run_id
+            and review.get("plan_sha256") == plan_fingerprint
+            and review.get("worktree_sha256") == worktree_fingerprint
+            and isinstance(worktree_fingerprint, str)
+            and self.approved_plan_is_current()
+        )
+
     def init_new(
         self,
         aufgabe: str,
@@ -396,6 +435,7 @@ class PhaseState:
         self.data["akzeptanzkriterien"] = list(criteria)
         self.data["tests"] = current_tests + list(tests)
         self.data["phasen"] = current_phases + phases
+        self.data.pop("phase_end_review_checkpoint", None)
         self.data["criteria_tracking"] = bool(
             self.data.get("criteria_tracking")
             or any(task.get("criterion_refs") for task in normalized)

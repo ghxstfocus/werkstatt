@@ -921,6 +921,10 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
     )
     monkeypatch.setattr(loop, "_git_head", lambda _path: "base-commit")
     monkeypatch.setattr(loop, "_git_dirty", lambda _path: False)
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _path: "a" * 64,
+    )
 
     with _silence_renderer(), _patch_main_config(tmp_path):
         rc = loop.main([
