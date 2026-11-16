@@ -3565,6 +3565,17 @@ body[data-mode="control"] .lf-step-detail {
 }
 #chat-eingabe::placeholder { color: var(--text-muted); }
 .chat-composer-hint { color: var(--text-muted); font-size: 9px; }
+.chat-reasoning-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 2px 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.chat-reasoning-toggle input { accent-color: var(--accent); }
 .chat-senden {
   width: 42px;
   height: 42px;

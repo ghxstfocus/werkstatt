@@ -174,6 +174,10 @@
         <div class="chat-composer">
           <textarea id="chat-eingabe" rows="1" placeholder="Frage oder Auftrag zum Projekt …"></textarea>
           <span class="chat-composer-hint">Enter sendet · Shift+Enter für neue Zeile</span>
+          <label class="chat-reasoning-toggle" title="Aktiviert vertieftes Reasoning für diese Nachricht. Antworten können länger dauern.">
+            <input id="chat-reasoning-enabled" type="checkbox">
+            <span>Mehr nachdenken</span>
+          </label>
         </div>
         <button class="chat-senden" type="submit" aria-label="Senden" title="Senden (Enter)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -275,7 +279,7 @@
   <script src="/static/tabs.js?v=202611141537"></script>
   <script src="/static/terminal.js?v=202611141537"></script>
   <script src="/static/audit.js?v=202611141537"></script>
-  <script src="/static/chat.js?v=202611141537"></script>
+  <script src="/static/chat.js?v=202611161700"></script>
   <script src="/static/runs.js?v=202611141537"></script>
   <script src="/static/timeline.js?v=202611141537"></script>
   <div class="shortcut-help-overlay" id="shortcut-help-overlay">

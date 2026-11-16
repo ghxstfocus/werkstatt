@@ -39,6 +39,7 @@ def test_chat_question_is_independent_from_active_loop(
         assert isinstance(kwargs["context_seq"], int)
         assert kwargs["run_id"] is None
         assert kwargs["snapshot_on_accept"] is True
+        assert kwargs["reasoning_enabled"] is True
         assert args[0] == "demo"
         assert "project" not in kwargs
         return {
@@ -57,6 +58,7 @@ def test_chat_question_is_independent_from_active_loop(
             "session_id": "session-1",
             "message": "Pruefe den letzten Run",
             "mode": "read",
+            "reasoning_enabled": True,
             "idempotency_key": "request-key-0001",
         },
     )
@@ -112,6 +114,24 @@ def test_chat_job_rejects_message_over_hard_limit(
 
     assert response.status_code == 413
     assert str(MAX_CHAT_MESSAGE_CHARS) in response.json()["detail"]
+
+
+def test_chat_job_requires_boolean_reasoning_setting(
+    client_and_base: tuple[Any, Path],
+) -> None:
+    client, _base = client_and_base
+    response = client.post(
+        "/api/projects/demo/chat/jobs",
+        json={
+            "session_id": "session-reasoning-invalid",
+            "message": "Komplexe Frage", "mode": "read",
+            "reasoning_enabled": "high",
+            "idempotency_key": "reasoning-invalid-001",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "reasoning_enabled" in response.json()["detail"]
 
 
 def test_chat_job_does_not_bind_to_terminal_run_from_stale_registry(

@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from werkstatt.chat_jobs import ChatJobStore
+from werkstatt.chat_jobs import ChatJobStore, IdempotencyConflict
 
 
 def test_create_is_idempotent_and_survives_store_reopen(tmp_path: Path) -> None:
@@ -30,6 +30,30 @@ def test_create_is_idempotent_and_survives_store_reopen(tmp_path: Path) -> None:
     assert first["context_seq"] == duplicate["context_seq"] == 7
     assert first["run_id"] == duplicate["run_id"] == "run-original"
     assert ChatJobStore(db).get(first["job_id"])["events"][0]["kind"] == "queued"
+
+
+def test_chat_reasoning_setting_is_persisted_and_part_of_idempotency(
+    tmp_path: Path,
+) -> None:
+    store = ChatJobStore(tmp_path / "jobs-reasoning.db")
+    job, created = store.create(
+        "session-reasoning", "Komplexe Frage", "read", "reasoning-key-0001",
+        reasoning_enabled=True,
+    )
+    replay, replay_created = store.create(
+        "session-reasoning", "Komplexe Frage", "read", "reasoning-key-0001",
+        reasoning_enabled=True,
+    )
+
+    assert created is True
+    assert job["reasoning_enabled"] == 1
+    assert replay_created is False
+    assert replay["reasoning_enabled"] == 1
+    with pytest.raises(IdempotencyConflict, match="idempotency_key"):
+        store.create(
+            "session-reasoning", "Komplexe Frage", "read",
+            "reasoning-key-0001", reasoning_enabled=False,
+        )
 
 
 def test_admission_fence_requires_session_prompt_before_claim(

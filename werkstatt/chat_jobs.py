@@ -75,7 +75,7 @@ class ChatJobStore:
                 " snapshot_required INTEGER NOT NULL DEFAULT 0,"
                 " run_snapshot_source TEXT,run_snapshot_path TEXT,"
                 " run_snapshot_head TEXT,run_snapshot_fingerprint TEXT,"
-                " snapshot_id TEXT,"
+                " snapshot_id TEXT, reasoning_enabled INTEGER NOT NULL DEFAULT 0,"
                 " UNIQUE(session_id, idempotency_key));"
                 "CREATE TABLE IF NOT EXISTS job_events ("
                 " seq INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -136,6 +136,11 @@ class ChatJobStore:
                     conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
             if "snapshot_id" not in columns:
                 conn.execute("ALTER TABLE jobs ADD COLUMN snapshot_id TEXT")
+            if "reasoning_enabled" not in columns:
+                conn.execute(
+                    "ALTER TABLE jobs ADD COLUMN reasoning_enabled INTEGER "
+                    "NOT NULL DEFAULT 0"
+                )
             event_columns = {
                 str(row["name"])
                 for row in conn.execute("PRAGMA table_info(job_events)")
@@ -156,9 +161,11 @@ class ChatJobStore:
         self, session_id: str, message: str, mode: str, idempotency_key: str,
         *, context_seq: int | None = None, run_id: str | None = None,
         project: str | None = None, snapshot_required: bool = False,
-        admission_required: bool = False,
+        admission_required: bool = False, reasoning_enabled: bool = False,
     ) -> tuple[dict[str, Any], bool]:
         """Atomar anlegen; wiederholter Key liefert den bestehenden Job."""
+        if not isinstance(reasoning_enabled, bool):
+            raise TypeError("reasoning_enabled muss bool sein")
         now = _now()
         with closing(self._connect()) as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -167,7 +174,11 @@ class ChatJobStore:
                 (session_id, idempotency_key),
             ).fetchone()
             if row:
-                if row["message"] != message or row["mode"] != mode:
+                if (
+                    row["message"] != message
+                    or row["mode"] != mode
+                    or bool(row["reasoning_enabled"]) != reasoning_enabled
+                ):
                     conn.rollback()
                     raise IdempotencyConflict(
                         "idempotency_key wurde bereits fuer eine andere Anfrage verwendet",
@@ -178,14 +189,14 @@ class ChatJobStore:
             conn.execute(
                 "INSERT INTO jobs(job_id,session_id,idempotency_key,message,"
                 "mode,state,created_at,updated_at,context_seq,run_id,project,"
-                "snapshot_required,admission_ready) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "snapshot_required,admission_ready,reasoning_enabled) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (job_id, session_id, idempotency_key, message, mode,
                  "queued", now, now,
                  None if admission_required else (
                      None if context_seq is None else max(0, context_seq)
                  ), run_id, project, int(snapshot_required),
-                 int(not admission_required)),
+                 int(not admission_required), int(reasoning_enabled)),
             )
             conn.execute(
                 "INSERT INTO job_events(job_id,kind,payload,ts) VALUES(?,?,?,?)",
@@ -912,29 +923,30 @@ def _run_job(
             job_id,
             at_seq=None if context_seq is None else int(context_seq),
         )
-        answer = chat_loop(
-            worker_session,
-            job["message"],
-            mode=job["mode"],
-            project_dir=chat_project_dir,
-            source_project_dir=project_dir,
-            cancel_check=cancel_check,
-            on_chunk=lambda text: event("chunk", text=text),
-            on_tool_call=lambda name, args: event(
+        loop_kwargs: dict[str, Any] = {
+            "mode": job["mode"],
+            "project_dir": chat_project_dir,
+            "source_project_dir": project_dir,
+            "cancel_check": cancel_check,
+            "on_chunk": lambda text: event("chunk", text=text),
+            "on_tool_call": lambda name, args: event(
                 "tool_call", name=name, args=args,
             ),
-            on_tool_result=lambda name, content: event(
+            "on_tool_result": lambda name, content: event(
                 "tool_result", name=name, content=content,
             ),
-            on_model_request=lambda manifest: event(
+            "on_model_request": lambda manifest: event(
                 "model_request", **manifest,
             ),
-            on_research_budget=lambda budget_s: event(
+            "on_research_budget": lambda budget_s: event(
                 "research_budget_reached", budget_s=budget_s,
             ),
-            request_id=job_id,
-            origin_session_id=str(job["session_id"]),
-        )
+            "request_id": job_id,
+            "origin_session_id": str(job["session_id"]),
+        }
+        if bool(job.get("reasoning_enabled", 0)):
+            loop_kwargs["reasoning_enabled"] = True
+        answer = chat_loop(worker_session, job["message"], **loop_kwargs)
         if store.finish(job_id, answer=answer, worker_id=_WORKER_ID):
             parent_session.append_job_turn(job_id, job["message"], answer)
     except ChatCancelled:
@@ -1277,6 +1289,7 @@ def enqueue_chat_job(
     context_seq: int | None = None,
     run_id: str | None = None,
     snapshot_on_accept: bool = False,
+    reasoning_enabled: bool = False,
 ) -> dict[str, Any]:
     """Persist a job, optionally pinning standalone work to an immutable tree."""
     path = Path(db_path) if db_path else _db_path(project)
@@ -1288,6 +1301,7 @@ def enqueue_chat_job(
         project=project,
         snapshot_required=snapshot_on_accept and run_id is None,
         admission_required=True,
+        reasoning_enabled=reasoning_enabled,
     )
     if snapshot_on_accept and run_id is None and job.get("state") == "queued":
         store.require_standalone_snapshot(str(job["job_id"]))

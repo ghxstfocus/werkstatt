@@ -1715,6 +1715,7 @@ def create_app() -> FastAPI:
         session_id = body.get("session_id")
         message = body.get("message")
         mode = body.get("mode", "read")
+        reasoning_enabled = body.get("reasoning_enabled", False)
         idempotency_key = body.get("idempotency_key")
         if not isinstance(session_id, str) or not session_id:
             raise HTTPException(status_code=400, detail="session_id fehlt")
@@ -1730,6 +1731,11 @@ def create_app() -> FastAPI:
             raise HTTPException(
                 status_code=400,
                 detail="Hintergrundjobs erlauben nur read- oder debugger-Modus",
+            )
+        if not isinstance(reasoning_enabled, bool):
+            raise HTTPException(
+                status_code=400,
+                detail="reasoning_enabled muss bool sein",
             )
         if not isinstance(idempotency_key, str) or not re.fullmatch(
             r"[A-Za-z0-9_.:-]{8,128}", idempotency_key,
@@ -1756,6 +1762,7 @@ def create_app() -> FastAPI:
                 # they can outlive a run and must never stop or rebind it.
                 run_id=None,
                 snapshot_on_accept=True,
+                reasoning_enabled=reasoning_enabled,
             )
         except IdempotencyConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -2269,6 +2276,12 @@ def create_app() -> FastAPI:
                     mode = str(roh.get("mode", "read"))
                     if mode not in ("read", "write"):
                         raise HTTPException(status_code=400, detail="mode ungueltig")
+                    reasoning_enabled = roh.get("reasoning_enabled", False)
+                    if not isinstance(reasoning_enabled, bool):
+                        raise HTTPException(
+                            status_code=400,
+                            detail="reasoning_enabled muss bool sein",
+                        )
                 except HTTPException as exc:
                     await _send({"type": "error", "detail": str(exc.detail)})
                     continue
@@ -2288,6 +2301,7 @@ def create_app() -> FastAPI:
                     antwort = await asyncio.to_thread(
                         _ca.chat_loop, session, message,
                         mode=mode,
+                        reasoning_enabled=reasoning_enabled,
                         project_dir=(_PROJECTS_BASE / projekt).resolve(),
                         on_chunk=on_chunk,
                         on_tool_call=on_tool_call,

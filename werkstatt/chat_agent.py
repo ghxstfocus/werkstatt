@@ -608,6 +608,7 @@ _CHAT_ACTIVE_TOOL_SUMMARY_MARKER = "[Verdichtete Werkzeughistorie]"
 
 def _message_size(message: dict[str, Any]) -> int:
     size = len(str(message.get("content") or ""))
+    size += len(str(message.get("reasoning_content") or ""))
     calls = message.get("tool_calls")
     if calls:
         size += len(json.dumps(calls, ensure_ascii=False, default=str))
@@ -756,6 +757,7 @@ def _deepseek_chat_stream(
     tools: list[dict[str, Any]] | None = None,
     on_chunk: Callable[[str], None] | None = None,
     cancel_check: Callable[[], bool] | None = None,
+    reasoning_enabled: bool = False,
 ) -> dict[str, Any]:
     """Echtes Token-Streaming. Ruft on_chunk pro Content-Delta."""
     import requests
@@ -763,10 +765,11 @@ def _deepseek_chat_stream(
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
         raise RuntimeError("DEEPSEEK_API_KEY nicht gesetzt")
-    body = _chat_provider_payload(messages, tools)
+    body = _chat_provider_payload(messages, tools, reasoning_enabled)
 
     _check_cancel(cancel_check)
     content_acc = ""
+    reasoning_acc = ""
     tool_calls_acc: dict[int, dict[str, Any]] = {}
     usage_acc: dict[str, Any] | None = None
     _provider_model = str(body["model"])
@@ -806,6 +809,9 @@ def _deepseek_chat_stream(
             if not choices:
                 continue
             delta = choices[0].get("delta") or {}
+            reasoning_delta = delta.get("reasoning_content")
+            if isinstance(reasoning_delta, str):
+                reasoning_acc += reasoning_delta
             if delta.get("content"):
                 content_acc += delta["content"]
                 if on_chunk is not None:
@@ -828,6 +834,8 @@ def _deepseek_chat_stream(
     _check_cancel(cancel_check)
     msg: dict[str, Any] = {"role": "assistant"}
     msg["content"] = content_acc or None
+    if reasoning_acc:
+        msg["reasoning_content"] = reasoning_acc
     if tool_calls_acc:
         msg["tool_calls"] = [tool_calls_acc[i] for i in sorted(tool_calls_acc)]
     if usage_acc is not None:
@@ -838,17 +846,21 @@ def _deepseek_chat_stream(
 def _chat_provider_payload(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
+    reasoning_enabled: bool = False,
 ) -> dict[str, Any]:
     """Build the exact JSON body passed to the chat provider."""
-    route = route_for_role("chat")
+    route = route_for_role("chat", reasoning=reasoning_enabled)
     body: dict[str, Any] = {
         "model": route.model,
         "thinking": {"type": route.thinking},
         "messages": messages,
-        "temperature": 0.0,
         "stream": True,
         "stream_options": {"include_usage": True},
     }
+    if route.reasoning_effort is not None:
+        body["reasoning_effort"] = route.reasoning_effort
+    else:
+        body["temperature"] = 0.0
     if tools:
         body["tools"] = tools
         body["tool_choice"] = "auto"
@@ -915,8 +927,9 @@ def _chat_request_manifest(
             str(tool.get("function", {}).get("name", ""))
             for tool in tools if isinstance(tool, dict)
         ],
-        "temperature": payload["temperature"],
+        "temperature": payload.get("temperature"),
         "thinking": payload["thinking"],
+        "reasoning_effort": payload.get("reasoning_effort"),
         "stream": payload["stream"],
     }
 
@@ -925,14 +938,35 @@ def _deepseek_chat(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
     cancel_check: Callable[[], bool] | None = None,
+    reasoning_enabled: bool = False,
 ) -> dict[str, Any]:
     """Non-streaming Wrapper. Test-Boundary (monkeypatch-Attr)."""
-    inner = _deepseek_chat_stream(messages, tools, None, cancel_check)
+    inner = _deepseek_chat_stream(
+        messages, tools, None, cancel_check, reasoning_enabled,
+    )
     usage = inner.pop("_usage", None)
     return {"choices": [{"message": inner}], "usage": usage}
 
 
 _DEFAULT_DEEPSEEK_CHAT = _deepseek_chat
+
+
+def _request_chat_provider(
+    messages: list[dict[str, Any]],
+    *,
+    tools: list[dict[str, Any]] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
+    reasoning_enabled: bool = False,
+) -> dict[str, Any]:
+    """Keep legacy test/provider seams compatible when reasoning is off."""
+    kwargs: dict[str, Any] = {}
+    if tools is not None:
+        kwargs["tools"] = tools
+    if cancel_check is not None:
+        kwargs["cancel_check"] = cancel_check
+    if reasoning_enabled:
+        kwargs["reasoning_enabled"] = True
+    return _deepseek_chat(messages, **kwargs)
 
 
 def _finalisiere_chat(
@@ -942,6 +976,7 @@ def _finalisiere_chat(
     grund: str,
     on_chunk: Callable[[str], None] | None = None,
     cancel_check: Callable[[], bool] | None = None,
+    reasoning_enabled: bool = False,
     on_llm_call: Callable[[], None] | None = None,
     record_model_request: Callable[[list[dict[str, Any]], list[dict[str, Any]] | None], None] | None = None,
 ) -> str:
@@ -979,12 +1014,10 @@ def _finalisiere_chat(
         on_llm_call()
     if record_model_request is not None:
         record_model_request(_abschluss_messages, None)
-    if cancel_check is None:
-        _resp = _deepseek_chat(_abschluss_messages)
-    else:
-        _resp = _deepseek_chat(
-            _abschluss_messages, cancel_check=cancel_check,
-        )
+    _resp = _request_chat_provider(
+        _abschluss_messages, cancel_check=cancel_check,
+        reasoning_enabled=reasoning_enabled,
+    )
     _usage = _resp.get("usage")
     if _usage and _usage.get("total_tokens"):
         session.append("token_usage", _usage)
@@ -1021,11 +1054,17 @@ def chat_loop(
     max_elapsed_s: float | None = _DEFAULT_MAX_ELAPSED_S,
     on_research_budget: Callable[[float], None] | None = None,
     allow_time_budget_finalize: bool = True,
+    reasoning_enabled: bool = False,
 ) -> str:
     """User-Nachricht -> LLM-Loop -> Assistant-Antwort."""
     tools = tools if tools is not None else CHAT_TOOLS
     _check_cancel(cancel_check)
-    user_payload: dict[str, Any] = {"text": message, "mode": mode}
+    if not isinstance(reasoning_enabled, bool):
+        raise TypeError("reasoning_enabled muss bool sein")
+    user_payload: dict[str, Any] = {
+        "text": message, "mode": mode,
+        "reasoning_enabled": reasoning_enabled,
+    }
     if request_id is not None:
         user_payload["job_id"] = request_id
     current_user_seq = session.append("user", user_payload)
@@ -1068,7 +1107,9 @@ def chat_loop(
         provider_request_number += 1
         if on_model_request is None:
             return
-        payload = _chat_provider_payload(request_messages, request_tools)
+        payload = _chat_provider_payload(
+            request_messages, request_tools, reasoning_enabled,
+        )
         on_model_request(_chat_request_manifest(
             payload,
             mode=mode,
@@ -1104,6 +1145,7 @@ def chat_loop(
         return _finalisiere_chat(
             messages, session, grund="time_budget",
             on_chunk=on_chunk, cancel_check=cancel_check,
+            reasoning_enabled=reasoning_enabled,
             on_llm_call=on_llm_call,
             record_model_request=record_model_request,
         )
@@ -1128,19 +1170,24 @@ def chat_loop(
                     _check_deadline(deadline)
                     return False
 
-                resp = _deepseek_chat(
+                resp = _request_chat_provider(
                     messages, tools=schemas, cancel_check=_deadline_check,
+                    reasoning_enabled=reasoning_enabled,
                 )
             elif cancel_check is None:
-                resp = _deepseek_chat(messages, tools=schemas)
+                resp = _request_chat_provider(
+                    messages, tools=schemas,
+                    reasoning_enabled=reasoning_enabled,
+                )
             else:
                 def _request_check() -> bool:
                     _check_deadline(deadline)
                     _check_cancel(cancel_check)
                     return False
 
-                resp = _deepseek_chat(
+                resp = _request_chat_provider(
                     messages, tools=schemas, cancel_check=_request_check,
+                    reasoning_enabled=reasoning_enabled,
                 )
         except ChatDeadlineExceeded:
             return _finish_time_budget()
@@ -1220,6 +1267,11 @@ def chat_loop(
             "role": "assistant",
             "content": None,
             "tool_calls": tool_calls,
+            **(
+                {"reasoning_content": msg["reasoning_content"]}
+                if isinstance(msg.get("reasoning_content"), str)
+                else {}
+            ),
         })
         _round_evidence: list[tuple[str, str, str]] = []
         for tc in tool_calls:
@@ -1315,6 +1367,7 @@ def chat_loop(
                 return _finalisiere_chat(
                     messages, session, grund="stagnation",
                     on_chunk=on_chunk, cancel_check=cancel_check,
+                    reasoning_enabled=reasoning_enabled,
                     on_llm_call=on_llm_call,
                     record_model_request=record_model_request,
                 )
@@ -1335,6 +1388,7 @@ def chat_loop(
     return _finalisiere_chat(
         messages, session, grund="round_limit",
         on_chunk=on_chunk, cancel_check=cancel_check,
+        reasoning_enabled=reasoning_enabled,
         on_llm_call=on_llm_call,
         record_model_request=record_model_request,
     )

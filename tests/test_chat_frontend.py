@@ -84,7 +84,7 @@ def test_chat_asset_urls_haben_einen_cache_bust() -> None:
     html = Path("static/layout.html").read_text(encoding="utf-8")
     assert re.search(r'/static/chat\.js\?v=[0-9]+', html)
     assert re.search(r'/static/live_feed\.js\?v=[0-9]+', html)
-    assert re.search(r'\?v=202611141537', html)
+    assert re.search(r'\?v=202611161700', html)
     assert "?v=202611121845" not in html
 
 
@@ -96,6 +96,15 @@ def test_chat_can_cancel_background_jobs_without_blocking_composer() -> None:
     assert "function _abbrechenAktiveJobs()" in js
     assert 'state === "cancelled"' in js
     assert 'id="chat-eingabe"' in html
+
+
+def test_chat_reasoning_checkbox_is_forwarded_per_message() -> None:
+    html = Path("static/layout.html").read_text(encoding="utf-8")
+    js = _chat_js()
+    assert 'id="chat-reasoning-enabled"' in html
+    assert 'function _chatReasoningEnabled()' in js
+    assert 'reasoning_enabled: reasoningEnabled' in js
+    assert 'reasoning_enabled: _chatReasoningEnabled()' in js
 
 
 

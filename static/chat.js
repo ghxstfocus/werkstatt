@@ -1079,7 +1079,9 @@
     return job;
   }
 
-  function _startChatJob(text, projekt, sid, request, assistantCard) {
+  function _startChatJob(
+    text, projekt, sid, request, assistantCard, reasoningEnabled,
+  ) {
     var idempotencyKey = (window.crypto && window.crypto.randomUUID)
       ? window.crypto.randomUUID()
       : (Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -1087,6 +1089,7 @@
     var body = {
       session_id: sid, message: text, mode: _chatRequestMode(),
       idempotency_key: idempotencyKey,
+      reasoning_enabled: reasoningEnabled,
     };
     function submit(attempt) {
       return fetch(url, {
@@ -1334,8 +1337,16 @@
     _loopAktivitaetPoll(projekt, zustand.loopActivityGeneration);
   }
 
-  function _sende(text) {
+  function _chatReasoningEnabled() {
+    var toggle = _el("chat-reasoning-enabled");
+    return !!(toggle && toggle.checked);
+  }
+
+  function _sende(text, reasoningEnabled) {
     if (!text) return;
+    if (typeof reasoningEnabled !== "boolean") {
+      reasoningEnabled = _chatReasoningEnabled();
+    }
     var projekt = zustand.projekt;
     var anfrage = zustand.historyRequest;
     if (!zustand.sessionId) {
@@ -1355,7 +1366,7 @@
       var wartendeSession = zustand.sessionPromise;
       wartendeSession.then(function () {
         if (projekt === zustand.projekt && anfrage === zustand.historyRequest) {
-          _sende(text);
+          _sende(text, reasoningEnabled);
         }
       }).catch(function () {
         if (projekt === zustand.projekt && anfrage === zustand.historyRequest) {
@@ -1368,7 +1379,10 @@
     var antwortKarte = _karte("assistant", "Ich sehe mir das Projekt an …");
     if (antwortKarte) antwortKarte.classList.add("is-working");
     _setzeChatStatus("Nachricht wird übermittelt …", "working");
-    _startChatJob(text, projekt, zustand.sessionId, anfrage, antwortKarte);
+    _startChatJob(
+      text, projekt, zustand.sessionId, anfrage, antwortKarte,
+      reasoningEnabled,
+    );
   }
 
   function _sendeUeberSocket(text) {
@@ -1380,6 +1394,7 @@
       session_id: zustand.sessionId,
       message: text,
       mode: _chatRequestMode(),
+      reasoning_enabled: _chatReasoningEnabled(),
     };
     if (!zustand.socket || zustand.socket.readyState !== WebSocket.OPEN) {
       zustand.sendQueue.push(payload);

@@ -41,6 +41,68 @@ def test_prompt_directs_recent_append_only_reads_to_tail_evidence():
     assert "read_chat_history seitenweise nach" in chat_agent._SYSTEM_PROMPT
 
 
+def test_chat_reasoning_route_is_opt_in_and_private_context_survives_tools(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret_reasoning = "PRIVATE_REASONING_SENTINEL"
+    requests: list[list[dict[str, Any]]] = []
+    chunks: list[str] = []
+    tools = {
+        "probe": {
+            "description": "Liefert einen Testbeleg.",
+            "parameters": {"type": "object", "properties": {}},
+            "fn": lambda _args: "Beleg vorhanden",
+            "mode": "read",
+        },
+    }
+
+    def fake_chat(messages, tools=None, cancel_check=None, reasoning_enabled=False):
+        assert reasoning_enabled is True
+        requests.append([dict(item) for item in messages])
+        if len(requests) == 1:
+            return {"choices": [{"message": {
+                "role": "assistant", "content": None,
+                "reasoning_content": secret_reasoning,
+                "tool_calls": [{
+                    "id": "probe-1", "type": "function",
+                    "function": {"name": "probe", "arguments": "{}"},
+                }],
+            }}]}
+        return {"choices": [{"message": {
+            "role": "assistant", "content": "Der Beleg ist vorhanden.",
+        }}]}
+
+    monkeypatch.setattr(chat_agent, "_deepseek_chat", fake_chat)
+    assert chat_agent._chat_provider_payload([], None)["thinking"] == {
+        "type": "disabled",
+    }
+    enabled_payload = chat_agent._chat_provider_payload(
+        [], None, reasoning_enabled=True,
+    )
+    assert enabled_payload["thinking"] == {"type": "enabled"}
+    assert enabled_payload["reasoning_effort"] == "high"
+
+    answer = chat_agent.chat_loop(
+        session, "Pruefe den Beleg", tools=tools,
+        reasoning_enabled=True, on_chunk=chunks.append,
+    )
+
+    assert answer == "Der Beleg ist vorhanden."
+    assistant_tool_call = next(
+        item for item in requests[1] if item.get("tool_calls")
+    )
+    assert assistant_tool_call["reasoning_content"] == secret_reasoning
+    persisted = json.dumps(session.load(), ensure_ascii=False)
+    assert secret_reasoning not in persisted
+    assert secret_reasoning not in "".join(chunks)
+
+
+def test_chat_loop_rejects_non_boolean_reasoning_setting(session: ChatSession) -> None:
+    with pytest.raises(TypeError, match="reasoning_enabled muss bool sein"):
+        chat_agent.chat_loop(session, "Frage", reasoning_enabled="high")
+
+
 def test_large_pasted_jsonl_is_compacted_but_session_event_stays_unchanged():
     records = [
         {"seq": i, "ts": f"2026-11-14T10:{i:02}:00Z", "kind": "loop_step", "payload": {}}
