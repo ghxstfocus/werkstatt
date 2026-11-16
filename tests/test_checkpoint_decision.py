@@ -334,6 +334,11 @@ def test_coordinator_audit_payload_includes_task_verify_evidence() -> None:
                 "setup_context_ready": False,
                 "plan_goal_matches": True,
                 "task_count": 2,
+                "planner_role_required_evidence": [
+                    "user_goal", "project_inventory",
+                ],
+                "planner_role_missing_evidence": ["scout_report"],
+                "untrusted_evidence": ["raw prompt"],
                 "private_prompt": "must not be copied",
             },
             "private_prompt": "must not be copied",
@@ -347,6 +352,10 @@ def test_coordinator_audit_payload_includes_task_verify_evidence() -> None:
         "setup_context_ready": False,
         "plan_goal_matches": True,
         "task_count": 2,
+        "planner_role_required_evidence": [
+            "user_goal", "project_inventory",
+        ],
+        "planner_role_missing_evidence": ["scout_report"],
     }
     assert "private_prompt" not in payload
 
@@ -499,6 +508,10 @@ def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(
     assert broad_decision["decision_basis"]["scout_route_reason"].startswith(
         "auftrag_enthaelt_breiten_marker:"
     )
+    assert broad_decision["decision_basis"]["planner_role_decision"] == "scout"
+    assert broad_decision["decision_basis"]["planner_role_missing_evidence"] == [
+        "scout_report",
+    ]
 
     focused_goal = "Ergaenze src/feature.py um eine neue Funktion"
     phase.data["aufgabe"] = focused_goal
@@ -512,6 +525,9 @@ def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(
     assert focused_decision["reason"] == (
         "scout_skipped:explizite_einzeldatei_mit_explorer_beleg"
     )
+    assert focused_decision["decision_basis"][
+        "planner_role_missing_evidence"
+    ] == ["architect_plan"]
 
     source = tmp_path / "src" / "feature.py"
     source.write_text("TIMEOUT = 10\n", encoding="utf-8")
@@ -528,6 +544,9 @@ def test_coordinator_dispatches_only_roles_needed_by_current_planner_route(
         "builder_direct"
     )
     assert direct_decision["decision_basis"]["direct_builder_ready"] is True
+    assert direct_decision["decision_basis"][
+        "planner_role_required_evidence"
+    ] == ["explicit_user_edit", "unique_current_source"]
 
 
 def _deterministic_explorer_context(tmp_path):
@@ -830,6 +849,12 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
             "plan_goal_matches": True,
             "setup_context_source": "checkpointed_plan",
             "task_count": 3,
+            "planner_role_decision": "builder_direct",
+            "planner_role_decision_reason": "unique_source_bound_edit_ready",
+            "planner_role_required_evidence": [
+                "explicit_user_edit", "unique_current_source",
+            ],
+            "planner_role_missing_evidence": [],
             "private_prompt": "do not persist",
         },
     }
@@ -880,6 +905,12 @@ def test_run_coordinator_decision_is_cas_persisted_for_chat_status(tmp_path):
                 "plan_goal_matches": True,
                 "setup_context_source": "checkpointed_plan",
                 "task_count": 3,
+                "planner_role_decision": "builder_direct",
+                "planner_role_decision_reason": "unique_source_bound_edit_ready",
+                "planner_role_required_evidence": [
+                    "explicit_user_edit", "unique_current_source",
+                ],
+                "planner_role_missing_evidence": [],
             },
         },
     }

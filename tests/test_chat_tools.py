@@ -843,6 +843,17 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                         "plan_goal_matches": True,
                         "setup_context_source": "checkpointed_plan",
                         "task_count": 4,
+                        "planner_role_decision": "planner_split",
+                        "planner_role_decision_reason": (
+                            "architect_output_needs_task_graph_compilation"
+                        ),
+                        "planner_role_required_evidence": [
+                            "user_goal", "architect_prose",
+                            "acceptance_criteria",
+                        ],
+                        "planner_role_missing_evidence": [
+                            "validated_task_graph",
+                        ],
                         "private_prompt": "never expose",
                     },
                 },
@@ -904,6 +915,14 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
         "plan_goal_matches": True,
         "setup_context_source": "checkpointed_plan",
         "task_count": 4,
+        "planner_role_decision": "planner_split",
+        "planner_role_decision_reason": (
+            "architect_output_needs_task_graph_compilation"
+        ),
+        "planner_role_required_evidence": [
+            "user_goal", "architect_prose", "acceptance_criteria",
+        ],
+        "planner_role_missing_evidence": ["validated_task_graph"],
     }
     coverage = dispatch_evidence["criteria_task_coverage"]
     assert coverage["uncovered_count"] == 23

@@ -869,6 +869,12 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 "planner_role_stage": planner_role_stage,
                 "planner_role_decision": planner_decision.role,
                 "planner_role_decision_reason": planner_decision.reason,
+            "planner_role_required_evidence": list(
+                planner_decision.required_evidence,
+            ),
+            "planner_role_missing_evidence": list(
+                planner_decision.missing_evidence,
+            ),
                 "scout_route_reason": scout_route_reason,
                 "direct_builder_ready": direct_builder_ready,
                 "direct_builder_reason": direct_builder_reason,
@@ -997,6 +1003,12 @@ def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
     """Keep only primitive checkpoint facts safe for Control and RunRecord."""
     if not isinstance(raw, dict):
         return None
+    from werkstatt.roles.planner_dispatch import (
+        PLANNER_ROLE_DECISION_REASONS,
+        PLANNER_ROLE_EVIDENCE_NAMES,
+        PLANNER_ROLE_NAMES,
+    )
+
     safe: dict[str, Any] = {}
     for key in (
         "setup_context_ready", "setup_checkpoint_complete",
@@ -1020,6 +1032,23 @@ def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
     role_stage = raw.get("planner_role_stage")
     if role_stage in {"scout", "architect"}:
         safe["planner_role_stage"] = role_stage
+    role = raw.get("planner_role_decision")
+    if role in PLANNER_ROLE_NAMES:
+        safe["planner_role_decision"] = role
+    role_reason = raw.get("planner_role_decision_reason")
+    if isinstance(role_reason, str) and role_reason in PLANNER_ROLE_DECISION_REASONS:
+        safe["planner_role_decision_reason"] = role_reason
+    for key in (
+        "planner_role_required_evidence", "planner_role_missing_evidence",
+    ):
+        items = raw.get(key)
+        if (
+            isinstance(items, list)
+            and len(items) <= 8
+            and all(isinstance(item, str) and item in PLANNER_ROLE_EVIDENCE_NAMES
+                    for item in items)
+        ):
+            safe[key] = list(dict.fromkeys(items))
     return safe or None
 
 

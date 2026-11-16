@@ -11,6 +11,31 @@ from pathlib import Path, PureWindowsPath
 
 from werkstatt.roles.builder_direct import build_direct_edit_plan
 
+PLANNER_ROLE_NAMES = frozenset({
+    "scout", "architect", "planner_split", "builder_direct",
+})
+PLANNER_ROLE_DECISION_REASONS = frozenset({
+    "validated_task_graph_ready",
+    "scout_reports_goal_already_fulfilled",
+    "validated_deterministic_task_graph_ready",
+    "unique_source_bound_edit_ready",
+    "scout_skipped_current_explorer_source_evidence",
+    "scout_evidence_missing",
+    "scout_report_needs_design_decision",
+    "architect_output_needs_task_graph_compilation",
+    "scout_skipped_but_architect_output_missing",
+    "architect_output_missing_recover_role",
+    "planner_split_checkpoint_completed",
+})
+PLANNER_ROLE_EVIDENCE_NAMES = frozenset({
+    "user_goal", "project_inventory", "explorer_evidence", "scout_report",
+    "explicit_user_edit", "unique_current_source", "architect_plan",
+    "scout_atomic_plan", "current_source_hashes", "criteria_coverage",
+    "current_source_manifest", "architect_prose", "acceptance_criteria",
+    "validated_task_graph", "explorer_source_evidence",
+    "current_source_evidence",
+})
+
 
 @dataclass(frozen=True)
 class PlannerRoleDecision:
@@ -18,6 +43,8 @@ class PlannerRoleDecision:
 
     role: str | None
     reason: str
+    required_evidence: tuple[str, ...] = ()
+    missing_evidence: tuple[str, ...] = ()
 
 
 def scout_route_decision(
@@ -406,47 +433,80 @@ def choose_next_planner_role(
     compiled task graph has passed validation.
     """
     if task_graph_ready:
-        return PlannerRoleDecision(None, "validated_task_graph_ready")
+        return PlannerRoleDecision(
+            None, "validated_task_graph_ready",
+            ("validated_task_graph",), (),
+        )
     if scout_already_fulfilled:
-        return PlannerRoleDecision(None, "scout_reports_goal_already_fulfilled")
+        return PlannerRoleDecision(
+            None, "scout_reports_goal_already_fulfilled",
+            ("scout_report", "current_source_evidence"), (),
+        )
     if deterministic_task_graph_ready:
-        return PlannerRoleDecision(None, "validated_deterministic_task_graph_ready")
+        return PlannerRoleDecision(
+            None, "validated_deterministic_task_graph_ready",
+            ("scout_atomic_plan", "current_source_hashes", "criteria_coverage"),
+            (),
+        )
     if direct_builder_ready:
         return PlannerRoleDecision(
             "builder_direct", "unique_source_bound_edit_ready",
+            ("explicit_user_edit", "unique_current_source"), (),
         )
 
     if completed_role is None:
         if scout_skip_path:
             return PlannerRoleDecision(
                 "architect", "scout_skipped_current_explorer_source_evidence",
+                ("user_goal", "explorer_source_evidence"), ("architect_plan",),
             )
-        return PlannerRoleDecision("scout", "scout_evidence_missing")
+        return PlannerRoleDecision(
+            "scout", "scout_evidence_missing",
+            ("user_goal", "project_inventory", "explorer_evidence"),
+            ("scout_report",),
+        )
 
     if completed_role == "scout":
         if not scout_skip_path and not architect_output_ready:
             return PlannerRoleDecision(
                 "architect", "scout_report_needs_design_decision",
+                ("user_goal", "scout_report", "current_source_evidence"),
+                ("architect_plan",),
             )
         if architect_output_ready:
             return PlannerRoleDecision(
                 "planner_split", "architect_output_needs_task_graph_compilation",
+                (
+                    "user_goal", "architect_prose", "acceptance_criteria",
+                    "current_source_manifest",
+                ),
+                ("validated_task_graph",),
             )
         return PlannerRoleDecision(
             "architect", "scout_skipped_but_architect_output_missing",
+            ("user_goal", "explorer_source_evidence"), ("architect_plan",),
         )
 
     if completed_role == "architect":
         if architect_output_ready:
             return PlannerRoleDecision(
                 "planner_split", "architect_output_needs_task_graph_compilation",
+                (
+                    "user_goal", "architect_prose", "acceptance_criteria",
+                    "current_source_manifest",
+                ),
+                ("validated_task_graph",),
             )
         return PlannerRoleDecision(
             "architect", "architect_output_missing_recover_role",
+            ("user_goal", "explorer_source_evidence"), ("architect_plan",),
         )
 
     if completed_role == "planner_split":
-        return PlannerRoleDecision(None, "planner_split_checkpoint_completed")
+        return PlannerRoleDecision(
+            None, "planner_split_checkpoint_completed",
+            ("validated_task_graph",), (),
+        )
 
     raise ValueError(f"Unbekannte abgeschlossene Planner-Rolle: {completed_role}")
 

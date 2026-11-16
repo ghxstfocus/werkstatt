@@ -96,6 +96,40 @@ def test_planner_dispatch_rejects_unknown_completed_role() -> None:
         )
 
 
+def test_planner_dispatch_declares_role_inputs_and_missing_artifact() -> None:
+    scout = choose_next_planner_role(scout_skip_path=None)
+    assert scout.role == "scout"
+    assert scout.required_evidence == (
+        "user_goal", "project_inventory", "explorer_evidence",
+    )
+    assert scout.missing_evidence == ("scout_report",)
+
+    architect = choose_next_planner_role(
+        scout_skip_path=None, completed_role="scout",
+    )
+    assert architect.required_evidence == (
+        "user_goal", "scout_report", "current_source_evidence",
+    )
+    assert architect.missing_evidence == ("architect_plan",)
+
+    split = choose_next_planner_role(
+        scout_skip_path=None, completed_role="architect",
+        architect_output_ready=True,
+    )
+    assert split.role == "planner_split"
+    assert split.required_evidence == (
+        "user_goal", "architect_prose", "acceptance_criteria",
+        "current_source_manifest",
+    )
+    assert split.missing_evidence == ("validated_task_graph",)
+
+    direct = choose_next_planner_role(
+        scout_skip_path="src/settings.py", direct_builder_ready=True,
+    )
+    assert direct.role == "builder_direct"
+    assert direct.missing_evidence == ()
+
+
 def test_direct_builder_route_requires_current_unique_source_edit(tmp_path) -> None:
     source = tmp_path / "src" / "settings.py"
     source.parent.mkdir()

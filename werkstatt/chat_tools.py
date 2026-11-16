@@ -815,6 +815,12 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                     evidence_summary: dict[str, Any] = {}
                     decision_basis = evidence.get("decision_basis")
                     if isinstance(decision_basis, dict):
+                        from werkstatt.roles.planner_dispatch import (
+                            PLANNER_ROLE_DECISION_REASONS,
+                            PLANNER_ROLE_EVIDENCE_NAMES,
+                            PLANNER_ROLE_NAMES,
+                        )
+
                         safe_basis: dict[str, Any] = {}
                         for key in (
                             "setup_context_ready", "setup_checkpoint_complete",
@@ -839,6 +845,34 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                             and task_count >= 0
                         ):
                             safe_basis["task_count"] = task_count
+                        role = decision_basis.get("planner_role_decision")
+                        if role in PLANNER_ROLE_NAMES:
+                            safe_basis["planner_role_decision"] = role
+                        role_reason = decision_basis.get(
+                            "planner_role_decision_reason",
+                        )
+                        if (
+                            isinstance(role_reason, str)
+                            and role_reason in PLANNER_ROLE_DECISION_REASONS
+                        ):
+                            safe_basis[
+                                "planner_role_decision_reason"
+                            ] = role_reason
+                        for key in (
+                            "planner_role_required_evidence",
+                            "planner_role_missing_evidence",
+                        ):
+                            items = decision_basis.get(key)
+                            if (
+                                isinstance(items, list)
+                                and len(items) <= 8
+                                and all(
+                                    isinstance(item, str)
+                                    and item in PLANNER_ROLE_EVIDENCE_NAMES
+                                    for item in items
+                                )
+                            ):
+                                safe_basis[key] = list(dict.fromkeys(items))
                         if safe_basis:
                             evidence_summary["decision_basis"] = safe_basis
                     progress = evidence.get("task_progress")
