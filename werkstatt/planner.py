@@ -2305,7 +2305,9 @@ def run_planner(
     if (
         not _scout_skip_path
         and not _scout_reused_artifact
-        and _planner_action_role in {"scout", "architect", "planner_split"}
+        and _planner_action_role in {
+            "scout", "architect", "planner_split", "planner_dispatch",
+        }
         and not _scout_artifact_persisted
     ):
         audit("planner_role_artifact_unbound", {
@@ -2316,7 +2318,9 @@ def run_planner(
     if (
         not _scout_skip_path
         and not _scout_reused_artifact
-        and _planner_action_role in {"architect", "planner_split"}
+        and _planner_action_role in {
+            "architect", "planner_split", "planner_dispatch",
+        }
     ):
         state.planner_step_yielded = True
         state.planner_yielded_after_role = "scout"
@@ -2567,7 +2571,9 @@ def run_planner(
             }, pd, pn)
 
     if (
-        _planner_action_role in {"architect", "planner_split"}
+        _planner_action_role in {
+            "architect", "planner_split", "planner_dispatch",
+        }
         and _saved_architect is None
         and not _architect_artifact_persisted
     ):
@@ -2580,7 +2586,7 @@ def run_planner(
         stop_after_role == "architect"
         or _planner_action_role in {"scout", "architect"}
         or (
-            _planner_action_role == "planner_split"
+            _planner_action_role in {"planner_split", "planner_dispatch"}
             and _saved_architect is None
         )
     ):

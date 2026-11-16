@@ -397,8 +397,10 @@ def test_run_coordinator_rebuilds_setup_context_and_hydrates_plan_on_resume(
         "planner_architect"
     )
     resumed_phase.data["planner_role_stage"] = "architect"
-    assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
-        "planner_split"
+    adaptive_compile = _run_coordinator_action(resumed_phase, state)
+    assert adaptive_compile["coordinator_action"] == "planner_dispatch"
+    assert adaptive_compile["reason"] == (
+        "architect_evidence_requires_adaptive_task_compilation"
     )
     # Role-stage progress is run and goal scoped; a stale stage cannot skip
     # the Scout on another run or a changed goal.

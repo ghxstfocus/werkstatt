@@ -838,13 +838,20 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                 "planner_split": "split",
                 "builder_direct": "direct",
             }[planner_decision.role]
-            reason = (
-                "scout_skipped:" + scout_route_reason
-                if planner_role_stage is None
-                and planner_decision.role == "architect"
-                and scout_route_reason
-                else planner_decision.reason
-            )
+            if (
+                planner_decision.role == "planner_split"
+                and planner_role_stage == "architect"
+            ):
+                next_role = "dispatch"
+                reason = "architect_evidence_requires_adaptive_task_compilation"
+            else:
+                reason = (
+                    "scout_skipped:" + scout_route_reason
+                    if planner_role_stage is None
+                    and planner_decision.role == "architect"
+                    and scout_route_reason
+                    else planner_decision.reason
+                )
         return {
             "decision": "prepare_approved_work_graph",
             "coordinator_action": f"planner_{next_role}",
@@ -1601,7 +1608,7 @@ def _run_pipeline_loop_impl(
             continue
         if action in {
             "plan_preflight", "planner_scout", "planner_architect",
-            "planner_split", "planner_direct",
+            "planner_split", "planner_dispatch", "planner_direct",
         }:
             if phase_state is None:
                 _persist_run_result(
@@ -1651,6 +1658,7 @@ def _run_pipeline_loop_impl(
                 "planner_scout": "scout",
                 "planner_architect": "architect",
                 "planner_split": "planner_split",
+                "planner_dispatch": "planner_dispatch",
                 "planner_direct": "builder_direct",
             }.get(action)
             state.planner_yielded_after_role = None
