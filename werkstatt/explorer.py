@@ -29,6 +29,10 @@ _SOURCE_TEXT_EXTENSIONS = frozenset({
     ".vue", ".svelte", ".json", ".jsonc", ".yaml", ".yml", ".toml",
     ".ini", ".cfg", ".xml", ".md", ".rst", ".txt", ".sh", ".ps1",
 })
+_ROLE_RETRIEVAL_TOKENS = frozenset({
+    "architect", "builder", "chat", "explorer", "planner",
+    "reflection", "reviewer", "scout", "verify",
+})
 from werkstatt.tools import run_readonly
 
 EXPLORER_SYSTEM = """Du bist ein read-only Codebase-Explorer.
@@ -338,6 +342,16 @@ def _rank_source_files(
         )
     )
     query_tokens = _source_content_tokens(query)
+    requested_role_tokens = query_tokens & _ROLE_RETRIEVAL_TOKENS
+    # "verify" is also a very common task verb (e.g. "verify this task").
+    # Treat it as a role label only when the query names the Verify module or
+    # an explicit Verify-role route.
+    if "verify" in requested_role_tokens and not re.search(
+        r"\bverify\.py\b|\bverify[-_]role\b|\brole[-_]verify\b",
+        query,
+        flags=re.IGNORECASE,
+    ):
+        requested_role_tokens.remove("verify")
     excluded = {item.replace("\\", "/") for item in (exclude or set())}
     documents: list[tuple[str, set[str], str, int, set[str], float]] = []
     read_failures = 0
@@ -401,7 +415,7 @@ def _rank_source_files(
             term for term, count in frequencies.items()
             if count > 0 and count * 2 < len(documents)
         }
-    scored: list[tuple[float, int, str, list[str]]] = []
+    scored: list[tuple[float, int, str, list[str], list[str]]] = []
     for index, (
         path, tokens, _digest, file_size, path_tokens, source_weight,
     ) in enumerate(documents):
@@ -417,11 +431,38 @@ def _rank_source_files(
         )
         content_score = sum(idf(term) for term in matched)
         path_score = sum(idf(term) for term in path_matches)
+        role_path_matches = sorted(
+            requested_role_tokens.intersection(path_tokens),
+        )
+        # Role names are often common in a repository and get discarded by
+        # the corpus-frequency filter. When the query explicitly names a
+        # role, its source path is strong routing evidence and must still
+        # distinguish that role's implementation from another role's tests.
+        # Apply a role-path bonus only when the query names one unambiguous
+        # role. In multi-role handoffs, content evidence must decide which
+        # specialists and supporting sources are needed.
+        role_path_score = (
+            4.0 * len(role_path_matches)
+            if source_weight == 1.0 and len(requested_role_tokens) == 1
+            else 0.0
+        )
         length_penalty = 1 + 0.5 * math.log1p(file_size / 4_096)
         score = source_weight * (
             content_score / length_penalty + 2.0 * path_score
+            + role_path_score
         )
-        scored.append((score, index, path, matched))
+        if (
+            len(requested_role_tokens) == 1
+            and not role_path_matches
+            and requested_role_tokens.intersection(_ROLE_RETRIEVAL_TOKENS)
+            and path_tokens.intersection(_ROLE_RETRIEVAL_TOKENS)
+        ):
+            # A query for one explicit role should not fill its limited result
+            # set with another role's tests simply because generic failure or
+            # budget terms overlap. Keep the candidate searchable, but rank it
+            # below same-role evidence and unlabelled supporting sources.
+            score *= 0.5
+        scored.append((score, index, path, matched, role_path_matches))
     scored.sort(key=lambda row: (-row[0], row[1]))
     source_records = {
         path: (digest, size)
@@ -430,13 +471,22 @@ def _rank_source_files(
     selected = [
         {
             "file": path,
-            "why": "Inhaltstreffer fuer spezifische Auftragsbegriffe",
+            "why": (
+                "Inhaltstreffer fuer spezifische Auftragsbegriffe"
+                + (
+                    "; explizite Rollenbegriffe im Quellpfad"
+                    if role_path_matches else ""
+                )
+            ),
             "confidence": "medium",
             "matched_terms": terms[:20],
+            "matched_role_path_terms": role_path_matches,
             "source_sha256": source_records[path][0],
             "source_bytes": source_records[path][1],
         }
-        for _score, _index, path, terms in scored[:max(0, limit)]
+            for (
+                _score, _index, path, terms, role_path_matches,
+            ) in scored[:max(0, limit)]
     ]
     manifest = {
         "indexed_file_scope": (
@@ -448,6 +498,7 @@ def _rank_source_files(
         "indexed_extensions": sorted(extensions),
         "inventory_source": inventory_source,
         "query_token_count": len(query_tokens),
+        "explicit_role_query_tokens": sorted(requested_role_tokens),
         "discriminative_token_count": len(discriminative),
         "common_or_unmatched_tokens_ignored": len(query_tokens - discriminative),
         "indexed_file_count": len(indexed),

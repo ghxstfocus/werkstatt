@@ -72,16 +72,25 @@ def test_role_information_queries_retrieve_required_sources_with_live_hashes() -
             (
                 row["query"],
                 set(row["required_files"].split(";")),
+                set(filter(None, row.get("forbidden_files", "").split(";"))),
             )
             for row in csv.DictReader(dataset_file)
         ]
 
-    for query, required_files in cases:
+    for query, required_files, forbidden_files in cases:
         selected, manifest = _rank_source_files(root, query, limit=5)
         selected_by_path = {item["file"]: item for item in selected}
         assert required_files <= selected_by_path.keys(), {
             "query": query,
             "required": sorted(required_files),
+            "selected": list(selected_by_path),
+            "manifest": manifest,
+        }
+        assert not forbidden_files.intersection(selected_by_path), {
+            "query": query,
+            "known_irrelevant_sources_selected": sorted(
+                forbidden_files.intersection(selected_by_path),
+            ),
             "selected": list(selected_by_path),
             "manifest": manifest,
         }
