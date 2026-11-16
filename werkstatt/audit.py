@@ -110,6 +110,7 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "debugger_fix_tests_run",
         "builder_context_budget",
         "loop_checkpoint_decision",
+        "loop_coordinator_dispatch_stale",
         "scout_context_budget",
         "planner_scout_context_budget_blocked",
         "reviewer_context_budget",

@@ -2033,10 +2033,19 @@ def _run_pipeline_loop_impl(
                 "done", "failed", "blocked", "vetoed", "split",
             }
         ])
+        state.coordinator_dispatch_stale = False
         _rc_task, tasks_ok, tasks = _phase_tasks_loop(
-            state, phase_state, 1, task_index_offset,
+            state,
+            phase_state,
+            1,
+            task_index_offset,
+            coordinator_decision=decision,
         )
         check_run_lease(state)
+        if state.coordinator_dispatch_stale:
+            # Follow-up reconciliation changed the work graph after the
+            # coordinator chose an action. Re-evaluate from the new checkpoint.
+            continue
         if _rc_task != 0:
             after_failure = _task_progress_snapshot(phase_state)
             recovery_decision = _recoverable_task_error_decision(

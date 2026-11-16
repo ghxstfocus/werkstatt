@@ -16,6 +16,7 @@
     "auftrag_bereits_erfuellt_quelle",
     "budget_exhausted_reason",
     "builder_failure_reason",
+    "coordinator_dispatch_stale",
     "explorer_context",
     "last_planner_info",
     "last_reject_kind",

@@ -165,6 +165,9 @@ class RunState:
     # Model-derived Explorer handoffs remain process-local. A fresh worker may
     # restore only the separately hash-bound deterministic single-file skip.
     coordinator_setup_context_ready: bool = False
+    # Set when a task worker revalidation finds the coordinator's persisted
+    # action stale; the outer loop must decide again before dispatching work.
+    coordinator_dispatch_stale: bool = False
     # Runtime hook used by the Run coordinator to persist role boundaries
     # while the planning phase is executing. Never serialized into PhaseState.
     planner_checkpoint_callback: Any = None
