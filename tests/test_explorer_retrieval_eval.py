@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 from pathlib import Path
 
 from werkstatt.explorer import _rank_source_files
@@ -58,3 +59,40 @@ def test_repository_retrieval_recall_and_first_relevant_rank() -> None:
     assert min(precisions) == 1.0, case_diagnostics
     assert min(recalls) == 1.0, case_diagnostics
     assert min(reciprocal_ranks) == 1.0, case_diagnostics
+
+
+def test_role_information_queries_retrieve_required_sources_with_live_hashes() -> None:
+    """Critical role handoffs retain their required source files and provenance."""
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "tests" / "fixtures" / "explorer_role_retrieval_eval.csv"
+    )
+    with dataset_path.open(encoding="utf-8", newline="") as dataset_file:
+        cases = [
+            (
+                row["query"],
+                set(row["required_files"].split(";")),
+            )
+            for row in csv.DictReader(dataset_file)
+        ]
+
+    for query, required_files in cases:
+        selected, manifest = _rank_source_files(root, query, limit=5)
+        selected_by_path = {item["file"]: item for item in selected}
+        assert required_files <= selected_by_path.keys(), {
+            "query": query,
+            "required": sorted(required_files),
+            "selected": list(selected_by_path),
+            "manifest": manifest,
+        }
+        assert manifest["index_scan_succeeded"] is True
+        assert manifest["omissions_are_not_negative_evidence"] is True
+        for relative_path in required_files:
+            source_path = root / relative_path
+            source_bytes = source_path.read_bytes()
+            assert selected_by_path[relative_path]["source_sha256"] == hashlib.sha256(
+                source_bytes
+            ).hexdigest()
+            assert selected_by_path[relative_path]["source_bytes"] == len(
+                source_bytes
+            )
