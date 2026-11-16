@@ -293,6 +293,29 @@ def check_plan(payload: dict) -> dict:
                 f"{sorted(_VALID_ACTIONS)}.",
             )
 
+    # A planned action without a concrete file scope is not executable by the
+    # project-bound workers. Historically the empty-list fallback below let
+    # such tasks pass, producing runs like "Zieldatei: (keine)" which invoked
+    # Builder/Review but could never produce criterion-bound file evidence.
+    for index, task in enumerate(tasks, 1):
+        if not isinstance(task, dict):
+            task_id = f"t{index}"
+            files = None
+        else:
+            task_id = task.get("id", f"t{index}")
+            files = task.get("task_files")
+        if not isinstance(files, list) or not files:
+            return _deny(
+                "TASK_FILE",
+                str(task_id),
+                "",
+                "Task hat keinen konkreten Dateiscope.",
+                "Jeder geplante Task braucht task_files als nichtleere "
+                "Liste konkreter Datei-Pfade. Ohne Dateiscope kann der "
+                "Loop keine passende Rolle sicher auswaehlen oder deren "
+                "Ergebnis belegen.",
+            )
+
     # 3) TASK_FILE
     for t in tasks:
         if not isinstance(t, dict):
@@ -339,12 +362,17 @@ def check_plan(payload: dict) -> dict:
 
     # 5) PHASE_ID
     if phasen:
-        _ids = {p.get("id") for p in phasen if isinstance(p, dict)}
+        _ids = {
+            phase["id"] for phase in phasen
+            if isinstance(phase, dict) and isinstance(phase.get("id"), str)
+        }
         for t in tasks:
             if not isinstance(t, dict):
                 continue
             pid = t.get("phase_id")
-            if pid is not None and pid not in _ids:
+            if pid is not None and (
+                not isinstance(pid, str) or pid not in _ids
+            ):
                 return _deny(
                     "PHASE_ID",
                     t.get("id", "?"),

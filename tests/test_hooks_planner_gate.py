@@ -48,6 +48,20 @@ def test_nur_code_erlaubt():
     assert result["allow"] is True
 
 
+def test_task_ohne_konkreten_dateiscope_abgelehnt():
+    """Ein Worker-Task ohne Datei kann nicht sicher ausgefuehrt/geprueft werden."""
+    from hooks import planner_gate as pg
+
+    for task_files in (None, [], "app/foo.py"):
+        task = {"id": "t1", "action": "update"}
+        if task_files is not None:
+            task["task_files"] = task_files
+        result = pg.check_plan({"tasks": [task], "phasen": []})
+        assert result["allow"] is False, result
+        assert result["info"]["regel"] == "TASK_FILE"
+        assert "Dateiscope" in result["info"]["erklaerung"]
+
+
 def test_ungueltige_action():
     result = _run({
         "tasks": [{"id": "t1", "task_files": ["a.py"], "action": "write"}],

@@ -231,6 +231,32 @@ def test_plan_gate_accepts_valid_dependency_dag(tmp_path) -> None:
         assert _plan_gate(state) is True
 
 
+def test_plan_gate_rejects_task_without_file_scope_before_approval(
+    tmp_path, monkeypatch,
+) -> None:
+    from hooks import planner_gate
+    from werkstatt import gates
+
+    state = mk_state(
+        project_dir=str(tmp_path),
+        project_name="probe",
+        architect_prosa="Plan",
+        tasks=[{"id": "t1", "action": "update"}],
+        tests=[],
+        akzeptanzkriterien=[],
+        phasen=[],
+    )
+    monkeypatch.setattr(
+        gates,
+        "_call_hook",
+        lambda _name, payload: planner_gate.check_plan(payload),
+    )
+
+    assert gates._plan_gate(state) is False
+    assert state.last_planner_info["regel"] == "TASK_FILE"
+    assert "Dateiscope" in state.last_planner_info["erklaerung"]
+
+
 def test_plan_gate_rejects_uncovered_acceptance_criterion(tmp_path) -> None:
     from werkstatt.gates import _plan_gate
 
