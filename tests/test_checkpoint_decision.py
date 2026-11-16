@@ -101,6 +101,51 @@ def test_checkpoint_replans_eligible_failed_task_instead_of_claiming_completion(
     assert decision["next_executor"] == "planner_and_plan_gate"
 
 
+def test_outer_coordinator_routes_allowlisted_task_failure_at_checkpoint(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import _recoverable_task_error_decision
+
+    phase = _phase(
+        tmp_path,
+        [
+            {"id": "failed", "name": "First", "criterion_refs": ["AC1"]},
+            {"id": "next", "name": "Independent", "criterion_refs": ["AC2"]},
+        ],
+        ["First", "Second"],
+    )
+    phase.mark_failed("failed", failure="builder_failed")
+
+    decision = _recoverable_task_error_decision(
+        phase, _state_after_setup(), progress_changed=True,
+    )
+
+    assert decision is not None
+    assert decision["coordinator_action"] == "execute_task_checkpoint"
+    assert decision["next_task_id"] == "next"
+
+
+def test_outer_coordinator_keeps_unknown_or_stale_task_failures_terminal(
+    tmp_path,
+) -> None:
+    from werkstatt.loop import _recoverable_task_error_decision
+
+    phase = _phase(
+        tmp_path,
+        [{"id": "failed", "name": "First", "criterion_refs": ["AC1"]}],
+        ["First"],
+    )
+    phase.mark_failed("failed", failure="reflection_erschoepft_rejected")
+
+    assert _recoverable_task_error_decision(
+        phase, _state_after_setup(), progress_changed=True,
+    ) is None
+    phase.data["tasks"][0]["failure"] = "builder_failed"
+    assert _recoverable_task_error_decision(
+        phase, _state_after_setup(), progress_changed=False,
+    ) is None
+
+
 def test_checkpoint_replans_only_eligible_failed_criterion_tasks(tmp_path) -> None:
     phase = _phase(
         tmp_path,

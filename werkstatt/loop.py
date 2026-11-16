@@ -691,6 +691,54 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
     }
 
 
+def _recoverable_task_error_decision(
+    phase_state: PhaseState,
+    state: RunState,
+    *,
+    progress_changed: bool,
+) -> dict[str, Any] | None:
+    """Re-enter the coordinator only for checkpoint-proven safe task failures.
+
+    A task worker may return an error after recording a recoverable failure.
+    The outer coordinator must not turn that into an unconditional run abort:
+    it may route an independent approved task or a gated criteria replan.
+    Unknown failures, stale/no-progress results, and failures without current
+    uncovered criterion references remain terminal.
+    """
+    if not progress_changed:
+        return None
+    tasks = phase_state.data.get("tasks")
+    if not isinstance(tasks, list):
+        return None
+    failed_ids: list[str] = []
+    for task_record in tasks:
+        if (
+            not isinstance(task_record, dict)
+            or task_record.get("status") != "failed"
+        ):
+            continue
+        task_id = task_record.get("id")
+        if isinstance(task_id, str):
+            failed_ids.append(task_id)
+    failed_ids.sort()
+    if not failed_ids:
+        return None
+    criteria = phase_state.criteria_progress()
+    from werkstatt.criteria_replan import eligible_failed_task_ids
+
+    eligible_ids = eligible_failed_task_ids(
+        phase_state, criteria.get("uncovered"),
+    )
+    if failed_ids != eligible_ids:
+        return None
+    decision = _run_coordinator_action(phase_state, state)
+    if decision.get("coordinator_action") not in {
+        "execute_task_checkpoint", "replan_failed_criteria",
+    }:
+        return None
+    return decision
+
+
 def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
     """Keep only primitive checkpoint facts safe for Control and RunRecord."""
     if not isinstance(raw, dict):
@@ -1225,6 +1273,24 @@ def _run_pipeline_loop_impl(
         )
         check_run_lease(state)
         if _rc_task != 0:
+            after_failure = _task_progress_snapshot(phase_state)
+            recovery_decision = _recoverable_task_error_decision(
+                phase_state,
+                state,
+                progress_changed=before != after_failure,
+            )
+            if recovery_decision is not None:
+                recovery_payload = _coordinator_decision_audit_payload(
+                    get_run_id(), recovery_decision,
+                )
+                recovery_payload["failure_checkpoint"] = True
+                audit(
+                    "loop_run_coordinator_decision",
+                    recovery_payload,
+                    state.project_dir,
+                    project_name,
+                )
+                continue
             _persist_run_result(
                 EventStore(), project_name, get_run_id(), _rc_task,
                 run_state=state, phase_state=phase_state,
