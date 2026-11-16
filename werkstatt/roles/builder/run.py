@@ -325,7 +325,7 @@ def _build_patches_fuer_datei(
                     continue
                 _tf_bf = _t_bf.get("task_files") or []
                 if zieldatei in _tf_bf:
-                    _fname_bf = (_t_bf.get("name") or "")[:60]
+                    _fname_bf = _t_bf.get("name") or ""
                     _fg_bf = _t_bf.get("failure") or "unbekannt"
                     _hist_fail += (
                         f"- Task {_t_bf.get('id','?')} "
@@ -358,6 +358,9 @@ def _build_patches_fuer_datei(
         _bug_lines = []
         for _b in _reviewer_bugs:
             if not isinstance(_b, dict):
+                _bug_lines.append(
+                    f"- Nicht strukturiertes Reviewer-Ereignis: {_b!s}"
+                )
                 continue
             _sev = str(_b.get("severity", "")).strip()
             if _sev.upper() not in {"HIGH", "CRITICAL"}:
@@ -395,17 +398,31 @@ def _build_patches_fuer_datei(
     ]
     if _failed_results:
         _evidence_lines = []
-        for _result in _failed_results[:5]:
-            _stage = str(_result.get("stage_id") or "?")[:120]
+        _evidence_lines.append(
+            f"Fehlgeschlagene Verify-Stages: {len(_failed_results)}."
+        )
+        _full_verify_errors = [
+            str(error) for error in (state.last_verify_errors or [])
+        ]
+        for _result in _failed_results:
+            _stage = str(_result.get("stage_id") or "?")
             _exit_code = _result.get("exit_code")
-            _excerpt = str(_result.get("error_excerpt") or "")[:1200]
+            _excerpt = str(_result.get("error_excerpt") or "")
             _evidence_lines.append(
                 f"- Stage {_stage}; Exit-Code: {_exit_code}"
             )
-            if _excerpt:
+            if _excerpt and not _full_verify_errors:
                 _evidence_lines.append(
-                    f"  Fehlerauszug (Pruefdaten): {_excerpt}"
+                    f"  Verify-Auszug ({len(_excerpt)} Zeichen; "
+                    f"Vollstaendigkeit nicht belegt): {_excerpt}"
                 )
+        if _full_verify_errors:
+            _evidence_lines.append(
+                f"Vollstaendige Verify-Fehler ({len(_full_verify_errors)}):"
+            )
+            _evidence_lines.extend(
+                f"  Verify-Fehler: {error}" for error in _full_verify_errors
+            )
         _feedback_block += (
             "\n\n## AKTUELLE VERIFY-BELEGE (letzter Versuch):\n"
             + "\n".join(_evidence_lines)
@@ -417,32 +434,59 @@ def _build_patches_fuer_datei(
         # Abwaertskompatibilitaet fuer gespeicherte/alte RunStates und Tests.
         _verify_errs = state.last_verify_errors or []
         if _verify_errs:
-            _err_lines = [str(e)[:500] for e in _verify_errs[:5]]
+            _err_lines = [str(e) for e in _verify_errs]
+            _evidence_lines = [
+                f"Verify-Fehler aus letzter Runde: {len(_err_lines)}."
+            ]
+            _evidence_lines.extend(f"- {error}" for error in _err_lines)
             _feedback_block += (
-                "\n\n## VERIFY-FEHLER (aus letzter Runde):\n"
-                + "\n".join(f"- {e}" for e in _err_lines)
+                "\n\n## VERIFY-FEHLER (untrusted Pruefdaten):\n"
+                + "\n".join(_evidence_lines)
                 + "\nBehebe diese Fehler in dieser Antwort.\n"
             )
     # K47: Reflection-Historie -- was in vorherigen Runden passiert ist.
     _refl_hist = state.reflection_history or []
     if _refl_hist:
-        _refl_lines = ["\n\n## VORHERIGE REFLECTION-RUNDEN (was du bereits versucht hast):\n"]
-        for _r in _refl_hist[-3:]:  # max 3 Runden
+        _recent_refl = _refl_hist[-3:]
+        _omitted_refl = len(_refl_hist) - len(_recent_refl)
+        _refl_lines = [
+            (
+                "\n\n## VORHERIGE REFLECTION-RUNDEN "
+                "(untrusted Reparaturhistorie):\n"
+            ),
+            (
+                f"{len(_recent_refl)} neueste von {len(_refl_hist)} Runden; "
+                f"{_omitted_refl} aeltere Runden ausgelassen.\n"
+            ),
+        ]
+        for _r in _recent_refl:
+            if not isinstance(_r, dict):
+                _refl_lines.append(
+                    f"\nNicht strukturierter Runden-Eintrag: {_r!s}\n"
+                )
+                continue
             _rn = _r.get("runde", "?")
             _pa = _r.get("patches_applied", 0)
-            _ve = _r.get("verify_errors", [])[:2]
-            _rb = _r.get("reviewer_bugs", [])[:2]
+            _ve = _r.get("verify_errors", [])
+            _rb = _r.get("reviewer_bugs", [])
+            if not isinstance(_ve, list):
+                _ve = [_ve]
+            if not isinstance(_rb, list):
+                _rb = [_rb]
             _refl_lines.append(f"\n### Runde {_rn}:\n")
             _refl_lines.append(f"- Patches: {_pa} angewendet\n")
             if _ve:
-                _refl_lines.append("- Verify-Fehler:\n")
+                _refl_lines.append(f"- Verify-Fehler ({len(_ve)}):\n")
                 for _e in _ve:
-                    _refl_lines.append(f"  * {str(_e)[:200]}\n")
+                    _refl_lines.append(f"  * {_e!s}\n")
             if _rb:
-                _refl_lines.append("- Reviewer-Bugs:\n")
+                _refl_lines.append(f"- Reviewer-Bugs ({len(_rb)}):\n")
                 for _b in _rb:
+                    if not isinstance(_b, dict):
+                        _refl_lines.append(f"  * Nicht strukturiert: {_b!s}\n")
+                        continue
                     _sv = _b.get("severity", "?")
-                    _ds = (_b.get("description") or _b.get("beschreibung") or "")[:150]
+                    _ds = _b.get("description") or _b.get("beschreibung") or ""
                     _refl_lines.append(f"  * [{_sv}] {_ds}\n")
         _refl_lines.append(
             "\nWiederhole NICHT die gleichen Versuche. Pruefe den aktuellen "
@@ -584,14 +628,32 @@ def _build_patches_fuer_datei(
         ("ZIELDATEI_INHALT", _datei_block),
         ("CHAT_RECOVERY_SOURCE_EVIDENCE", _chat_evidence_block),
     ]
+    _repair_context_required = bool(
+        _hist_fail
+        or _feedback
+        or _refl_hist
+        or _failed_results
+        or getattr(state, "last_verify_errors", None)
+        or _reviewer_bugs
+        or any(
+            isinstance(_bug, dict)
+            and str(_bug.get("severity", "")).strip().upper()
+            in {"HIGH", "CRITICAL"}
+            for _bug in _reviewer_bugs
+        )
+    )
+    if _repair_context_required and _feedback_block:
+        _required_context.append(("FEEDBACK_UND_VERIFY", _feedback_block))
     _scout_api_context = _format_scout_apis_for_builder(
         state.scout_api_auszug,
     )
     _explorer_context = _format_explorer_findings_b(
         state.explorer_findings,
     )
-    _optional_context = [
-        ("FEEDBACK_UND_VERIFY", _feedback_block),
+    _optional_context = []
+    if _feedback_block and not _repair_context_required:
+        _optional_context.append(("FEEDBACK_UND_VERIFY", _feedback_block))
+    _optional_context.extend([
         ("REPAIR_HINT_UND_BASELINE", _refl_hint),
         ("DATEI_SKILLS", _skills_block),
         ("MODULHINWEIS", _module_hint),
@@ -602,7 +664,7 @@ def _build_patches_fuer_datei(
          ("## EXPLORER-FINDINGS:\n" + _explorer_context)
          if _explorer_context else ""),
         ("MESSWERTE", _messwerte_block_b),
-    ]
+    ])
     _user, _context_meta = _budget_builder_context(
         _required_context, _optional_context,
     )

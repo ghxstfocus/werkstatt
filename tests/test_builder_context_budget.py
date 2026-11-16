@@ -313,3 +313,101 @@ def test_builder_does_not_call_model_when_required_context_exceeds_budget(
     )
     assert budget_event[1]["blocked"] is True
     assert budget_event[1]["required_chars"] > 60_000
+
+
+def test_builder_requires_full_repair_feedback_and_marks_history_boundary(
+    tmp_path,
+):
+    target = tmp_path / "a.py"
+    target.write_text("value = 1\n", encoding="utf-8")
+    state = RunState(
+        api_key="test-key",
+        project_dir=tmp_path,
+        project_name="demo",
+        architect_prosa="## a.py\nRepair the reported failure.",
+        aktuelle_task={
+            "id": "t1", "name": "Repair a.py",
+            "description": "Use the complete current failure evidence.",
+            "action": "update", "task_files": ["a.py"],
+        },
+        last_verify_results=[{
+            "stage_id": "stage_" + "S" * 140,
+            "ok": False,
+            "exit_code": 2,
+            "error_excerpt": "verify error " * 140 + "VERIFY_TAIL_MARKER",
+        }],
+        last_verify_errors=[
+            "complete verify failure " * 80 + "COMPLETE_VERIFY_TAIL_MARKER"
+        ],
+        reviewer_bugs=[{
+            "severity": "HIGH",
+            "description": "review finding " * 30 + "REVIEW_TAIL_MARKER",
+        }],
+        reflection_history=[
+            {"runde": index, "patches_applied": 1,
+             "verify_errors": [f"attempt_{index}_" + "V" * 250],
+             "reviewer_bugs": [{
+                 "severity": "HIGH",
+                 "description": f"attempt_{index}_" + "R" * 220,
+             }]}
+            for index in range(1, 5)
+        ],
+    )
+    reply = type("Reply", (), {
+        "ok": True, "content": '{"patches": []}', "error": "",
+    })()
+
+    with patch(
+        "werkstatt.roles.builder._common.ask_llm", return_value=reply,
+    ) as ask_llm:
+        _build_patches_fuer_datei(
+            state, "a.py", "Repair the reported failure.", "test-key",
+        )
+
+    prompt = ask_llm.call_args.args[2]
+    assert "stage_" + "S" * 140 in prompt
+    assert "VERIFY_TAIL_MARKER" in prompt
+    assert "COMPLETE_VERIFY_TAIL_MARKER" in prompt
+    assert "REVIEW_TAIL_MARKER" in prompt
+    assert "attempt_4_" + "V" * 250 in prompt
+    assert "attempt_4_" + "R" * 220 in prompt
+    assert "attempt_1_" not in prompt
+    assert "3 neueste von 4 Runden; 1 aeltere Runden ausgelassen" in prompt
+    manifest = ask_llm.call_args.kwargs["context_manifest"]["budget"]
+    section = next(
+        item for item in manifest["section_manifest"]
+        if item["name"] == "FEEDBACK_UND_VERIFY"
+    )
+    assert section["status"] == "required"
+    start, end = section["prompt_start"], section["prompt_end"]
+    assert "## AKTUELLE VERIFY-BELEGE" in prompt[start:end]
+
+
+def test_builder_blocks_when_complete_repair_evidence_exceeds_budget(tmp_path):
+    target = tmp_path / "a.py"
+    target.write_text("value = 1\n", encoding="utf-8")
+    state = RunState(
+        api_key="test-key",
+        project_dir=tmp_path,
+        project_name="demo",
+        architect_prosa="## a.py\nRepair the reported failure.",
+        aktuelle_task={
+            "id": "t1", "name": "Repair a.py",
+            "description": "Do not drop the verify failure.",
+            "action": "update", "task_files": ["a.py"],
+        },
+        last_verify_results=[{
+            "stage_id": "huge_failure", "ok": False, "exit_code": 2,
+            "error_excerpt": "E" * 65_000,
+        }],
+    )
+    with patch("werkstatt.roles.builder._common.ask_llm") as ask_llm, patch(
+        "werkstatt.roles.builder._common.audit",
+    ):
+        result = _build_patches_fuer_datei(
+            state, "a.py", "Repair the reported failure.", "test-key",
+        )
+
+    assert result == []
+    assert state.builder_failure_reason == "required_context_over_budget"
+    ask_llm.assert_not_called()
