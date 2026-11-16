@@ -933,14 +933,35 @@ def _phase_tasks_loop(
     state.tasks_ok_counter = tasks_ok
     i = task_index_offset
     task_steps = 0
+    budget_chat_handoff_attempted = False
     from werkstatt.agent import _enforce_run_budget
     # M-473: while-Loop statt for. Nach ADaPT-Split wird die
     # Schleife neu gestartet, damit Sub-Tasks gebaut werden.
     while True:
         check_run_lease(state)
         if _enforce_run_budget(state):
-            phase_state.save()
-            return 1, tasks_ok, tasks
+            # A write task at the exhausted boundary must reach the Builder's
+            # local budget guard once. Its explicit failure then lets the
+            # Reflection wrapper consult the originating Chat's separate,
+            # bounded recovery reserve. No normal provider call is permitted.
+            pending_for_chat = phase_state.get_next_task()
+            raw_action_for_chat = (
+                pending_for_chat.get("action", "update")
+                if isinstance(pending_for_chat, dict) else None
+            )
+            action_for_chat = (
+                "update" if raw_action_for_chat is None
+                else raw_action_for_chat
+            )
+            chat_budget_handoff = bool(
+                not budget_chat_handoff_attempted
+                and getattr(state, "chat_origin_session_id", None)
+                and action_for_chat in {"create", "update"}
+            )
+            if not chat_budget_handoff:
+                phase_state.save()
+                return 1, tasks_ok, tasks
+            budget_chat_handoff_attempted = True
         from werkstatt.audit import get_run_id
         run_id = get_run_id()
         if run_id:
@@ -1203,26 +1224,40 @@ def _phase_tasks_loop(
             _builder_recoverable, _builder_failure_reason = (
                 _builder_failure_recoverable(state)
             )
+            _run_budget_recovery = bool(state.budget_exhausted_reason)
             if (
                 _loop_action in ("create", "update")
                 and not _has_failed_dependency
-                and _builder_recoverable
+                and (_builder_recoverable or _run_budget_recovery)
             ):
                 audit(
                     "loop_builder_recovery_start",
                     {"task_id": i, "action": _loop_action,
-                     "strategy": "single_reflection_checkpoint"},
+                     "strategy": (
+                         "originating_chat_budget_handoff"
+                         if _run_budget_recovery
+                         else "single_reflection_checkpoint"
+                     ),
+                     "budget_exhausted": _run_budget_recovery},
                     pd, pn,
                 )
                 _recovered = bool(_reflection_loop(
                     state,
                     max_runden=1,
                     error_context=(
-                        "Der Builder hat einen korrigierbaren Fehler gemeldet: "
-                        f"{_builder_failure_reason}. Prüfe passende "
-                        "Quell-/Verify-Belege und versuche eine gezielte, "
-                        "auf die aktuelle Aufgabe begrenzte Korrektur. "
-                        "Task gilt nur bei erfolgreicher Verifikation als erledigt."
+                        "Das Run-Budget ist vor dem Builder-Aufruf "
+                        "erschoepft: "
+                        f"{state.budget_exhausted_reason}. Frage den "
+                        "urspruenglichen Projektchat nach genau einer "
+                        "beleggestuetzten Kurskorrektur fuer diesen Task. "
+                        "Kein normaler Builder-Request darf gesendet werden."
+                        if _run_budget_recovery else
+                        "Der Builder hat einen korrigierbaren Fehler "
+                        f"gemeldet: {_builder_failure_reason}. Prüfe "
+                        "passende Quell-/Verify-Belege und versuche eine "
+                        "gezielte, auf die aktuelle Aufgabe begrenzte "
+                        "Korrektur. Task gilt nur bei erfolgreicher "
+                        "Verifikation als erledigt."
                     ),
                 ))
                 check_run_lease(state)

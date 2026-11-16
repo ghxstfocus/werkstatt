@@ -107,3 +107,59 @@ def test_tasks_loop_resume_counts_persisted_done_tasks(monkeypatch, tmp_path):
     assert tasks_ok == 1
     assert returned_tasks == planned
     assert state.tasks_ok_counter == 1
+
+
+def test_exhausted_budget_routes_one_pending_write_task_to_chat_recovery(
+    monkeypatch, tmp_path,
+):
+    """A pending Builder task reaches the bounded Chat recovery path at exhaustion."""
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.phases import tasks
+    from werkstatt.state import RunState
+
+    planned = [{
+        "id": "t1", "name": "Implementierung", "action": "update",
+        "task_files": ["sample.py"],
+    }]
+    phase_state = PhaseState("testproj", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new("Ziel", planned)
+    state = RunState(
+        aufgabe="Ziel", api_key="sk-test", budget={"max_llm_calls": 1},
+        llm_calls=1, project_dir=tmp_path, project_name="testproj",
+    )
+    state.chat_origin_session_id = "session-1"
+    state.tasks = planned
+    reflection_calls = []
+
+    monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: None)
+    monkeypatch.setattr(
+        "werkstatt.agent._enforce_run_budget",
+        lambda current: setattr(
+            current, "budget_exhausted_reason", "LLM-Aufrufbudget erreicht"
+        ) or True,
+    )
+    monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: None)
+
+    def builder_blocked(*_args, **_kwargs):
+        state.builder_failure_reason = "run_budget_exhausted"
+        return False
+
+    monkeypatch.setattr(tasks, "_run_with_progress", builder_blocked)
+    monkeypatch.setattr(
+        tasks, "_pruefe_prior_failed_dependency",
+        lambda *_args: (False, []),
+    )
+    monkeypatch.setattr(
+        tasks, "_reflection_loop",
+        lambda *args, **kwargs: reflection_calls.append((args, kwargs)) or False,
+    )
+
+    rc, tasks_ok, _returned = tasks._phase_tasks_loop(state, phase_state)
+
+    assert rc == 1
+    assert tasks_ok == 0
+    assert len(reflection_calls) == 1
+    assert "Run-Budget ist vor dem Builder-Aufruf erschoepft" in (
+        reflection_calls[0][1]["error_context"]
+    )
+    assert phase_state.get_task("t1")["status"] == "failed"
