@@ -61,6 +61,63 @@ def test_approved_plan_fingerprint_binds_plan_but_allows_runtime_progress():
     assert phase.approved_plan_fingerprint() != original
 
 
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        (lambda phase: phase.data["tasks"][0].update(action="read"), False),
+        (
+            lambda phase: phase.data["tasks"][0].update(
+                task_files=["src/other.py"],
+            ),
+            False,
+        ),
+        (
+            lambda phase: phase.data["tasks"][0].update(
+                dependencies=["t0"],
+            ),
+            False,
+        ),
+        (
+            lambda phase: phase.data["tasks"][0].update(
+                criterion_refs=["AC2"],
+            ),
+            False,
+        ),
+        (lambda phase: phase.data.update(tests=["pytest other_test.py"]), False),
+        (
+            lambda phase: phase.data.update(
+                akzeptanzkriterien=["A different result is required"],
+            ),
+            False,
+        ),
+        (lambda phase: phase.data.update(phasen=[{"id": "p2"}]), False),
+    ],
+)
+def test_approved_plan_fingerprint_rejects_changed_execution_inputs(
+    tmp_path, mutation, expected,
+):
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.init_new(
+        "Goal",
+        [{
+            "id": "t1",
+            "name": "Edit source",
+            "description": "Approved implementation",
+            "action": "update",
+            "task_files": ["src/main.py"],
+            "dependencies": [],
+            "criterion_refs": ["AC1"],
+        }],
+        tests=["pytest tests/test_main.py"],
+        akzeptanzkriterien=["Expected behavior is implemented"],
+    )
+    phase.bind_approved_plan()
+
+    mutation(phase)
+
+    assert phase.approved_plan_is_current() is expected
+
+
 def test_task_verify_evidence_is_persisted_and_bound_to_criteria(tmp_path):
     project_dir = tmp_path / "project"
     (project_dir / "src").mkdir(parents=True)
