@@ -9,6 +9,7 @@ from werkstatt.explorer import (
     _list_py_file_inventory,
     _python_inventory_context,
     _rank_python_source_files,
+    _rank_source_files,
     run_explorer,
 )
 from werkstatt.state import RunState
@@ -50,7 +51,7 @@ def test_explorer_liefert_json(tmp_path):
     assert manifest["files_omitted_from_prompt"] == 0
     assert manifest["required_context_complete"] is True
     assert manifest["request_chars"] <= manifest["max_request_chars"]
-    assert "Inventar vollstaendig; keine Python-Dateien gefunden" in ask.call_args.args[2]
+    assert "Inventar vollstaendig; keine Quell-/Textdateien" in ask.call_args.args[2]
     assert "Scan fehlgeschlagen oder teilweise" not in ask.call_args.args[2]
     assert manifest["user_chars"] == len(ask.call_args.args[2])
     for section in manifest["sections"]:
@@ -222,6 +223,27 @@ def test_content_retrieval_excludes_already_selected_and_common_terms(tmp_path):
     assert manifest["common_or_unmatched_tokens_ignored"] == 1
 
 
+def test_source_retrieval_finds_typescriptx_and_hashes_selected_source(tmp_path):
+    target = tmp_path / "frontend" / "dashboard.tsx"
+    target.parent.mkdir()
+    target.write_text(
+        "export function quasarLedgerSync() { return true; }\n",
+        encoding="utf-8",
+    )
+
+    matches, manifest = _rank_source_files(
+        tmp_path, "Find the QuasarLedger synchronization logic",
+    )
+
+    assert [item["file"] for item in matches] == ["frontend/dashboard.tsx"]
+    assert matches[0]["source_sha256"] == hashlib.sha256(
+        target.read_bytes(),
+    ).hexdigest()
+    assert ".tsx" in manifest["indexed_extensions"]
+    assert ".py" in manifest["indexed_extensions"]
+    assert manifest["indexed_file_scope"].startswith("Quell-/Textdateien")
+
+
 def test_explorer_wires_content_retrieval_into_actual_role_request(tmp_path):
     unrelated = tmp_path / "alpha.py"
     unrelated.write_text("def unrelated(): return 1\n", encoding="utf-8")
@@ -242,7 +264,8 @@ def test_explorer_wires_content_retrieval_into_actual_role_request(tmp_path):
     retrieval = manifest["content_retrieval"]
     assert result["content_retrieval"] == retrieval
     assert retrieval["indexed_file_scope"] == (
-        "Python-Dateien, kein Vollindex des Projekts"
+        "Quell-/Textdateien der Extension-Allowlist, kein Vollindex "
+        "des Projekts"
     )
     assert [item["file"] for item in retrieval["selected_sources"]] == [
         "beta.py",
@@ -265,7 +288,7 @@ def test_explorer_wires_content_retrieval_into_actual_role_request(tmp_path):
         candidate["source_excerpt_prompt_sha256"]
     )
     assert candidate["source_excerpt_complete"] is True
-    assert "Keine gueltigen spezifischen Python-Inhaltstreffer" not in user
+    assert "Keine gueltigen spezifischen Quell-/Texttreffer" not in user
 
 
 def test_content_retrieval_reports_total_byte_budget_omissions(tmp_path):

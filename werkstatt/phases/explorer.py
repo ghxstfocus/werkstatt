@@ -279,9 +279,9 @@ def _phase_explorer_and_setup(
         and not isinstance(_explorer_retrieval, dict)
         and len(explorer_result["key_files"]) < 5
     ):
-        from werkstatt.explorer import _rank_python_source_files
+        from werkstatt.explorer import _rank_source_files
 
-        _source_matches, _retrieval_manifest = _rank_python_source_files(
+        _source_matches, _retrieval_manifest = _rank_source_files(
             Path(pd), aufgabe + " " + " ".join(_suchbegriffe),
             exclude=set(_seen),
             limit=5 - len(explorer_result["key_files"]),

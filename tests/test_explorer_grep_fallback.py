@@ -93,9 +93,10 @@ def test_inhaltssuche_findet_auftragsbegriff_ohne_pfad_oder_backticks(tmp_path):
     (tmp_path / "src" / "alpha.py").write_text(
         "def unrelated():\n    return 1\n", encoding="utf-8",
     )
-    target = tmp_path / "src" / "beta.py"
+    target = tmp_path / "src" / "beta.tsx"
     target.write_text(
-        "def quasarledger_sync():\n    return 2\n", encoding="utf-8",
+        "export function quasarLedgerSync() { return 2; }\n",
+        encoding="utf-8",
     )
     from werkstatt.phases import explorer as exp
 
@@ -113,40 +114,44 @@ def test_inhaltssuche_findet_auftragsbegriff_ohne_pfad_oder_backticks(tmp_path):
     context = state.explorer_context
     evidence = next(
         item for item in context["key_files"]
-        if item["file"] == "src/beta.py"
+        if item["file"] == "src/beta.tsx"
     )
     retrieval = context["content_retrieval"]
-    assert "000001 | def quasarledger_sync():" in evidence["preview"]
-    assert evidence["source_line_ranges"] == [[1, 2]]
+    assert "000001 | export function quasarLedgerSync()" in evidence["preview"]
+    assert evidence["source_line_ranges"] == [[1, 1]]
     assert evidence["source_sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
-    assert retrieval["selected_files"] == ["src/beta.py"]
-    assert retrieval["indexed_file_scope"] == "Python-Dateien, kein Vollindex des Projekts"
+    assert retrieval["selected_files"] == ["src/beta.tsx"]
+    assert retrieval["indexed_file_scope"] == (
+        "Quell-/Textdateien der Extension-Allowlist, kein Vollindex "
+        "des Projekts"
+    )
 
 
 def test_content_retrieval_from_explorer_is_reused_for_architect_handoff(
     tmp_path: Path,
     monkeypatch,
 ):
-    target = tmp_path / "src" / "beta.py"
+    target = tmp_path / "src" / "beta.tsx"
     target.parent.mkdir()
     target.write_text(
-        "def quasarledger_sync():\n    return 2\n", encoding="utf-8",
+        "export function quasarLedgerSync() { return 2; }\n",
+        encoding="utf-8",
     )
     from werkstatt import explorer as explorer_module
     from werkstatt.phases import explorer as phase_explorer
 
     task = "Finde die QuasarLedger synchronization logic"
-    source_candidates, retrieval = explorer_module._rank_python_source_files(
+    source_candidates, retrieval = explorer_module._rank_source_files(
         tmp_path, task, limit=5,
     )
-    assert source_candidates[0]["file"] == "src/beta.py"
+    assert source_candidates[0]["file"] == "src/beta.tsx"
     state = _state(tmp_path, task)
 
     def retrieval_must_not_run_again(*_args, **_kwargs):
         raise AssertionError("Explorer-Inhaltssuche darf nicht doppelt laufen")
 
     monkeypatch.setattr(
-        explorer_module, "_rank_python_source_files", retrieval_must_not_run_again,
+        explorer_module, "_rank_source_files", retrieval_must_not_run_again,
     )
     with (
         patch.object(
@@ -167,10 +172,10 @@ def test_content_retrieval_from_explorer_is_reused_for_architect_handoff(
 
     evidence = next(
         item for item in state.explorer_context["key_files"]
-        if item["file"] == "src/beta.py"
+        if item["file"] == "src/beta.tsx"
     )
     assert evidence["source_sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
-    assert "000001 | def quasarledger_sync():" in evidence["preview"]
+    assert "000001 | export function quasarLedgerSync()" in evidence["preview"]
     assert state.explorer_context["content_retrieval"] == retrieval
 
 
