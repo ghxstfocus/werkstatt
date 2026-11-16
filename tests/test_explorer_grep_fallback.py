@@ -88,6 +88,65 @@ def test_grep_fallback_findet_dateien_bei_backtick_suchbegriff(tmp_path):
     ).hexdigest()
 
 
+def test_inhaltssuche_findet_auftragsbegriff_ohne_pfad_oder_backticks(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "alpha.py").write_text(
+        "def unrelated():\n    return 1\n", encoding="utf-8",
+    )
+    target = tmp_path / "src" / "beta.py"
+    target.write_text(
+        "def quasarledger_sync():\n    return 2\n", encoding="utf-8",
+    )
+    from werkstatt.phases import explorer as exp
+
+    task = "Finde die QuasarLedger synchronization logic"
+    state = _state(tmp_path, task)
+    with (
+        patch.object(exp, "run_explorer", return_value={}),
+        patch.object(exp, "group_start"),
+        patch.object(exp, "group_end"),
+        patch.object(exp, "step"),
+        patch.object(exp, "audit"),
+    ):
+        exp._phase_explorer_and_setup(state, task, "test", None)
+
+    context = state.explorer_context
+    evidence = next(
+        item for item in context["key_files"]
+        if item["file"] == "src/beta.py"
+    )
+    retrieval = context["content_retrieval"]
+    assert "000001 | def quasarledger_sync():" in evidence["preview"]
+    assert evidence["source_line_ranges"] == [[1, 2]]
+    assert evidence["source_sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
+    assert retrieval["selected_files"] == ["src/beta.py"]
+    assert retrieval["indexed_file_scope"] == "Python-Dateien, kein Vollindex des Projekts"
+
+
+def test_leerer_retrievalbericht_bleibt_fuer_scout_erhalten(tmp_path):
+    (tmp_path / "alpha.py").write_text("def alpha():\n    pass\n", encoding="utf-8")
+    (tmp_path / "beta.py").write_text("def beta():\n    pass\n", encoding="utf-8")
+    from werkstatt.phases import explorer as exp
+
+    task = "Suche nach dem seltenen Begriff QuasarLedgerNonce"
+    state = _state(tmp_path, task)
+    with (
+        patch.object(exp, "run_explorer", return_value={}),
+        patch.object(exp, "group_start"),
+        patch.object(exp, "group_end"),
+        patch.object(exp, "step"),
+        patch.object(exp, "audit"),
+    ):
+        rc, _ = exp._phase_explorer_and_setup(state, task, "test", None)
+
+    assert rc == 0
+    assert state.explorer_context["key_files"] == []
+    assert state.explorer_context["content_retrieval"]["matching_file_count"] == 0
+    assert state.explorer_context["content_retrieval"][
+        "omissions_are_not_negative_evidence"
+    ] is True
+
+
 def test_explorer_vorschau_wird_vor_handoff_aus_repo_neu_gelesen(tmp_path):
     (tmp_path / "src").mkdir()
     source = tmp_path / "src" / "core.py"

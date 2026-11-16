@@ -73,6 +73,43 @@ def test_scout_offers_status_and_adr_before_optional_project_docs(
     ]
 
 
+def test_scout_receives_explorer_content_search_coverage(monkeypatch, tmp_path):
+    report = {
+        "indexed_file_scope": "Python files only",
+        "index_truncated": True,
+        "read_failures": 1,
+        "omissions_are_not_negative_evidence": True,
+    }
+    state = mk_state(
+        project_dir=tmp_path,
+        project_name="test",
+        explorer_context={"key_files": [], "content_retrieval": report},
+    )
+    prompts: list[str] = []
+    monkeypatch.setattr(scout, "_with_spinner", lambda _label, call: call())
+    monkeypatch.setattr(
+        scout,
+        "ask_llm",
+        lambda _key, _system, user, **_kwargs: (
+            prompts.append(user) or SimpleNamespace(
+                ok=True,
+                content=json.dumps({
+                    "ziel": "Ziel", "relevante_dateien": [],
+                    "api_auszug": {}, "vorgeschlagene_aenderungen": [],
+                    "risiken": [], "auftrag_prosa": "Pruefe das Ziel.",
+                    "bereits_erfuellt": False,
+                }),
+            )
+        ),
+    )
+    monkeypatch.setattr(scout, "audit", lambda *_args, **_kwargs: None)
+
+    assert scout._run_scout(state, "Pruefe das Ziel", {}, [], "key")
+    assert "EXPLORER-INHALTSSUCHE" in prompts[0]
+    assert '"read_failures": 1' in prompts[0]
+    assert "kein Negativbeleg" in scout.SCOUT_SYSTEM
+
+
 def test_scout_does_not_silently_pretruncate_project_docs(
     monkeypatch, tmp_path,
 ) -> None:

@@ -6,6 +6,7 @@ from unittest.mock import patch
 from werkstatt.explorer import (
     _list_py_file_inventory,
     _python_inventory_context,
+    _rank_python_source_files,
     run_explorer,
 )
 from werkstatt.state import RunState
@@ -111,6 +112,61 @@ def test_python_inventory_nonzero_find_is_not_complete(tmp_path):
     assert indexed == [str(tmp_path / "partial.py")]
     assert scan_succeeded is False
     assert index_truncated is False
+
+
+def test_content_retrieval_ranks_specific_source_hits_and_reports_scope(tmp_path):
+    (tmp_path / "alpha.py").write_text(
+        "def unrelated():\n    return 1\n", encoding="utf-8",
+    )
+    (tmp_path / "beta.py").write_text(
+        "def quasarledger_sync():\n    return 2\n", encoding="utf-8",
+    )
+
+    matches, manifest = _rank_python_source_files(
+        tmp_path, "Find the QuasarLedger synchronization logic",
+    )
+
+    assert [item["file"] for item in matches] == ["beta.py"]
+    assert "quasarledger" in matches[0]["matched_terms"]
+    assert manifest["indexed_file_scope"] == (
+        "Python-Dateien, kein Vollindex des Projekts"
+    )
+    assert manifest["content_scanned_file_count"] == 2
+    assert manifest["index_scan_succeeded"] is True
+    assert manifest["omissions_are_not_negative_evidence"] is True
+
+
+def test_content_retrieval_excludes_already_selected_and_common_terms(tmp_path):
+    (tmp_path / "alpha.py").write_text(
+        "commonword firstthing\n", encoding="utf-8",
+    )
+    (tmp_path / "beta.py").write_text(
+        "commonword secondthing\n", encoding="utf-8",
+    )
+
+    matches, manifest = _rank_python_source_files(
+        tmp_path, "commonword", exclude={"alpha.py"},
+    )
+
+    assert matches == []
+    assert manifest["matching_file_count"] == 0
+    assert manifest["common_or_unmatched_tokens_ignored"] == 1
+
+
+def test_content_retrieval_reports_total_byte_budget_omissions(tmp_path):
+    (tmp_path / "alpha.py").write_text("x" * 10, encoding="utf-8")
+    (tmp_path / "beta.py").write_text(
+        "def quasarledger(): pass\n", encoding="utf-8",
+    )
+
+    matches, manifest = _rank_python_source_files(
+        tmp_path, "QuasarLedger", max_total_bytes=10,
+    )
+
+    assert matches == []
+    assert manifest["content_scanned_bytes"] == 10
+    assert manifest["files_skipped_total_byte_cap"] == 1
+    assert manifest["omissions_are_not_negative_evidence"] is True
 
 
 def test_python_inventory_does_not_turn_scan_error_into_empty_repo():

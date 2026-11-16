@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -92,15 +93,19 @@ _EXPLORER_QUERY_STOPWORDS = frozenset({
 })
 
 
-def _rank_python_paths(
-    paths: list[str], query: str,
-) -> tuple[list[str], int, int, int]:
-    """Rank only paths supported by query terms; never fill with arbitrary files."""
-    query_tokens = {
+def _explorer_query_tokens(query: str) -> set[str]:
+    return {
         token.casefold()
         for token in re.findall(r"[A-Za-z0-9]+", query)
         if len(token) >= 3 and token.casefold() not in _EXPLORER_QUERY_STOPWORDS
     }
+
+
+def _rank_python_paths(
+    paths: list[str], query: str,
+) -> tuple[list[str], int, int, int]:
+    """Rank only paths supported by query terms; never fill with arbitrary files."""
+    query_tokens = _explorer_query_tokens(query)
     normalized_query = query.replace("\\", "/").casefold()
     path_tokens: list[tuple[str, set[str], set[str]]] = []
     for path in paths:
@@ -125,7 +130,9 @@ def _rank_python_paths(
     }
     effective_tokens = {
         token for token, count in path_frequency.items()
-        if count > 0 and count * 2 < len(path_tokens)
+        if count > 0 and (
+            len(path_tokens) == 1 or count * 2 < len(path_tokens)
+        )
     }
     common_tokens_ignored = len(query_tokens - effective_tokens)
     scored: list[tuple[int, int, str]] = []
@@ -146,6 +153,107 @@ def _rank_python_paths(
         len(effective_tokens),
         common_tokens_ignored,
     )
+
+
+def _rank_python_source_files(
+    project_dir: Path,
+    query: str,
+    *,
+    exclude: set[str] | None = None,
+    limit: int = 5,
+    max_file_bytes: int = 1_000_000,
+    max_total_bytes: int = 20_000_000,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Find query-relevant source by content with explicit index/read limits."""
+    indexed, scan_succeeded, index_truncated = _list_py_file_inventory(
+        project_dir,
+    )
+    query_tokens = _explorer_query_tokens(query)
+    excluded = {item.replace("\\", "/") for item in (exclude or set())}
+    documents: list[tuple[str, set[str]]] = []
+    read_failures = 0
+    large_files_skipped = 0
+    total_budget_skipped = 0
+    scanned_bytes = 0
+    for path in indexed:
+        try:
+            resolved = Path(path).resolve(strict=True)
+            rel = resolved.relative_to(Path(project_dir).resolve()).as_posix()
+            file_size = resolved.stat().st_size
+            if file_size > max_file_bytes:
+                large_files_skipped += 1
+                continue
+            if scanned_bytes + file_size > max_total_bytes:
+                total_budget_skipped += 1
+                continue
+            content = resolved.read_bytes().decode("utf-8", errors="replace")
+        except (OSError, RuntimeError, ValueError):
+            read_failures += 1
+            continue
+        scanned_bytes += file_size
+        tokens = {token.casefold() for token in re.findall(r"[A-Za-z0-9]+", content)}
+        documents.append((rel, tokens))
+
+    frequencies = {
+        term: sum(term in tokens for _path, tokens in documents)
+        for term in query_tokens
+    }
+    if len(documents) <= 5:
+        discriminative = {
+            term for term, count in frequencies.items()
+            if count > 0 and (
+                count < len(documents) or len(documents) == 1
+            )
+        }
+    else:
+        discriminative = {
+            term for term, count in frequencies.items()
+            if count > 0 and count * 2 < len(documents)
+        }
+    scored: list[tuple[float, int, str, list[str]]] = []
+    for index, (path, tokens) in enumerate(documents):
+        if path in excluded:
+            continue
+        matched = sorted(term for term in discriminative if term in tokens)
+        if not matched:
+            continue
+        score = sum(
+            math.log1p((len(documents) - frequencies[term] + 0.5)
+                       / (frequencies[term] + 0.5))
+            for term in matched
+        )
+        scored.append((score, index, path, matched))
+    scored.sort(key=lambda row: (-row[0], row[1]))
+    selected = [
+        {
+            "file": path,
+            "why": "Inhaltstreffer fuer spezifische Auftragsbegriffe",
+            "confidence": "medium",
+            "matched_terms": terms[:20],
+        }
+        for _score, _index, path, terms in scored[:max(0, limit)]
+    ]
+    manifest = {
+        "indexed_file_scope": "Python-Dateien, kein Vollindex des Projekts",
+        "query_token_count": len(query_tokens),
+        "discriminative_token_count": len(discriminative),
+        "common_or_unmatched_tokens_ignored": len(query_tokens - discriminative),
+        "indexed_file_count": len(indexed),
+        "content_scanned_file_count": len(documents),
+        "index_scan_succeeded": scan_succeeded,
+        "index_truncated": index_truncated,
+        "read_failures": read_failures,
+        "large_files_skipped": large_files_skipped,
+        "content_scanned_bytes": scanned_bytes,
+        "content_scan_byte_cap": max_total_bytes,
+        "files_skipped_total_byte_cap": total_budget_skipped,
+        "matching_file_count": len(scored),
+        "selected_files": [item["file"] for item in selected],
+        "matching_files_omitted": max(0, len(scored) - len(selected)),
+        "file_size_cap_bytes": max_file_bytes,
+        "omissions_are_not_negative_evidence": True,
+    }
+    return selected, manifest
 
 
 def _python_inventory_context(
@@ -576,10 +684,11 @@ def _datei_inhalt_mit_fundstellen(
     if total <= 200:
         selected = list(range(total))
     else:
+        folded_terms = [term.casefold() for term in (suchbegriffe or [])]
         hits = {
             index
             for index, line in enumerate(lines)
-            if any(term and term in line for term in (suchbegriffe or []))
+            if any(term and term in line.casefold() for term in folded_terms)
         }
         if hits:
             selected = sorted({

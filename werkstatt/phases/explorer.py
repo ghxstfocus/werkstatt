@@ -167,17 +167,22 @@ def _phase_explorer_and_setup(
         "findings": _explorer_ergaenzung.get("findings", ""),
         "key_files": [],
         "next_reads": list(_explorer_ergaenzung.get("next_reads") or []),
+        "content_retrieval": {},
     }
     def _file_evidence(
         file_path: str,
         why: str,
         confidence: str,
         char_limit: int,
+        search_terms: list[str] | None = None,
     ) -> dict[str, Any]:
         from werkstatt.explorer import _datei_inhalt_mit_fundstellen
 
         evidence = _datei_inhalt_mit_fundstellen(
-            Path(pd), file_path, suchbegriffe=_suchbegriffe,
+            Path(pd), file_path,
+            suchbegriffe=(
+                search_terms if search_terms is not None else _suchbegriffe
+            ),
         )
         excerpt = str(evidence.get("text") or "")
         preview = excerpt[:char_limit]
@@ -224,45 +229,48 @@ def _phase_explorer_and_setup(
                 str(k.get("confidence") or "low"),
                 6000,
             ))
-    # OP-XXX (2026-11-09): Fallback-Grep bei leeren key_files.
-    # Live-Bug 2026-11-09 20:25 (Run werkstatt-20261109-202502-4e5bfd9c):
-    # Aufgabe "OP-389b: DRY-Migration auf `require_ws_auth`" enthaelt
-    # keine .py-Pfade, aber einen Backtick-Suchbegriff. _messen() fand
-    # nichts (kein Pfad, keine Migration), _explorer_key leer,
-    # _alle_genannten leer, _verwandte leer -> key_files=[]. Explorer
-    # endete mit 0 files -> state_contract_violation -> loop_failed
-    # nach 2 Sekunden.
-    # Fix: wenn _suchbegriffe gesetzt und key_files leer, deterministisch
-    # grep ueber .py-Dateien. Kein LLM, testbar.
-    if not explorer_result["key_files"] and _suchbegriffe:
-        _pd_path = Path(pd)
-        _b_lower_cache: list[str] = [b.lower() for b in _suchbegriffe]
-        for _py_file in sorted(_pd_path.rglob("*.py")):
-            # Skip typische noise-Ordner
-            _parts = _py_file.parts
-            if any(x in _parts for x in (
-                ".venv", "__pycache__", ".git", "node_modules", "venv",
-            )):
-                continue
-            try:
-                _content = _py_file.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            _content_lower = _content.lower()
-            _hit_b = next((b for b in _b_lower_cache if b in _content_lower), None)
-            if _hit_b is None:
-                continue
-            _rel = _py_file.relative_to(_pd_path).as_posix()
-            if _rel in _seen:
-                continue
+    # Retrieve matching source by content as a bounded supplement to path-only
+    # Explorer results. Missing files/index entries remain unknown, not negative.
+    if not _skip_explorer and len(explorer_result["key_files"]) < 5:
+        from werkstatt.explorer import _rank_python_source_files
+
+        _source_matches, _retrieval_manifest = _rank_python_source_files(
+            Path(pd), aufgabe + " " + " ".join(_suchbegriffe),
+            exclude=set(_seen),
+            limit=5 - len(explorer_result["key_files"]),
+        )
+        explorer_result["content_retrieval"] = _retrieval_manifest
+        if not _source_matches:
+            audit(
+                "loop_explorer_grep_fallback",
+                {"result": "no_specific_content_match",
+                 "retrieval": _retrieval_manifest},
+                pd, pn,
+            )
+        for _match in _source_matches:
+            _rel = str(_match["file"])
+            _matched_terms = list(dict.fromkeys([
+                *_suchbegriffe,
+                *[
+                    str(term) for term in _match.get("matched_terms", [])
+                    if isinstance(term, str)
+                ],
+            ]))
             _seen.add(_rel)
             explorer_result["key_files"].append(_file_evidence(
-                _rel, f"grep:{_hit_b}", "medium", 6000,
+                _rel,
+                str(_match.get("why") or "Inhaltstreffer"),
+                str(_match.get("confidence") or "medium"),
+                6000,
+                search_terms=_matched_terms,
             ))
-            audit("loop_explorer_grep_fallback",
-                  {"file": _rel, "begriff": _hit_b}, pd, pn)
-            if len(explorer_result["key_files"]) >= 5:
-                break
+            audit(
+                "loop_explorer_grep_fallback",
+                {"file": _rel,
+                 "begriffe": _match.get("matched_terms", []),
+                 "retrieval": _retrieval_manifest},
+                pd, pn,
+            )
 
     audit("loop_explorer_ergaenzt",
           {"explizit": len(_explizite_dateien[:5]),
@@ -286,10 +294,12 @@ def _phase_explorer_and_setup(
     if explorer_result.get("key_files"):
         step(1, "Explorer", f"{len(explorer_result['key_files'])} files", elapsed_s=_el_exp)
         audit("loop_explorer_ok", {"files": len(explorer_result["key_files"])}, pd, pn)
-        state.explorer_context = explorer_result
     else:
         step(1, "Explorer", "0 files", ok=False, elapsed_s=_el_exp)
         audit("loop_explorer_leer", {}, pd, pn)
+    # Preserve the retrieval coverage even when it found no source file so
+    # Scout can distinguish a bounded no-match from complete negative evidence.
+    state.explorer_context = explorer_result
     group_end()
 
     # OP-136a: Contract-Validierung explorer->scout.
