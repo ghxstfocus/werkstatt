@@ -426,7 +426,7 @@ def _checkpoint_decision_payload(
         action = str("update" if raw_action is None else raw_action)
         executor = {
             "read": "read_only_task",
-            "verify": "verify_and_review",
+            "verify": "verify_only",
             "create": "builder",
             "update": "builder",
         }.get(action)
@@ -1215,7 +1215,9 @@ def _phase_tasks_loop(
             phase_state.save()
             return 1, tasks_ok, tasks
         next_executor = decision_payload.get("next_executor")
-        if next_executor not in {"read_only_task", "verify_and_review", "builder"}:
+        if next_executor not in {
+            "read_only_task", "verify_only", "builder",
+        }:
             audit(
                 "state_contract_violation",
                 {
@@ -1390,21 +1392,16 @@ def _phase_tasks_loop(
             )
             continue
 
-        # Verify-Task: kein Builder, direkt Verify + Reviewer.
-        if next_executor == "verify_and_review":
+        # Verify-Task: deterministische Pruefung ohne unnoetigen Reviewer-LLM.
+        if next_executor == "verify_only":
             _v_ok = bool(_verify_patches(state, phase="post_build"))
             check_run_lease(state)
-            if _v_ok:
-                _r_ok = bool(run_reviewer(state))
-                check_run_lease(state)
-            else:
-                _r_ok = False
             _evidence_ok = (
                 _record_task_verify_evidence(state, phase_state, task_id)
-                if _v_ok and _r_ok else False
+                if _v_ok else False
             )
             _el_task = time.monotonic() - _t_task
-            if _v_ok and _r_ok and _evidence_ok:
+            if _v_ok and _evidence_ok:
                 task_ok(i, len(tasks), elapsed_s=_el_task)
                 group_end()
                 if not _verification_only:
@@ -1413,17 +1410,14 @@ def _phase_tasks_loop(
                 _audit_task_ok(
                     _task_ende(state, phase_state, task_id, ok=True, name=task_name),
                     task_id, task_name, pd, pn,
-                    via="verify_and_review",
+                    via="verify_only",
                 )
             else:
                 group_end()
                 _task_ende(
                     state, phase_state, task_id, ok=False,
                     name=task_name,
-                    failure=(
-                        "verify_evidence_missing"
-                        if _v_ok and _r_ok else "verify_failed"
-                    ),
+                    failure=("verify_evidence_missing" if _v_ok else "verify_failed"),
                     failure_detail=(
                         _verify_failure_detail(state)
                         if not _v_ok else None

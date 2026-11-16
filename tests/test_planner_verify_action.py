@@ -67,7 +67,7 @@ def test_phase_tasks_verify_ruft_run_builder_nicht(monkeypatch):
 
     assert builder_calls == []
     assert len(verify_calls) == 1
-    assert len(reviewer_calls) == 1
+    assert reviewer_calls == []
 
 
 def test_reviewer_filtert_diff_erwartung_bei_verify():
@@ -108,4 +108,4 @@ def test_verify_setzt_kein_auftrag_bereits_erfuellt():
         Phase(), {"id": "verify-1", "action": "verify"},
     )
     assert decision["decision"] == "execute_planned_task"
-    assert decision["next_executor"] == "verify_and_review"
+    assert decision["next_executor"] == "verify_only"

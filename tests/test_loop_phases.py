@@ -90,7 +90,7 @@ def _audit_events(tmp_path: Path) -> list[dict]:
     ("action", "executor"),
     [
         ("read", "read_only_task"),
-        ("verify", "verify_and_review"),
+        ("verify", "verify_only"),
         ("create", "builder"),
         ("update", "builder"),
     ],
@@ -117,6 +117,69 @@ def test_checkpoint_selects_registered_executor_for_task_action(
     assert decision["decision"] == "execute_planned_task"
     assert decision["next_executor"] == executor
     assert executor in decision["reason"]
+
+
+def test_verify_task_runs_deterministic_verify_without_reviewer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.phases import tasks as task_phase
+
+    project = tmp_path / "project"
+    project.mkdir()
+    source = project / "feature.py"
+    source.write_text("value = 1\n", encoding="utf-8")
+    phase = PhaseState("testproj", base_dir=project / ".werkstatt")
+    phase.init_new(
+        "Verify the feature",
+        [{
+            "id": "verify-1", "name": "Verify feature", "action": "verify",
+            "task_files": ["feature.py"], "criterion_refs": ["AC1"],
+        }],
+        akzeptanzkriterien=["The feature passes verification"],
+    )
+    phase.run_id = "verify-run-1"
+    phase.save()
+    state = _state(
+        project,
+        aufgabe="Verify the feature",
+        run_id="verify-run-1",
+        tasks=phase.data["tasks"],
+    )
+    verify_calls: list[str] = []
+
+    def verify(_state, *, phase):
+        verify_calls.append(phase)
+        _state.last_verify_results = [{
+            "stage_id": "pytest_changed", "ok": True, "exit_code": 0,
+            "scope_files": ["feature.py"],
+        }]
+        return True
+
+    monkeypatch.setattr(task_phase, "audit", lambda *args, **kwargs: True)
+    monkeypatch.setattr(task_phase, "group_start", lambda *_args: None)
+    monkeypatch.setattr(task_phase, "group_end", lambda: None)
+    monkeypatch.setattr(task_phase, "task", lambda *_args: None)
+    monkeypatch.setattr(task_phase, "task_started", lambda *_args: None)
+    monkeypatch.setattr(task_phase, "task_ok", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(task_phase, "task_done", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(task_phase, "check_run_lease", lambda _state: None)
+    monkeypatch.setattr(task_phase, "_verify_patches", verify)
+    monkeypatch.setattr(
+        task_phase, "run_reviewer",
+        lambda _state: pytest.fail("Verify-only task must not call Reviewer"),
+    )
+    monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _state: False)
+    monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "")
+
+    rc, tasks_ok, tasks = task_phase._phase_tasks_loop(state, phase)
+
+    assert rc == 0
+    assert tasks_ok == 1
+    assert tasks[0]["id"] == "verify-1"
+    assert phase.get_task("verify-1")["status"] == "done"
+    assert verify_calls == ["post_build"]
 
 
 def test_builder_recovery_only_retries_typed_correctable_failures() -> None:

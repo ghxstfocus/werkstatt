@@ -74,7 +74,7 @@ def test_checkpoint_routes_next_planned_task_and_keeps_open_criteria_visible(
 
     assert decision["decision"] == "execute_planned_task"
     assert decision["next_task_id"] == "t2"
-    assert decision["next_executor"] == "verify_and_review"
+    assert decision["next_executor"] == "verify_only"
     assert decision["criteria_task_coverage"]["covered"] == ["AC1"]
     assert decision["criteria_task_coverage"]["uncovered"] == ["AC2"]
     assert decision["goal_candidate_before_final_verify"] is False
@@ -970,7 +970,7 @@ def test_run_coordinator_requeues_stale_criterion_evidence(tmp_path) -> None:
     )
 
     assert decision["coordinator_action"] == "execute_task_checkpoint"
-    assert decision["next_executor"] == "verify_and_review"
+    assert decision["next_executor"] == "verify_only"
     assert decision["next_task_id"] == "t1"
     assert decision["verification_only"] is True
     assert decision["stale_tasks_queued"] == ["t1"]
