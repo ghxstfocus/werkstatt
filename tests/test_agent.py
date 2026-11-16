@@ -488,6 +488,63 @@ def test_role_request_rejects_incomplete_required_section_manifest(
     }]
 
 
+def test_planner_required_sections_are_span_verified_at_model_boundary(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.planner import _compose_planner_prompt_sections
+
+    state = mk_state(project_dir=tmp_path, project_name="planner-span-test")
+    system = "planner system"
+    user, sections = _compose_planner_prompt_sections([
+        ("architect_prose", "## ARCHITECT\nDo the approved work.", False),
+        ("target_files", "## FILES\nwerkstatt/example.py", False),
+        ("optional_history", "older notes", True),
+    ])
+    required = next(
+        item for item in sections if item["name"] == "architect_prose"
+    )
+    assert required["status"] == "required_included"
+    required.pop("prompt_start")
+    events = []
+    provider_calls = []
+    monkeypatch.setattr(
+        agent, "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+    monkeypatch.setattr(
+        agent.requests, "post",
+        lambda *_args, **_kwargs: provider_calls.append(True),
+    )
+
+    reply = agent.ask_llm(
+        api_key="test-key",
+        system_prompt=system,
+        user_content=user,
+        model="deepseek-chat",
+        temperature=0.0,
+        state=state,
+        aufgabe="planner-split",
+        context_manifest={
+            "budget_event": "planner_split_context_budget",
+            "required_context_complete": True,
+            "user_sha256": hashlib.sha256(user.encode()).hexdigest(),
+            "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+            "sections": sections,
+        },
+    )
+
+    assert not reply.ok
+    assert reply.error == (
+        "required_context_span_unverified; provider request was not sent"
+    )
+    assert provider_calls == []
+    blocked = [payload for kind, payload in events if kind == "llm_context_blocked"]
+    assert blocked[0]["spans"] == [{
+        "section": "architect_prose",
+        "status": "invalid_source_range",
+    }]
+
+
 def test_role_request_rejects_another_roles_budget_manifest(monkeypatch, tmp_path):
     state = mk_state(project_dir=tmp_path, project_name="wrong-role-context")
     events = []

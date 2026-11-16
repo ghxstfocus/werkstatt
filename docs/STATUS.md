@@ -122,6 +122,8 @@ Letzte Aktualisierung: 2026-11-16.
 
 - **Reflection-Builder-Reserve bei lokal blockierten Handoffs (lokal, noch nicht serververifiziert):** Der durable Chat-Recovery-Builderzaehler wird erst beansprucht, nachdem Rollen-/Kontextbelege vollstaendig geprueft und `llm_call` erfolgreich auditiert sind. Ein vor Providerkontakt abgewiesener Pflichtkontext verbraucht damit nicht den einzigen reservierten Builderaufruf; ein Regressionstest blockiert zunaechst einen unvollstaendigen Manifeststatus und belegt danach einen erfolgreichen gueltigen Retry. Agent-/Reflection-Chat-/Adapter-Gruppe: 77 bestanden; Ruff und Mypy fuer `agent.py` bestanden. Servertest fehlt; OP-398/405 bleiben offen.
 
+- **Planner-Pflichtspannen am Modellgrenzwert (lokal, noch nicht serververifiziert):** Planner-Taskgraph-Handoffs markierten Architect-Prosa und Zielfiles als generisches `included`, obwohl der Builder sie als Pflichtteile deklariert hatte. Diese Abschnitte wurden damit nicht von der zentralen exakten Provider-Spanpruefung erfasst. Der Manifeststatus unterscheidet jetzt `required_included` und `optional_included`; ein Adapter-Regressionstest entfernt eine Pflichtspanne und bestaetigt, dass der Provideraufruf vor Versand blockiert wird. Planner-/Agent-/Architect-Evidenzgruppe: 80 bestanden, 3 uebersprungen; zusaetzlich Status-/Progress-Konsistenz: 10 bestanden. Ruff, Mypy fuer `planner.py` mit `--follow-imports=silent`, Audit-Drift, Control-Drift, strikter Doku-Drift und `git diff --check` bestanden. Servernachweis fehlt; OP-398/405 bleiben offen.
+
 ### OP-399: Projekt-Hub fuer GitHub- und lokale Quellen
 - **Status:** open
 - **Typ:** project-platform

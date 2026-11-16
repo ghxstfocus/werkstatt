@@ -116,7 +116,7 @@ def _compose_planner_prompt_sections(
         prompt_parts.append(content)
         manifest.append({
             "name": name,
-            "status": "included",
+            "status": "optional_included" if optional else "required_included",
             "chars": len(content),
             "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
             "prompt_start": start,
@@ -1652,7 +1652,7 @@ def _zerlege_in_sub_tasks(
     source_section = next(
         (item for item in section_manifest
          if item.get("name") == "scout_source_evidence"
-         and item.get("status") == "included"),
+         and item.get("status") == "optional_included"),
         None,
     )
     source_records = source_manifest.get("sources", [])

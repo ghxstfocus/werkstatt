@@ -688,10 +688,14 @@ def test_planner_split_persistiert_abnahmekriterien_und_originalauftrag(tmp_path
     assert captured["manifest"]["scope"] == "task_graph"
     assert captured["manifest"]["required_context_complete"] is True
     sections = captured["manifest"]["sections"]
-    included = [item for item in sections if item["status"] == "included"]
-    assert {item["name"] for item in included} >= {
-        "original_request", "architect_prose", "target_files",
-    }
+    included = [
+        item for item in sections
+        if item["status"] in {"required_included", "optional_included"}
+    ]
+    section_status = {item["name"]: item["status"] for item in sections}
+    assert section_status["original_request"] == "optional_included"
+    assert section_status["architect_prose"] == "required_included"
+    assert section_status["target_files"] == "required_included"
     assert any(item["name"] == "planner_skills"
                and item["status"] == "not_provided_optional" for item in sections)
     for item in included:
