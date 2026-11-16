@@ -17,6 +17,10 @@ from pathlib import Path, PureWindowsPath
 
 from werkstatt.agent import DEEPSEEK_API_URL, ask_llm
 from werkstatt.render import _with_spinner
+from werkstatt.roles.planner_split import (
+    PLANNER_SPLIT_SINGLE_SYSTEM,
+    PLANNER_SPLIT_SYSTEM,
+)
 
 
 # M-442/M-479: Architect bekommt das aktuelle Reasoning-Modell.
@@ -668,132 +672,6 @@ def _erledigte_punkte(pd) -> str:
     return "\n\n".join(_teile)
 
 
-PLANNER_SPLIT_SYSTEM = """Du bist ein Task-Zerleger.
-Du bekommst den Originalauftrag, eine Architect-Prosa und eine Liste von Dateien.
-Leite aus Originalauftrag und Prosa die beobachtbaren Abnahmekriterien fuer
-das Gesamtziel ab. Uebernimm explizite Kriterien aus STATUS/ADR; erfinde keine
-nicht geforderten Produktanforderungen. Kriterien muessen spaeter durch Tests,
-Datei-/API-Verhalten oder explizite Doku-Inhalte pruefbar sein.
-Zerlege die Prosa in so viele Sub-Tasks wie noetig (typisch 3-10).
-Nicht mehr, nicht weniger als die Aufgabe braucht.
-
-Jeder Sub-Task:
-- id: "t1", "t2", ... (aufsteigend)
-- name: kurzer Titel (< 50 Zeichen)
-- action: "create" | "update" | "read" | "verify"
-  - "create": neue Datei anlegen
-  - "update": bestehende Datei aendern
-  - "read": Task liest nur, aendert KEINE Datei
-  - "verify": Task prueft einen Zustand, aendert KEINE Datei.
-    `task_files` nennt die zu pruefenden Dateien, `description`
-    sagt WAS geprueft wird.
-  Hinweis: Verifikations-Aufgaben (nur pruefen, nichts aendern)
-  bevorzugt als "verify" klassifizieren. Der deterministische
-  Pre-Check im Planner ist die harte Garantie, nicht der Prompt.
-- task_files: Liste der Dateien, die dieser Sub-Task aendert
-  (max 1 Datei pro Task, wenn moeglich)
-- architect_start: ERSTE Zeile des Architect-Abschnitts,
-  der zu diesem Task gehoert (woertliches Zitat, z.B. "5. Backup").
-  FUER __init__.py-Tasks: verwende den exakten Schritt, z.B.
-  "15. In __init__.py: __all__ alphabetisch sortieren".
-- architect_ende: LETZTE Zeile des Architect-Abschnitts
-  (woertliches Zitat, z.B. "6. Anwenden").
-  WICHTIG: architect_start und architect_ende muessen BENACHBARTE
-  nummerierte Schritte sein (max 3 Schritte dazwischen).
-  Wenn ein Task nur 1 Schritt umfasst, setze start = ende.
-- dependencies: Liste von Task-IDs, die vorher fertig sein muessen.
-- criterion_refs: Liste der IDs "AC1", "AC2", ... aus der Gesamtplan-Liste.
-  Jeder Task muss mindestens ein Kriterium referenzieren; zusammen muessen
-  die Tasks jedes Kriterium abdecken. Keine IDs erfinden oder auslassen.
-  WANN setzen (Pflicht): Konsequenz-Tasks (Baseline senken, Doku
-  die Endzustand prueft, Cross-Role-Tests, Ghost-Entfernung in
-  mehreren Dateien) MUESSEN dependencies auf alle Tasks setzen,
-  die den Vorbedingungs-Zustand veraendern. Reine Datei-Tasks
-  ohne Vorbedingung: leere Liste [].
-
-Gesamtplan:
-- akzeptanzkriterien: Liste beobachtbarer Abnahmekriterien fuer den
-  Originalauftrag. Nutze den exakten JSON-Schluessel "akzeptanzkriterien".
-- Mindestens ein Kriterium, sofern der Auftrag ein veraenderbares Ziel
-  enthaelt. Reine Analyseauftraege bekommen Kriterien fuer Belege und
-  Ergebnisumfang. Kriterien aus dem Auftrag duerfen nicht still entfallen.
-
-Regeln:
-  - INTERFACE-GRENZE: Jede Task liefert EIN vollstaendiges,
-    reviewbares Interface — nicht einen Schritt einer Funktion.
-    Beispiel GUT: eine Funktion/Methode komplett (Eingabepruefung,
-    Kernlogik, Fehlerbehandlung, Rueckgabe) als EINE Task.
-    Beispiel SCHLECHT: Eingabepruefung / Kernlogik / Fehler-
-    behandlung als getrennte Tasks fuer dieselbe Funktion.
-  - Groesse: 50-150 Zeilen Code pro Task. Zu klein (< 30 Zeilen):
-    Reviewer sieht kein Feature. Zu gross (> 200 Zeilen):
-    Semantik geht verloren.
-  - Eine Datei mit N unabhaengigen Funktionen/Klassen:
-    EINE Task pro Einheit, nicht pro Schritt.
-  - Eine Datei mit EINER Funktion/Klasse: EINE Task fuer die
-    ganze Einheit — nicht in Schritte aufteilen.
-  - Keine Test-Dateien (tests/*).
-  - DOKU-AUFGABEN: Wenn die Prosa AUSSCHLIESSLICH
-    Markdown-Dateien (docs/*.md, README.md) aendert und
-    KEINEN Python-Code nennt: Erzeuge GENAU EINEN Task fuer
-    die genannte Markdown-Datei. Keine Code-Tasks aus
-    Symbolen, die in der Prosa nur als "schon erledigt" oder
-    "bereits vorhanden" erwaehnt werden. Beispiel: Prosa sagt
-    "in docs/DECISIONS.md Abschnitt 2 praezisieren, kein
-    Python-Code" -> Task t1 mit task_files=["docs/DECISIONS.md"],
-    action="update", architect_start/ende aus der Prosa.
-  - architect_start und architect_ende MUESSEN woertlich in
-    der Architect-Prosa vorkommen. Der Loop extrahiert dann
-    den Text dazwischen.
-
-Antworte NUR mit JSON:
-{
-  "akzeptanzkriterien": ["beobachtbares, pruefbares Kriterium"],
-  "tasks": [
-    {"id": "t1", "name": "...", "action": "update",
-     "task_files": ["..."], "architect_start": "...",
-     "architect_ende": "...", "dependencies": [],
-     "criterion_refs": ["AC1"]},
-    ...
-  ]
-}
-Keine Erklaerung, nur JSON."""
-
-PLANNER_SPLIT_SINGLE_SYSTEM = """Du bist ein Task-Zerleger.
-Du bekommst EINEN zu grossen Sub-Task (Description > 2000 Zeichen
-oder vom Builder als zu gross gemeldet).
-Zerlege ihn in 2-3 kleinere Sub-Tasks.
-
-Jeder Sub-Task:
-- id: "tN_a", "tN_b", ... (abgeleitet von der Original-ID)
-- name: kurzer Titel (< 50 Zeichen)
-- action: "update" oder "create"
-- task_files: Liste der Dateien (max 1)
-- architect_start: ERSTE Zeile des Architect-Abschnitts (woertlich)
-- architect_ende: LETZTE Zeile (woertlich, benachbart zu start)
-- dependencies: Liste von Task-IDs
-- criterion_refs: Erhalte die parent criterion_refs. Verteile sie auf
-  die passenden Sub-Tasks; die Gesamtdeckung darf nicht verloren gehen.
-
-Regeln:
-  - Jede Sub-Task liefert ein vollstaendiges, reviewbares
-    Interface (nicht einen Schritt). Max 3 Sub-Tasks.
-  - Groesse: 50-150 Zeilen Code pro Sub-Task.
-  - architect_start und architect_ende MUESSEN woertlich
-    in der Architect-Prosa vorkommen.
-
-Antworte NUR mit JSON:
-{
-  "tasks": [
-    {"id": "...", "name": "...", "action": "update",
-     "task_files": ["..."], "architect_start": "...",
-     "architect_ende": "...", "dependencies": []},
-    ...
-  ]
-}
-Keine Erklaerung, nur JSON."""
-
-
 def _migrations_stand(pd) -> str:
     """K17: Deterministischer Migrationsstand fuer Architect-Kontext.
 
@@ -1103,28 +981,38 @@ def _llm_split_einzel_task(
         section_manifest=section_manifest,
     ):
         return []
-    reply = _with_spinner(
-        f"Split-{task.get('id', '?')}",
-        lambda: ask_llm(
-            api_key, _system, _user,
-            model="deepseek-chat", temperature=0.2, max_tokens=4000,
-            aufgabe="planner-split", state=state,
-            context_manifest={
-                "budget_event": "planner_split_context_budget",
-                "user_sha256": hashlib.sha256(_user.encode("utf-8")).hexdigest(),
-                "system_sha256": hashlib.sha256(_system.encode("utf-8")).hexdigest(),
-                "scope": "single_task",
-                "task_id": str(task.get("id") or "")[:120],
-                "system_chars": len(_system),
-                "user_chars": len(_user),
-                "required_context_complete": True,
-                "sections": section_manifest,
-            },
+    from werkstatt.roles.planner_split import (
+        PlannerSplitInput,
+        build_context_manifest,
+        run_planner_split_role,
+    )
+
+    _split_manifest = build_context_manifest(
+        system_prompt=_system,
+        user_prompt=_user,
+        key_files=[],
+        source_evidence={},
+        source_context="",
+        sections=section_manifest,
+        scope="single_task",
+        task_id=str(task.get("id") or ""),
+    )
+    _split_result = run_planner_split_role(
+        PlannerSplitInput(
+            api_key=api_key,
+            system_prompt=_system,
+            user_prompt=_user,
+            state=state,
+            context_manifest=_split_manifest,
+        ),
+        ask_llm_call=ask_llm,
+        spinner_call=lambda _label, call: _with_spinner(
+            f"Split-{task.get('id', '?')}", call,
         ),
     )
-    if not reply.ok:
+    if not _split_result.ok:
         return []
-    raw = reply.content.strip()
+    raw = _split_result.content
     parsed = _parse_json_robust(raw)
     if parsed is None:
         return []
@@ -1891,33 +1779,37 @@ def _zerlege_in_sub_tasks(
         section_manifest=section_manifest,
     ):
         return []
-    reply = _with_spinner(
-        "Planner-Split",
-        lambda: ask_llm(
-            api_key, PLANNER_SPLIT_SYSTEM, _user,
-            model="deepseek-chat", temperature=0.2, max_tokens=8000,
-            aufgabe="planner-split", state=state,
-            context_manifest={
-                "budget_event": "planner_split_context_budget",
-                "user_sha256": hashlib.sha256(_user.encode("utf-8")).hexdigest(),
-                "system_sha256": hashlib.sha256(PLANNER_SPLIT_SYSTEM.encode("utf-8")).hexdigest(),
-                "scope": "task_graph",
-                "system_chars": len(PLANNER_SPLIT_SYSTEM),
-                "user_chars": len(_user),
-                "required_context_complete": True,
-                "key_files": key_files[:50],
-                "source_evidence": source_manifest,
-                "source_evidence_sha256": hashlib.sha256(
-                    source_context.encode("utf-8"),
-                ).hexdigest() if source_context else None,
-                "sections": section_manifest,
-            },
-        ),
+    from werkstatt.roles.planner_split import (
+        PlannerSplitInput,
+        build_context_manifest,
+        run_planner_split_role,
     )
-    if not reply.ok:
-        audit("planner_split_llm_fehler", {"fehler": reply.error}, pd, pn)
+
+    _split_manifest = build_context_manifest(
+        system_prompt=PLANNER_SPLIT_SYSTEM,
+        user_prompt=_user,
+        key_files=key_files,
+        source_evidence=source_manifest,
+        source_context=source_context,
+        sections=section_manifest,
+    )
+    _split_result = run_planner_split_role(
+        PlannerSplitInput(
+            api_key=api_key,
+            system_prompt=PLANNER_SPLIT_SYSTEM,
+            user_prompt=_user,
+            state=state,
+            context_manifest=_split_manifest,
+        ),
+        # Keep the compatibility seams used by run replay and existing tests;
+        # the role runner itself owns call parameters and payload validation.
+        ask_llm_call=ask_llm,
+        spinner_call=_with_spinner,
+    )
+    if not _split_result.ok:
+        audit("planner_split_llm_fehler", {"fehler": _split_result.error}, pd, pn)
         return []
-    raw = reply.content.strip()
+    raw = _split_result.content
     parsed = _parse_json_robust(raw)
     if parsed is None:
         audit("planner_split_json_fehler", {"raw": raw[:200]}, pd, pn)
