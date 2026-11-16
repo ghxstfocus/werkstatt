@@ -454,6 +454,48 @@ def test_explorer_supplements_path_matches_with_distinct_content_evidence(
     assert json.loads(excerpt) == "000001 | def quasarledger_sync(): return True"
 
 
+def test_explorer_reserves_content_search_after_five_path_only_matches(
+    tmp_path,
+):
+    for index in range(5):
+        (tmp_path / f"quasarledger_client_{index}.py").write_text(
+            f"def client_{index}(): return None\n", encoding="utf-8",
+        )
+    for index in range(7):
+        (tmp_path / f"unrelated_{index}.py").write_text(
+            f"def unrelated_{index}(): return None\n", encoding="utf-8",
+        )
+    relevant = tmp_path / "sync_engine.py"
+    relevant.write_text(
+        "def quasarledger_sync(): return True\n", encoding="utf-8",
+    )
+    state = _state(tmp_path)
+
+    class FakeReply:
+        ok = True
+        content = '{"findings":"found","key_files":[],"next_reads":[]}'
+
+    with patch("werkstatt.explorer.ask_llm", return_value=FakeReply()) as ask:
+        result = run_explorer(state, "Explain QuasarLedger synchronization")
+
+    manifest = ask.call_args.kwargs["context_manifest"]
+    retrieval = manifest["content_retrieval"]
+    assert manifest["query_matched_file_count"] == 5
+    assert retrieval["selected_files"] == ["sync_engine.py"]
+    candidate = retrieval["selected_sources"][0]
+    user = ask.call_args.args[2]
+    excerpt = user[
+        candidate["source_excerpt_prompt_start"]:
+        candidate["source_excerpt_prompt_end"]
+    ]
+    assert json.loads(excerpt) == "000001 | def quasarledger_sync(): return True"
+    assert candidate["source_excerpt_complete"] is True
+    assert hashlib.sha256(relevant.read_bytes()).hexdigest() == (
+        candidate["source_sha256"]
+    )
+    assert result["content_retrieval"] == retrieval
+
+
 def test_content_retrieval_reports_total_byte_budget_omissions(tmp_path):
     (tmp_path / "alpha.py").write_text("x" * 10, encoding="utf-8")
     (tmp_path / "beta.py").write_text(

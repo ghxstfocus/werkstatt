@@ -1188,6 +1188,11 @@ def run_explorer(state: RunState, frage: str) -> dict:
         0,
         5 - min(5, int(inventory_manifest["query_matched_file_count"])),
     )
+    # Path matches carry names only; they are not source-content evidence.
+    # Always reserve one slot for a distinct content-ranked excerpt so five
+    # coincidental filename hits cannot suppress the actual code search.
+    if remaining_source_slots == 0 and _explorer_query_tokens(frage):
+        remaining_source_slots = 1
     path_matched_files = {
         str(item["path"])
         for item in inventory_manifest["path_manifest"]
