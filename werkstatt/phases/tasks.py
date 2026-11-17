@@ -839,7 +839,11 @@ def _phase_tasks_loop(
         }:
             from werkstatt.criteria_replan import replan_unassigned_criteria
 
-            if not replan_unassigned_criteria(state, phase_state):
+            if not replan_unassigned_criteria(
+                state,
+                phase_state,
+                checkpoint_only=max_task_steps is not None,
+            ):
                 phase_state.save()
                 return 1, tasks_ok, tasks
             tasks = [

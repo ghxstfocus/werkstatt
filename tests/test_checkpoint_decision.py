@@ -2350,7 +2350,9 @@ def test_task_loop_dispatches_criteria_replan_at_checkpoint(
     monkeypatch.setattr(task_phase, "audit", lambda *_a, **_kw: True)
     monkeypatch.setattr(
         "werkstatt.criteria_replan.replan_unassigned_criteria",
-        lambda _state, _phase: calls.append("replan") or False,
+        lambda _state, _phase, *, checkpoint_only=False: (
+            calls.append(("replan", checkpoint_only)) or False
+        ),
     )
 
     result = task_phase._phase_tasks_loop(
@@ -2359,7 +2361,7 @@ def test_task_loop_dispatches_criteria_replan_at_checkpoint(
     )
 
     assert result[0] == 1
-    assert calls == ["replan"]
+    assert calls == [("replan", True)]
 
 
 def test_successful_criteria_replan_yields_before_new_task_dispatch(
@@ -2380,8 +2382,8 @@ def test_successful_criteria_replan_yields_before_new_task_dispatch(
     )
     calls = []
 
-    def replan(_state, current_phase):
-        calls.append("replan")
+    def replan(_state, current_phase, *, checkpoint_only=False):
+        calls.append(("replan", checkpoint_only))
         new_task = {
             "id": "t2", "action": "read", "status": "pending",
             "criterion_refs": ["AC2"],
@@ -2409,8 +2411,55 @@ def test_successful_criteria_replan_yields_before_new_task_dispatch(
     )
 
     assert result[0] == 0
-    assert calls == ["replan"]
+    assert calls == [("replan", True)]
     assert phase.get_task("t2")["status"] == "pending"
+
+
+def test_coordinator_routes_checkpoint_replan_goal_to_role_chooser(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt import checkpoint_coordinator, criteria_replan, loop
+
+    phase = _phase(
+        tmp_path,
+        [{"id": "t1", "action": "read", "criterion_refs": ["AC1"]}],
+        ["First criterion", "Second criterion"],
+    )
+    phase.mark_done("t1")
+    state = RunState(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id=phase.run_id,
+        aufgabe="OP-398 " + "long request detail " * 1000,
+        tasks=list(phase.data["tasks"]),
+        akzeptanzkriterien=list(phase.data["akzeptanzkriterien"]),
+    )
+    assert criteria_replan.replan_unassigned_criteria(
+        state, phase, checkpoint_only=True,
+    ) is True
+    observed = {}
+
+    def choose(current_state, **kwargs):
+        observed["goal"] = current_state.aufgabe
+        observed["task_count"] = len(kwargs["phase_data"].get("tasks", []))
+        return {
+            "decision": "prepare_approved_work_graph",
+            "coordinator_action": "planner_split",
+            "reason": "test_role_selection",
+            "next_executor": "planner_split",
+        }
+
+    monkeypatch.setattr(
+        checkpoint_coordinator, "choose_planner_checkpoint_action", choose,
+    )
+    decision = loop._run_coordinator_action(phase, state)
+
+    assert decision["coordinator_action"] == "planner_split"
+    assert observed["goal"] == criteria_replan.active_criteria_replan(phase)[
+        "planner_goal"
+    ]
+    assert observed["task_count"] == 0
+    assert [task["id"] for task in phase.data["tasks"]] == ["t1"]
 
 
 def test_task_dispatch_returns_at_next_persisted_boundary(

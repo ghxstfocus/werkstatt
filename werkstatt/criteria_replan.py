@@ -112,9 +112,250 @@ def _record_attempt(
     phase_state.save()
 
 
+def active_criteria_replan(phase_state: PhaseState) -> dict[str, Any] | None:
+    """Return the newest unfinished checkpointed criteria-replan request."""
+    records = phase_state.data.get("criteria_replans")
+    if not isinstance(records, list):
+        return None
+    for record in reversed(records):
+        if (
+            isinstance(record, dict)
+            and record.get("status") in {
+                "roles_pending", "candidate_pending_approval", "pending",
+            }
+            and isinstance(record.get("replan_id"), str)
+            and isinstance(record.get("parent_goal"), str)
+            and isinstance(record.get("planner_goal"), str)
+        ):
+            return record
+    return None
+
+
+def restore_criteria_replan_parent(state: RunState, phase_state: PhaseState) -> None:
+    """Restore the approved parent graph after planning a bounded replan."""
+    data = phase_state.data
+    state.aufgabe = str(data.get("aufgabe") or "")
+    state.tasks = [
+        dict(task) for task in data.get("tasks", [])
+        if isinstance(task, dict)
+    ]
+    state.tests = list(data.get("tests", []))
+    state.akzeptanzkriterien = list(data.get("akzeptanzkriterien", []))
+    state.phasen = list(data.get("phasen", []))
+    state.architect_prosa = str(data.get("architect_prosa") or "")
+    state.criteria_replan_id = None
+
+
+def store_criteria_replan_candidate(
+    state: RunState,
+    phase_state: PhaseState,
+    *,
+    run_id: str,
+) -> str:
+    """Bind one Planner-Split result to the active replan checkpoint."""
+    record = active_criteria_replan(phase_state)
+    if (
+        record is None
+        or record.get("status") != "roles_pending"
+        or state.criteria_replan_id != record.get("replan_id")
+        or state.aufgabe != record.get("planner_goal")
+        or phase_state.run_id != run_id
+    ):
+        raise ValueError("Criteria-Replan-Rollencheckpoint ist nicht aktuell")
+    criteria = record.get("criteria_texts")
+    if not isinstance(criteria, list) or state.akzeptanzkriterien != criteria:
+        raise ValueError("Criteria-Replan hat freigegebene Kriterien veraendert")
+    payload = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "project": phase_state.project_name,
+        "replan_id": record["replan_id"],
+        "planner_goal_sha256": hashlib.sha256(
+            state.aufgabe.encode("utf-8"),
+        ).hexdigest(),
+        "tasks": deepcopy(state.tasks),
+        "tests": deepcopy(state.tests or []),
+        "criteria": deepcopy(state.akzeptanzkriterien),
+        "phases": deepcopy(state.phasen or []),
+        "architect_prose": state.architect_prosa or "",
+        "preflight_findings": deepcopy(state.preflight_fehler or []),
+    }
+    try:
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeEncodeError) as exc:
+        raise ValueError("Criteria-Replan-Kandidat ist ungueltig") from exc
+    if not payload["tasks"] or len(encoded) > 200_000:
+        raise ValueError("Criteria-Replan-Kandidat fehlt oder ist zu gross")
+    digest = hashlib.sha256(encoded).hexdigest()
+    record["candidate"] = payload
+    record["candidate_sha256"] = digest
+    record["candidate_chars"] = len(encoded)
+    record["status"] = "candidate_pending_approval"
+    phase_state.save()
+    return digest
+
+
+def apply_criteria_replan_candidate(
+    state: RunState,
+    phase_state: PhaseState,
+    replan_id: str,
+) -> bool:
+    """Validate, gate, and append a persisted criteria-replan candidate."""
+    from werkstatt.audit import audit
+
+    records = phase_state.data.get("criteria_replans")
+    record = next((
+        item for item in records
+        if isinstance(item, dict) and item.get("replan_id") == replan_id
+    ), None) if isinstance(records, list) else None
+    if (
+        not isinstance(record, dict)
+        or record.get("status") not in {
+            "candidate_pending_approval", "pending",
+        }
+        or record.get("parent_goal") != phase_state.data.get("aufgabe")
+        or record.get("parent_goal_sha256") != hashlib.sha256(
+            str(phase_state.data.get("aufgabe", "")).encode("utf-8"),
+        ).hexdigest()
+        or record.get("parent_plan_sha256")
+        != phase_state.approved_plan_fingerprint()
+        or not phase_state.approved_plan_is_current()
+    ):
+        return False
+    payload = record.get("candidate")
+    if not isinstance(payload, dict):
+        return False
+    try:
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeEncodeError):
+        return False
+    if (
+        len(encoded) > 200_000
+        or len(encoded) != record.get("candidate_chars")
+        or hashlib.sha256(encoded).hexdigest() != record.get("candidate_sha256")
+        or payload.get("schema_version") != 1
+        or payload.get("run_id") != phase_state.run_id
+        or payload.get("project") != phase_state.project_name
+        or payload.get("replan_id") != replan_id
+        or payload.get("planner_goal_sha256") != hashlib.sha256(
+            str(record.get("planner_goal", "")).encode("utf-8"),
+        ).hexdigest()
+        or not isinstance(payload.get("tasks"), list)
+        or not payload["tasks"]
+        or any(not isinstance(task, dict) for task in payload["tasks"])
+        or payload.get("criteria") != record.get("criteria_texts")
+        or not isinstance(payload.get("tests"), list)
+        or not isinstance(payload.get("phases"), list)
+        or any(not isinstance(item, dict) for item in payload["phases"])
+        or not isinstance(payload.get("architect_prose"), str)
+        or not isinstance(payload.get("preflight_findings"), list)
+    ):
+        return False
+
+    from werkstatt.gates import _human_gate_plan, _plan_gate
+    from werkstatt.run_followups import _extend_candidate
+
+    criteria = phase_state.data.get("akzeptanzkriterien")
+    refs = record.get("criteria_refs")
+    replaced_task_ids = record.get("replaced_task_ids")
+    if (
+        not isinstance(criteria, list)
+        or not isinstance(refs, list)
+        or not refs
+        or not isinstance(replaced_task_ids, list)
+    ):
+        return False
+    addition = deepcopy(state)
+    addition.aufgabe = record["planner_goal"]
+    addition.tasks = deepcopy(payload["tasks"])
+    addition.tests = deepcopy(payload["tests"])
+    addition.akzeptanzkriterien = deepcopy(payload["criteria"])
+    addition.phasen = deepcopy(payload["phases"])
+    addition.architect_prosa = payload["architect_prose"]
+    addition.preflight_fehler = deepcopy(payload["preflight_findings"])
+    if not addition.tasks or not _plan_gate(addition):
+        return False
+
+    candidate, new_tasks, _combined, tests, phases = _extend_candidate(
+        state, addition, replan_id,
+    )
+    local_to_original = {
+        f"AC{len(criteria) + index}": ref
+        for index, ref in enumerate(refs, 1)
+    }
+    remapped_by_id: dict[str, list[str]] = {}
+    for task in new_tasks:
+        task_refs = task.get("criterion_refs")
+        if not isinstance(task_refs, list) or not task_refs:
+            return False
+        mapped_refs = [local_to_original.get(ref) for ref in task_refs]
+        if any(ref is None for ref in mapped_refs):
+            return False
+        remapped = [ref for ref in mapped_refs if isinstance(ref, str)]
+        task["criterion_refs"] = remapped
+        remapped_by_id[str(task["id"])] = remapped
+    for task in candidate.tasks:
+        if isinstance(task, dict) and str(task.get("id")) in remapped_by_id:
+            task["criterion_refs"] = remapped_by_id[str(task["id"])]
+    candidate.akzeptanzkriterien = list(criteria)
+    if not _plan_gate(candidate):
+        return False
+    gate_result = _human_gate_plan(candidate, kontext="criteria_replan")
+    if gate_result != 0:
+        _record_attempt(
+            phase_state,
+            replan_id,
+            "pending" if gate_result == 2 else "rejected",
+            gate_result=gate_result,
+        )
+        return False
+
+    task_ids = phase_state.append_followup_tasks(
+        new_tasks,
+        criteria=list(criteria),
+        tests=tests,
+        phases=phases,
+        followup_id=replan_id,
+    )
+    if replaced_task_ids:
+        phase_state.supersede_failed_tasks(
+            replaced_task_ids, replan_id=replan_id,
+        )
+    restore_criteria_replan_parent(state, phase_state)
+    state.architect_prosa = candidate.architect_prosa
+    _record_attempt(phase_state, replan_id, "applied", task_ids=task_ids)
+    audit(
+        "loop_phase",
+        {
+            "phase": "criteria_replan",
+            "status": "approved",
+            "replan_id": replan_id,
+            "criteria_refs": refs,
+            "task_ids": task_ids,
+        },
+        state.project_dir,
+        state.project_name,
+    )
+    return True
+
+
 def replan_unassigned_criteria(
     state: RunState,
     phase_state: PhaseState,
+    *,
+    checkpoint_only: bool = False,
 ) -> bool:
     """Re-plan uncovered approved criteria after an exhausted safe graph.
 
@@ -357,6 +598,60 @@ def replan_unassigned_criteria(
     addition.scout_api_auszug = {}
     addition.explorer_context = {}
     addition.explorer_findings = {}
+
+    if checkpoint_only:
+        # Persist a bounded subgoal and return control to the outer
+        # coordinator. Scout, Architect and Planner-Split then run as
+        # separate role actions with their normal evidence handoffs.
+        record = next((
+            item for item in phase_state.data.get("criteria_replans", [])
+            if isinstance(item, dict) and item.get("replan_id") == replan_id
+        ), None)
+        if not isinstance(record, dict):
+            return False
+        record.update({
+            "status": "roles_pending",
+            "parent_goal": state.aufgabe,
+            "parent_goal_sha256": hashlib.sha256(
+                state.aufgabe.encode("utf-8"),
+            ).hexdigest(),
+            "parent_plan_sha256": phase_state.approved_plan_fingerprint(),
+            "planner_goal": addition.aufgabe,
+            "criteria_refs": list(missing_refs),
+            "criteria_texts": list(missing_criteria),
+            "failed_task_details": failed_task_details,
+            "candidate": None,
+            "planner_role_stage": None,
+        })
+        phase_state.save()
+        state.criteria_replan_id = replan_id
+        state.aufgabe = addition.aufgabe
+        state.tasks = []
+        state.tests = []
+        state.akzeptanzkriterien = []
+        state.phasen = []
+        state.architect_prosa = ""
+        state.scout_auftrag = {}
+        state.scout_api_auszug = {}
+        state.explorer_context = {}
+        state.explorer_findings = {}
+        state.planner_role_artifacts = {}
+        state.planning_response_cache = {}
+        state.coordinator_setup_context_ready = False
+        state.preflight_fehler = []
+        audit(
+            "loop_phase",
+            {
+                "phase": "criteria_replan",
+                "status": "roles_pending",
+                "replan_id": replan_id,
+                "criteria_refs": missing_refs,
+                "mode": replan_mode,
+            },
+            state.project_dir,
+            state.project_name,
+        )
+        return True
 
     try:
         from werkstatt.gates import _human_gate_plan, _plan_gate

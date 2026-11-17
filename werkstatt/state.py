@@ -206,6 +206,9 @@ class RunState:
         default_factory=dict,
     )
     planner_role_artifact_callback: Any = None
+    # Transient ID while the coordinator plans an approved criteria replan.
+    # The durable state lives in PhaseState.criteria_replans.
+    criteria_replan_id: str | None = None
 
     # M-WelleE (2026-11-02): strukturierte Explorer-Findings.
     # Fliesst in Architect- und Builder-Prompt. Format:

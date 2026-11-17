@@ -2073,8 +2073,15 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
     state.preflight_fehler = []
     phase_data = getattr(phase_state, "data", {})
     phase_data = phase_data if isinstance(phase_data, dict) else {}
+    planner_phase_data = phase_data
     task_records = phase_data.get("tasks")
     task_count = len(task_records) if isinstance(task_records, list) else 0
+    from werkstatt.criteria_replan import active_criteria_replan
+
+    active_replan = (
+        active_criteria_replan(phase_state)
+        if phase_state is not None else None
+    )
     setup_checkpoint_complete = phase_data.get("setup_complete") is True
     plan_checkpoint_complete = phase_data.get("plan_complete") is True
     plan_goal_matches = phase_data.get("aufgabe") == state.aufgabe
@@ -2099,7 +2106,7 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
             item for item in followups
             if isinstance(item, dict) and item.get("status") == "received"
         ] if isinstance(followups, list) else []
-        if received_followups:
+        if received_followups and active_replan is None:
             item = received_followups[0]
             return {
                 "decision": "reconcile_chat_followup",
@@ -2116,6 +2123,50 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
                     "plan_checkpoint_complete": plan_checkpoint_complete,
                 },
             }
+    if active_replan is not None:
+        replan_status = active_replan.get("status")
+        if replan_status in {"candidate_pending_approval", "pending"}:
+            from werkstatt.criteria_replan import (
+                restore_criteria_replan_parent,
+            )
+
+            restore_criteria_replan_parent(state, phase_state)
+            return {
+                "decision": "approve_criteria_replan_candidate",
+                "coordinator_action": "apply_criteria_replan_candidate",
+                "reason": "criteria_replan_candidate_requires_plan_and_human_gates",
+                "next_executor": "plan_and_human_gates",
+                "decision_basis": {
+                    "replan_id": active_replan["replan_id"],
+                    "criteria_refs": active_replan.get("criteria_refs", [])[:20],
+                    "candidate_sha256": active_replan.get("candidate_sha256"),
+                },
+            }
+        if replan_status == "roles_pending":
+            state.aufgabe = active_replan["planner_goal"]
+            state.criteria_replan_id = active_replan["replan_id"]
+            state.tasks = []
+            state.tests = []
+            state.akzeptanzkriterien = []
+            state.phasen = []
+            state.architect_prosa = ""
+            state.explorer_context = {}
+            state.explorer_findings = {}
+            state.coordinator_setup_context_ready = False
+            planner_phase_data = {**phase_data, "tasks": []}
+            from werkstatt.planner_artifacts import load_role_artifacts
+            from werkstatt.planner_replay import load_response_cache
+
+            state.planner_role_artifacts = load_role_artifacts(
+                phase_data.get("planner_role_artifacts"),
+                run_id=state.run_id,
+                goal=state.aufgabe,
+            )
+            state.planning_response_cache = load_response_cache(
+                phase_data.get("planner_response_cache"),
+                run_id=state.run_id,
+                goal=state.aufgabe,
+            )
     plan_run_matches = (
         not state.run_id or checkpoint_run_id == state.run_id
     )
@@ -2348,7 +2399,7 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
 
         return choose_planner_checkpoint_action(
             state,
-            phase_data=phase_data,
+            phase_data=planner_phase_data,
             planner_role_stage=planner_role_stage,
             plan_checkpoint_complete=plan_checkpoint_complete,
             plan_goal_matches=plan_goal_matches,
@@ -3442,6 +3493,44 @@ def _run_pipeline_loop_impl(
                 )
                 return 1
             continue
+        if action == "apply_criteria_replan_candidate":
+            if phase_state is None:
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=None,
+                )
+                return 1
+            from werkstatt.criteria_replan import (
+                active_criteria_replan,
+                apply_criteria_replan_candidate,
+            )
+
+            replan = active_criteria_replan(phase_state)
+            applied = bool(
+                replan
+                and apply_criteria_replan_candidate(
+                    state, phase_state, str(replan.get("replan_id", "")),
+                )
+            )
+            if not applied:
+                audit(
+                    "loop_failed",
+                    {
+                        "reason": "criteria_replan_candidate_gate_or_evidence_failed",
+                        "replan_id": (
+                            replan.get("replan_id") if replan else None
+                        ),
+                    },
+                    state.project_dir,
+                    project_name,
+                )
+                phase_state.save()
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
+            continue
         if action == "plan_preflight":
             if phase_state is None:
                 _persist_run_result(
@@ -3537,6 +3626,7 @@ def _run_pipeline_loop_impl(
                 )
                 return 1
             check_run_lease(state)
+            planner_goal = state.aufgabe
             state.planner_checkpoint_callback = (
                 lambda role_checkpoint: _persist_run_planner_role_checkpoint(
                     project_name, get_run_id(), role_checkpoint,
@@ -3547,7 +3637,7 @@ def _run_pipeline_loop_impl(
                 entry: dict[str, Any],
                 _phase_state: PhaseState = phase_state,
                 _run_id: str = get_run_id(),
-                _goal: str = aufgabe,
+                _goal: str = planner_goal,
             ) -> None:
                 _persist_planning_response_cache(
                     _phase_state, entry, run_id=_run_id, goal=_goal,
@@ -3560,7 +3650,7 @@ def _run_pipeline_loop_impl(
                 artifact: dict[str, Any],
                 _phase_state: PhaseState = phase_state,
                 _run_id: str = get_run_id(),
-                _goal: str = aufgabe,
+                _goal: str = planner_goal,
             ) -> None:
                 _persist_planner_role_artifact(
                     _phase_state, artifact, run_id=_run_id, goal=_goal,
@@ -3601,7 +3691,7 @@ def _run_pipeline_loop_impl(
                 # checkpoints run directly, while plan/taskgraph actions use
                 # the candidate-producing executor.
                 _rc_plan, _done = _dispatch_planner_checkpoint_action(
-                    state, action, aufgabe, project_name, phase_state,
+                    state, action, planner_goal, project_name, phase_state,
                 )
             finally:
                 yielded_after_role = state.planner_yielded_after_role
@@ -3618,16 +3708,27 @@ def _run_pipeline_loop_impl(
                 state.planner_yielded_after_role = None
             if candidate_ready:
                 try:
-                    candidate_digest = phase_state.record_plan_candidate(
-                        goal=aufgabe,
-                        run_id=get_run_id(),
-                        tasks=state.tasks,
-                        tests=list(state.tests or []),
-                        criteria=list(state.akzeptanzkriterien or []),
-                        phases=list(state.phasen or []),
-                        architect_prose=state.architect_prosa or "",
-                        preflight_findings=list(state.preflight_fehler or []),
-                    )
+                    if state.criteria_replan_id:
+                        from werkstatt.criteria_replan import (
+                            restore_criteria_replan_parent,
+                            store_criteria_replan_candidate,
+                        )
+
+                        candidate_digest = store_criteria_replan_candidate(
+                            state, phase_state, run_id=get_run_id(),
+                        )
+                        restore_criteria_replan_parent(state, phase_state)
+                    else:
+                        candidate_digest = phase_state.record_plan_candidate(
+                            goal=planner_goal,
+                            run_id=get_run_id(),
+                            tasks=state.tasks,
+                            tests=list(state.tests or []),
+                            criteria=list(state.akzeptanzkriterien or []),
+                            phases=list(state.phasen or []),
+                            architect_prose=state.architect_prosa or "",
+                            preflight_findings=list(state.preflight_fehler or []),
+                        )
                     phase_state.run_id = get_run_id()
                     phase_state.save()
                 except (AttributeError, TypeError, ValueError) as exc:
@@ -3663,7 +3764,7 @@ def _run_pipeline_loop_impl(
                         phase_state,
                         completed_role,
                         run_id=get_run_id(),
-                        goal=aufgabe,
+                        goal=planner_goal,
                     )
                 except Exception as exc:
                     audit(
@@ -3896,7 +3997,18 @@ def _run_pipeline_loop_impl(
             return 1
 
         def _task_progress_snapshot(current_phase_state) -> tuple[tuple, ...]:
-            snapshot = []
+            snapshot: list[tuple[Any, ...]] = []
+            replan_records = current_phase_state.data.get("criteria_replans")
+            if isinstance(replan_records, list):
+                for record in replan_records:
+                    if not isinstance(record, dict):
+                        continue
+                    snapshot.append((
+                        "criteria_replan",
+                        record.get("replan_id"),
+                        record.get("status"),
+                        record.get("candidate_sha256"),
+                    ))
             for record in current_phase_state.data.get("tasks", []):
                 if not isinstance(record, dict):
                     continue

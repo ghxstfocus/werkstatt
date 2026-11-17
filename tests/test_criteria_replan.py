@@ -130,6 +130,125 @@ def test_replans_only_missing_criteria_and_preserves_completed_tasks(
     assert state.llm_calls == 2
 
 
+def test_checkpoint_replan_prepares_bounded_subgoal_without_calling_planner(
+    tmp_path, monkeypatch,
+):
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.init_new(
+        "Goal",
+        [{"id": "first", "action": "read", "criterion_refs": ["AC1"]}],
+        akzeptanzkriterien=["First", "Second"],
+    )
+    phase.data["setup_complete"] = True
+    phase.data["plan_complete"] = True
+    phase.bind_approved_plan()
+    phase.mark_done("first")
+    state = RunState(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-checkpoint-criteria-replan",
+        aufgabe="OP-398 " + "long request detail " * 1000,
+        tasks=list(phase.data["tasks"]),
+        akzeptanzkriterien=list(phase.data["akzeptanzkriterien"]),
+    )
+    phase.run_id = state.run_id
+    monkeypatch.setattr(
+        "werkstatt.planner.run_planner",
+        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
+    )
+
+    assert criteria_replan.replan_unassigned_criteria(
+        state, phase, checkpoint_only=True,
+    ) is True
+
+    record = criteria_replan.active_criteria_replan(phase)
+    assert record is not None
+    assert record["status"] == "roles_pending"
+    assert record["parent_goal"].startswith("OP-398")
+    assert "OP-398" not in record["planner_goal"]
+    assert "AC2: Second" in record["planner_goal"]
+    assert len(record["planner_goal"]) < 5_000
+    assert state.criteria_replan_id == record["replan_id"]
+    assert state.aufgabe == record["planner_goal"]
+    assert phase.data["tasks"][0]["status"] == "done"
+    assert "plan_candidate_checkpoint" not in phase.data
+
+
+def test_checkpoint_replan_candidate_is_gated_before_append(tmp_path, monkeypatch):
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.init_new(
+        "Goal",
+        [{"id": "first", "action": "read", "criterion_refs": ["AC1"]}],
+        tests=["pytest"],
+        akzeptanzkriterien=["First", "Second"],
+    )
+    phase.data["setup_complete"] = True
+    phase.data["plan_complete"] = True
+    phase.bind_approved_plan()
+    phase.mark_done("first")
+    state = RunState(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-checkpoint-criteria-candidate",
+        aufgabe="Goal",
+        tasks=list(phase.data["tasks"]),
+        tests=list(phase.data["tests"]),
+        akzeptanzkriterien=list(phase.data["akzeptanzkriterien"]),
+    )
+    phase.run_id = state.run_id
+    monkeypatch.setattr(
+        "werkstatt.planner.run_planner",
+        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
+    )
+    assert criteria_replan.replan_unassigned_criteria(
+        state, phase, checkpoint_only=True,
+    ) is True
+    record = criteria_replan.active_criteria_replan(phase)
+    assert record is not None
+
+    state.tasks = [{
+        "id": "second",
+        "name": "Complete second criterion",
+        "description": "Implement and verify the second criterion.",
+        "action": "update",
+        "task_files": ["src/two.py"],
+        "dependencies": [],
+        "criterion_refs": ["AC1"],
+        "phase_id": None,
+        "parent_id": None,
+    }]
+    state.tests = ["pytest tests/test_two.py"]
+    state.akzeptanzkriterien = ["Second"]
+    state.architect_prosa = "Bounded replan candidate."
+    digest = criteria_replan.store_criteria_replan_candidate(
+        state, phase, run_id=state.run_id,
+    )
+    criteria_replan.restore_criteria_replan_parent(state, phase)
+    assert [task["id"] for task in phase.data["tasks"]] == ["first"]
+    assert criteria_replan.active_criteria_replan(phase)["candidate_sha256"] == digest
+
+    from werkstatt import gates
+
+    gates_called = []
+    monkeypatch.setattr(gates, "_plan_gate", lambda _state: True)
+    monkeypatch.setattr(
+        gates, "_human_gate_plan",
+        lambda _state, kontext="": gates_called.append(kontext) or 0,
+    )
+    monkeypatch.setattr(
+        "werkstatt.audit.audit", lambda *_args, **_kwargs: True,
+    )
+
+    assert criteria_replan.apply_criteria_replan_candidate(
+        state, phase, record["replan_id"],
+    ) is True
+    assert gates_called == ["criteria_replan"]
+    assert next(task["id"] for task in phase.data["tasks"]) == "first"
+    assert phase.data["tasks"][1]["id"].endswith("_second")
+    assert phase.data["tasks"][1]["criterion_refs"] == ["AC2"]
+    assert phase.data["criteria_replans"][0]["status"] == "applied"
+
+
 def test_replan_rejects_planner_that_changes_original_criteria(
     tmp_path, monkeypatch,
 ):
