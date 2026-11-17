@@ -95,6 +95,7 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "planner_split_context_budget",
         "chat_job_research_budget_reached",
         "loop_explorer_graphify",
+        "loop_graphify_startup_refresh",
         "loop_explorer_related_files_failed",
         "loop_debugger_fix_prepared",
         "loop_debugger_fix_rejected",

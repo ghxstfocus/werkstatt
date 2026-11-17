@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -428,7 +429,7 @@ def _query_graphify_cli(
     seed_paths: tuple[str, ...] = (),
 ) -> tuple[str, list[dict[str, Any]], str]:
     """Use Graphify's own query/traversal implementation when the CLI is present."""
-    executable = shutil.which("graphify")
+    executable = _graphify_executable()
     if not executable:
         return "cli_unavailable", [], ""
     return _query_graphify_cli_cached(
@@ -437,6 +438,16 @@ def _query_graphify_cli(
         query[:2000], max(1, min(limit, MAX_CANDIDATES)),
         seed_paths[:3],
     )
+
+
+def _graphify_executable() -> str | None:
+    """Find Graphify on PATH or beside the Python running Werkstatt."""
+    executable = shutil.which("graphify")
+    if executable:
+        return executable
+    script_name = "graphify.exe" if os.name == "nt" else "graphify"
+    environment_script = Path(sys.executable).resolve().parent / script_name
+    return str(environment_script) if environment_script.is_file() else None
 
 
 @lru_cache(maxsize=64)
@@ -589,9 +600,11 @@ def graphify_candidates(
             result["status"] = "index_too_large"
             return result
         query_tokens = tuple(sorted(_tokens(query))[:32])
-        # Seeds come only from callers that already read the source. Revalidate
-        # each one against the current Graphify manifest before native traversal.
+        # Explorer seeds are source evidence only if their current bytes still
+        # match the caller's hash. Graphify traversal has the stricter additional
+        # requirement that the indexed representation is current as well.
         validated_seeds: list[str] = []
+        current_source_seeds: list[str] = []
         for raw_seed in seed_paths:
             relative = _safe_relative(root, raw_seed)
             expected_seed_sha256 = (
@@ -601,10 +614,9 @@ def graphify_candidates(
             )
             if (
                 relative is not None
-                and relative not in validated_seeds
+                and relative not in current_source_seeds
                 and isinstance(expected_seed_sha256, str)
                 and re.fullmatch(r"[0-9a-f]{64}", expected_seed_sha256)
-                and _manifest_fresh(root, manifest_path, relative)
             ):
                 try:
                     current_sha256 = hashlib.sha256(
@@ -613,8 +625,10 @@ def graphify_candidates(
                 except OSError:
                     current_sha256 = ""
                 if current_sha256 == expected_seed_sha256:
-                    validated_seeds.append(relative)
-            if len(validated_seeds) >= 3:
+                    current_source_seeds.append(relative)
+                    if _manifest_fresh(root, manifest_path, relative):
+                        validated_seeds.append(relative)
+            if len(current_source_seeds) >= 3:
                 break
         graph, graph_sha256 = _load_graph_snapshot(
             str(graph_path.resolve()), graph_stat.st_mtime_ns, graph_stat.st_size,
@@ -644,6 +658,46 @@ def graphify_candidates(
                 graph_stat.st_size, query_tokens,
             )
             retrieval_method = "werkstatt_fallback"
+            if current_source_seeds:
+                # Current Explorer source evidence remains useful when Graphify
+                # is missing or stale, but it must not be presented as graph
+                # evidence. Keep it ahead of a weak lexical fallback and mark
+                # seeds absent from the current manifest explicitly.
+                by_path = {
+                    str(item.get("file")): item
+                    for item in ranked
+                    if isinstance(item, dict)
+                    and isinstance(item.get("file"), str)
+                }
+                seeded: list[dict[str, Any]] = []
+                for seed in current_source_seeds:
+                    graph_fresh = seed in validated_seeds
+                    candidate = by_path.get(seed)
+                    if candidate is None:
+                        candidate = {
+                            "file": seed,
+                            "score": 0.001,
+                            "matched_terms": [],
+                            "related_to": [],
+                            "why": "current Explorer source seed; Graphify CLI unavailable",
+                        }
+                    else:
+                        candidate = dict(candidate)
+                        candidate["why"] = "current Explorer source seed"
+                    if not graph_fresh:
+                        candidate["_source_seed_without_current_graph"] = True
+                        candidate["relationships"] = []
+                        candidate["symbols"] = []
+                        candidate["graphify_provenance"] = (
+                            "explorer_source_seed_graphify_unindexed_or_stale"
+                        )
+                    seeded.append(candidate)
+                seeded_paths = set(current_source_seeds)
+                ranked = (
+                    *seeded,
+                    *(item for item in ranked if item.get("file") not in seeded_paths),
+                )
+                retrieval_method = "werkstatt_fallback_seeded"
         candidate_pool = list(ranked[: MAX_CANDIDATES * 4])
         ignored_paths = _git_ignored_paths(
             root,
@@ -666,9 +720,15 @@ def graphify_candidates(
         result["index_sha256"] = graph_sha256
         selected: list[dict[str, Any]] = []
         stale = 0
+        graph_stale_seed_count = 0
         for candidate in ranked:
             rel = str(candidate["file"])
-            if not _manifest_fresh(root, manifest_path, rel):
+            source_seed_without_graph = bool(
+                candidate.get("_source_seed_without_current_graph")
+            )
+            if not source_seed_without_graph and not _manifest_fresh(
+                root, manifest_path, rel,
+            ):
                 stale += 1
                 continue
             try:
@@ -686,8 +746,26 @@ def graphify_candidates(
                 stale += 1
                 continue
             current_candidate = dict(candidate)
-            current_candidate["source_sha256"] = source_digest.hexdigest()
+            current_sha256 = source_digest.hexdigest()
+            expected_seed_sha256 = (
+                seed_sha256.get(rel)
+                if isinstance(seed_sha256, dict)
+                else None
+            )
+            if source_seed_without_graph and current_sha256 != expected_seed_sha256:
+                stale += 1
+                continue
+            current_candidate.pop("_source_seed_without_current_graph", None)
+            current_candidate["source_sha256"] = current_sha256
             current_candidate["source_bytes"] = source_bytes
+            current_candidate.setdefault(
+                "source_provenance",
+                "explorer_source_seed_graphify_unindexed_or_stale"
+                if source_seed_without_graph
+                else "graphify_manifest_current",
+            )
+            if source_seed_without_graph:
+                graph_stale_seed_count += 1
             selected.append(current_candidate)
             if len(selected) >= max(1, min(limit, MAX_CANDIDATES)):
                 break
@@ -699,6 +777,16 @@ def graphify_candidates(
         stale_relationship_count = 0
         ignored_relationship_count = 0
         for candidate in selected:
+            if candidate.get("source_provenance") == (
+                "explorer_source_seed_graphify_unindexed_or_stale"
+            ):
+                candidate.update({
+                    "symbols": [],
+                    "relationships": [],
+                    "stale_relationship_count": 0,
+                    "ignored_relationship_count": 0,
+                })
+                continue
             details = _candidate_ast_subgraph(
                 root,
                 manifest_path,
@@ -720,13 +808,16 @@ def graphify_candidates(
             {
                 "status": (
                     "partial_stale"
-                    if selected and (stale or stale_relationship_count)
+                    if selected and (
+                        stale or stale_relationship_count or graph_stale_seed_count
+                    )
                     else "ok" if selected
                     else "stale" if stale
                     else "no_match"
                 ),
                 "candidates": selected,
                 "stale_source_count": stale,
+                "graph_stale_seed_count": graph_stale_seed_count,
                 "stale_relationship_count": stale_relationship_count,
                 "graphify_version": graphify_version,
                 "built_at_commit": graph.get("built_at_commit"),
@@ -736,6 +827,7 @@ def graphify_candidates(
                 "native_node_count": native_node_count,
                 "native_relationship_count": native_relationship_count,
                 "seed_paths": validated_seeds,
+                "source_seed_paths": current_source_seeds,
                 "ignored_source_count": len(ignored_paths),
                 "ignored_relationship_count": ignored_relationship_count,
             }
@@ -748,7 +840,7 @@ def graphify_candidates(
 def refresh_graphify_index(project_dir: str | Path) -> dict[str, Any]:
     """Build or incrementally refresh the local code graph without an LLM call."""
     root = Path(project_dir).resolve()
-    executable = shutil.which("graphify")
+    executable = _graphify_executable()
     if not executable:
         return {"status": "cli_unavailable"}
     try:

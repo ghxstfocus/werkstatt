@@ -133,6 +133,13 @@ def _loop_runner(tasks_ok: int, rc: int, aufrufe: list | None = None):
 def test_main_ruft_run_pipeline_loop(tmp_path, monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     aufrufe: list = []
+    refreshes: list[tuple[Path, str]] = []
+    refresh_result = {"attempted": True, "status": "refreshed"}
+    monkeypatch.setattr(
+        loop,
+        "_refresh_graphify_before_run",
+        lambda path, project: refreshes.append((path, project)) or refresh_result,
+    )
     with _silence_renderer(), _patch_main_config(tmp_path), \
          patch("werkstatt.loop.run_pipeline_loop",
                _loop_runner(1, 0, aufrufe)), \
@@ -146,6 +153,34 @@ def test_main_ruft_run_pipeline_loop(tmp_path, monkeypatch):
     assert a["aufgabe"] == "aufgabe-x"
     assert isinstance(a["state_ref"], list)
     assert isinstance(a["state_ref"][0], RunState)
+    assert refreshes == [(tmp_path.resolve(), "p")]
+    assert a["state_ref"][0].explorer_context == {
+        "graphify_startup_refresh": refresh_result,
+    }
+
+
+def test_graphify_cache_refresh_is_audited_before_role_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import graphify_index
+
+    events: list[tuple] = []
+    monkeypatch.setattr(
+        graphify_index,
+        "refresh_graphify_index",
+        lambda _path: {"status": "refreshed", "returncode": 0},
+    )
+    monkeypatch.setattr(
+        loop,
+        "audit",
+        lambda *args: events.append(args),
+    )
+
+    result = loop._refresh_graphify_before_run(tmp_path, "demo")
+
+    assert result == {"attempted": True, "status": "refreshed", "returncode": 0}
+    assert events[0][0] == "loop_graphify_startup_refresh"
+    assert events[0][1]["stage"] == "before_first_coordinator_decision"
 
 
 

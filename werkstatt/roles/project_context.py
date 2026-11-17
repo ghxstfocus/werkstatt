@@ -409,10 +409,21 @@ def collect_project_context(
         seed_paths=_graph_seeds,
         seed_sha256=_graph_seed_sha256,
     )
-    _graph_refresh: dict[str, Any] | None = None
+    _state_explorer_context = getattr(state, "explorer_context", None)
+    _startup_refresh = (
+        _state_explorer_context.get("graphify_startup_refresh")
+        if isinstance(_state_explorer_context, dict) else None
+    )
+    _startup_refresh_attempted = (
+        isinstance(_startup_refresh, dict)
+        and _startup_refresh.get("attempted") is True
+    )
+    _graph_refresh: dict[str, Any] | None = (
+        _startup_refresh if isinstance(_startup_refresh, dict) else None
+    )
     if _graph_retrieval.get("status") in {
         "unavailable", "stale", "partial_stale", "invalid_index",
-    }:
+    } and not _startup_refresh_attempted:
         _graph_refresh = refresh_graphify_index(Path(pd))
         if _graph_refresh.get("status") == "refreshed":
             _graph_retrieval = graphify_candidates(
@@ -421,7 +432,9 @@ def collect_project_context(
                 seed_paths=_graph_seeds,
                 seed_sha256=_graph_seed_sha256,
             )
-    _graph_retrieval["refresh_attempted"] = _graph_refresh is not None
+    _graph_retrieval["refresh_attempted"] = (
+        _startup_refresh_attempted or _graph_refresh is not None
+    )
     explorer_result["graphify_retrieval"] = _graph_retrieval
     audit("loop_explorer_graphify", {
         "status": _graph_retrieval.get("status"),

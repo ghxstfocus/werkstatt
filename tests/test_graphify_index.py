@@ -105,6 +105,72 @@ def test_graphify_candidates_use_current_manifest_hash_and_relationship(tmp_path
     )
 
 
+def test_graphify_fallback_prioritizes_hash_validated_explorer_seed(
+    tmp_path: Path, monkeypatch,
+):
+    source = tmp_path / "werkstatt" / "phase_state.py"
+    source.parent.mkdir()
+    source.write_text("def target_checkpoint(): return True\n", encoding="utf-8")
+    _write_index(tmp_path, source)
+    monkeypatch.setattr(graphify_index.shutil, "which", lambda _name: None)
+
+    result = graphify_candidates(
+        tmp_path,
+        "unrelated query vocabulary",
+        limit=3,
+        seed_paths=["werkstatt/phase_state.py"],
+        seed_sha256={
+            "werkstatt/phase_state.py": hashlib.sha256(
+                source.read_bytes(),
+            ).hexdigest(),
+        },
+    )
+
+    assert result["retrieval_method"] == "werkstatt_fallback_seeded"
+    assert result["seed_paths"] == ["werkstatt/phase_state.py"]
+    assert result["candidates"][0]["file"] == "werkstatt/phase_state.py"
+    assert result["candidates"][0]["source_sha256"] == hashlib.sha256(
+        source.read_bytes(),
+    ).hexdigest()
+    assert "Explorer source seed" in result["candidates"][0]["why"]
+
+
+def test_graphify_fallback_keeps_current_source_seed_when_manifest_is_stale(
+    tmp_path: Path, monkeypatch,
+):
+    source = tmp_path / "werkstatt" / "phase_state.py"
+    source.parent.mkdir()
+    source.write_text("def target_checkpoint(): return True\n", encoding="utf-8")
+    _write_index(tmp_path, source)
+    manifest_path = tmp_path / "graphify-out" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["werkstatt/phase_state.py"]["ast_hash"] = "0" * 32
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(graphify_index.shutil, "which", lambda _name: None)
+
+    current_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+    result = graphify_candidates(
+        tmp_path,
+        "unrelated query vocabulary",
+        limit=3,
+        seed_paths=["werkstatt/phase_state.py"],
+        seed_sha256={"werkstatt/phase_state.py": current_sha256},
+    )
+
+    candidate = result["candidates"][0]
+    assert result["status"] == "partial_stale"
+    assert result["graph_stale_seed_count"] == 1
+    assert candidate["file"] == "werkstatt/phase_state.py"
+    assert candidate["source_sha256"] == current_sha256
+    assert candidate["source_provenance"] == (
+        "explorer_source_seed_graphify_unindexed_or_stale"
+    )
+    assert candidate["relationships"] == []
+    assert candidate["symbols"] == []
+    assert result["seed_paths"] == []
+    assert result["source_seed_paths"] == ["werkstatt/phase_state.py"]
+
+
 def test_graphify_index_uses_generic_project_relative_source_paths(
     tmp_path: Path,
 ):
@@ -549,6 +615,36 @@ def test_graphify_refresh_uses_update_when_index_exists(
     assert result["status"] == "refreshed"
     assert observed["argv"] == ["graphify", "update", "."]
     assert observed["env"]["GRAPHIFY_OUT"] == "graphify-out"
+
+
+def test_graphify_refresh_finds_cli_beside_venv_python_when_path_is_missing(
+    tmp_path: Path, monkeypatch,
+):
+    scripts = tmp_path / "venv" / (
+        "Scripts" if graphify_index.os.name == "nt" else "bin"
+    )
+    scripts.mkdir(parents=True)
+    python = scripts / (
+        "python.exe" if graphify_index.os.name == "nt" else "python"
+    )
+    python.write_text("", encoding="utf-8")
+    executable = scripts / (
+        "graphify.exe" if graphify_index.os.name == "nt" else "graphify"
+    )
+    executable.write_text("", encoding="utf-8")
+    monkeypatch.setattr(graphify_index.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(graphify_index.sys, "executable", str(python))
+    observed: dict[str, object] = {}
+
+    def fake_run(argv, **kwargs):
+        observed["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, "updated", "")
+
+    monkeypatch.setattr(graphify_index.subprocess, "run", fake_run)
+    result = graphify_index.refresh_graphify_index(tmp_path)
+
+    assert result["status"] == "refreshed"
+    assert observed["argv"][0] == str(executable)
 
 
 def test_graphify_parsed_index_is_cached_and_invalidated_on_change(tmp_path: Path):

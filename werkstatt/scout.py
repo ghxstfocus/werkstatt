@@ -1267,12 +1267,23 @@ def _run_scout(
             _explorer_ctx.get("graphify_retrieval")
             if isinstance(_explorer_ctx, dict) else None
         )
+        _startup_graph_refresh = (
+            _explorer_ctx.get("graphify_startup_refresh")
+            if isinstance(_explorer_ctx, dict) else None
+        )
+        _refresh_already_attempted = (
+            isinstance(_startup_graph_refresh, dict)
+            and _startup_graph_refresh.get("attempted") is True
+        ) or (
+            isinstance(_prior_graph, dict)
+            and _prior_graph.get("refresh_attempted") is True
+        )
         _graph_refresh: dict[str, Any] | None = None
         if (
             _graph_result.get("status") in {
                 "unavailable", "stale", "partial_stale", "invalid_index",
             }
-            and not (isinstance(_prior_graph, dict) and _prior_graph.get("refresh_attempted"))
+            and not _refresh_already_attempted
         ):
             _graph_refresh = refresh_graphify_index(pd)
             if _graph_refresh.get("status") == "refreshed":

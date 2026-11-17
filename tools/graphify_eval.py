@@ -131,11 +131,24 @@ def evaluate(
                     "metrics": _rank_metrics(graph_paths, relevant, k=limit),
                 },
                 "graphify_seeded": {
+                    "status": seeded_graph.get("status"),
                     "retrieval_method": seeded_graph.get("retrieval_method"),
                     "native_query_status": seeded_graph.get("native_query_status"),
                     "seed_paths": seeded_graph.get("seed_paths", []),
+                    "source_seed_paths": seeded_graph.get(
+                        "source_seed_paths", [],
+                    ),
+                    "graph_stale_seed_count": seeded_graph.get(
+                        "graph_stale_seed_count", 0,
+                    ),
                     "selected": seeded_paths,
                     "source_sha256": seeded_source_hashes,
+                    "source_provenance": {
+                        str(item["file"]): item.get("source_provenance")
+                        for item in seeded_graph.get("candidates", [])
+                        if isinstance(item, dict)
+                        and isinstance(item.get("file"), str)
+                    },
                     "metrics": _rank_metrics(seeded_paths, relevant, k=limit),
                 },
                 "explorer": {

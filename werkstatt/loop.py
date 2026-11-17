@@ -122,6 +122,30 @@ def _handle_loop_sigterm(signum: int, _frame: object) -> None:
     if not _STOP_SIGNAL_DEFERRED:
         raise _LoopStopRequested(signum)
 
+
+def _refresh_graphify_before_run(project_dir: Path, project_name: str) -> dict[str, Any]:
+    """Reconcile the project's incremental Graphify cache before role selection."""
+    from werkstatt.graphify_index import refresh_graphify_index
+
+    try:
+        refresh = refresh_graphify_index(project_dir)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        refresh = {"status": "refresh_error", "error_type": type(exc).__name__}
+    result = {"attempted": True, **refresh}
+    audit(
+        "loop_graphify_startup_refresh",
+        {
+            "status": result.get("status", "unknown"),
+            "returncode": result.get("returncode"),
+            "timeout_s": result.get("timeout_s"),
+            "error_type": result.get("error_type"),
+            "stage": "before_first_coordinator_decision",
+        },
+        project_dir,
+        project_name,
+    )
+    return result
+
 # Oeffentliche API (Re-Exports + lokale Funktionen).
 # ruff F401 entfernt sonst Re-Exports, die von Tests/Aufrufern
 # importiert werden. __all__ ist die offizielle Python-Deklaration.
@@ -4553,6 +4577,11 @@ def _main_inner(argv: list[str] | None = None) -> int:
                 _STOP_SIGNAL_DEFERRED = False
             if _STOP_SIGNAL is not None:
                 raise _LoopStopRequested(_STOP_SIGNAL)
+        _state.explorer_context = {
+            "graphify_startup_refresh": _refresh_graphify_before_run(
+                _pd, args.project,
+            ),
+        }
         rc = run_pipeline_loop(args.project, args.aufgabe, state_ref, phase_state=_ps)
     except BaseException:
         _hat_exception = True

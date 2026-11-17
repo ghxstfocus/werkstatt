@@ -125,7 +125,11 @@ Der Loop startet keine Explorer-LLM-Rolle. Kontextwerkzeuge in
 Graphify-Navigation und aktuelle, hashgebundene Quellbelege. Der Adapter
 arbeitet relativ zum ausgewaehlten Projekt-Root und speichert den Graphify-
 Index projektlokal; Graphkandidaten sind Navigationshinweise, keine
-Quellbelege. Fehlt Graphify oder ist der Index ungueltig/veraltet, greifen
+Quellbelege. Vor der ersten Checkpoint-Rollenentscheidung versucht der Loop
+einen inkrementellen Graphify-Cache-Abgleich und auditiert Status/Fehler.
+Explorer und Scout wiederholen diesen Abgleich im selben Run nicht. Das CLI
+wird zuerst im `PATH`, danach neben dem verwendeten venv-Python gesucht.
+Fehlt Graphify oder ist der Index ungueltig/veraltet, greifen
 die ausgewiesenen Such-Rueckfallpfade. Explorer-/Graphify-Retrieval ist nur
 lokal auf kleinen kuratierten Beispielen gemessen und noch nicht fuer beliebige
 Repositories oder den Server verifiziert.
