@@ -72,8 +72,11 @@ Artefakte erhalten; ein ungueltiges oder fehlendes Architect-Artefakt wird
 zum Koordinator zurueckgegeben.
 
 Die Migration ist unvollstaendig: `werkstatt/phases/` enthaelt weiterhin
-Review-/Gate-Executor- und Kompatibilitaetsmodule; Setup-/Plan-/Task-Module
-sind noch nicht vollstaendig aus den Laufzeitpfaden entfernt. Planner-Taskgraph-Erzeugung nutzt noch
+Plan-/Review-/Finalize-Executor- und Kompatibilitaetsmodule; Setup-/Plan-/Task-Module
+sind noch nicht vollstaendig aus den Laufzeitpfaden entfernt. Die verpflichtende
+Schranke nach einer Reviewer-Ablehnung liegt jetzt als `reviewer_rejection_gate`
+in `werkstatt/gates.py`; sie bleibt fail-closed, ist aber kein Phasenmodul mehr.
+Planner-Taskgraph-Erzeugung nutzt noch
 einen gebuendelten Executor; einige Erstlauf- und Abschlussentscheidungen
 bleiben deterministisch aneinander gebunden. Eine vollstaendig freie,
 zielorientierte Aktionswahl aus ADR-0032 ist damit noch nicht erreicht.

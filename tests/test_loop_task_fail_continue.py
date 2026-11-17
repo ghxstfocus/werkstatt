@@ -22,13 +22,14 @@ class TestTaskFailContinue:
     def test_pre_build_gate_bleibt_return_1(self) -> None:
         """pre_build_gate ist echter Abbruch, kein Task-Fail."""
         # Laufzeitcode liegt im Koordinator und seinen aktiven Checkpoint-Executoren.
+        import werkstatt.gates as _gates
         import werkstatt.loop as _loop
         import werkstatt.phases as _pp
         import werkstatt.roles.project_context as _ctx
         import werkstatt.roles.task_dispatch as _task_dispatch
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
-            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_ctx, _task_dispatch, _pp._review_mod, _pp._finalize_mod]))
+            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_ctx, _task_dispatch, _gates, _pp._finalize_mod]))
         )
         # OP-114 (2026-11-04): Payload wird jetzt via _gate_failed_payload
         # gebaut. Struktur-Anker ist der _verify_patches-Aufruf mit

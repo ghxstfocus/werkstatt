@@ -12,8 +12,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, "/opt/werkstatt")
 
+from werkstatt.gates import reviewer_rejection_gate
 from werkstatt.loop import _phase_end_reflection
-from werkstatt.phases import _phase_review_gate
 from werkstatt.state import RunState
 
 _here = Path(__file__).parent
@@ -56,17 +56,17 @@ def _mock_non_interactive(monkeypatch):
 
 def test_j_gibt_0(monkeypatch):
     _mock_interactive(monkeypatch, ["j"])
-    assert _phase_review_gate(_mk_state()) == 0
+    assert reviewer_rejection_gate(_mk_state()) == 0
 
 
 def test_n_gibt_1(monkeypatch):
     _mock_interactive(monkeypatch, ["n"])
-    assert _phase_review_gate(_mk_state()) == 1
+    assert reviewer_rejection_gate(_mk_state()) == 1
 
 
 def test_grossbuchstabe_j(monkeypatch):
     _mock_interactive(monkeypatch, ["J"])
-    assert _phase_review_gate(_mk_state()) == 0
+    assert reviewer_rejection_gate(_mk_state()) == 0
 
 
 def test_eof_gibt_1(monkeypatch):
@@ -80,25 +80,25 @@ def test_eof_gibt_1(monkeypatch):
     def _raise_eof(*a, **kw):
         raise EOFError
     monkeypatch.setattr("werkstatt.gates._frage_gate", _raise_eof)
-    assert _phase_review_gate(_mk_state()) == 1
+    assert reviewer_rejection_gate(_mk_state()) == 1
 
 
 def test_ungueltig_dann_j(monkeypatch):
     """Ungueltige Eingabe -> retry, dann j -> 0."""
     _mock_interactive(monkeypatch, ["x", "j"])
-    assert _phase_review_gate(_mk_state()) == 0
+    assert reviewer_rejection_gate(_mk_state()) == 0
 
 
 def test_e_dann_n(monkeypatch):
     """'e' -> manuell, dann 'n' -> 1."""
     _mock_interactive(monkeypatch, ["e", "", "n"])
-    assert _phase_review_gate(_mk_state()) == 1
+    assert reviewer_rejection_gate(_mk_state()) == 1
 
 
 def test_non_interactive_gibt_1(monkeypatch):
     """stdin nicht tty (pytest) -> fail-closed, kein input() (OSError-Schutz)."""
     _mock_non_interactive(monkeypatch)
-    assert _phase_review_gate(_mk_state()) == 1
+    assert reviewer_rejection_gate(_mk_state()) == 1
 
 
 # =====================================================================
@@ -140,7 +140,7 @@ def test_reflection_reject_ruft_gate(tmp_path):
          patch("werkstatt.loop._apply_patches_with_hooks", return_value=1), \
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.reviewer.run_phase_end_review", return_value=False), \
-         patch("werkstatt.phases.review._phase_review_gate",
+         patch("werkstatt.gates.reviewer_rejection_gate",
                side_effect=_gate_spy):
         # Zwei ausdrueckliche j-Entscheidungen: nach der letzten darf der
         # Mensch die verifizierten Patches trotz Reviewer-Befund uebernehmen.
@@ -171,7 +171,7 @@ def test_gate_n_bricht_reflection_ab(tmp_path):
          patch("werkstatt.loop._apply_patches_with_hooks", return_value=1), \
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.reviewer.run_phase_end_review", return_value=False), \
-         patch("werkstatt.phases.review._phase_review_gate",
+         patch("werkstatt.gates.reviewer_rejection_gate",
                side_effect=_gate_spy):
         assert _phase_end_reflection(s) is False
     assert len(gate_calls) == 1, (

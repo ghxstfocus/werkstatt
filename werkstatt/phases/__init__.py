@@ -8,7 +8,6 @@ from __future__ import annotations
 
 # Modul-Referenzen (fuer AST-Guard-Tests)
 from . import finalize as _finalize_mod  # noqa: F401
-from . import review as _review_mod  # noqa: F401
 
 # Re-Exports aus _common (as-alias-pattern)
 from ._common import (
@@ -103,4 +102,3 @@ from ._common import (
 from .finalize import _phase_end_review_action as _phase_end_review_action
 from .finalize import _phase_end_verify_action as _phase_end_verify_action
 from .finalize import _phase_human_gate_action as _phase_human_gate_action
-from .review import _phase_review_gate as _phase_review_gate

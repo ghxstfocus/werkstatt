@@ -379,7 +379,7 @@ def test_phase_reflection_fallback_task_files(tmp_path):
          patch("werkstatt.loop._apply_patches_with_hooks", return_value=1), \
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.reviewer.run_phase_end_review", return_value=False), \
-         patch("werkstatt.phases.review._phase_review_gate", return_value=1):
+         patch("werkstatt.gates.reviewer_rejection_gate", return_value=1):
         assert loop._phase_end_reflection(s) is False
     ev = _kind(tmp_path, "loop_phase_reflection_fallback_alle_task_files")
     assert len(ev) >= 1
@@ -394,7 +394,7 @@ def test_phase_reflection_builder_failed(tmp_path):
          patch("werkstatt.loop._apply_patches_with_hooks", return_value=0), \
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.reviewer.run_phase_end_review", return_value=False), \
-         patch("werkstatt.phases.review._phase_review_gate", return_value=1):
+         patch("werkstatt.gates.reviewer_rejection_gate", return_value=1):
         assert loop._phase_end_reflection(s) is False
     assert len(_kind(tmp_path, "loop_phase_reflection_builder_failed")) >= 1
 
@@ -408,7 +408,7 @@ def test_phase_reflection_kein_patch(tmp_path):
          patch("werkstatt.loop._apply_patches_with_hooks", return_value=0), \
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.reviewer.run_phase_end_review", return_value=False), \
-         patch("werkstatt.phases.review._phase_review_gate", return_value=1):
+         patch("werkstatt.gates.reviewer_rejection_gate", return_value=1):
         assert loop._phase_end_reflection(s) is False
     assert len(_kind(tmp_path, "loop_phase_reflection_kein_patch")) >= 1
 
@@ -423,7 +423,7 @@ def test_phase_reflection_verify_failed(tmp_path):
          patch("werkstatt.loop._apply_patches_with_hooks", return_value=1), \
          patch("werkstatt.loop._verify_patches", return_value=False), \
          patch("werkstatt.reviewer.run_phase_end_review", return_value=False), \
-         patch("werkstatt.phases.review._phase_review_gate", return_value=1):
+         patch("werkstatt.gates.reviewer_rejection_gate", return_value=1):
         assert loop._phase_end_reflection(s) is False
     assert len(_kind(tmp_path, "loop_phase_reflection_verify_failed")) == 1
 
@@ -444,7 +444,7 @@ def test_phase_reflection_approved(tmp_path):
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.reviewer.run_phase_end_review",
                side_effect=_review_side_effect), \
-         patch("werkstatt.phases.review._phase_review_gate", return_value=0):
+         patch("werkstatt.gates.reviewer_rejection_gate", return_value=0):
         assert loop._phase_end_reflection(s) is True
     assert len(_kind(tmp_path, "loop_phase_reflection_approved")) == 1
 
@@ -460,7 +460,7 @@ def test_phase_reflection_last_explicit_approval_accepts_remaining_review_findin
          patch("werkstatt.loop._verify_patches", return_value=True), \
          patch("werkstatt.reviewer.run_phase_end_review",
                return_value=False), \
-         patch("werkstatt.phases.review._phase_review_gate", return_value=0) as gate:
+         patch("werkstatt.gates.reviewer_rejection_gate", return_value=0) as gate:
         assert loop._phase_end_reflection(s) is True
     assert gate.call_count == 2
 

@@ -1,4 +1,4 @@
-"""OP-393: _phase_review_gate im headless-Modus -> _frage_gate statt input.
+"""OP-393: Reviewer rejection gate nutzt im Headless-Modus die Gate-Bridge.
 
 Live-Bug 2026-11-10 10:23: Loop-Subprozess (--headless) crasht am
 Phase-Review-Gate mit loop_human_gate_eof, weil stdin=/dev/null
@@ -14,7 +14,6 @@ if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 from factories import mk_state  # noqa: E402, I001
 from werkstatt import gate_bridge, gates as gates_mod  # noqa: E402
-from werkstatt.phases import review as review_mod  # noqa: E402
 
 
 def _mk_state():
@@ -24,7 +23,7 @@ def _mk_state():
 def test_headless_nutzt_frage_gate_und_liefert_j(monkeypatch):
     """Headless -> _frage_gate('phase_review', ...) wird gerufen, 'j' -> 0."""
     from werkstatt import gates as gates_mod
-    from werkstatt.phases.review import _phase_review_gate
+    from werkstatt.gates import reviewer_rejection_gate
 
     monkeypatch.setattr(gates_mod, "_HEADLESS", True)
 
@@ -36,7 +35,7 @@ def test_headless_nutzt_frage_gate_und_liefert_j(monkeypatch):
 
     monkeypatch.setattr(gates_mod, "_frage_gate", _fake_frage)
 
-    rc = _phase_review_gate(_mk_state())
+    rc = reviewer_rejection_gate(_mk_state())
     assert rc == 0, f"rc={rc}, aufrufe={aufrufe}"
     assert len(aufrufe) == 1
     assert aufrufe[0][0] == "phase_review"
@@ -45,18 +44,17 @@ def test_headless_nutzt_frage_gate_und_liefert_j(monkeypatch):
 
 def test_headless_n_liefert_1(monkeypatch):
     from werkstatt import gates as gates_mod
-    from werkstatt.phases.review import _phase_review_gate
+    from werkstatt.gates import reviewer_rejection_gate
 
     monkeypatch.setattr(gates_mod, "_HEADLESS", True)
     monkeypatch.setattr(gates_mod, "_frage_gate", lambda k, p, o="jna", **_kwargs: "n")
 
-    assert _phase_review_gate(_mk_state()) == 1
+    assert reviewer_rejection_gate(_mk_state()) == 1
 
 
 def test_headless_a_erteilt_keine_freigabe(monkeypatch):
     from werkstatt import gates as gates_mod
-    from werkstatt.phases import review as review_mod
-    from werkstatt.phases.review import _phase_review_gate
+    from werkstatt.gates import reviewer_rejection_gate
 
     monkeypatch.setattr(gates_mod, "_HEADLESS", True)
     antworten = iter(["a", "j"])
@@ -69,11 +67,11 @@ def test_headless_a_erteilt_keine_freigabe(monkeypatch):
 
     monkeypatch.setattr(gates_mod, "_frage_gate", _frage)
     monkeypatch.setattr(
-        review_mod, "audit_safe",
+        gates_mod, "audit_safe",
         lambda kind, payload, *_args: audit_events.append((kind, payload)),
     )
 
-    rc = _phase_review_gate(_mk_state())
+    rc = reviewer_rejection_gate(_mk_state())
     assert rc == 0
     assert aufrufe == [("phase_review", "jne"), ("phase_review", "jne")]
     assert not any(kind == "loop_human_gate_auto" for kind, _ in audit_events)
@@ -82,7 +80,7 @@ def test_headless_a_erteilt_keine_freigabe(monkeypatch):
 def test_headless_eof_liefert_1(monkeypatch):
     """_frage_gate wirft EOFError (Gate-Timeout o.ae.) -> 1."""
     from werkstatt import gates as gates_mod
-    from werkstatt.phases.review import _phase_review_gate
+    from werkstatt.gates import reviewer_rejection_gate
 
     monkeypatch.setattr(gates_mod, "_HEADLESS", True)
 
@@ -90,13 +88,15 @@ def test_headless_eof_liefert_1(monkeypatch):
         raise EOFError
 
     monkeypatch.setattr(gates_mod, "_frage_gate", _raise)
-    assert _phase_review_gate(_mk_state()) == 1
+    assert reviewer_rejection_gate(_mk_state()) == 1
 
 
 def test_headless_phase_review_opens_and_waits_on_bridge(monkeypatch):
+    from werkstatt.gates import reviewer_rejection_gate
+
     monkeypatch.setattr(gates_mod, "_HEADLESS", True)
     monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "run-review")
-    monkeypatch.setattr(review_mod, "audit_safe", lambda *args: None)
+    monkeypatch.setattr(gates_mod, "audit_safe", lambda *args: None)
     opened = []
     waited = []
 
@@ -110,7 +110,7 @@ def test_headless_phase_review_opens_and_waits_on_bridge(monkeypatch):
     monkeypatch.setattr(gate_bridge, "signal_open", signal_open)
     monkeypatch.setattr(gate_bridge, "wait", wait)
 
-    assert review_mod._phase_review_gate(_mk_state()) == 0
+    assert reviewer_rejection_gate(_mk_state()) == 0
     assert len(opened) == 1
     run_id, gate_id, _prompt, optionen, typ, project = opened[0]
     assert run_id == "run-review"

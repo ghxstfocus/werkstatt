@@ -1082,8 +1082,6 @@ def test_phase_end_chat_recovery_stops_after_reserved_reviewer_rejects(
     tmp_path: Path,
 ) -> None:
     from werkstatt import reviewer
-    from werkstatt.phases import review
-
     state = _state(tmp_path)
     state.reviewer_bugs = [{
         "file": "werkstatt/sample.py", "severity": "high",
@@ -1109,7 +1107,9 @@ def test_phase_end_chat_recovery_stops_after_reserved_reviewer_rejects(
     )
     monkeypatch.setattr(reflection, "_verify_patches", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(reviewer, "run_phase_end_review", run_review)
-    monkeypatch.setattr(review, "_phase_review_gate", lambda _state: 0)
+    monkeypatch.setattr(
+        "werkstatt.gates.reviewer_rejection_gate", lambda _state: 0,
+    )
     monkeypatch.setattr(reflection, "audit", lambda *args, **kwargs: True)
 
     assert reflection._phase_end_reflection_core(

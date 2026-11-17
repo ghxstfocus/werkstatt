@@ -8,6 +8,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from werkstatt.audit import audit_safe
 from werkstatt.state import RunState
 
 
@@ -102,6 +103,68 @@ def _frage_gate(
         if state is not None:
             state.gate_timed_out = True
         return "n"
+
+
+def reviewer_rejection_gate(state: RunState) -> int:
+    """Require an explicit human choice after a rejected review.
+
+    This is a safety gate that can be requested at a review checkpoint; it
+    does not define a phase or authorize an automatic retry. Non-interactive
+    and headless behavior remains fail-closed through ``_frage_gate``.
+    """
+    pd = getattr(state, "project_dir", None)
+    pn = getattr(state, "project_name", "?")
+    if not _HEADLESS:
+        import sys
+
+        try:
+            is_tty = sys.stdin.isatty()
+        except (AttributeError, OSError):
+            is_tty = False
+        if not is_tty:
+            audit_safe(
+                "loop_human_gate_eof",
+                {"gate": "phase_review", "reason": "non_interactive"},
+                pd,
+                pn,
+            )
+            return 1
+
+    prompt = (
+        "\nREVIEWER-ABLEHNUNG\n"
+        "  Der Reviewer hat die aktuelle Aenderung abgelehnt.\n"
+        "  j = Patches behalten und fortfahren\n"
+        "  n = Patches verwerfen und Lauf abbrechen\n"
+        "  e = Datei manuell bearbeiten und erneut fragen\n"
+        "Deine Wahl [j] behalten / [n] verwerfen / [e] manuell: "
+    )
+    while True:
+        try:
+            answer = _frage_gate(
+                "phase_review",
+                prompt,
+                "jne",
+                project_name=state.project_name,
+                state=state,
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            audit_safe("loop_human_gate_eof", {"gate": "phase_review"}, pd, pn)
+            return 1
+        if answer == "j":
+            audit_safe("loop_human_gate_approved", {"gate": "phase_review"}, pd, pn)
+            return 0
+        if answer == "n":
+            audit_safe("loop_human_gate_rejected", {"gate": "phase_review"}, pd, pn)
+            return 1
+        if answer == "e":
+            print("Bitte Datei manuell bearbeiten, dann Enter.")
+            if not _HEADLESS:
+                try:
+                    input()
+                except EOFError:
+                    return 1
+            continue
+        print("Ungueltige Eingabe. Erlaubt: j, n, e.")
 
 
 def _task_graph_error(tasks: list) -> str | None:

@@ -1321,8 +1321,8 @@ def _phase_end_reflection_core(
         bugs = state.reviewer_bugs or []
 
         # Jede Reject-Runde braucht eine eigene menschliche Entscheidung.
-        from werkstatt.phases.review import _phase_review_gate
-        if _phase_review_gate(state) != 0:
+        from werkstatt.gates import reviewer_rejection_gate
+        if reviewer_rejection_gate(state) != 0:
             # A declined/failed human gate is a hard stop. The originating
             # Chat may advise after autonomous exhaustion, but cannot restart
             # work the user explicitly stopped or failed to authorize.
