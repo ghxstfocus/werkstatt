@@ -7,11 +7,12 @@ from typing import Any
 
 ARTIFACT_SCHEMA = "planner_role_artifact_v1"
 MAX_ARTIFACT_CHARS = 60_000
-MAX_ARTIFACTS = 3
+MAX_ARTIFACTS = 4
 _ROLE_OUTPUT_TYPES = {
     "scout": dict,
     "architect": str,
     "planner_split": dict,
+    "planner_handoff": dict,
 }
 
 
@@ -118,7 +119,7 @@ def load_role_artifacts(
     if not isinstance(raw, dict):
         return {}
     result: dict[str, dict[str, Any]] = {}
-    for role in ("scout", "architect", "planner_split"):
+    for role in ("scout", "architect", "planner_split", "planner_handoff"):
         artifact = raw.get(role)
         if not isinstance(artifact, dict):
             continue

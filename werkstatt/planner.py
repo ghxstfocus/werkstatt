@@ -204,6 +204,294 @@ def _architect_input_fingerprint(
     })
 
 
+PLANNER_SPLIT_HANDOFF_SCHEMA = "planner_split_handoff_v1"
+
+
+def _persist_planner_split_handoff(
+    state: RunState,
+    *,
+    goal: str,
+    scout_report: dict,
+    architect_scout_report: dict,
+    scout_input_sha256: str | None,
+    architect_prose: str,
+    architect_input_sha256: str | None,
+) -> bool:
+    """Persist the exact upstream outputs needed by a later Split action."""
+    from werkstatt.planner_artifacts import make_role_artifact, value_sha256
+
+    if (
+        not isinstance(scout_report, dict)
+        or not isinstance(architect_scout_report, dict)
+        or not isinstance(architect_prose, str)
+        or len(architect_prose) < 50
+        or not isinstance(architect_input_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", architect_input_sha256) is None
+    ):
+        return False
+    explorer_context = getattr(state, "explorer_context", None)
+    raw_files = (
+        explorer_context.get("key_files", [])
+        if isinstance(explorer_context, dict) else []
+    )
+    key_file_hashes: dict[str, str] = {}
+    key_files: list[str] = []
+    for item in raw_files if isinstance(raw_files, list) else []:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("file")
+        digest = item.get("source_sha256")
+        if not isinstance(path, str) or not path:
+            continue
+        if (
+            not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+        ):
+            return False
+        if path not in key_file_hashes:
+            key_files.append(path)
+            key_file_hashes[path] = digest
+    source_manifest = getattr(
+        state, "architect_scout_source_manifest", {},
+    )
+    if not isinstance(source_manifest, dict):
+        return False
+    source_records = source_manifest.get("sources", [])
+    if not isinstance(source_records, list):
+        return False
+    for record in source_records:
+        if (
+            not isinstance(record, dict)
+            or not isinstance(record.get("path"), str)
+            or not isinstance(record.get("source_sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", record["source_sha256"]) is None
+        ):
+            return False
+    scout_artifact = getattr(state, "planner_role_artifacts", {}).get("scout")
+    scout_output_sha256 = (
+        scout_artifact.get("output_sha256")
+        if isinstance(scout_artifact, dict) else value_sha256(scout_report)
+    )
+    architect_artifact = getattr(
+        state, "planner_role_artifacts", {},
+    ).get("architect")
+    if not isinstance(architect_artifact, dict):
+        return False
+    handoff = {
+        "schema": PLANNER_SPLIT_HANDOFF_SCHEMA,
+        "scout_report": scout_report,
+        "architect_scout_report": architect_scout_report,
+        "scout_input_sha256": scout_input_sha256,
+        "scout_output_sha256": scout_output_sha256,
+        "architect_prose": architect_prose,
+        "architect_input_sha256": architect_input_sha256,
+        "architect_output_sha256": architect_artifact.get("output_sha256"),
+        "key_files": key_files,
+        "key_file_sha256": key_file_hashes,
+        "source_manifest": source_manifest,
+    }
+    handoff_input_sha256 = value_sha256({
+        key: value for key, value in handoff.items()
+        if key not in {"scout_report", "architect_prose", "source_manifest"}
+    })
+    if not handoff_input_sha256 or not getattr(state, "run_id", None):
+        return False
+    artifact = make_role_artifact(
+        "planner_handoff",
+        handoff,
+        run_id=state.run_id,
+        goal=goal,
+        input_sha256=handoff_input_sha256,
+    )
+    callback = getattr(state, "planner_role_artifact_callback", None)
+    if artifact is None or not callable(callback):
+        return False
+    callback(artifact)
+    artifacts = dict(getattr(state, "planner_role_artifacts", {}) or {})
+    artifacts["planner_handoff"] = artifact
+    state.planner_role_artifacts = artifacts
+    audit("planner_role_artifact_persisted", {
+        "role": "planner_handoff",
+        "input_sha256": handoff_input_sha256,
+        "output_sha256": artifact["output_sha256"],
+    }, state.project_dir, state.project_name)
+    return True
+
+
+def _current_source_hashes(project_dir: Path, paths: list[str]) -> dict[str, str] | None:
+    """Read a bounded set of project-local files and return current hashes."""
+    root = project_dir.resolve(strict=True)
+    hashes: dict[str, str] = {}
+    if len(paths) > 32:
+        return None
+    for raw_path in paths:
+        if not isinstance(raw_path, str) or not raw_path or len(raw_path) > 300:
+            return None
+        relative = Path(raw_path)
+        if relative.is_absolute() or ".." in relative.parts:
+            return None
+        target = (root / relative).resolve(strict=True)
+        target.relative_to(root)
+        if not target.is_file():
+            return None
+        hashes[relative.as_posix()] = hashlib.sha256(
+            target.read_bytes(),
+        ).hexdigest()
+    return hashes
+
+
+def _load_current_planner_split_handoff(
+    state: RunState, goal: str,
+) -> dict | None:
+    """Load a run-bound handoff only when upstream artifacts and source files match."""
+    from werkstatt.architect import _format_scout_source_evidence
+    from werkstatt.planner_artifacts import (
+        validate_role_artifact,
+        value_sha256,
+    )
+
+    artifacts = getattr(state, "planner_role_artifacts", {})
+    if not isinstance(artifacts, dict):
+        return None
+    raw = artifacts.get("planner_handoff")
+    if not isinstance(raw, dict):
+        return None
+    input_sha256 = raw.get("input_sha256")
+    if not isinstance(input_sha256, str):
+        return None
+    valid = validate_role_artifact(
+        raw,
+        role="planner_handoff",
+        run_id=str(getattr(state, "run_id", "") or ""),
+        goal=goal,
+        input_sha256=input_sha256,
+    )
+    if valid is None:
+        return None
+    handoff = valid["output"]
+    if (
+        not isinstance(handoff, dict)
+        or handoff.get("schema") != PLANNER_SPLIT_HANDOFF_SCHEMA
+        or not isinstance(handoff.get("scout_report"), dict)
+        or not isinstance(handoff.get("architect_scout_report"), dict)
+        or not isinstance(handoff.get("architect_prose"), str)
+        or len(handoff["architect_prose"]) < 50
+        or not isinstance(handoff.get("source_manifest"), dict)
+        or not isinstance(handoff.get("key_files"), list)
+        or not isinstance(handoff.get("key_file_sha256"), dict)
+    ):
+        return None
+    architect = artifacts.get("architect")
+    architect_input = handoff.get("architect_input_sha256")
+    if not isinstance(architect_input, str):
+        return None
+    valid_architect = validate_role_artifact(
+        architect,
+        role="architect",
+        run_id=str(getattr(state, "run_id", "") or ""),
+        goal=goal,
+        input_sha256=architect_input,
+    )
+    if (
+        valid_architect is None
+        or valid_architect.get("output") != handoff.get("architect_prose")
+        or valid_architect.get("output_sha256")
+        != handoff.get("architect_output_sha256")
+    ):
+        return None
+    scout_report = handoff["scout_report"]
+    scout_input = handoff.get("scout_input_sha256")
+    if scout_input is not None:
+        if not isinstance(scout_input, str):
+            return None
+        valid_scout = validate_role_artifact(
+            artifacts.get("scout"),
+            role="scout",
+            run_id=str(getattr(state, "run_id", "") or ""),
+            goal=goal,
+            input_sha256=scout_input,
+        )
+        if (
+            valid_scout is None
+            or valid_scout.get("output") != scout_report
+            or valid_scout.get("output_sha256")
+            != handoff.get("scout_output_sha256")
+        ):
+            return None
+    elif value_sha256(scout_report) != handoff.get("scout_output_sha256"):
+        return None
+
+    key_files = handoff["key_files"]
+    raw_key_hashes = handoff["key_file_sha256"]
+    if (
+        any(not isinstance(path, str) for path in key_files)
+        or not isinstance(raw_key_hashes, dict)
+    ):
+        return None
+    key_hashes: dict[str, str] = {}
+    for path, digest in raw_key_hashes.items():
+        if (
+            not isinstance(path, str)
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+        ):
+            return None
+        key_hashes[path] = digest
+    if set(key_files) != set(key_hashes):
+        return None
+    current_key_hashes = _current_source_hashes(
+        Path(state.project_dir), key_files,
+    )
+    if current_key_hashes != key_hashes:
+        return None
+
+    source_manifest = handoff["source_manifest"]
+    records = source_manifest.get("sources", [])
+    if not isinstance(records, list):
+        return None
+    source_hashes: dict[str, str] = {}
+    for record in records:
+        if (
+            not isinstance(record, dict)
+            or not isinstance(record.get("path"), str)
+            or not isinstance(record.get("source_sha256"), str)
+        ):
+            return None
+        source_hashes[record["path"]] = record["source_sha256"]
+    _current_context, current_manifest = _format_scout_source_evidence(
+        state.project_dir, handoff["architect_scout_report"],
+    )
+    current_records = current_manifest.get("sources", [])
+    if not isinstance(current_records, list):
+        return None
+    current_hashes = {
+        record["path"]: record["source_sha256"]
+        for record in current_records
+        if isinstance(record, dict)
+        and isinstance(record.get("path"), str)
+        and isinstance(record.get("source_sha256"), str)
+    }
+    if source_hashes != current_hashes:
+        return None
+    current_key_files = (
+        getattr(state, "explorer_context", {}).get("key_files", [])
+        if isinstance(getattr(state, "explorer_context", None), dict)
+        else []
+    )
+    explorer_key_hashes: dict[str, str] = {}
+    if isinstance(current_key_files, list):
+        for item in current_key_files:
+            if (
+                isinstance(item, dict)
+                and isinstance(item.get("file"), str)
+                and isinstance(item.get("source_sha256"), str)
+            ):
+                explorer_key_hashes[item["file"]] = item["source_sha256"]
+    if explorer_key_hashes != key_hashes:
+        return None
+    return handoff
+
+
 
 
 ARCHITECT_EXECUTION_CONTEXT_MAX_CHARS = 12000
@@ -306,11 +594,24 @@ def _budget_architect_execution_context(
             records.append(record)
         return records
 
-    normalized = [
+    normalized_input = [
         (title, content)
         for title, content in sections
         if isinstance(title, str) and isinstance(content, str) and content
     ]
+    def priority(item: tuple[str, str]) -> int:
+        title = item[0].casefold()
+        if title.startswith("preflight-fehler"):
+            return 0
+        if title.startswith("bereits erledigt"):
+            return 1
+        if title.startswith("vorherige fehlschlaege"):
+            return 2
+        if title.startswith("phase-state"):
+            return 3
+        return 4
+
+    normalized = sorted(normalized_input, key=priority)
     full = "\n\n".join(f"## {title}\n{content}" for title, content in normalized)
     if len(full) <= max_chars:
         return full, {
@@ -1285,6 +1586,116 @@ def _zerlege_in_sub_tasks(
     )
 
 
+def run_planner_split_checkpoint(
+    state: RunState, *, goal: str,
+) -> bool | None:
+    """Compile directly from a current Architect handoff; None asks for refresh."""
+    handoff = _load_current_planner_split_handoff(state, goal)
+    if handoff is None:
+        audit("planner_role_artifact_rejected", {
+            "role": "planner_handoff",
+            "reason": "missing_or_stale_upstream_evidence",
+        }, state.project_dir, state.project_name)
+        return None
+
+    from werkstatt.rollen import ROLLEN
+    from werkstatt.skills import _merke_geladene_skills, load_all_skills
+
+    try:
+        loaded = ROLLEN["planner"].lade_skills(load_all_skills())
+        if loaded:
+            _merke_geladene_skills(
+                state, [skill.get("name", "") for skill in loaded],
+                rolle="planner",
+            )
+            state.planner_skills_block = "\n\n".join(
+                f"### {skill.get('name', '?')}\n{skill.get('body') or ''}"
+                for skill in loaded if skill.get("body")
+            )
+    except Exception:  # noqa: BLE001 - skill loading remains optional
+        state.planner_skills_block = ""
+
+    state.architect_prosa = handoff["architect_prose"]
+    state.scout_auftrag = dict(handoff["architect_scout_report"])
+    state.architect_scout_source_manifest = dict(handoff["source_manifest"])
+    key_files = list(handoff["key_files"])
+    output_sha = hashlib.sha256(
+        state.architect_prosa.encode("utf-8"),
+    ).hexdigest()
+    _publish_role_checkpoint(
+        state, "planner_split", "running", "current_architect_handoff",
+        {
+            "architect_input_sha256": handoff["architect_input_sha256"],
+            "architect_output_sha256": output_sha,
+            "key_files": key_files,
+        },
+    )
+    try:
+        subtasks = _zerlege_in_sub_tasks(
+            state.architect_prosa,
+            key_files,
+            state.api_key,
+            state.project_dir,
+            state.project_name,
+            aufgabe=goal,
+            state=state,
+        )
+    except _task_graph.TaskGraphError as exc:
+        _publish_role_checkpoint(
+            state, "planner_split", "failed", "task_graph_rejected",
+            {"architect_output_sha256": output_sha},
+        )
+        audit("planner_plan_abgelehnt", {
+            "grund": str(exc),
+            "quelle": "checkpoint_planner_split",
+        }, state.project_dir, state.project_name)
+        return False
+
+    if subtasks:
+        subtasks = _normalisiere_task_files(
+            subtasks, state.explorer_context, state.project_dir,
+            state.project_name,
+        )
+        state.tasks = subtasks
+    else:
+        if len(state.akzeptanzkriterien or []) != 1:
+            audit("planner_plan_abgelehnt", {
+                "grund": "split_fallback_deckt_nicht_mehrere_kriterien_ab",
+                "kriterien": len(state.akzeptanzkriterien or []),
+            }, state.project_dir, state.project_name)
+            return False
+        fallback = _topo_sort_tasks(
+            [_fallback_task_von_prosa(state.architect_prosa, key_files)],
+            state.project_dir,
+            state.project_name,
+        )
+        if fallback:
+            fallback[0]["criterion_refs"] = ["AC1"]
+        _validate_criteria_coverage(fallback, state.akzeptanzkriterien)
+        state.tasks = fallback
+
+    if not state.tasks:
+        return False
+    state.phasen = []
+    state.tests = []
+    _publish_role_checkpoint(
+        state, "planner_split", "completed", "task_graph_received",
+        {
+            "architect_output_sha256": output_sha,
+            "key_files": key_files,
+        },
+        {"tasks": state.tasks, "criteria": state.akzeptanzkriterien},
+    )
+    audit("planner_plan_erstellt", {
+        "tasks": len(state.tasks),
+        "prosa_len": len(state.architect_prosa),
+        "compiler": "validated_role_handoff",
+    }, state.project_dir, state.project_name)
+    state.planner_step_yielded = True
+    state.planner_yielded_after_role = "planner_split"
+    return True
+
+
 def _doku_post_check(
     tasks: list[dict], prosa: str = "", pd=None, pn="?",
     aufgabe: str = "",
@@ -1793,7 +2204,7 @@ def run_planner(
     stop_after_role: str | None = None,
 ) -> bool:
     """Erstellt den Plan. Schreibt in state.tasks/tests/akzeptanzkriterien."""
-    if stop_after_role not in {None, "scout", "architect"}:
+    if stop_after_role not in {None, "scout", "architect", "planner_split"}:
         raise ValueError("ungueltiger Planner-Rollengrenzpunkt")
     state.planner_step_yielded = False
     state.planner_yielded_after_role = None
@@ -2061,6 +2472,10 @@ def run_planner(
     # Scout liefert Code-/Explorer-Fakten; diese Liste erhaelt nur
     # Projektfortschritt, verifizierte Historie und Kontrollfeedback.
     _architect_execution_sections: list[tuple[str, str]] = []
+    if preflight:
+        _architect_execution_sections.append(
+            ("PREFLIGHT-FEHLER (aktuelle Pflichtbefunde)", json.dumps(preflight, ensure_ascii=False))
+        )
     if _erledigt:
         _architect_execution_sections.append(
             ("BEREITS ERLEDIGT (nicht erneut planen)", _erledigt)
@@ -2069,17 +2484,14 @@ def run_planner(
         _architect_execution_sections.append(
             ("VORHERIGE FEHLSCHLAEGE", json.dumps(_fails_af, ensure_ascii=False))
         )
+    # Historischer Fortschritt ist nachrangiger Kontext.
     if progress_text:
         _architect_execution_sections.append(
-            ("PROJEKT-FORTSCHRITT (letzte 10 Eintraege)", progress_text)
+            ("PROJEKT-FORTSCHRITT (letzte 10 Eintraege; nachrangige Historie)", progress_text)
         )
     if _tasks_status:
         _architect_execution_sections.append(
             ("PHASE-STATE", json.dumps(_tasks_status, ensure_ascii=False))
-        )
-    if preflight:
-        _architect_execution_sections.append(
-            ("PREFLIGHT-FEHLER", json.dumps(preflight, ensure_ascii=False))
         )
     if follow_up_prev:
         _architect_execution_sections.append(
@@ -2223,6 +2635,35 @@ def run_planner(
     _scout_skip_path, _scout_route_reason = _scout_route_decision(
         aufgabe, _explorer_ctx, pd,
     )
+    _coordinator_role = getattr(state, "planner_coordinator_role", None)
+    if _coordinator_role in {"scout", "architect"}:
+        from werkstatt.checkpoint_coordinator import (
+            apply_checkpoint_role_choice,
+        )
+
+        _coordinator_evidence = tuple(
+            record for record in getattr(
+                state, "planner_coordinator_source_evidence", (),
+            )
+            if isinstance(record, dict)
+        )
+        _route = apply_checkpoint_role_choice(
+            pd,
+            role=_coordinator_role,
+            deterministic_skip_path=_scout_skip_path,
+            source_evidence=_coordinator_evidence,
+            deterministic_reason=_scout_route_reason,
+        )
+        _scout_skip_path = _route["skip_path"]
+        _scout_route_reason = _route["reason"]
+        if _coordinator_role == "architect" and _scout_skip_path:
+            state.architect_required_source_files = _route["source_files"]
+        audit("planner_role_dispatch_decision", {
+            "next_role": _coordinator_role if _scout_skip_path else "scout",
+            "reason": _scout_route_reason,
+            "basis": "revalidated_coordinator_source_manifest",
+            "source_files": _route["source_files"],
+        }, pd, pn)
     _scout_route_payload = {"grund": _scout_route_reason}
     if _scout_skip_path:
         _scout_route_payload["datei"] = _scout_skip_path
@@ -2525,6 +2966,20 @@ def run_planner(
     if architect_result.failure_reason is not None:
         return False
 
+    architect_scout_report = getattr(state, "scout_auftrag", None)
+    if isinstance(architect_scout_report, dict) and isinstance(
+        _scout_report, dict,
+    ):
+        _persist_planner_split_handoff(
+            state,
+            goal=aufgabe,
+            scout_report=_scout_report,
+            architect_scout_report=architect_scout_report,
+            scout_input_sha256=_scout_input_sha256,
+            architect_prose=_arch_prosa,
+            architect_input_sha256=_architect_input_sha256,
+        )
+
     if (
         stop_after_role == "architect"
         or _planner_action_role in {"scout", "architect"}
@@ -2762,6 +3217,10 @@ def run_planner(
     audit("planner_plan_erstellt",
           {"tasks": len(state.tasks),
            "prosa_len": len(_arch_prosa)}, pd, pn)
+
+    if stop_after_role == "planner_split" and state.tasks:
+        state.planner_step_yielded = True
+        state.planner_yielded_after_role = "planner_split"
 
     return bool(state.tasks)
 

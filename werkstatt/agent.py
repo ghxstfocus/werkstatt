@@ -28,7 +28,7 @@ from werkstatt.subprocess_env import subprocess_env
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 _EVIDENCE_REQUIRED_ROLES = frozenset({
     "architect", "builder", "explorer", "planner", "planner-split",
-    "reviewer", "scout",
+    "reviewer", "scout", "project-coordinator",
 })
 _ROLE_CONTEXT_BUDGET_EVENTS: dict[str, frozenset[str]] = {
     "architect": frozenset({"planner_architect_context_budget"}),
@@ -40,6 +40,9 @@ _ROLE_CONTEXT_BUDGET_EVENTS: dict[str, frozenset[str]] = {
         "reviewer_context_budget", "reviewer_phase_context",
     }),
     "scout": frozenset({"scout_context_budget"}),
+    "project-coordinator": frozenset({
+        "project_coordinator_context_budget",
+    }),
 }
 _ROLE_CONTEXT_DIGEST_REQUIRED = _EVIDENCE_REQUIRED_ROLES
 
@@ -385,7 +388,8 @@ def _rolle_aus_aufgabe(aufgabe: str) -> str:
     """Mappt stabile Rollenlabels; freie Task-Namen bleiben unbekannt."""
     label = (aufgabe or "").strip().lower().replace("_", "-")
     if label in {"architect", "planner", "builder", "reviewer",
-                 "reflection", "explorer", "scout", "debugger", "chat"}:
+                 "reflection", "explorer", "scout", "debugger", "chat",
+                 "project-coordinator"}:
         return label
     if label.startswith("planner-"):
         return "planner"

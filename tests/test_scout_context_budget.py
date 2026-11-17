@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 from werkstatt.scout import SCOUT_SYSTEM, _budget_scout_context
 
@@ -62,3 +63,20 @@ def test_scout_blocks_when_required_assignment_exceeds_budget() -> None:
     assert metadata["omitted"] == ["project docs"]
     assert metadata["section_manifest"][0]["status"] == "blocked_required"
     assert "prompt_start" not in metadata["section_manifest"][0]
+
+
+def test_scout_grep_limits_hits_globally_per_term(tmp_path: Path) -> None:
+    from werkstatt.scout import _grep_projekt
+
+    for index in range(12):
+        (tmp_path / f"file_{index}.py").write_text(
+            "TARGET\nTARGET\nTARGET\n", encoding="utf-8",
+        )
+
+    hits = _grep_projekt(tmp_path, ["TARGET"], max_per_begriff=4)
+
+    assert len(hits) == 4
+    assert {item["begriff"] for item in hits} == {"TARGET"}
+    assert len(_grep_projekt(
+        tmp_path, ["TARGET"], max_per_begriff=100, max_total=7,
+    )) == 7

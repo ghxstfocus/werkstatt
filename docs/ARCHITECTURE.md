@@ -51,14 +51,33 @@ abgeloest und keine gueltige Bauvorgabe.
 
 ## 1.5 Ausfuehrung
 
-Der produktive Run-Kern ist weiterhin die bestehende lineare Folge aus
-Setup/Explorer, Plan/Preflight, Task-Loop und Finalizer. Der Finalizer hat
-einen Failure-Record-Recoverypfad fuer das Phase-End-Verify. Nach einem
-erfolgreichen Commit wird die vollstaendige Phase-End-Verify erneut
-ausgefuehrt; HEAD und Working Tree werden danach gegen den geprueften Commit
-validiert. Ein roter oder veraenderter Stand kann keinen Run-Erfolg ausloesen.
-Der persistierte Zielkoordinator, die Inbox fuer Folgeauftraege und ein
-gemeinsames Evidence Ledger aus ADR-0032 sind noch nicht implementiert.
+Der Loop speichert Run-/Ziel-/Projekt-gebundene Checkpoints und fragt an
+sicheren Grenzen erneut den Koordinator nach der naechsten Aktion. Kontext-
+und Preflight-Erhebung, Planner-Rollen, Taskausfuehrung, Task-Verify,
+risikobasierter Review, Planfreigabe, Phase-End-Review, Human-Gate,
+Phase-End-Verify, Commit und Abschluss sind einzeln dispatchbare Aktionen.
+Nach einem Rollen- oder Taskcheckpoint wird die Auswahl neu getroffen;
+Scout/Architect laufen direkt bis zu ihrem Rollencheckpoint, und Builder,
+Verify sowie Reviewer sind fuer Kriterien-Tasks getrennte Taskaktionen.
+Die Task-Aktionspolicy liegt in `werkstatt/checkpoint_coordinator.py`;
+Taskexecutor und historische Phasenfassade duerfen sie nicht als zweite
+Auswahlquelle ersetzen. Hauptlauf und genehmigte Follow-ups verwenden denselben
+Koordinatorvertrag, muessen aber noch in einen gemeinsamen Dispatcher
+zusammengefuehrt werden.
+Der risikoarme Ein-Datei-Builder und `planner_split` koennen ebenfalls als
+eigene Koordinatoraktionen laufen. Der bestehende Planner-Orchestrator bleibt
+fuer die Revalidierung und den Wiederaufbau erforderlicher Scout-/Architect-
+Artefakte erhalten; ein ungueltiges oder fehlendes Architect-Artefakt wird
+zum Koordinator zurueckgegeben.
+
+Die Migration ist unvollstaendig: `werkstatt/phases/` enthaelt weiterhin
+Executor- und Kompatibilitaetsmodule. Planner-Taskgraph-Erzeugung nutzt noch
+einen gebuendelten Executor; einige Erstlauf- und Abschlussentscheidungen
+bleiben deterministisch aneinander gebunden. Eine vollstaendig freie,
+zielorientierte Aktionswahl aus ADR-0032 ist damit noch nicht erreicht.
+Planfreigabe, Human-Gate sowie Verify- und Review-Belege bleiben verbindliche
+Sicherheits- und Ergebnisschranken. Ein veralteter oder roter Arbeitsstand
+kann keinen Run-Erfolg ausloesen.
 
 Entwicklungs- und Verify-Befehle laufen aus dem Repository-Root und der
 projektspezifischen Umgebung. Die verbindlichen Abhaengigkeiten und
@@ -90,13 +109,17 @@ nicht, dass alle OP-399-Akzeptanzkriterien bereits umgesetzt sind.
 
 ## 2. Rollen
 
-### 2.1 Explorer (werkstatt/explorer.py)
+### 2.1 Explorer und Projektkontext
 
-Read-only Agent. Sammelt Projektkontext und key_files; die Pruefungen
-selbst bleiben deterministisch. Modell: deepseek-flash, Thinking aus.
-Der Planner kann den Scout bei einem einzelnen, expliziten und im
-Projekt belegten Dateiziel ueberspringen; der Explorer liefert weiterhin den
-Projektkontext.
+Der Loop startet keine Explorer-LLM-Rolle. Kontextwerkzeuge in
+`werkstatt/phases/explorer.py` kombinieren deterministische Messungen,
+Graphify-Navigation und aktuelle, hashgebundene Quellbelege. Der Adapter
+arbeitet relativ zum ausgewaehlten Projekt-Root und speichert den Graphify-
+Index projektlokal; Graphkandidaten sind Navigationshinweise, keine
+Quellbelege. Fehlt Graphify oder ist der Index ungueltig/veraltet, greifen
+die ausgewiesenen Such-Rueckfallpfade. Explorer-/Graphify-Retrieval ist nur
+lokal auf kleinen kuratierten Beispielen gemessen und noch nicht fuer beliebige
+Repositories oder den Server verifiziert.
 
 ### 2.2 Architect (werkstatt/architect.py, Prosa-Modus)
 

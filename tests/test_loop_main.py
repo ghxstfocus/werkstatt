@@ -17,6 +17,7 @@ import contextlib
 import json
 import os
 import signal
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -854,6 +855,13 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
     )
 
     run_id = "p-resume-final-verify"
+    repository_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
     phase_state = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     (tmp_path / "app").mkdir()
     (tmp_path / "app" / "resume.py").write_text(
@@ -893,12 +901,11 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
         ]
         return True
 
-    def commit(state: RunState) -> tuple[bool, str]:
-        state.progress_written_at_commit = True
-        return True, "committed-resume"
+    def commit_only(_state: RunState) -> tuple[bool, str]:
+        return True, repository_head
 
     monkeypatch.setattr(
-        loop, "_phase_explorer_and_setup",
+        loop, "_phase_project_context_tools",
         lambda _state, _goal, _project, saved: (0, saved),
     )
     monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
@@ -908,18 +915,29 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
     monkeypatch.setattr(
         finalize, "_hat_human_review_tasks", lambda _phase: False,
     )
-    monkeypatch.setattr(finalize, "_phase_end_reflection", lambda _state: True)
     monkeypatch.setattr(finalize, "_verify_patches", verify)
+    monkeypatch.setattr(loop, "_verify_patches", verify)
+    monkeypatch.setattr(loop, "_git_dirty", lambda _path: False)
     monkeypatch.setattr(
         finalize, "_post_commit_snapshot_check",
         lambda *_args: (True, {"worktree_clean": True}),
     )
     monkeypatch.setattr("werkstatt.progress.append", lambda *_a, **_kw: None)
-    monkeypatch.setattr("werkstatt.committer._committe_zielprojekt", commit)
+    monkeypatch.setattr(
+        finalize, "_approved_commit",
+        commit_only,
+    )
+    monkeypatch.setattr(
+        finalize.subprocess,
+        "run",
+        lambda args, **_kwargs: subprocess.CompletedProcess(
+            args, 0, stdout=repository_head, stderr="",
+        ),
+    )
     monkeypatch.setattr(
         "werkstatt.reviewer.run_phase_end_review", lambda _state: True,
     )
-    monkeypatch.setattr(loop, "_git_head", lambda _path: "base-commit")
+    monkeypatch.setattr(loop, "_git_head", lambda _path: repository_head)
     monkeypatch.setattr(loop, "_git_dirty", lambda _path: False)
     monkeypatch.setattr(
         "werkstatt.failure_record._worktree_fingerprint",
@@ -936,7 +954,7 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
         ])
 
     record = EventStore().get_run_record("p", run_id)
-    assert rc == 0
+    assert rc == 0, record["checkpoint"] if record is not None else None
     assert verify_phases == ["phase_end", "phase_end"]
     assert record is not None
     assert record["status"] == "completed"

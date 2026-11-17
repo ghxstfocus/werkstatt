@@ -28,6 +28,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from werkstatt import loop as loop_mod
+from werkstatt.phase_state import PhaseState
 from werkstatt.state import RunState
 
 
@@ -46,6 +47,26 @@ def _mk_state(tmp_path: Path, *, tasks: list[dict]) -> RunState:
     s.tasks = tasks
     s.phasen = []
     return s
+
+
+def _approved_checkpoint(state: RunState) -> PhaseState:
+    """Give task executor tests the current persisted plan contract."""
+    state.run_id = "builder-failure-test-run"
+    phase = PhaseState(
+        state.project_name,
+        base_dir=Path(state.project_dir) / ".werkstatt",
+    )
+    phase.run_id = state.run_id
+    phase.init_new(
+        state.aufgabe,
+        state.tasks,
+        tests=["python -c pass"],
+        akzeptanzkriterien=["The checkpoint task outcome is recorded."],
+    )
+    phase.data["plan_complete"] = True
+    phase.bind_approved_plan()
+    phase.save()
+    return phase
 
 
 def _common_mocks(monkeypatch, *, builder_fn, reviewer_fn, reflection_fn):
@@ -68,6 +89,14 @@ def _common_mocks(monkeypatch, *, builder_fn, reviewer_fn, reflection_fn):
             monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
 
 
+def _capture_audits(monkeypatch, audits: list[tuple]) -> None:
+    from werkstatt.phases import tasks as task_executor
+
+    sink = lambda kind, payload, *args, **kwargs: audits.append((kind, payload))
+    monkeypatch.setattr(loop_mod, "audit", sink)
+    monkeypatch.setattr(task_executor, "audit", sink)
+
+
 def test_builder_failed_mit_grund(tmp_path: Path, monkeypatch) -> None:
     """C: Audit loop_task_failed enthaelt grund='builder_failed'."""
     st = _mk_state(tmp_path, tasks=[
@@ -75,8 +104,7 @@ def test_builder_failed_mit_grund(tmp_path: Path, monkeypatch) -> None:
          "task_files": ["core/x.py"]},
     ])
     _audits: list[tuple] = []
-    monkeypatch.setattr(loop_mod, "audit",
-                        lambda k, p, *a, **kw: _audits.append((k, p)))
+    _capture_audits(monkeypatch, _audits)
 
     def _builder_fail(_s):
         _s.patches = []
@@ -95,7 +123,9 @@ def test_builder_failed_mit_grund(tmp_path: Path, monkeypatch) -> None:
         reflection_fn=_no_refl,
     )
 
-    loop_mod.run_pipeline_loop("p", "a", [st])
+    loop_mod.run_pipeline_loop(
+        "p", "a", [st], phase_state=_approved_checkpoint(st),
+    )
     # Task ist failed — aber das Audit MUSS den Grund nennen.
     failed_kinds = [
         p for k, p in _audits if k == "loop_task_failed"
@@ -104,133 +134,23 @@ def test_builder_failed_mit_grund(tmp_path: Path, monkeypatch) -> None:
         f"kein loop_task_failed-Audit; kinds={[k for k, _ in _audits]}"
     )
     assert any(
-        isinstance(p, dict) and p.get("grund") == "builder_failed"
+        isinstance(p, dict)
+        and p.get("reason") == "builder_failed_at_checkpoint"
+        and p.get("coordinator_reentry") is True
         for p in failed_kinds
-    ), f"loop_task_failed ohne grund=builder_failed: {failed_kinds}"
+    ), f"Builder-Fehler wurde nicht am Checkpoint zurueckgegeben: {failed_kinds}"
 
 
-def test_builder_patch_bereits_erfuellt(
+def test_patch_apply_failure_returns_to_coordinator_without_reflection(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """B: t2 kein wirksamer Patch, prior done auf gleicher Datei -> done."""
-    st = _mk_state(tmp_path, tasks=[
-        {"id": "t1", "name": "T1", "action": "update",
-         "task_files": ["core/x.py"]},
-        {"id": "t2", "name": "T2", "action": "update",
-         "task_files": ["core/x.py"]},
-    ])
-    _audits: list[tuple] = []
-    _builder_calls = {"n": 0}
-    # t1-Patch old="a = 1", new="b = 2" muss auf Datei passen.
-    (tmp_path / "core" / "x.py").write_text("a = 1\n")
-
-    monkeypatch.setattr(loop_mod, "audit",
-                        lambda k, p, *a, **kw: _audits.append((k, p)))
-
-    def _builder(_s):
-        _builder_calls["n"] += 1
-        if _builder_calls["n"] == 1:
-            _s.patches = [{"action": "update", "file": "core/x.py",
-                           "old_string": "a = 1", "new_string": "b = 2"}]
-            _s.applied_count = 1
-            return True
-        # t2: kein wirksamer Patch (Datei bereits im Zielzustand).
-        _s.patches = []
-        _s.applied_count = 0
-        return False
-
-    def _rev(_s):
-        return True
-
-    def _refl(_s, **kw):
-        return False
-
-    _common_mocks(
-        monkeypatch,
-        builder_fn=_builder,
-        reviewer_fn=_rev,
-        reflection_fn=_refl,
-    )
-
-    def _verify_with_success_evidence(_state, *, phase=None):
-        _state.last_verify_results = [{
-            "stage_id": "pytest_full",
-            "exit_code": 0,
-            "ok": True,
-        }]
-        return True
-
-    monkeypatch.setattr(loop_mod, "_verify_patches", _verify_with_success_evidence)
-
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
-    via = [p for k, p in _audits
-           if k == "loop_task_ok" and isinstance(p, dict)
-           and p.get("via") == "builder_patch_bereits_erfuellt"]
-    assert via, (
-        "t2 nicht done via builder_patch_bereits_erfuellt; "
-        f"kinds={[k for k, _ in _audits]}"
-    )
-    assert rc == 0, f"erwartet rc=0, war {rc}; kinds={[k for k, _ in _audits]}"
-
-
-def test_builder_patch_nicht_erfuellt_ohne_prior(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """B: t2 kein wirksamer Patch, KEIN prior done auf gleicher Datei -> failed."""
-    st = _mk_state(tmp_path, tasks=[
-        {"id": "t2", "name": "T2", "action": "update",
-         "task_files": ["core/y.py"]},
-    ])
-    (tmp_path / "core" / "y.py").write_text("z = 1\n")
-    _audits: list[tuple] = []
-    monkeypatch.setattr(loop_mod, "audit",
-                        lambda k, p, *a, **kw: _audits.append((k, p)))
-
-    def _builder(_s):
-        _s.patches = []
-        return False
-
-    def _rev(_s):
-        return True
-
-    def _refl(_s, **kw):
-        return False
-
-    _common_mocks(
-        monkeypatch,
-        builder_fn=_builder,
-        reviewer_fn=_rev,
-        reflection_fn=_refl,
-    )
-
-    loop_mod.run_pipeline_loop("p", "a", [st])
-    via = [p for k, p in _audits
-           if k == "loop_task_ok" and isinstance(p, dict)
-           and p.get("via") == "builder_patch_bereits_erfuellt"]
-    assert not via, (
-        "t2 faelschlich done via builder_patch_bereits_erfuellt ohne prior done"
-    )
-    failed = [p for k, p in _audits if k == "loop_task_failed"]
-    assert failed, (
-        f"t2 nicht als failed markiert; kinds={[k for k, _ in _audits]}"
-    )
-
-
-def test_auftrag_bereits_erfuellt_im_pre_reviewer_patch_fail(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """A: Reflection False + auftrag_bereits_erfuellt + Verify gruen -> done.
-
-    Szenario Pre-Reviewer-Patch-Fail: der Patch passt nicht mehr zur
-    Datei (old_string weg), Reflection scheitert mit gesetztem Flag.
-    """
+    """A failed patch application is recorded without an inline role chain."""
     st = _mk_state(tmp_path, tasks=[
         {"id": "t1", "name": "T1", "action": "update",
          "task_files": ["core/x.py"]},
     ])
     _audits: list[tuple] = []
-    monkeypatch.setattr(loop_mod, "audit",
-                        lambda k, p, *a, **kw: _audits.append((k, p)))
+    _capture_audits(monkeypatch, _audits)
 
     def _builder(_s):
         _s.patches = [{"action": "update", "file": "core/x.py",
@@ -242,10 +162,10 @@ def test_auftrag_bereits_erfuellt_im_pre_reviewer_patch_fail(
         _s.reviewer_bugs = [{"severity": "high", "description": "fake"}]
         return False
 
+    reflection_calls = []
+
     def _refl(_s, **kw):
-        # Reflection setzt Flag (Datei bereits im Zielzustand), gibt
-        # aber False zurueck (Stagnation).
-        _s.auftrag_bereits_erfuellt = True
+        reflection_calls.append(True)
         return False
 
     _common_mocks(
@@ -255,15 +175,11 @@ def test_auftrag_bereits_erfuellt_im_pre_reviewer_patch_fail(
         reflection_fn=_refl,
     )
 
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
-    done_audits = [
-        p for k, p in _audits
-        if k == "loop_task_ok" and isinstance(p, dict)
-    ]
-    via = [p for p in done_audits
-           if "auftrag_bereits_erfuellt" in str(p.get("via", ""))]
-    assert via, (
-        "t1 nicht done via auftrag_bereits_erfuellt nach Reflection; "
-        f"kinds={[k for k, _ in _audits]}"
+    rc = loop_mod.run_pipeline_loop(
+        "p", "a", [st], phase_state=_approved_checkpoint(st),
     )
-    assert rc == 0, f"erwartet rc=0, war {rc}"
+    assert reflection_calls == []
+    assert not any(kind == "loop_task_ok" for kind, _ in _audits)
+    assert any(kind == "loop_patch_old_string_not_found" for kind, _ in _audits)
+    assert any(kind == "loop_task_failed" for kind, _ in _audits)
+    assert rc != 0

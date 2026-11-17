@@ -1,19 +1,14 @@
-"""Werkstatt-Phasen — Fassade (OP-139 Phase 2b).
+"""Compatibility facade for checkpoint action executors.
 
-Phase-Orchestrierung lebt in werkstatt/phases/*. Diese Datei
-re-exportiert die Phasen-Funktionen und die _common-Stubs fuer
-Rueckwaerts-Kompatibilitaet.
-
-Modul-Referenzen (_tasks_mod, _plan_mod, _explorer_mod,
-_review_mod, _finalize_mod) sind fuer AST-Guard-Tests gedacht,
-die raw-Quelltext ueber alle Phasen-Dateien scannen muessen.
+The runtime coordinator selects actions from persisted evidence; these
+modules are implementation boundaries, not a mandatory global phase order.
+Re-exports remain for callers migrating from the former phase-oriented API.
 """
 from __future__ import annotations
 
 # Modul-Referenzen (fuer AST-Guard-Tests)
 from . import explorer as _explorer_mod  # noqa: F401
 from . import finalize as _finalize_mod  # noqa: F401
-from . import plan as _plan_mod  # noqa: F401
 from . import review as _review_mod  # noqa: F401
 from . import tasks as _tasks_mod  # noqa: F401
 
@@ -106,12 +101,12 @@ from ._common import (
     run_reviewer as run_reviewer,
 )
 
-# Phasen-Funktionen
+# Historical callable names retained as compatibility exports.
 from .explorer import _phase_explorer_and_setup as _phase_explorer_and_setup
+from .explorer import _phase_project_context_tools as _phase_project_context_tools
 from .finalize import _phase_end_review_action as _phase_end_review_action
 from .finalize import _phase_end_verify_action as _phase_end_verify_action
 from .finalize import _phase_finalize as _phase_finalize
 from .finalize import _phase_human_gate_action as _phase_human_gate_action
-from .plan import _phase_plan_and_preflight as _phase_plan_and_preflight
 from .review import _phase_review_gate as _phase_review_gate
 from .tasks import _phase_tasks_loop as _phase_tasks_loop

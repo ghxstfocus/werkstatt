@@ -797,10 +797,17 @@ def create_app() -> FastAPI:
                         raise HTTPException(
                             status_code=500, detail="STATUS.md nicht lesbar",
                         ) from exc
+                    try:
+                        _progress_text = (_source_pd / "PROGRESS.md").read_text(
+                            encoding="utf-8", errors="replace",
+                        )
+                    except OSError:
+                        _progress_text = ""
                     _entscheidung = select_next_op(
                         _status_text,
                         _completed_op_ids(_source_pd, _status_text),
                         accepted_adrs=_accepted_adr_ids(_source_pd),
+                        progress_text=_progress_text,
                     )
                     explizite_auswahl = next(
                         (
@@ -836,22 +843,15 @@ def create_app() -> FastAPI:
                         )
         
                     if not aufgabe:
-                        # Volltext aus STATUS.md (nicht nur Titel): der Explorer
-                        # braucht konkrete Symbole und Pfade als Suchbegriffe.
-                        _status_md = _source_pd / "docs" / "STATUS.md"
-                        try:
-                            _status_text = _status_md.read_text(
-                                encoding="utf-8", errors="replace")
-                        except OSError as exc:
+                        from werkstatt.web.op_selector import op_assignment_from_status
+                        aufgabe = op_assignment_from_status(
+                            _status_text, op_id, _progress_text,
+                        )
+                        if not aufgabe:
                             raise HTTPException(
-                                status_code=500, detail="STATUS.md nicht lesbar",
-                            ) from exc
-                        _m_op = re.search(
-                            rf"^### {re.escape(op_id)}:.*?(?=^### OP-|\Z)",
-                            _status_text, re.MULTILINE | re.DOTALL)
-                        if not _m_op:
-                            raise HTTPException(status_code=404, detail="OP-Text nicht gefunden")
-                        aufgabe = _m_op.group(0).strip()
+                                status_code=404,
+                                detail="OP-Pflichtfelder nicht lesbar",
+                            )
         
                 if not aufgabe and not op_id:
                     try:
@@ -862,10 +862,17 @@ def create_app() -> FastAPI:
                         raise HTTPException(
                             status_code=500, detail="STATUS.md nicht lesbar",
                         ) from exc
+                    try:
+                        progress_text = (_source_pd / "PROGRESS.md").read_text(
+                            encoding="utf-8", errors="replace",
+                        )
+                    except OSError:
+                        progress_text = ""
                     entscheidung = select_next_op(
                         status_text,
                         _completed_op_ids(_source_pd, status_text),
                         accepted_adrs=_accepted_adr_ids(_source_pd),
+                        progress_text=progress_text,
                     )
                     if entscheidung["zustand"] == "needs_input":
                         raise HTTPException(

@@ -1,4 +1,4 @@
-"""Phase: _phase_tasks_loop (OP-139 Phase 2b)."""
+"""Checkpoint task executor and evidence-based task recovery."""
 from __future__ import annotations
 
 import json
@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from werkstatt.antipattern import scan_patches
+from werkstatt.checkpoint_coordinator import (
+    choose_task_checkpoint_action as _checkpoint_decision_payload,
+)
 from werkstatt.event_store import EventStore
 from werkstatt.render import (
     group_end,
@@ -19,49 +22,23 @@ from werkstatt.render import (
     task_started,
 )
 from werkstatt.state import RunState, check_run_lease
-from werkstatt.verify_classify import filtere_harte_verify_fehler
 
 from ._common import (
     _apply_one_patch,
     _call_hook,
     _delete_ziel_erlaubt,
-    _gate_failed_payload,
     _get_git_diff_for_hook,
-    _human_gate,
-    _patches_wirklich_angewendet,
-    _pruefe_prior_failed_dependency,
-    _reflection_loop,
     _reset_task_state,
     _reviewer_rejected_payload,
     _ruff_fix_changed,
     _run_with_progress,
     _task_ende,
     _verify_patches,
-    _verify_patches_soft,
     _with_spinner,
     audit,
     run_builder,
     run_reviewer,
 )
-
-_RECOVERABLE_BUILDER_FAILURES = frozenset({
-    "invalid_model_response",
-    "invalid_patch_response",
-    "invalid_patch_import",
-    "no_patch_proposed",
-    "ambiguous_patch_anchor",
-    "invalid_patch_scope",
-    "invalid_patch_action",
-    "no_effect_patch",
-})
-
-
-def _builder_failure_recoverable(state: RunState) -> tuple[bool, str]:
-    """Retry only failures with a concrete, correctable Builder result."""
-    reason = getattr(state, "builder_failure_reason", "")
-    if not isinstance(reason, str) or not reason:
-        return False, "failure_reason_missing"
-    return reason in _RECOVERABLE_BUILDER_FAILURES, reason
 
 
 def _verify_failure_detail(state: RunState) -> str | None:
@@ -86,101 +63,6 @@ def _verify_failure_detail(state: RunState) -> str | None:
     if not evidence["errors"]:
         return None
     return json.dumps(evidence, ensure_ascii=False, sort_keys=True)
-
-
-def _reflect_verify_failure(state: RunState, phase: str) -> bool:
-    """Recover failing verify stages and re-run the complete phase contract."""
-    from werkstatt.verify import _stage_ids
-
-    configured = set(_stage_ids(Path(state.project_dir)))
-    budget = state.budget if isinstance(state.budget, dict) else {}
-    has_run_budget = any(
-        isinstance(budget.get(key), int)
-        and not isinstance(budget.get(key), bool)
-        and budget[key] > 0
-        for key in ("max_llm_calls", "max_minutes")
-    )
-    seen_stage_sets: set[tuple[str, ...]] = set()
-
-    while True:
-        errors = getattr(state, "last_verify_errors", None)
-        if not isinstance(errors, list):
-            errors = []
-        targeted = sorted({
-            stage_id
-            for stage_id in configured
-            if any(
-                str(error).startswith((
-                    f"{stage_id}:",
-                    f"{stage_id}-Fehler:",
-                ))
-                for error in errors
-            )
-        })
-        if not targeted or not has_run_budget:
-            reason = (
-                "verify_stage_unbekannt" if not targeted
-                else "run_budget_fehlt"
-            )
-            audit(
-                "loop_reflection_bounded_fallback",
-                {
-                    "phase": phase,
-                    "reason": reason,
-                    "failed_stage_ids": sorted({
-                        str(error).split(":", 1)[0].strip()
-                        for error in errors
-                        if ":" in str(error)
-                    }),
-                    "configured_stage_ids": sorted(configured),
-                },
-                state.project_dir,
-                state.project_name,
-            )
-            return _reflection_loop(state)
-
-        stage_set = tuple(targeted)
-        if stage_set in seen_stage_sets:
-            audit(
-                "loop_reflection_stagnation_abort",
-                {
-                    "phase": phase,
-                    "stage_ids": list(stage_set),
-                    "reason": "verify_stage_set_recurred_after_full_check",
-                },
-                state.project_dir,
-                state.project_name,
-            )
-            return False
-        seen_stage_sets.add(stage_set)
-
-        audit(
-            "loop_reflection_targeted_recovery",
-            {
-                "phase": phase,
-                "stage_ids": targeted,
-                "run_budget": {
-                    key: budget[key]
-                    for key in ("max_llm_calls", "max_minutes")
-                    if key in budget
-                },
-            },
-            state.project_dir,
-            state.project_name,
-        )
-        if not _reflection_loop(
-            state,
-            max_runden=None,
-            phase=phase,
-            verify_stage_ids=set(targeted),
-        ):
-            return False
-
-        # A targeted green result proves only those stages. Re-run the full
-        # phase contract before letting the task proceed to its reviewer.
-        hart_ok, _soft_errors = _verify_patches_soft(state, phase=phase)
-        if hart_ok:
-            return True
 
 
 def _audit_task_ok(
@@ -353,226 +235,7 @@ def _read_dependency_sources(
     return sources, ""
 
 
-def _checkpoint_decision_payload(
-    phase_state: Any,
-    next_task: dict[str, Any] | None,
-    *,
-    state: RunState | None = None,
-) -> dict[str, Any]:
-    """Describe the evidence-based next action at a persisted task boundary."""
-    task_progress = phase_state.progress()
-    criteria = phase_state.criteria_progress()
-    evidence_check = getattr(
-        phase_state, "task_verify_evidence_is_current", None,
-    )
-    file_hash_check = getattr(phase_state, "_task_file_hashes", None)
-    verification_tasks: dict[str, list[str]] = {
-        "current": [], "reverify_possible": [], "unverifiable": [],
-    }
-    phase_data = getattr(phase_state, "data", {})
-    task_records = (
-        phase_data.get("tasks", []) if isinstance(phase_data, dict) else []
-    )
-    if isinstance(task_records, list):
-        for record in task_records:
-            if (
-                not isinstance(record, dict)
-                or record.get("status") == "superseded"
-                or not record.get("criterion_refs")
-            ):
-                continue
-            task_id = record.get("id")
-            if not isinstance(task_id, str) or not task_id.strip():
-                verification_tasks["unverifiable"].append("<missing-task-id>")
-                continue
-            try:
-                is_current = (
-                    callable(evidence_check)
-                    and evidence_check(task_id, record.get("verify_evidence"))
-                    is True
-                )
-            except (OSError, RuntimeError, TypeError, ValueError):
-                is_current = False
-            if is_current:
-                verification_tasks["current"].append(task_id[:120])
-                continue
-            try:
-                can_reverify = (
-                    callable(file_hash_check)
-                    and isinstance(file_hash_check(record.get("task_files")), dict)
-                )
-            except (OSError, RuntimeError, TypeError, ValueError):
-                can_reverify = False
-            bucket = "reverify_possible" if can_reverify else "unverifiable"
-            verification_tasks[bucket].append(task_id[:120])
-    verify_total = sum(len(items) for items in verification_tasks.values())
-    verification_snapshot: dict[str, Any] = {
-        "required_task_count": verify_total,
-        "current_count": len(verification_tasks["current"]),
-        "reverify_possible_count": len(verification_tasks["reverify_possible"]),
-        "unverifiable_count": len(verification_tasks["unverifiable"]),
-    }
-    for name, task_ids in verification_tasks.items():
-        verification_snapshot[name] = task_ids[:20]
-        verification_snapshot[f"{name}_omitted_count"] = max(
-            0, len(task_ids) - 20,
-        )
-    verification_complete = (
-        bool(verification_snapshot["required_task_count"])
-        and verification_snapshot["current_count"] == verify_total
-    )
-    if next_task is not None:
-        raw_action = next_task.get("action", "update")
-        action = str("update" if raw_action is None else raw_action)
-        executor = {
-            "read": "read_only_task",
-            "verify": "verify_only",
-            "create": "builder",
-            "update": "builder",
-        }.get(action)
-        if executor is None:
-            decision = "reject_invalid_task_action"
-            reason = f"Task-Aktion {action!r} hat keinen freigegebenen Executor."
-        else:
-            decision = "execute_planned_task"
-            reason = (
-                f"{executor} fuer naechsten abhaengigkeitsfreien Task "
-                "aus dem freigegebenen Graph gewaehlt."
-            )
-    elif task_progress.get("pending", 0):
-        executor = None
-        decision = "resolve_blocked_graph"
-        reason = "Keine ausfuehrbare Task-Graph-Node; offene Tasks bleiben sichtbar."
-    elif task_progress.get("blocked", 0):
-        executor = None
-        decision = "reject_blocked_graph"
-        reason = (
-            "Der Graph wurde aufgeloest, enthaelt aber weiterhin blockierte "
-            "Tasks; der Checkpoint stoppt statt dieselben Tasks erneut "
-            "aufzuloesen."
-        )
-    else:
-        executor = "phase_end_verify"
-        if task_progress.get("failed", 0):
-            from werkstatt.criteria_replan import eligible_failed_task_ids
-
-            replannable = (
-                criteria.get("tracked") is True
-                and (
-                    criteria.get("valid") is True
-                    or criteria.get("error") == "criteria_not_assigned"
-                )
-                and eligible_failed_task_ids(
-                    phase_state, criteria.get("uncovered"),
-                )
-            )
-            if replannable:
-                executor = "planner_and_plan_gate"
-                decision = "replan_failed_criteria"
-                reason = (
-                    "Alle Tasks sind terminal; fehlgeschlagene, "
-                    "kriteriumsgebundene Recovery ist erschoepft. "
-                    "Nur bereits freigegebene offene Kriterien duerfen "
-                    "neu geplant und erneut freigegeben werden."
-                )
-            else:
-                decision = "verify_with_failed_tasks"
-                reason = (
-                    "Task-Graph erschoepft, aber mindestens ein Task "
-                    "ist fehlgeschlagen und nicht sicher neu planbar."
-                )
-        elif (
-            task_progress.get("total", 0) > 0
-            and task_progress.get("done", 0) == task_progress.get("total", 0)
-            and criteria.get("tracked") is True
-            and criteria.get("error") == "criteria_not_assigned"
-            and criteria.get("uncovered")
-        ):
-            executor = "planner_and_plan_gate"
-            decision = "replan_unassigned_criteria"
-            reason = (
-                "Alle geplanten Tasks sind erledigt, aber explizite "
-                "Akzeptanzkriterien sind keinem Task zugeordnet; nur diese "
-                "Kriterien muessen am Checkpoint neu geplant werden."
-            )
-        elif criteria.get("tracked") and not criteria.get("valid"):
-            decision = "verify_invalid_criteria_mapping"
-            reason = "Kriterienzuordnung ist ungueltig oder unvollstaendig."
-        elif criteria.get("tracked") and criteria.get("uncovered"):
-            decision = "verify_with_open_criteria"
-            reason = "Task-Graph erschoepft, aber Kriterienabdeckung ist unvollstaendig."
-        elif (
-            criteria.get("tracked") is True
-            and criteria.get("valid") is True
-            and not criteria.get("uncovered")
-            and verification_snapshot["unverifiable_count"]
-        ):
-            executor = None
-            decision = "reject_criteria_verify_scope_missing"
-            reason = (
-                "Kriterien und Taskstatus sind vollstaendig, aber fuer "
-                f"{verification_snapshot['unverifiable_count']} kriteriumsgebundene "
-                "Tasks fehlt ein aktueller Dateiscope fuer taskgebundene "
-                "Verify-Belege. Phase-End-Verify wird nicht als Ersatz gewertet."
-            )
-        elif not criteria.get("tracked"):
-            decision = "verify_untracked_criteria"
-            reason = "Keine belegte Kriterienzuordnung; Abschluss darf Zielerreichung nicht behaupten."
-        else:
-            decision = "run_phase_end_verify"
-            reason = "Task-Graph abgeschlossen; finale Verify entscheidet ueber den Abschluss."
-
-    criteria_snapshot = {
-        key: criteria.get(key)
-        for key in ("tracked", "valid", "covered", "uncovered", "error")
-    }
-    candidate = bool(
-        next_task is None
-        and task_progress.get("failed", 0) == 0
-        and task_progress.get("blocked", 0) == 0
-        and task_progress.get("pending", 0) == 0
-        and criteria.get("tracked")
-        and criteria.get("valid")
-        and not criteria.get("uncovered")
-    )
-    raw_verify = getattr(state, "last_verify_results", []) if state else []
-    verify_evidence = []
-    if isinstance(raw_verify, list):
-        for result in raw_verify[-50:]:
-            if not isinstance(result, dict):
-                continue
-            stage_id = result.get("stage_id")
-            if not isinstance(stage_id, str):
-                continue
-            item: dict[str, Any] = {
-                "stage_id": stage_id[:120],
-                "ok": bool(result.get("ok", False)),
-            }
-            exit_code = result.get("exit_code")
-            if isinstance(exit_code, int) and not isinstance(exit_code, bool):
-                item["exit_code"] = exit_code
-            artifact_hash = result.get("artifact_sha256")
-            if isinstance(artifact_hash, str):
-                item["artifact_sha256"] = artifact_hash[:128]
-            verify_evidence.append(item)
-    return {
-        "decision": decision,
-        "reason": reason,
-        "next_task_id": next_task.get("id") if next_task else None,
-        "next_action": next_task.get("action") if next_task else None,
-        "verification_only": bool(
-            next_task and next_task.get("verification_only") is True
-        ),
-        "next_executor": executor,
-        "task_progress": task_progress,
-        "criteria_task_coverage": criteria_snapshot,
-        "criteria_task_verification": verification_snapshot,
-        "last_verify_evidence": verify_evidence,
-        "goal_candidate_before_final_verify": candidate and verification_complete,
-        "final_verify_required": True,
-    }
-
-
+# Compatibility export; policy lives with the checkpoint coordinator.
 
 def _persist_run_checkpoint(
     store: EventStore,
@@ -927,7 +590,7 @@ def _persist_run_checkpoint(
             max(result_seqs_above_offset),
         )
     checkpoint["safe_point"] = {
-        "phase": "build",
+        "kind": "coordinator_checkpoint",
         "next_task_id": next_task.get("id") if next_task else None,
         "completed_task_ids": [
             task_record.get("id")
@@ -1005,20 +668,6 @@ def _persist_run_checkpoint(
         )
 
 
-def _run_chat_recovery_reviewer(state) -> bool:
-    """Spend the single durable Reviewer call paired with Chat recovery."""
-    previous = bool(getattr(
-        state, "reflection_chat_builder_reserve_active", False,
-    ))
-    state.reflection_chat_builder_reserve_active = True
-    try:
-        from werkstatt.reviewer import run_reviewer
-
-        return bool(run_reviewer(state))
-    finally:
-        state.reflection_chat_builder_reserve_active = previous
-
-
 def _phase_tasks_loop(
     state: RunState,
     phase_state,
@@ -1027,14 +676,12 @@ def _phase_tasks_loop(
     *,
     coordinator_decision: dict[str, Any] | None = None,
 ) -> tuple[int, int, list]:
-    """Phase 3 (Fix AZ Stufe 8-C, 2026-10-31): Autonomer Task-Loop.
+    """Execute one coordinator-selected task checkpoint.
 
-    Extrahiert aus run_pipeline_loop. Enthaelt den while-True-Loop
-    mit Task-Build, Reviewer, Reflection, Task-Fail-Continue.
-
-    Rueckgabe: (rc, tasks_ok, tasks).
-    rc=1 -> Caller gibt direkt zurueck (Abbruch).
-    rc=0 -> weiter mit Phase-End + Human-Gate.
+    ``max_task_steps`` limits this call to the requested number of worker
+    actions so the outer coordinator can reassess evidence and choose again.
+    Return ``(rc, tasks_ok, tasks)``; the caller persists failures and
+    dispatches again from the resulting checkpoint.
     """
     if max_task_steps is not None and max_task_steps < 1:
         raise ValueError("max_task_steps must be positive or None")
@@ -1042,6 +689,7 @@ def _phase_tasks_loop(
         raise ValueError("task_index_offset must be non-negative")
     pd = state.project_dir
     pn = state.project_name
+    store = EventStore()
 
     # OP-381g: loop_phase-Marker fuer Timeline-Gruppierung.
     # Ohne diesen Marker landen alle Builder/Verify/Reflection/Reviewer-
@@ -1051,9 +699,8 @@ def _phase_tasks_loop(
     # Knoten nur bei naechstem loop_phase-Event, siehe inspector.py Z.965).
     audit("loop_phase", {"phase": "build", "status": "start"}, pd, pn)
 
-    # 3. Autonomer Task-Loop (Claude-Code-Prinzip)
-    #    Alle Tasks werden abgearbeitet ohne Unterbrechung.
-    #    Human-Gate kommt nur am Ende der Phase.
+    # The compatibility executor processes the selected task and returns at
+    # the next durable boundary for coordinator reassessment.
     tasks = state.tasks
     # Resume after a final-verify failure may find every planned task already
     # done. Count persisted work so finalization can re-run verification instead
@@ -1065,65 +712,29 @@ def _phase_tasks_loop(
     state.tasks_ok_counter = tasks_ok
     i = task_index_offset
     task_steps = 0
-    budget_chat_handoff_attempted = False
+    if coordinator_decision is None:
+        audit(
+            "loop_failed",
+            {
+                "reason": "task_checkpoint_requires_coordinator_decision",
+                "executor": "task_checkpoint",
+            },
+            pd,
+            pn,
+        )
+        phase_state.save()
+        return 1, tasks_ok, tasks
     from werkstatt.agent import _enforce_run_budget
     # M-473: while-Loop statt for. Nach ADaPT-Split wird die
     # Schleife neu gestartet, damit Sub-Tasks gebaut werden.
     while True:
         check_run_lease(state)
         if _enforce_run_budget(state):
-            # A write task at the exhausted boundary must reach the Builder's
-            # local budget guard once. Its explicit failure then lets the
-            # Reflection wrapper consult the originating Chat's separate,
-            # bounded recovery reserve. No normal provider call is permitted.
-            pending_for_chat = phase_state.get_next_task()
-            raw_action_for_chat = (
-                pending_for_chat.get("action", "update")
-                if isinstance(pending_for_chat, dict) else None
-            )
-            action_for_chat = (
-                "update" if raw_action_for_chat is None
-                else raw_action_for_chat
-            )
-            chat_budget_handoff = bool(
-                not budget_chat_handoff_attempted
-                and getattr(state, "chat_origin_session_id", None)
-                and action_for_chat in {"create", "update"}
-            )
-            if not chat_budget_handoff:
-                phase_state.save()
-                return 1, tasks_ok, tasks
-            budget_chat_handoff_attempted = True
+            phase_state.save()
+            return 1, tasks_ok, tasks
         from werkstatt.audit import get_run_id
         run_id = get_run_id()
         if run_id:
-            store = EventStore()
-            next_task = phase_state.get_next_task()
-            _persist_run_checkpoint(
-                store, pn, run_id, phase_state, next_task,
-                run_state=state,
-            )
-            from werkstatt.run_followups import (
-                FollowupReconciliationError,
-                reconcile_chat_followups,
-            )
-            try:
-                if reconcile_chat_followups(
-                    state, phase_state, store, pn, run_id,
-                ):
-                    tasks = state.tasks
-            except FollowupReconciliationError as exc:
-                audit(
-                    "loop_failed",
-                    {
-                        "reason": "chat_followup_reconciliation",
-                        "error": str(exc)[:500],
-                    },
-                    pd,
-                    pn,
-                )
-                phase_state.save()
-                return 1, tasks_ok, tasks
             next_task = phase_state.get_next_task()
         else:
             next_task = phase_state.get_next_task()
@@ -1154,57 +765,58 @@ def _phase_tasks_loop(
             if audit_result is False:
                 phase_state.save()
                 return 1, tasks_ok, tasks
-        if coordinator_decision is not None:
-            fresh_decision = decision_payload.get("decision")
-            fresh_action = {
-                "execute_planned_task": "execute_task_checkpoint",
-                "resolve_blocked_graph": "resolve_task_graph",
-                "replan_unassigned_criteria": "replan_unassigned_criteria",
-                "replan_failed_criteria": "replan_failed_criteria",
-            }.get(fresh_decision) if isinstance(fresh_decision, str) else None
-            dispatch_matches = (
-                coordinator_decision.get("coordinator_action") == fresh_action
-                and coordinator_decision.get("decision")
-                == decision_payload.get("decision")
-                and coordinator_decision.get("next_task_id")
-                == decision_payload.get("next_task_id")
-                and coordinator_decision.get("next_executor")
-                == decision_payload.get("next_executor")
+        fresh_decision = decision_payload.get("decision")
+        fresh_action = {
+            "execute_planned_task": "execute_task_checkpoint",
+            "verify_task_checkpoint": "verify_task_checkpoint",
+            "review_task_checkpoint": "review_task_checkpoint",
+            "complete_task_checkpoint": "complete_task_checkpoint",
+            "recover_verify_failure_checkpoint": "recover_verify_failure_checkpoint",
+            "reject_stale_verify_failure_checkpoint": "reject_stale_verify_failure_checkpoint",
+            "resolve_blocked_graph": "resolve_task_graph",
+            "replan_unassigned_criteria": "replan_unassigned_criteria",
+            "replan_failed_criteria": "replan_failed_criteria",
+        }.get(fresh_decision) if isinstance(fresh_decision, str) else None
+        dispatch_matches = (
+            coordinator_decision.get("coordinator_action") == fresh_action
+            and coordinator_decision.get("decision")
+            == decision_payload.get("decision")
+            and coordinator_decision.get("next_task_id")
+            == decision_payload.get("next_task_id")
+            and coordinator_decision.get("next_executor")
+            == decision_payload.get("next_executor")
+        )
+        if not dispatch_matches:
+            audit(
+                "loop_coordinator_dispatch_stale",
+                {
+                    "requested_action": coordinator_decision.get(
+                        "coordinator_action",
+                    ),
+                    "current_action": fresh_action,
+                    "requested_task_id": coordinator_decision.get(
+                        "next_task_id",
+                    ),
+                    "current_task_id": decision_payload.get(
+                        "next_task_id",
+                    ),
+                },
+                pd,
+                pn,
             )
-            if not dispatch_matches:
-                audit(
-                    "loop_coordinator_dispatch_stale",
-                    {
-                        "requested_action": coordinator_decision.get(
-                            "coordinator_action",
-                        ),
-                        "current_action": fresh_action,
-                        "requested_task_id": coordinator_decision.get(
-                            "next_task_id",
-                        ),
-                        "current_task_id": decision_payload.get(
-                            "next_task_id",
-                        ),
-                    },
-                    pd,
-                    pn,
-                )
-                phase_state.save()
-                state.coordinator_dispatch_stale = True
-                return 0, tasks_ok, tasks
-            # The run coordinator owns the action choice. This worker only
-            # revalidates that choice against the latest persisted checkpoint
-            # after follow-up reconciliation, then executes the exact task.
-            decision_payload = coordinator_decision
+            phase_state.save()
+            state.coordinator_dispatch_stale = True
+            return 0, tasks_ok, tasks
+        # The run coordinator owns the action choice. This worker only
+        # revalidates that choice against the latest persisted checkpoint
+        # after follow-up reconciliation, then executes the exact task.
+        decision_payload = coordinator_decision
 
         decision = decision_payload["decision"]
-        if (
-            max_task_steps is not None
-            and task_steps >= max_task_steps
-            and decision == "execute_planned_task"
-        ):
-            # Return at a durable task boundary. The outer run coordinator
-            # re-evaluates the goal/evidence before dispatching another worker.
+        if max_task_steps is not None and task_steps >= max_task_steps:
+            # A checkpoint may now request a different role (verify, review,
+            # or recovery) after the previous action. Do not run that second
+            # role under the stale coordinator decision.
             phase_state.save()
             return 0, tasks_ok, tasks
         if decision == "reject_invalid_task_action":
@@ -1238,6 +850,11 @@ def _phase_tasks_loop(
                 )
             ]
             tasks_ok = phase_state.progress().get("done", 0)
+            if max_task_steps is not None:
+                # Planning is one checkpoint action too. Persist its result
+                # and let the coordinator select the next role explicitly.
+                phase_state.save()
+                return 0, tasks_ok, tasks
             continue
         if decision == "resolve_blocked_graph":
             # OP-163: unerfuellte Deps -> als blocked markieren.
@@ -1258,7 +875,14 @@ def _phase_tasks_loop(
             if _pending_after:
                 phase_state.save()
             break
-        if decision != "execute_planned_task":
+        if decision not in {
+            "execute_planned_task",
+            "verify_task_checkpoint",
+            "review_task_checkpoint",
+            "complete_task_checkpoint",
+            "recover_verify_failure_checkpoint",
+            "reject_stale_verify_failure_checkpoint",
+        }:
             break
         if next_task is None:
             audit(
@@ -1275,7 +899,8 @@ def _phase_tasks_loop(
             return 1, tasks_ok, tasks
         next_executor = decision_payload.get("next_executor")
         if next_executor not in {
-            "read_only_task", "verify_only", "builder",
+            "read_only_task", "verify_only", "builder", "reviewer",
+            "task_completion", "verify_recovery",
         }:
             audit(
                 "state_contract_violation",
@@ -1292,9 +917,13 @@ def _phase_tasks_loop(
             return 1, tasks_ok, tasks
         task_obj = dict(next_task)  # Ephemere Handoff-Daten nicht persistieren.
         _verification_only = task_obj.get("verification_only") is True
-        if not _verification_only:
+        _review_checkpoint_action = decision in {
+            "review_task_checkpoint", "complete_task_checkpoint",
+        }
+        _verify_recovery_action = decision == "recover_verify_failure_checkpoint"
+        if not _verification_only and not _review_checkpoint_action and not _verify_recovery_action:
             i += 1
-            task_steps += 1
+        task_steps += 1
         task_id = next_task.get("id", f"t{i}")
         phase_state.mark_running(task_id)
         task_name = task_obj.get("name", f"Task {i}") if isinstance(task_obj, dict) else str(task_obj)
@@ -1312,6 +941,176 @@ def _phase_tasks_loop(
         # OP-166: per-Task-State reset, sonst leaken Fehler aus
         # vorherigen Tasks in Reflection (Loop-Test-4 t7-Bug).
         _reset_task_state(state)
+
+        if decision == "reject_stale_verify_failure_checkpoint":
+            phase_state.mark_human_review(
+                task_id,
+                grund="verify_failure_checkpoint_stale",
+            )
+            audit(
+                "loop_verify_recovery_checkpoint_rejected",
+                {"task_id": task_id, "reason": "stale_file_evidence"},
+                pd, pn,
+            )
+            group_end()
+            return 0, tasks_ok, tasks
+
+        if decision == "recover_verify_failure_checkpoint":
+            from werkstatt.roles.verify_recovery import run_verify_recovery
+
+            audit(
+                "loop_verify_recovery_started",
+                {"task_id": task_id},
+                pd, pn,
+            )
+            recovery = run_verify_recovery(state, phase_state, task_id)
+            if recovery.get("status") != "repair_handoff":
+                phase_state.mark_human_review(
+                    task_id,
+                    grund=str(recovery.get("reason") or "verify_recovery_failed"),
+                )
+            audit(
+                "loop_verify_recovery_result",
+                {"task_id": task_id, "status": recovery.get("status"),
+                 "reason": recovery.get("reason"),
+                 "stage_ids": recovery.get("stage_ids", [])},
+                pd, pn,
+            )
+            group_end()
+            return 0, tasks_ok, tasks
+
+        if decision in {
+            "review_task_checkpoint", "complete_task_checkpoint",
+        }:
+            if next_executor not in {"reviewer", "task_completion"}:
+                phase_state.save()
+                return 1, tasks_ok, tasks
+            record = phase_state.get_task(task_id)
+            review_checkpoint = (
+                record.get("review_checkpoint")
+                if isinstance(record, dict) else None
+            )
+            if (
+                not isinstance(review_checkpoint, dict)
+                or phase_state.task_review_checkpoint_is_current(task_id) is not True
+            ):
+                audit(
+                    "loop_coordinator_dispatch_stale",
+                    {
+                        "action": decision,
+                        "task_id": task_id,
+                        "reason": "review_checkpoint_verify_evidence_missing_or_stale",
+                    },
+                    pd, pn,
+                )
+                phase_state.save()
+                state.coordinator_dispatch_stale = True
+                return 0, tasks_ok, tasks
+
+            review_warnings = review_checkpoint.get("verify_warnings")
+            review_warnings = (
+                review_warnings if isinstance(review_warnings, list) else []
+            )
+            from werkstatt.review_dispatch import reviewer_dispatch_decision
+            from werkstatt.reviewer import _get_git_diff
+
+            try:
+                current_diff = _get_git_diff(
+                    project_dir=pd, task_files=task_obj.get("task_files"),
+                )
+            except (OSError, RuntimeError, TypeError, ValueError):
+                current_diff = None
+            current_review = reviewer_dispatch_decision(
+                task_obj,
+                current_diff,
+                verify_warnings=review_warnings,
+                recovery=bool(
+                    getattr(state, "reflection_chat_builder_reserve_active", False)
+                    or getattr(state, "reflection_chat_evidence", None)
+                ),
+            )
+            should_review = current_review.get("invoke_reviewer") is True
+            persisted_dispatch = decision_payload.get("review_dispatch")
+            persisted_evidence = (
+                persisted_dispatch.get("evidence")
+                if isinstance(persisted_dispatch, dict) else None
+            )
+            if (
+                (decision == "review_task_checkpoint") != should_review
+                or not isinstance(persisted_evidence, dict)
+                or current_review.get("evidence", {}).get("diff_sha256")
+                != persisted_evidence.get("diff_sha256")
+            ):
+                audit(
+                    "loop_coordinator_dispatch_stale",
+                    {
+                        "action": decision,
+                        "task_id": task_id,
+                        "reason": "review_dispatch_evidence_changed",
+                    },
+                    pd, pn,
+                )
+                phase_state.save()
+                state.coordinator_dispatch_stale = True
+                return 0, tasks_ok, tasks
+
+            if should_review:
+                state.reviewer_bugs = []
+                state.reviewer_deterministic_fail = False
+                _review_ok = _with_spinner(
+                    f"Reviewer t{i}", lambda: run_reviewer(state),
+                )
+                check_run_lease(state)
+                if not _review_ok:
+                    review_failure = json.dumps(
+                        state.reviewer_bugs or [], ensure_ascii=False,
+                    )[:1200]
+                    transitioned = _task_ende(
+                        state, phase_state, task_id, ok=False,
+                        name=task_name,
+                        failure="reviewer_rejected_at_checkpoint",
+                        failure_detail=review_failure,
+                    )
+                    if not transitioned:
+                        phase_state.save()
+                        return 1, tasks_ok, tasks
+                    audit(
+                        "loop_reviewer_rejected",
+                        _reviewer_rejected_payload(
+                            task_id, {"bugs": state.reviewer_bugs or []},
+                        ),
+                        pd, pn,
+                    )
+                    phase_state.save()
+                    return 0, tasks_ok, tasks
+
+            transitioned = _task_ende(
+                state, phase_state, task_id, ok=True, name=task_name,
+            )
+            if not transitioned:
+                phase_state.save()
+                return 1, tasks_ok, tasks
+            tasks_ok += 1
+            state.tasks_ok_counter = tasks_ok
+            _audit_task_ok(
+                transitioned, task_id, task_name, pd, pn,
+                via=("reviewer_checkpoint" if should_review
+                     else "coordinator_checkpoint"),
+            )
+            audit(
+                "loop_reviewer_checkpoint_completed",
+                {
+                    "task_id": task_id,
+                    "reviewer_invoked": should_review,
+                    "decision": decision,
+                    "diff_sha256": current_review.get(
+                        "evidence", {},
+                    ).get("diff_sha256"),
+                },
+                pd, pn,
+            )
+            phase_state.save()
+            return 0, tasks_ok, tasks
 
         if next_executor == "builder":
             read_sources, read_context_error = _read_dependency_sources(
@@ -1461,6 +1260,32 @@ def _phase_tasks_loop(
             )
             _el_task = time.monotonic() - _t_task
             if _v_ok and _evidence_ok:
+                _build_checkpoint = (
+                    task_obj.get("build_checkpoint")
+                    if isinstance(task_obj, dict) else None
+                )
+                if (
+                    coordinator_decision is not None
+                    and isinstance(_build_checkpoint, dict)
+                    and phase_state.task_build_checkpoint_is_current(task_id)
+                    and phase_state.record_task_review_checkpoint(
+                        task_id,
+                        verify_warnings=getattr(
+                            state, "last_verify_errors", [],
+                        ),
+                    )
+                ):
+                    _record = phase_state.get_task(task_id)
+                    if isinstance(_record, dict):
+                        _record.pop("verification_pending", None)
+                        _record.pop("build_checkpoint", None)
+                        phase_state.save()
+                    group_end()
+                    return 0, tasks_ok, tasks
+                try:
+                    task_done(i, len(tasks), task_name, elapsed_s=_el_task, ok=True)
+                except Exception:
+                    pass
                 task_ok(i, len(tasks), elapsed_s=_el_task)
                 group_end()
                 if not _verification_only:
@@ -1472,6 +1297,33 @@ def _phase_tasks_loop(
                     via="verify_only",
                 )
             else:
+                if coordinator_decision is not None:
+                    checkpointed = phase_state.record_task_verify_failure_checkpoint(
+                        task_id,
+                        getattr(state, "last_verify_errors", []),
+                    )
+                    if checkpointed:
+                        audit(
+                            "loop_task_verify_failure_checkpoint",
+                            {"task_id": task_id, "phase": "post_build",
+                             "error_count": min(
+                                 8, len(getattr(state, "last_verify_errors", [])),
+                             )},
+                            pd, pn,
+                        )
+                    else:
+                        phase_state.mark_human_review(
+                            task_id,
+                            grund="verify_failure_checkpoint_could_not_be_bound",
+                        )
+                        audit(
+                            "loop_verify_recovery_result",
+                            {"task_id": task_id, "status": "human_review",
+                             "reason": "failure_evidence_unbound"},
+                            pd, pn,
+                        )
+                    group_end()
+                    return 0, tasks_ok, tasks
                 group_end()
                 _task_ende(
                     state, phase_state, task_id, ok=False,
@@ -1582,178 +1434,65 @@ def _phase_tasks_loop(
                 )
                 continue
 
-            # A failed Builder call is a checkpoint for one bounded,
-            # evidence-checked course correction. Do not retry work whose
-            # prerequisites already failed; that task remains independently
-            # visible as a dependency failure below.
-            _has_failed_dependency, _failed_dependency_files = (
-                _pruefe_prior_failed_dependency(phase_state, task_id)
+            # The failed Builder result is the checkpoint input for the next
+            # coordinator decision. Recovery, Reviewer and Verify are never
+            # started inside this Builder dispatch.
+            failure_reason = str(
+                getattr(state, "builder_failure_reason", "") or "builder_failed"
+            )[:120]
+            transitioned = _task_ende(
+                state,
+                phase_state,
+                task_id,
+                ok=False,
+                name=task_name,
+                failure=failure_reason,
+                failure_detail=str(
+                    getattr(state, "builder_failure_detail", "") or ""
+                )[:1200],
             )
-            _builder_recoverable, _builder_failure_reason = (
-                _builder_failure_recoverable(state)
+            audit(
+                "loop_task_failed",
+                {
+                    "task_id": task_id,
+                    "reason": "builder_failed_at_checkpoint",
+                    "coordinator_reentry": True,
+                    "transitioned": transitioned,
+                },
+                pd,
+                pn,
             )
-            _run_budget_recovery = bool(state.budget_exhausted_reason)
-            if (
-                _loop_action in ("create", "update")
-                and not _has_failed_dependency
-                and (_builder_recoverable or _run_budget_recovery)
-            ):
-                _chat_builder_calls_before = int(
-                    getattr(state, "reflection_chat_builder_calls", 0),
-                )
-                audit(
-                    "loop_builder_recovery_start",
-                    {"task_id": i, "action": _loop_action,
-                     "strategy": (
-                         "originating_chat_budget_handoff"
-                         if _run_budget_recovery
-                         else "single_reflection_checkpoint"
-                     ),
-                     "budget_exhausted": _run_budget_recovery},
-                    pd, pn,
-                )
-                _recovered = bool(_reflection_loop(
-                    state,
-                    max_runden=1,
-                    error_context=(
-                        "Das Run-Budget ist vor dem Builder-Aufruf "
-                        "erschoepft: "
-                        f"{state.budget_exhausted_reason}. Frage den "
-                        "urspruenglichen Projektchat nach genau einer "
-                        "beleggestuetzten Kurskorrektur fuer diesen Task. "
-                        "Kein normaler Builder-Request darf gesendet werden."
-                        if _run_budget_recovery else
-                        "Der Builder hat einen korrigierbaren Fehler "
-                        f"gemeldet: {_builder_failure_reason}. Prüfe "
-                        "passende Quell-/Verify-Belege und versuche eine "
-                        "gezielte, auf die aktuelle Aufgabe begrenzte "
-                        "Korrektur. Task gilt nur bei erfolgreicher "
-                        "Verifikation als erledigt."
-                    ),
-                ))
-                check_run_lease(state)
-                audit(
-                    "loop_builder_recovery_result",
-                    {"task_id": i, "recovered": _recovered}, pd, pn,
-                )
-                if _recovered:
-                    _chat_builder_recovery_used = (
-                        int(getattr(
-                            state, "reflection_chat_builder_calls", 0,
-                        )) > _chat_builder_calls_before
-                    )
-                    if _chat_builder_recovery_used:
-                        _review_recovered = _run_chat_recovery_reviewer(state)
-                    else:
-                        _review_recovered = bool(run_reviewer(state))
-                    check_run_lease(state)
-                    _evidence_recovered = (
-                        _record_task_verify_evidence(
-                            state, phase_state, task_id,
-                        ) if _review_recovered else False
-                    )
-                    audit(
-                        "loop_builder_recovery_result",
-                        {
-                            "task_id": i,
-                            "recovered": _recovered and _review_recovered,
-                            "reviewed": _review_recovered,
-                            "evidence_recorded": _evidence_recovered,
-                        },
-                        pd, pn,
-                    )
-                    if _review_recovered and _evidence_recovered:
-                        tasks_ok += 1
-                        state.tasks_ok_counter = tasks_ok
-                        task_ok(i, len(tasks), elapsed_s=time.monotonic() - _t_task)
-                        group_end()
-                        _audit_task_ok(
-                            _task_ende(
-                                state, phase_state, task_id, ok=True,
-                                name=task_name,
-                            ),
-                            task_id, task_name, pd, pn,
-                            via="single_reflection_checkpoint",
-                        )
-                        continue
-            elif _loop_action in ("create", "update"):
-                audit(
-                    "loop_builder_recovery_skipped",
-                    {
-                        "task_id": i,
-                        "reason": (
-                            "failed_dependency" if _has_failed_dependency
-                            else _builder_failure_reason
-                        ),
-                        "recoverable": _builder_recoverable,
-                    },
-                    pd, pn,
-                )
+            phase_state.save()
+            group_end()
+            return 0, tasks_ok, tasks
 
-            # Idempotenz-Erkennung (nur create).
-            # M-355: Loop-Idempotenz-Check entfernt. Der Builder
-            # (M-352) entscheidet ueber Idempotenz. Der Loop prueft
-            # nur noch, ob der Builder erfolgreich war.
-            # OP-061 B: Hat ein prior done-Task die gleiche Datei
-            # bereits geschrieben? Dann ist der Task erfuellt.
-            _task_files_b = (task_obj.get("task_files", [])
-                             if isinstance(task_obj, dict) else [])
-            if _task_files_b and phase_state is not None:
-                _primary = _task_files_b[0]
-                _prior_done = False
-                for _pt in phase_state.data.get("tasks", []):
-                    if _pt.get("id") == task_id:
-                        continue
-                    if _pt.get("status") != "done":
-                        continue
-                    if _primary in (_pt.get("task_files") or []):
-                        _prior_done = True
-                        break
-                if _prior_done:
-                    _v_gruen_b = False
-                    try:
-                        _v_gruen_b = bool(
-                            _verify_patches(state, phase="post_build"))
-                    except Exception:
-                        _v_gruen_b = False
-                    check_run_lease(state)
-                    if _v_gruen_b:
-                        audit("builder_patch_bereits_erfuellt",
-                              {"task_id": i, "file": _primary}, pd, pn)
-                        tasks_ok += 1
-                        state.tasks_ok_counter = tasks_ok
-                        _audit_task_ok(
-                            _task_ende(state, phase_state, task_id, ok=True,
-                                       name=task_name),
-                            task_id, task_name, pd, pn,
-                            via="builder_patch_bereits_erfuellt",
-                        )
-                        continue
-            # M-355b: run_builder=False -> Task gescheitert, KEIN
-            # Durchfallen in den Patch-Pfad mit leerem state.patches.
-            audit("loop_builder_aufgerufen", {"task_id": i}, pd, pn)
-            _task_ende(state, phase_state, task_id, ok=False,
-                       name=task_name, failure="builder_failed")
-            _split_failure = "builder_failed"
-            # FIX AP 2026-10-31: Dependency-Failure -> continue statt
-            # return 1. Live-Beleg 10:36: t1 (create) failte, t2-t4
-            # (update) fanden Datei nicht, Loop brach bei t2 ab,
-            # t5-t14 (unabhaengig) wurden nie versucht.
-            _is_dep_fail, _dep_files = _pruefe_prior_failed_dependency(
-                phase_state, task_id)
-            if _is_dep_fail:
-                audit("loop_task_failed_dependency",
-                      {"task_id": i, "files": _dep_files}, pd, pn)
-                _task_ende(state, phase_state, task_id, ok=False,
-                           name=task_name, failure="depends_on_failed")
-                continue
-            audit("loop_task_failed", {"task_id": i, "grund": _split_failure}, pd, pn)
-            _task_ende(state, phase_state, task_id, ok=False,
-                       name=task_name, failure=_split_failure)
-            # K43b / FIX AR 2026-10-31: Task-Fail -> continue statt
-            # return 1. Spaetere Tasks koennen unabhaengig sein.
-            # Live-Beleg v6: t2 failte, t3-t7 nie versucht.
-            continue
+        antipatterns = scan_patches(list(state.patches or []))
+        if antipatterns:
+            audit(
+                "loop_task_antipattern_veto",
+                {
+                    "task_id": task_id,
+                    "count": len(antipatterns),
+                    "kinds": [item.kind for item in antipatterns[:5]],
+                    "files": [item.file for item in antipatterns[:5]],
+                },
+                pd,
+                pn,
+            )
+            reason = f"antipattern:{antipatterns[0].kind}"
+            phase_state.mark_vetoed(task_id, grund=reason)
+            _task_ende(
+                state,
+                phase_state,
+                task_id,
+                ok=False,
+                name=task_name,
+                human_review=True,
+                failure=reason,
+            )
+            phase_state.save()
+            group_end()
+            return 0, tasks_ok, tasks
 
         # GOLD 2026-10-30: Wenn der Builder das auftrag_bereits_erfuellt-
         # Flag gesetzt hat (weil die Zieldatei den Zielzustand schon
@@ -1851,56 +1590,20 @@ def _phase_tasks_loop(
                     via="auftrag_bereits_erfuellt",
                 )
                 continue
-            # Reflection versuchen. Sie ruft run_builder + _apply_patches_with_hooks
-            # intern; bei True ist der neue Patch schon angewendet.
-            # FIX AL 2026-10-31: Reflection-OK nur, wenn applied_count
-            # tatsaechlich gestiegen ist. Vorher: _verify_patches gab
-            # True bei "no changed files" (leere Stage), Task wurde
-            # als done markiert, obwohl nichts geschrieben wurde.
-            # Live-Beleg 2026-10-31 10:03 t1.
-            _applied_vor_al = int(
-                state.applied_count or 0)
-            _refl_ok_al = _reflection_loop(state)
-            check_run_lease(state)
-            _applied_nach_al = int(
-                state.applied_count or 0)
-            if _refl_ok_al and _applied_nach_al > _applied_vor_al:
-                # OP-167: Counter auch im Reflection-OK-Pfad hochzaehlen.
-                # Loop-Test-8 (2026-11-05): t3/t4 über Reflection
-                # done, aber tasks_ok_counter blieb 0 -> Footer
-                # meldete '8 failed'.
-                tasks_ok += 1
-                state.tasks_ok_counter = tasks_ok
-                _audit_task_ok(
-                    _task_ende(state, phase_state, task_id, ok=True,
-                               name=task_name),
-                    task_id, task_name, pd, pn, via="reflection",
-                )
-            elif _refl_ok_al and _applied_nach_al <= _applied_vor_al:
-                # Reflection sagte "ok", aber nichts angewendet
-                audit("loop_reflection_no_apply",
-                      {"task_id": i,
-                       "applied_vorher": _applied_vor_al,
-                       "applied_nachher": _applied_nach_al}, pd, pn)
-                _task_ende(state, phase_state, task_id, ok=False,
-                           name=task_name,
-                           failure="reflection_ohne_apply",
-                           failure_detail=(
-                               "Reflection meldete Erfolg, aber applied_count "
-                               f"stieg nicht ({_applied_vor_al} -> "
-                               f"{_applied_nach_al})."
-                           ))
-                audit("loop_task_failed",
-                      {"task_id": i,
-                       "grund": "reflection_ohne_apply"}, pd, pn)
-            else:
-                _task_ende(state, phase_state, task_id, ok=False,
-                           name=task_name,
-                           failure=f"hook_blocked: {_blocked_reason}")
-                audit("loop_task_failed",
-                      {"task_id": i, "grund": f"hook_blocked: {_blocked_reason}"},
-                      pd, pn)
-            continue
+            failure = f"hook_blocked: {_blocked_reason}"[:120]
+            transitioned = _task_ende(
+                state, phase_state, task_id, ok=False, name=task_name,
+                failure=failure,
+            )
+            audit(
+                "loop_task_failed",
+                {"task_id": task_id, "reason": failure,
+                 "coordinator_reentry": True, "transitioned": transitioned},
+                pd, pn,
+            )
+            phase_state.save()
+            group_end()
+            return 0, tasks_ok, tasks
 
         # Patches anwenden (create + update) — NACH dem Hook.
         # K50b: applied_count zaehlen.
@@ -1970,30 +1673,21 @@ def _phase_tasks_loop(
                 if _match2 == "fail":
                     audit("loop_patch_old_string_not_found",
                           {"file": file, "old": old_str[:50]}, pd, pn)
-                    # M-298d: Reflection statt stumm weiterlaufen.
-                    # OP-061 A: Flag-Check vor fail-Pfad.
-                    _refl_ok = _reflection_loop(state)
-                    check_run_lease(state)
-                    if not _refl_ok:
-                        if (state.auftrag_bereits_erfuellt
-                                and _verify_patches(state, phase="post_build")):
-                            audit("auftrag_bereits_erfuellt",
-                                  {"task_id": i,
-                                   "reason": "pre_reviewer_patch_fail"},
-                                  pd, pn)
-                            state.auftrag_bereits_erfuellt = False
-                            tasks_ok += 1
-                            state.tasks_ok_counter = tasks_ok
-                            _audit_task_ok(
-                                _task_ende(state, phase_state, task_id, ok=True,
-                                           name=task_name),
-                                task_id, task_name, pd, pn,
-                                via="auftrag_bereits_erfuellt_pre_reviewer",
-                            )
-                            break
-                        _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="old_string_not_found")
-                        return 1, tasks_ok, tasks
-                    break  # Retry mit korrigiertem Patch
+                    failure = f"old_string_not_found:{file}"[:120]
+                    transitioned = _task_ende(
+                        state, phase_state, task_id, ok=False,
+                        name=task_name, failure=failure,
+                    )
+                    audit(
+                        "loop_task_failed",
+                        {"task_id": task_id, "reason": failure,
+                         "coordinator_reentry": True,
+                         "transitioned": transitioned},
+                        pd, pn,
+                    )
+                    phase_state.save()
+                    group_end()
+                    return 0, tasks_ok, tasks
                 # M-351a: Patch mit identischem Inhalt = no_effect.
                 if old_str == new_str and _match2 == "exact":
                     audit("loop_patch_no_effect", {"file": file}, pd, pn)
@@ -2011,19 +1705,21 @@ def _phase_tasks_loop(
                 if new_str not in _neu_content2:
                     audit("loop_patch_not_applied_vor_schreiben",
                           {"file": file}, pd, pn)
-                    if not _reflection_loop(state):
-                        _task_ende(state, phase_state, task_id,
-                                   ok=False, name=task_name,
-                                   failure="patch_not_applied")
-                        return 1, tasks_ok, tasks
-                    _task_ende(state, phase_state, task_id,
-                               ok=False, name=task_name,
-                               failure="patch_not_applied_nach_reflection",
-                               failure_detail=(
-                                   "Reflection war erfolgreich, der Patch "
-                                   f"wurde aber fuer {file} nicht angewendet."
-                               ))
-                    break
+                    failure = f"patch_not_applied:{file}"[:120]
+                    transitioned = _task_ende(
+                        state, phase_state, task_id, ok=False,
+                        name=task_name, failure=failure,
+                    )
+                    audit(
+                        "loop_task_failed",
+                        {"task_id": task_id, "reason": failure,
+                         "coordinator_reentry": True,
+                         "transitioned": transitioned},
+                        pd, pn,
+                    )
+                    phase_state.save()
+                    group_end()
+                    return 0, tasks_ok, tasks
                 # FIX N 2026-10-31: Write-Fehler fail-closed.
                 try:
                     check_run_lease(state)
@@ -2049,26 +1745,21 @@ def _phase_tasks_loop(
                 )
                 if new_str not in _after:
                     audit("loop_patch_not_applied", {"file": file}, pd, pn)
-                    # GOLD 2026-10-30: Auch nach erfolgreicher Reflection
-                    # ist der Patch NICHT angewendet. Der Task ist nicht
-                    # erledigt. Live-Beleg 2026-10-30 22:35:
-                    # loop_patch_not_applied, _reflection_loop True,
-                    # break, reviewer_kein_diff_aber_patches,
-                    # loop_task_ok trotzdem -> Phase-Review fail.
-                    if not _reflection_loop(state):
-                        _task_ende(state, phase_state, task_id,
-                                   ok=False, name=task_name,
-                                   failure="patch_not_applied")
-                        return 1, tasks_ok, tasks
-                    # Reflection war "erfolgreich", aber der Patch
-                    # wurde trotzdem nicht angewendet. Task fail.
-                    _task_ende(state, phase_state, task_id,
-                               ok=False, name=task_name,
-                               failure="patch_not_applied_nach_reflection",
-                               failure_detail=(
-                                   "Nach Reflection enthaelt die Zieldatei "
-                                   f"{file} die erwartete Aenderung weiterhin nicht."
-                               ))
+                    failure = f"post_write_patch_check_failed:{file}"[:120]
+                    transitioned = _task_ende(
+                        state, phase_state, task_id, ok=False,
+                        name=task_name, failure=failure,
+                    )
+                    audit(
+                        "loop_task_failed",
+                        {"task_id": task_id, "reason": failure,
+                         "coordinator_reentry": True,
+                         "transitioned": transitioned},
+                        pd, pn,
+                    )
+                    phase_state.save()
+                    group_end()
+                    return 0, tasks_ok, tasks
                     break
                 # FIX AI 2026-10-31: applied_count++ erst NACH
                 # erfolgreichem Post-Verify. Vorher (Fix W) wurde
@@ -2108,387 +1799,60 @@ def _phase_tasks_loop(
         hook_res = _call_hook("simplify.py", {"diff": _get_git_diff_for_hook()})
         if not hook_res.get("allow", False):
             audit("loop_hook_blocked", {"hook": "simplify", "reason": hook_res.get("reason", "")}, pd, pn)
-            if not _reflection_loop(state):
-                return 1, tasks_ok, tasks
+            failure = "simplify_hook_blocked"
+            transitioned = _task_ende(
+                state, phase_state, task_id, ok=False, name=task_name,
+                failure=failure,
+                failure_detail=str(hook_res.get("reason", ""))[:1200],
+            )
+            audit(
+                "loop_task_failed",
+                {"task_id": task_id, "reason": failure,
+                 "coordinator_reentry": True, "transitioned": transitioned},
+                pd, pn,
+            )
+            phase_state.save()
+            group_end()
+            return 0, tasks_ok, tasks
 
         # M-467: ruff --fix auf geaenderte Dateien (deterministisch).
         # GOLD 2026-10-30: ausgelagert nach _ruff_fix_changed, damit
         # dieselbe Logik auch in der Reflection-Schleife laeuft.
         _ruff_fix_changed(state)
 
-        # Post-Build Verify + Reflection (automatisch)
-        # FIX AT/AU 2026-10-31: Weiche Verify-Fehler (ruff, mypy)
-        # markieren Task als done mit Warnung, nicht als failed.
-        # Live-Beleg v7: t1 ok bis auf 2 ruff TRY004, als failed
-        # markiert trotz funktionalem Code.
-        _v_hart_ok, _v_weich = _verify_patches_soft(state, phase="post_build")
-        if not _v_hart_ok:
+        # Builder is one coordinator action. Verify and Reviewer are dispatched
+        # separately from the persisted build checkpoint; this worker must not
+        # fall back to an inline build -> verify -> review sequence.
+        checkpointed = phase_state.record_task_build_checkpoint(task_id)
+        if checkpointed:
             audit(
-                "loop_gate_failed",
-                _gate_failed_payload("post_build", []),
-                pd, pn,
-            )
-            if not _reflect_verify_failure(state, phase="post_build"):
-                audit("loop_reflection_gescheitert", {"task_id": i}, pd, pn)
-                # OP-059d: bei Spec-Widerspruch-Verdacht human_review
-                # statt post_build_verify_failed.
-                if state.spec_widerspruch_erkannt:
-                    audit("loop_verify_failed_human_review",
-                          {"task_id": i,
-                           "grund": "spec_widerspruch_vermutet"}, pd, pn)
-                    state.spec_widerspruch_erkannt = False
-                    _task_ende(state, phase_state, task_id,
-                               ok=False, name=task_name,
-                               human_review=True,
-                               failure="spec_widerspruch_vermutet")
-                    continue
-                # OP-090: Human-Gate statt sofortigem Fail.
-                # Der User soll den Diff sehen und entscheiden:
-                # j = Patches behalten + committen (Task ok)
-                # n = Patches verwerfen (Task fail, Loop laeuft weiter)
-                state.reflection_erschoepft = True
-                _gate_rc = _human_gate(state)
-                state.reflection_erschoepft = False
-                if _gate_rc == 0:
-                    audit("loop_human_gate_reflection_erschoepft_approved",
-                          {"task_id": i}, pd, pn)
-                    # OP-167: Counter auch hier hochzaehlen.
-                    # Reflection-Erschoepft-Gate-approve (User 'j').
-                    tasks_ok += 1
-                    state.tasks_ok_counter = tasks_ok
-                    _task_ende(state, phase_state, task_id,
-                               ok=True, name=task_name,
-                               failure="reflection_erschoepft_approved")
-                    continue
-                audit("loop_human_gate_reflection_erschoepft_rejected",
-                      {"task_id": i}, pd, pn)
-                _task_ende(state, phase_state, task_id,
-                           ok=False, name=task_name,
-                           failure="reflection_erschoepft_rejected")
-                continue
-        elif _v_weich:
-            # Weiche Fehler: Warnung auditieren, aber Task laeuft weiter
-            # zum Reviewer (der prueft Code-Substanz).
-            audit("loop_task_soft_fail",
-                  {"task_id": i, "warnungen": len(_v_weich),
-                   "errors": _v_weich[:3]}, pd, pn)
-
-        # Reviewer (Phase 9)
-        # FIX R 2026-10-31: Deterministischen Reviewer-Fail nicht
-        # durch "pytest gruen" ignorieren. Flag wird in run_reviewer
-        # gesetzt (z.B. reviewer_unvollstaendig).
-        state.reviewer_deterministic_fail = False
-
-        # Pre-Reviewer-Gate: harte Verify-Fehler verhindern LLM-Review.
-        # Live-Beleg 2026-11-02 (OP-077): Builder hat __all__=["create_app"]
-        # ohne create_app gebaut. ruff F822 (undefined name) hat es gemeldet
-        # (in _v_weich), aber _v_hart_ok war True (ruff ist weiche Stage).
-        # Der Reviewer hat approved -> t1 = done. Test scheitert 5 Runden.
-        #
-        # WICHTIG: Nur _v_weich pruefen (frischer Rueckgabewert von
-        # _verify_patches_soft). NICHT last_verify_errors — das ist global
-        # und enthaelt Reste vom ersten Reviewer-Call.
-        _harte = filtere_harte_verify_fehler(list(_v_weich or []))
-        if _harte:
-            audit(
-                "reviewer_pre_gate_hart",
+                "loop_task_build_checkpoint",
                 {
-                    "task_id": i,
-                    "anzahl": len(_harte),
-                    "beispiele": [str(e)[:120] for e in _harte[:3]],
-                },
-                pd, pn,
-            )
-            state.reviewer_bugs = [
-                {
-                    "severity": "high",
-                    "description": (
-                        f"Pre-Reviewer-Gate: {len(_harte)} harte Verify-Fehler "
-                        f"vor LLM-Review (nicht uebergangen): "
-                        + "; ".join(str(e)[:80] for e in _harte[:3])
-                    ),
-                }
-            ]
-            # Reviewer ueberspringen, Reflection soll greifen (nicht
-            # deterministic_fail, sonst wird Task sofort gefailt).
-            _rev_ok = False
-        else:
-            from werkstatt.review_dispatch import reviewer_dispatch_decision
-            from werkstatt.reviewer import _get_git_diff
-
-            _review_diff = None
-            _diff_error = ""
-            try:
-                _review_diff = _get_git_diff(
-                    project_dir=pd,
-                    task_files=task_obj.get("task_files"),
-                )
-            except (OSError, RuntimeError, ValueError) as _exc:
-                _diff_error = type(_exc).__name__
-            _review_decision = reviewer_dispatch_decision(
-                task_obj,
-                _review_diff,
-                verify_warnings=_v_weich,
-                recovery=(
-                    bool(getattr(state, "reflection_chat_builder_reserve_active", False))
-                    or bool(getattr(state, "reflection_chat_evidence", None))
-                ),
-            )
-            audit(
-                "loop_reviewer_dispatch_decision",
-                {
-                    "task_id": str(task_id)[:160],
-                    **_review_decision,
-                    **({"diff_error": _diff_error} if _diff_error else {}),
+                    "task_id": task_id,
+                    "task_file_count": len(task_obj.get("task_files") or []),
+                    "status": "verify_pending",
                 },
                 pd,
                 pn,
             )
-            if _review_decision["invoke_reviewer"]:
-                _rev_ok = _with_spinner(
-                    f"Reviewer t{i}", lambda: run_reviewer(state),
-                )
-            else:
-                state.reviewer_bugs = []
-                _rev_ok = True
-        check_run_lease(state)
-        # K40: Historie pushen (unabhaengig vom Ergebnis).
-        _cur_bugs = state.reviewer_bugs or []
-        if _cur_bugs:
-            _hist = getattr(state, "reviewer_bugs_history", None)
-            if _hist is None:
-                state.reviewer_bugs_history = []
-                _hist = state.reviewer_bugs_history
-            _hist.append(list(_cur_bugs))
-            # Limit auf 5 Runden (RAM-Schutz).
-            if len(_hist) > 5:
-                state.reviewer_bugs_history = _hist[-5:]
-        if not _rev_ok:
-            # FIX R 2026-10-31: Deterministischer Fail = sofort
-            # task_fail, kein Reflection, kein Ignore.
-            if state.reviewer_deterministic_fail:
-                audit("loop_reviewer_deterministic_fail",
-                      {"task_id": i}, pd, pn)
-                _task_ende(state, phase_state, task_id, ok=False,
-                           name=task_name,
-                           failure="reviewer_unvollstaendig")
-                # FIX AR 2026-10-31: continue statt return 1.
-                continue
+        else:
+            phase_state.mark_human_review(
+                task_id,
+                grund="builder_checkpoint_unavailable",
+            )
             audit(
-                "loop_reviewer_rejected",
-                _reviewer_rejected_payload(
-                    task_id,
-                    {"bugs": state.reviewer_bugs or []},
-                ),
-                pd, pn,
+                "loop_task_build_checkpoint",
+                {
+                    "task_id": task_id,
+                    "task_file_count": len(task_obj.get("task_files") or []),
+                    "status": "human_review",
+                    "reason": "build_evidence_could_not_be_bound",
+                },
+                pd,
+                pn,
             )
-            # M-314: Reviewer-Bug-Text als Kontext an Reflection.
-            _reviewer_bugs = state.reviewer_bugs or []
-            # M-441: Bug-Anzahl Runde 1 merken (fuer Divergenz-Check).
-            _bugs_runde1 = len(_reviewer_bugs)
-            _bug_ctx = ""
-            if _reviewer_bugs:
-                import json as _json
-                _bug_ctx = _json.dumps(_reviewer_bugs, ensure_ascii=False)
-            # OP-059: Diff-Hash VOR Reflexion als Referenz fuer
-            # die false_positive-Erkennung (idempotenter Patch).
-            try:
-                from werkstatt.reflection import _diff_hash_for_state as _dh
-                state._reflection_diff_hash = _dh(state)
-            except Exception:
-                state._reflection_diff_hash = None
-            state.reviewer_stagnation_false_positive = False
-            if not _reflection_loop(state, error_context=_bug_ctx):
-                audit("loop_reviewer_reflection_gescheitert", {"task_id": i}, pd, pn)
-                # M-343c: pytest ist das letzte Wort. Wenn der letzte
-                # _verify_patches-Lauf gruen war (last_verify_errors leer),
-                # ist der Reviewer-Reject eine Halluzination.
-                _last_errors = state.last_verify_errors or []
-                # K50-Bug-A: wie BUG-B, gleicher semantischer
-                # _hat_patch-Check. Ohne diesen Zweig war der
-                # erste Reject-Pfad fail-open, der zweite fail-
-                # closed -- asymmetrisch und reproduzierbar falsch.
-                _hat_patch_a = _patches_wirklich_angewendet(state)
-                if not _last_errors and _hat_patch_a:
-                    audit("loop_reviewer_reject_ignoriert",
-                          {"task_id": i, "grund": "pytest gruen"}, pd, pn)
-                    # Fall durch zum task_ok
-                elif not _last_errors and not _hat_patch_a:
-                    audit("loop_reviewer_reject_fail_closed",
-                          {"task_id": i, "grund": "kein_patch_angewendet_runde1"},
-                          pd, pn)
-                    _task_ende(state, phase_state, task_id, ok=False,
-                               name=task_name,
-                               failure="reviewer_rejected_no_patch")
-                    # FIX AR 2026-10-31: continue statt return 1.
-                    continue
-                else:
-                    # OP-060b-Rest: bei Spec-Widerspruch-Verdacht
-                    # human_review statt failed.
-                    if state.spec_widerspruch_erkannt:
-                        audit("loop_reviewer_reject_human_review",
-                              {"task_id": i,
-                               "grund": "spec_widerspruch_vermutet"}, pd, pn)
-                        state.spec_widerspruch_erkannt = False
-                        _task_ende(state, phase_state, task_id,
-                                   ok=False, name=task_name,
-                                   human_review=True,
-                                   failure="spec_widerspruch_vermutet")
-                        continue
-                    _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected")
-                    continue
-            # OP-064a: Sticky-Veto. Wenn die Reflection spec_widerspruch
-            # erkannt hat, ist der Task NICHT fertig — auch wenn die
-            # Reflection return True lieferte. Veto + human_review.
-            if state.spec_widerspruch_erkannt:
-                audit("loop_task_spec_widerspruch_veto",
-                      {"task_id": i,
-                       "grund": "spec_widerspruch_vermutet"}, pd, pn)
-                state.spec_widerspruch_erkannt = False
-                phase_state.mark_vetoed(
-                    task_id, grund="spec_widerspruch_vermutet",
-                )
-                _task_ende(state, phase_state, task_id,
-                           ok=False, name=task_name,
-                           human_review=True,
-                           failure="spec_widerspruch_vermutet")
-                continue
-            # OP-059: False-Positive erkannt -> erneuten Reviewer-
-            # Call sparen (Reviewer-Bug, nicht Task-Problem).
-            _is_fp = bool(state.reviewer_stagnation_false_positive)
-            _post_reflection_review_ok = True
-            if _is_fp:
-                audit("loop_reviewer_reject_false_positive",
-                      {"task_id": i, "grund": "stagnation_idempotent"}, pd, pn)
-                # Fall durch zum task_ok (kein _task_ende im Else-Zweig)
-            # M-306d Fix 2: Nach erfolgreicher Reflection MUSS der
-            # Reviewer erneut pruefen. Sonst fail-open (HR-R9).
-            else:
-                _post_reflection_review_ok = run_reviewer(state)
-                check_run_lease(state)
-            if not _post_reflection_review_ok:
-                audit("loop_reviewer_rejected_after_reflection", {"task_id": i}, pd, pn)
-                # M-343c: pytest ist das letzte Wort.
-                _last_errors = state.last_verify_errors or []
-                # M-359: pytest gruen reicht NICHT, wenn der Patch
-                # gar nicht angewendet wurde (old_string_not_found).
-                # Dann ist der Task fail-closed.
-                # K50-Bug-B: state.patches ist nur Builder-Output.
-                # Es sagt NICHTS darueber, ob der Patch angewandt
-                # wurde (loop_patch_old_string_not_found setzt
-                # state.patches NICHT zurueck). Fail-closed nur,
-                # wenn nachweislich kein Patch angewandt wurde:
-                _hat_patch = _patches_wirklich_angewendet(state)
-                # M-441: Divergenz-Check. Wenn der Reviewer in Runde 2
-                # MEHR Bugs findet als in Runde 1, hat die Reflection
-                # nichts geholfen — fail-closed, keine dritte Runde.
-                _bugs_runde2 = len(state.reviewer_bugs or [])
-                if _bugs_runde2 > _bugs_runde1:
-                    audit("loop_reviewer_divergenz",
-                          {"task_id": i,
-                           "bugs_runde1": _bugs_runde1,
-                           "bugs_runde2": _bugs_runde2}, pd, pn)
-                    _task_ende(state, phase_state, task_id, ok=False,
-                               name=task_name,
-                               failure="reviewer_divergenz")
-                    # FIX AR 2026-10-31: continue statt return 1.
-                    continue
-                # M-399b: High-severity Bugs NIE ignorieren.
-                _high_bugs = [
-                    b for b in (state.reviewer_bugs or [])
-                    if isinstance(b, dict) and b.get("severity") == "high"
-                ]
-                if _high_bugs:
-                    audit("loop_reviewer_high_bug_fail_closed",
-                          {"task_id": i, "high_bugs": len(_high_bugs)}, pd, pn)
-                    _split_failure = "reviewer_high_bug"
-                    _task_ende(state, phase_state, task_id, ok=False,
-                               name=task_name, failure=_split_failure)
-                    # FIX AR 2026-10-31: continue statt return 1.
-                    continue
-                elif not _last_errors and _hat_patch:
-                    audit("loop_reviewer_reject_ignoriert",
-                          {"task_id": i, "grund": "pytest gruen nach Reflection"}, pd, pn)
-                elif not _last_errors and not _hat_patch:
-                    audit("loop_reviewer_reject_fail_closed",
-                          {"task_id": i, "grund": "kein_patch_angewendet"}, pd, pn)
-                    _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected_no_patch")
-                    # FIX AR 2026-10-31: continue statt return 1.
-                    continue
-                else:
-                    _task_ende(state, phase_state, task_id, ok=False, name=task_name, failure="reviewer_rejected_after_reflection")
-                    continue
-            audit("loop_reviewer_approved_after_reflection", {"task_id": i}, pd, pn)
-
-        # OP-064a-Live-Fix (2026-11-01, HR-24): Spec-Widerspruch aus
-        # reflection.py ist ein deterministisches Signal und darf NICHT
-        # zu task_ok fuehren — egal welcher Pfad (reviewer-approved
-        # oder reflection-durch). Der Erfolgs-Pfad ist die einzige
-        # Stelle, an der _task_ende(ok=True) gerufen wird; dieser
-        # Guard sitzt genau davor. Live-Beleg Testrunde #4 (19:10):
-        # _refl_ok=True, _rev_ok=True, spec_widerspruch=True, aber
-        # loop_task_ok + status=done.
-        if state.spec_widerspruch_erkannt:
-            audit("loop_task_spec_widerspruch_veto",
-                  {"task_id": i,
-                   "grund": "spec_widerspruch_vermutet",
-                   "schicht": "pipeline"}, pd, pn)
-            state.spec_widerspruch_erkannt = False
-            phase_state.mark_vetoed(
-                task_id, grund="spec_widerspruch_vermutet",
-            )
-            _task_ende(state, phase_state, task_id,
-                       ok=False, name=task_name,
-                       human_review=True,
-                       failure="spec_widerspruch_vermutet")
-            continue
-
-        # OP-064b: Antipattern-Scanner (deterministisch, kein LLM).
-        # Greift im Erfolgs-Pfad nach OP-064a. Ein Patch mit
-        # # type: ignore / noqa / eslint-disable / || true / geloeschtem
-        # Test wuerde das Verify-Gate umgehen — auch wenn Verify
-        # (durch das Muster selbst) gruen meldet. Veto statt
-        # task_ok. Referenz: fakegreen, Harn Completion-Gate.
-        _ap_treffer = scan_patches(
-            list(state.patches or [])
-        )
-        if _ap_treffer:
-            audit("loop_task_antipattern_veto",
-                  {"task_id": i,
-                   "anzahl": len(_ap_treffer),
-                   "kinds": [a.kind for a in _ap_treffer[:5]],
-                   "files": [a.file for a in _ap_treffer[:5]]},
-                  pd, pn)
-            _ap_grund = f"antipattern:{_ap_treffer[0].kind}"
-            phase_state.mark_vetoed(task_id, grund=_ap_grund)
-            _task_ende(state, phase_state, task_id,
-                       ok=False, name=task_name,
-                       human_review=True,
-                       failure=_ap_grund)
-            continue
-
-        _evidence_ok = _record_task_verify_evidence(
-            state, phase_state, task_id,
-        )
-        if not _evidence_ok:
-            _task_ende(
-                state, phase_state, task_id, ok=False,
-                name=task_name, failure="verify_evidence_missing",
-            )
-            group_end()
-            continue
-        _el_task = time.monotonic() - _t_task
-        task_ok(i, len(tasks), elapsed_s=_el_task)
-        try:
-            task_done(i, len(tasks), task_name, elapsed_s=_el_task, ok=True)
-        except Exception:
-            pass
+        phase_state.save()
         group_end()
-        tasks_ok += 1
-        state.tasks_ok_counter = tasks_ok
-        _audit_task_ok(
-            _task_ende(state, phase_state, task_id, ok=True, name=task_name),
-            task_id, task_name, pd, pn,
-        )
+        return 0, tasks_ok, tasks
 
     return 0, tasks_ok, tasks

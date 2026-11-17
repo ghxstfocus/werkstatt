@@ -25,27 +25,41 @@ Der CLI-Einstieg bleibt fuer automatisierte und serverseitige Runs verfuegbar:
 ## Agentenrollen und Kontrollschritte
 
 Rollen sind bedarfsabhängige Verantwortlichkeiten, keine Pflicht zu einem
-LLM-Aufruf pro Run. Explorer liefert zuerst deterministische Repo-Fakten.
-Danach entscheidet der Planner anhand Auftrag, Scope und Beleglage:
+LLM-Aufruf pro Run. Der Loop startet keine Explorer-LLM-Rolle. Gemeinsame
+Kontextwerkzeuge fragen Graphify auftragsbezogen ab, messen deterministische
+Projektfakten und lesen relevante Quellen aktuell mit Hashbindung. Danach
+entscheidet der Checkpoint-Koordinator anhand Auftrag, Risiko und Beleglage:
 
 - Scout fuer breite, mehrdeutige, diagnostische oder API-/Ursachen-Auftraege.
-- Scout kann entfallen, wenn ein einzelnes Ziel explizit genannt und vom
-  Explorer bestaetigt wurde.
+- Scout kann entfallen, wenn ein einzelnes Ziel explizit genannt und durch
+  aktuelle, hashgebundene Quellenbelege bestaetigt wurde.
 - Architect fuer Aenderungen mit Design-, Abhaengigkeits- oder
   Mehrdatei-Entscheidungen. Er kann auch bei einem einzelnen, ausdruecklich
-  genannten Python-Ziel entfallen, wenn Explorer oder der deterministische
-  Quelllese-Worker die aktuelle Quelle vollstaendig hashgebunden belegen,
+  genannten Python-Ziel entfallen, wenn die Kontextwerkzeuge die aktuelle
+  Quelle vollstaendig hashgebunden belegen,
   genau eine einfache Aenderungsabsicht vorliegt, der Auftrag
   kurz und frei von Test-, Diagnose-, Sicherheits-, API-, Schema-, Migrations-
   oder Mehrdateirisiken ist. Der Checkpoint waehlt dann builder_direct; die
   unveraenderte Nutzeranweisung wird als einziges Kriterium im Plan-Gate
   freigegeben. Der Builder liest die Datei erneut; Verify, Review und Ergebnis-
   Gate bleiben bestehen. Literal-/atomare Direktplaene sind davon getrennt.
-- Der aktuelle Planner-Split ist nach dem Architect-Prosa-Plan der normale
-  Schritt zur Erzeugung des Task-JSON; er ist kein Fallback. Deterministische
-  Taskgraph-Pruefungen validieren anschliessend IDs, Kriterien und
-  Abhaengigkeiten. Ihn erst nach einer nachgewiesen gleichwertigen
-  Architect-Plan-/Compiler-Evaluation zu ersetzen entspricht ADR-0032.
+- Der Planner-Split wird nur dispatcht, wenn der aktuelle Checkpoint einen
+  Taskgraph-Compiler benoetigt. Ein belegter atomarer Architect-Plan oder ein
+  sicher deterministisch kompilierbarer Kandidat kann ihn ueberspringen;
+  fehlende oder veraltete Evidenz verlangt gezieltes Nachladen bzw. erneute
+  Auswahl. IDs, Kriterien, Dateiscope und Abhaengigkeiten werden vor jedem
+  Plan-/Freigabeschritt deterministisch validiert. Keine Rolle darf aus einer
+  frueheren Rolle allein eine Pflichtreihenfolge fuer kuenftige Runs ableiten.
+
+`werkstatt/phases/plan.py` und der alte Plan-/Retry-Executor sind entfernt;
+die produktive Planroute laeuft ausschliesslich ueber typisierte
+Koordinatoraktionen und den gespeicherten Plan-Kandidaten. Die verbleibenden
+Dateien unter `werkstatt/phases/` enthalten waehrend der Migration noch
+Executor-Implementierungen und Kompatibilitaetsfassade. Sie duerfen keine
+globale Setup->Plan->Task->Finalize-Reihenfolge erzwingen. Der persistierte
+Checkpoint-Koordinator waehlt jede naechste Aktion anhand Ziel, Risiko,
+aktueller Evidenz, Fortschritt, Freigabe und Budget; erforderliche Sicherheits-
+und Ergebnis-Gates bleiben eigenstaendige, verbindliche Aktionen.
 - Spec-First mit unabhaengigem Spec-Builder, eingefrorenem Test-Hash und
   abgeschirmtem Blind-Builder ist in der Produktionssteuerung noch nicht
   verdrahtet (OP-398); vorhandene `test_spec`-Module nicht als aktiven Pfad
@@ -57,7 +71,7 @@ Danach entscheidet der Planner anhand Auftrag, Scope und Beleglage:
   Plan- und Ergebnis-Gates bleiben fail-closed verpflichtend.
 
 Jeder Skip ist durch aktuellen Repo-Beleg begrenzt und wird auditiert.
-Mehrdeutigkeit, Diagnose, breite Aenderung oder veralteter Textbeleg
+Mehrdeutigkeit, Diagnose, breite Aenderung oder veralteter Quellenbeleg
 eskalieren in den normalen Scout-/Architect-Pfad.
 
 Der Run-Koordinator wertet nach Planfreigabe und nach jedem einzelnen Task
@@ -99,11 +113,12 @@ Auslassungen und begrenzte Trefferlisten sind keine Negativbelege. Bei einer
 Entscheidung, die von ausgelassenem Inhalt abhaengt, muss die Rolle gezielt
 nachladen oder die Belegluecke ausweisen.
 
-Explorer-Quelltext fuer Rollen-Handoffs wird nach projektlokaler Pfadpruefung
-erneut aus dem Repo gelesen. Auszuege tragen Originalzeilennummern,
+Graphify liefert Navigationshinweise, keine Quelltextbelege. Dateien fuer
+Rollen-Handoffs werden nach projektlokaler Pfadpruefung erneut aus dem Repo
+gelesen. Auszuege tragen Originalzeilennummern,
 Zeilenbereiche, Vollstaendigkeitsstatus und SHA-256 der Quelldatei. Vom
-Explorer-Modell gelieferte Vorschau-Texte werden nicht als Quellbeleg
-weitergereicht. Der Scout-Prompt muss den tatsaechlich enthaltenen
+Modellgelieferte Dateivorschauen werden nicht als Quellbeleg weitergereicht.
+Der Scout-Prompt muss den tatsaechlich enthaltenen
 Zeilenumfang anzeigen; ein spaeteres Zeichenlimit darf die Fundstelle nicht
 groesser erscheinen lassen als den uebergebenen Text.
 
@@ -123,7 +138,7 @@ Skills in `skills/<name>/SKILL.md`. Jeder Skill hat:
 
 - `globs:` — Datei-Muster, die den Skill aktivieren (deterministisch per fnmatch)
 - `rollen:` — Rollen-Filter: `builder`, `reviewer`, `architect`, `scout`,
-  `explorer`, `planner` (leer = alle Rollen)
+  `planner` (leer = alle Rollen)
 - `always:` — in jeder Rolle aktiv (selten; `using-werkstatt` ist der Fall)
 - Body (Markdown) — wird bei Aktivierung in den Prompt geladen
 

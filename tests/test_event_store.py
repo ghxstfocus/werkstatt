@@ -794,6 +794,9 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
     chat_db = tmp_path / "chat.db"
     monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
     monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "werkstatt.chat_jobs.resume_chat_jobs", lambda *_args, **_kwargs: None,
+    )
     original_finish = store.finish_run_checkpoint
     inserted = False
 
@@ -818,6 +821,12 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
     monkeypatch.setattr(loop, "EventStore", lambda: store)
     monkeypatch.setattr(loop, "get_run_id", lambda: "run-final-race")
     decisions = iter([
+        {
+            "decision": "reconcile_chat_followup",
+            "coordinator_action": "reconcile_chat_followup",
+            "reason": "accepted_chat_followup_waiting_at_checkpoint",
+            "next_executor": "followup_planner_and_plan_gate",
+        },
         {
             "decision": "execute_planned_task",
             "coordinator_action": "execute_task_checkpoint",
@@ -863,7 +872,16 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
 
     monkeypatch.setattr(run_followups, "reconcile_chat_followups", reconcile)
     run_state = SimpleNamespace(project_dir=tmp_path, run_lease_check=None)
-    phase_state = SimpleNamespace(data={"tasks": [{"id": "followup-t1", "status": "pending"}]})
+    phase_state = SimpleNamespace(
+        data={"tasks": [{"id": "followup-t1", "status": "pending"}]},
+        get_next_task=lambda: next(
+            (
+                task for task in phase_state.data["tasks"]
+                if task.get("status") == "pending"
+            ),
+            None,
+        ),
+    )
     run_state.tasks = phase_state.data["tasks"]
     assert loop._finish_run_after_followups(
         "demo", run_state, phase_state, 0,
@@ -914,6 +932,14 @@ def test_final_followup_failure_persists_recoverable_run_status(
     monkeypatch.setattr(loop, "check_run_lease", lambda _state: None)
     monkeypatch.setattr(loop, "audit", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        loop, "_run_coordinator_action",
+        lambda *_args: {
+            "decision": "reconcile_chat_followup",
+            "coordinator_action": "reconcile_chat_followup",
+            "next_executor": "followup_planner_and_plan_gate",
+        },
+    )
 
     def reconciliation_failed(*_args, **_kwargs):
         raise run_followups.FollowupReconciliationError("Plan-Gate nicht verfuegbar")
@@ -959,6 +985,14 @@ def test_final_followup_gate_timeout_does_not_leave_run_running(
     monkeypatch.setattr(loop, "check_run_lease", lambda _state: None)
     monkeypatch.setattr(loop, "audit", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        loop, "_run_coordinator_action",
+        lambda *_args: {
+            "decision": "reconcile_chat_followup",
+            "coordinator_action": "reconcile_chat_followup",
+            "next_executor": "followup_planner_and_plan_gate",
+        },
+    )
     monkeypatch.setattr(
         run_followups, "reconcile_chat_followups", lambda *_args: False,
     )

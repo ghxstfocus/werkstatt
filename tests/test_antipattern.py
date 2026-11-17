@@ -266,6 +266,24 @@ def test_live_pfad_antipattern_veto(
     st.tasks = [{"id": "t1", "name": "T1", "action": "update",
                  "task_files": ["core/x.py"]}]
     st.phasen = []
+    # Exercise the task checkpoint directly. Without a current, approved
+    # plan, the coordinator must ask for missing project/planning evidence;
+    # that would test role routing (and could call a real provider), not the
+    # anti-pattern veto this regression is meant to cover.
+    from werkstatt.phase_state import PhaseState
+
+    st.run_id = "p-antipattern-veto"
+    phase_state = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    phase_state.run_id = st.run_id
+    phase_state.init_new(
+        "a",
+        st.tasks,
+        tests=["python -c pass"],
+        akzeptanzkriterien=["Der Task darf kein type: ignore einschleusen."],
+    )
+    phase_state.data["plan_complete"] = True
+    phase_state.bind_approved_plan()
+    phase_state.save()
 
     _audits: list[tuple] = []
     monkeypatch.setattr(loop_mod, "audit",
@@ -306,7 +324,9 @@ def test_live_pfad_antipattern_veto(
         if hasattr(loop_mod, _fn):
             monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
 
-    loop_mod.run_pipeline_loop("p", "a", [st])
+    loop_mod.run_pipeline_loop(
+        "p", "a", [st], phasen_state=st, phase_state=phase_state,
+    )
 
     kinds = [k for k, _ in _audits]
     assert "loop_task_antipattern_veto" in kinds, (
@@ -316,7 +336,6 @@ def test_live_pfad_antipattern_veto(
         f"loop_task_ok darf NICHT kommen; kinds={kinds[-10:]}"
     )
 
-    from werkstatt.phase_state import PhaseState
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     ps.load()
     _t = ps.get_task("t1")

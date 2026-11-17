@@ -5,6 +5,7 @@ work. It never authorizes code changes or bypasses plan/human gates.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ PLANNER_ROLE_DECISION_REASONS = frozenset({
     "scout_skipped_but_architect_output_missing",
     "architect_output_missing_recover_role",
     "planner_split_checkpoint_completed",
+    "explicit_current_sources_need_scoped_investigation",
 })
 PLANNER_ROLE_EVIDENCE_NAMES = frozenset({
     "user_goal", "project_inventory", "explorer_evidence", "scout_report",
@@ -35,6 +37,8 @@ PLANNER_ROLE_EVIDENCE_NAMES = frozenset({
     "current_source_manifest", "architect_prose", "acceptance_criteria",
     "validated_task_graph", "explorer_source_evidence",
     "current_source_evidence",
+    "explicit_source_evidence",
+    "preflight_findings",
     "goal_already_fulfilled",
 })
 
@@ -333,6 +337,88 @@ def prepare_direct_builder_context(
     if not ready:
         return None, reason
     return context, "eindeutige_explorer_datei_niedriges_risiko"
+
+
+def prepare_explicit_source_context(
+    goal: str, project_dir,
+) -> tuple[dict | None, str]:
+    """Read a small set of user-named files without claiming Explorer ran.
+
+    This lets the checkpoint dispatch directly to Scout when the task names
+    its evidence sources. It is deliberately unavailable for long OP dumps,
+    broad implicit discovery, unsafe paths, stale/unreadable files, or a
+    context that would exceed the role handoff budget.
+    """
+    if not isinstance(goal, str) or len(goal) > 12_000:
+        return None, "explicit_sources_goal_outside_limit"
+    paths = tuple(dict.fromkeys(re.findall(
+        r"(?<![\w.-])(?:[\w.-]+/)*[\w.-]+\.(?:py|md|yaml|yml|toml|"
+        r"json|css|html|js)",
+        goal,
+        flags=re.IGNORECASE,
+    )))
+    if not 2 <= len(paths) <= 4:
+        return None, "explicit_sources_need_two_to_four_paths"
+    try:
+        root = Path(project_dir).resolve(strict=True)
+        if not root.is_dir():
+            return None, "explicit_sources_project_root_invalid"
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None, "explicit_sources_project_root_invalid"
+
+    key_files: list[dict[str, object]] = []
+    total_chars = 0
+    for relative_text in paths:
+        relative = Path(relative_text)
+        if relative.is_absolute() or ".." in relative.parts:
+            return None, "explicit_source_path_unsafe"
+        try:
+            source_path = (root / relative).resolve(strict=True)
+            source_path.relative_to(root)
+            if not source_path.is_file() or source_path.stat().st_size > 24_000:
+                return None, "explicit_source_missing_or_too_large"
+            raw = source_path.read_bytes()
+            source_text = raw.decode("utf-8", errors="strict")
+        except (OSError, RuntimeError, UnicodeDecodeError, ValueError):
+            return None, "explicit_source_unreadable_or_unsafe"
+        if len(source_text) > 6_000:
+            return None, "explicit_source_context_too_large"
+        total_chars += len(source_text)
+        if total_chars > 12_000:
+            return None, "explicit_sources_context_too_large"
+        line_count = len(source_text.splitlines())
+        key_files.append({
+            "file": relative.as_posix(),
+            "why": "vom Auftrag explizit benannt; aktuell und vollstaendig gelesen",
+            "confidence": "high",
+            "preview": source_text,
+            "source_line_ranges": [[1, max(1, line_count)]],
+            "source_total_lines": line_count,
+            "source_complete": True,
+            "preview_source_chars": len(source_text),
+            "source_sha256": hashlib.sha256(raw).hexdigest(),
+        })
+    context = {
+        "findings": (
+            "Nur explizit benannte Quellen wurden aktuell gelesen. Es wurde "
+            "kein Projektinventar und keine verwandte Dateisuche behauptet."
+        ),
+        "key_files": key_files,
+        "next_reads": [],
+        "content_retrieval": {"status": "explicit_sources_only"},
+        "dispatch": {
+            "role": "scout",
+            "selected": "explicit_source_context",
+            "reason": "bounded_current_user_named_sources",
+            "evidence_kind": "explicit_source_read",
+        },
+        "related_files_scan": {
+            "status": "not_requested",
+            "reason": "explicit_sources_are_not_repository_discovery",
+            "explicit_file_count": len(key_files),
+        },
+    }
+    return context, "explicit_current_sources_ready_for_role_dispatch"
 
 
 def build_direct_single_file_task(
@@ -719,10 +805,20 @@ def choose_next_planner_role(
             ("user_goal", "explorer_source_evidence"),
             ("architect_plan",),
         )
+    if "explicit_source_evidence" in available:
+        return decision(
+            "scout",
+            "explicit_current_sources_need_scoped_investigation",
+            ("user_goal", "explicit_source_evidence"),
+            ("scout_report",),
+        )
     return decision(
         "scout",
         "scout_evidence_missing",
-        ("user_goal", "project_inventory", "explorer_evidence"),
+        # Repository discovery belongs to Scout's bounded tool set. Do not
+        # force a separate Explorer/setup pass before the coordinator can
+        # dispatch the role that will decide what evidence it actually needs.
+        ("user_goal",),
         ("scout_report",),
     )
 

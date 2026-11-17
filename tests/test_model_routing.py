@@ -21,13 +21,16 @@ from werkstatt.model_routing import canonical_model_name, route_for_role
         "test-spec-validator",
         "chat",
         "debugger",
+        "project-coordinator",
     ],
 )
 def test_operational_roles_use_flash_without_thinking(
     role: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    route_label = "chat" if role == "debugger" else role
+    route_label = (
+        "chat" if role in {"debugger", "project-coordinator"} else role
+    )
     monkeypatch.delenv(
         f"WERKSTATT_MODEL_{route_label.upper().replace('-', '_')}",
         raising=False,
@@ -80,6 +83,22 @@ def test_role_override_is_scoped_and_keeps_role_thinking_policy(
     assert builder.thinking == "disabled"
     assert reviewer.model == "deepseek-flash"
     assert reviewer.thinking == "disabled"
+
+
+def test_project_coordinator_shares_project_chat_model_and_reasoning_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WERKSTATT_MODEL_CHAT", "deepseek-v4-pro")
+    monkeypatch.delenv("WERKSTATT_MODEL_PROJECT_COORDINATOR", raising=False)
+
+    chat = route_for_role("chat", reasoning=True)
+    coordinator = route_for_role("project-coordinator", reasoning=True)
+
+    assert coordinator == chat
+    assert coordinator.role == "chat"
+    assert coordinator.model == "deepseek-v4-pro"
+    assert coordinator.thinking == "enabled"
+    assert coordinator.reasoning_effort == "high"
 
 
 @pytest.mark.parametrize(

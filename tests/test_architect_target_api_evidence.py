@@ -630,6 +630,26 @@ def test_execution_context_budget_keeps_sections_whole_and_reports_omissions() -
     assert tiny_metadata["chars"] == len(tiny)
 
 
+def test_preflight_findings_are_prioritized_over_long_progress_history() -> None:
+    from werkstatt.planner import _budget_architect_execution_context
+
+    context, metadata = _budget_architect_execution_context(
+        [
+            ("PROJEKT-FORTSCHRITT (Historie)", "H" * 12_500),
+            ("PREFLIGHT-FEHLER (aktuelle Pflichtbefunde)", "Befund: Ruff Fehler"),
+            ("BEREITS ERLEDIGT", "Erledigt: Kontextbudget"),
+        ],
+    )
+
+    assert "Befund: Ruff Fehler" in context
+    assert "Erledigt: Kontextbudget" in context
+    assert "H" * 100 not in context
+    assert metadata["included"] == [
+        "PREFLIGHT-FEHLER (aktuelle Pflichtbefunde)", "BEREITS ERLEDIGT",
+    ]
+    assert "PROJEKT-FORTSCHRITT (Historie)" in metadata["omitted"]
+
+
 def test_architect_execution_context_manifest_covers_all_included_sections() -> None:
     from werkstatt.planner import _budget_architect_execution_context
 

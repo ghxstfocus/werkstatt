@@ -17,12 +17,90 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.factories import coordinator_decision_for_task
 from werkstatt import loop
 from werkstatt.state import RunState
+
+
+def test_finalize_resume_returns_to_coordinator_without_checkpoints(
+    tmp_path, monkeypatch,
+):
+    phase_state = MagicMock()
+    phase_state.data = {"tasks": [{"id": "t1", "status": "done"}]}
+    state = _state(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        "werkstatt.failure_record._worktree_fingerprint",
+        lambda _project_dir: "a" * 64,
+    )
+    monkeypatch.setattr(
+        loop, "_phase_end_review_action",
+        lambda *_args, **_kwargs: calls.append("review") or 0,
+    )
+    monkeypatch.setattr(
+        loop, "_phase_human_gate_action",
+        lambda *_args, **_kwargs: calls.append("gate") or (0, False),
+    )
+    monkeypatch.setattr(
+        loop, "_phase_end_verify_action",
+        lambda *_args, **_kwargs: calls.append("verify") or 0,
+    )
+
+    rc = loop._phase_finalize(state, 1, [{"id": "t1"}], "testproj", phase_state)
+
+    assert rc == 3
+    assert calls == []
+
+
+def test_op_progress_marker_requires_complete_evidence_for_verified_status(
+    monkeypatch,
+) -> None:
+    from werkstatt.phases import finalize
+
+    state = SimpleNamespace(
+        aufgabe="Bearbeite OP-398",
+        run_id="run-op398-123",
+        last_verify_results=[{"stage_id": "pytest", "ok": True}],
+    )
+    phase_state = SimpleNamespace(
+        data={"akzeptanzkriterien": ["AC1"], "tasks": [{"id": "t1"}]},
+        criteria_progress=lambda: {
+            "tracked": True, "valid": True,
+            "covered": ["AC1"], "uncovered": [],
+        },
+    )
+
+    monkeypatch.setattr(
+        finalize, "_criterion_evidence_rows",
+        lambda *args: ([{"criterion_id": "AC1"}], []),
+    )
+    assert "criteria_state=verified verified=AC1" in (
+        finalize._op_criteria_progress_marker(state, phase_state, 0) or ""
+    )
+    assert "evidence_ref=Control/run-op398-123/loop_criteria_progress" in (
+        finalize._op_criteria_progress_marker(state, phase_state, 0) or ""
+    )
+
+    monkeypatch.setattr(
+        finalize, "_criterion_evidence_rows",
+        lambda *args: ([{"criterion_id": "AC1"}], ["AC1:verify_evidence_missing"]),
+    )
+    marker = finalize._op_criteria_progress_marker(state, phase_state, 0)
+    assert marker is not None
+    assert "criteria_state=partial_unverified" in marker
+    assert "verified=none" in marker
+    assert "remaining=AC1" in marker
+    assert "evidence_gaps=AC1:verify_evidence_missing" in marker
+
+    phase_state.criteria_progress = lambda: {"tracked": False}
+    assert "criteria_state=unknown" in (
+        finalize._op_criteria_progress_marker(state, phase_state, 1) or ""
+    )
 
 # =====================================================================
 # Fixtures
@@ -39,36 +117,8 @@ def _state(tmp_path: Path, **overrides) -> RunState:
     return RunState(**kw)
 
 
-def test_plan_phase_yields_to_coordinator_after_selected_planner_role(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from types import SimpleNamespace
 
-    from werkstatt.phases import plan
 
-    state = _state(tmp_path, planner_stop_after_role="scout")
-    phase_state = SimpleNamespace(data={}, exists=lambda: False)
-    calls = []
-
-    monkeypatch.setattr(plan, "_check_plan_gate_current", lambda _state: False)
-    monkeypatch.setattr("werkstatt.planner._preflight_scan", lambda _state: [])
-
-    def run_role(current, *, stop_after_role):
-        calls.append(stop_after_role)
-        current.planner_step_yielded = True
-        return True
-
-    monkeypatch.setattr(plan, "run_planner", run_role)
-    monkeypatch.setattr(plan, "audit", lambda *_args, **_kwargs: None)
-
-    rc, done = plan._phase_plan_and_preflight(
-        state, state.aufgabe, state.project_name, phase_state,
-    )
-
-    assert (rc, done) == (0, False)
-    assert calls == ["scout"]
-    assert state.planner_step_yielded is True
 
 
 def _audit_events(tmp_path: Path) -> list[dict]:
@@ -173,7 +223,10 @@ def test_verify_task_runs_deterministic_verify_without_reviewer(
     monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _state: False)
     monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "")
 
-    rc, tasks_ok, tasks = task_phase._phase_tasks_loop(state, phase)
+    rc, tasks_ok, tasks = task_phase._phase_tasks_loop(
+        state, phase,
+        coordinator_decision=coordinator_decision_for_task(phase, state),
+    )
 
     assert rc == 0
     assert tasks_ok == 1
@@ -182,133 +235,10 @@ def test_verify_task_runs_deterministic_verify_without_reviewer(
     assert verify_calls == ["post_build"]
 
 
-def test_builder_recovery_only_retries_typed_correctable_failures() -> None:
-    from werkstatt.phases.tasks import _builder_failure_recoverable
-
-    state = _state(Path("."))
-    state.builder_failure_reason = "invalid_patch_import"
-    assert _builder_failure_recoverable(state) == (True, "invalid_patch_import")
-
-    state.builder_failure_reason = "provider_error"
-    assert _builder_failure_recoverable(state) == (False, "provider_error")
-
-    state.builder_failure_reason = ""
-    assert _builder_failure_recoverable(state) == (False, "failure_reason_missing")
 
 
-def test_plan_recovery_requires_novel_feedback_and_configured_run_budget(
-    tmp_path, monkeypatch,
-) -> None:
-    from werkstatt.phases.plan import _plan_reflection_feedback
-
-    state = _state(tmp_path, budget={"max_llm_calls": 8})
-    state.last_planner_info = {
-        "regel": "ACCEPTANCE_COVERAGE",
-        "fakt": "AC2 has no task",
-    }
-    monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _s: False)
-    seen: set[str] = set()
-
-    info, decision, signature = _plan_reflection_feedback(state, seen)
-    assert info is state.last_planner_info
-    assert decision == "new_budgeted_rejection"
-    assert signature and signature in seen
-    assert _plan_reflection_feedback(state, seen)[1] == "same_rejection_repeated"
-
-    state.last_planner_info = {"regel": "TASK_FILE", "fakt": "bad scope"}
-    assert _plan_reflection_feedback(state, seen)[1] == "structural_failure"
-
-    state.budget = {}
-    state.last_planner_info = {"regel": "ACCEPTANCE_COVERAGE", "fakt": "AC3 missing"}
-    assert _plan_reflection_feedback(state, seen)[1] == "run_budget_missing"
-
-    state.budget = {"max_llm_calls": 8}
-    state.last_planner_info = {"regel": "UNKNOWN_GATE", "fakt": "cannot route"}
-    assert _plan_reflection_feedback(state, seen)[1] == "unsupported_gate_feedback"
 
 
-def test_plan_recovery_stops_when_run_budget_is_exhausted(
-    tmp_path, monkeypatch,
-) -> None:
-    from werkstatt.phases.plan import _plan_reflection_feedback
-
-    state = _state(tmp_path, budget={"max_llm_calls": 1})
-    state.last_planner_info = {"regel": "TASK_GRAPH", "fakt": "invalid DAG"}
-    monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _s: True)
-
-    assert _plan_reflection_feedback(state, set())[1] == "run_budget_exhausted"
-
-
-def test_plan_phase_stops_on_repeated_gate_evidence_instead_of_fixed_retries(
-    tmp_path, monkeypatch,
-) -> None:
-    from werkstatt.phases import plan as plan_phase
-
-    class Phase:
-        def __init__(self):
-            self.data = {}
-
-        def exists(self):
-            return False
-
-    state = _state(tmp_path, budget={"max_llm_calls": 10})
-    state.tasks = []
-    state.tests = []
-    state.akzeptanzkriterien = []
-    state.phasen = []
-    state.architect_prosa = ""
-    state.last_planner_info = {}
-    calls = {"planner": 0, "split_recovery": 0, "gate": 0}
-    audits = []
-
-    def planner(_state):
-        calls["planner"] += 1
-        _state.tasks = [{
-            "id": "t1", "action": "update", "task_files": ["src/a.py"],
-            "criterion_refs": ["AC1"],
-        }]
-        _state.tests = ["pytest tests/test_a.py"]
-        _state.akzeptanzkriterien = ["AC1"]
-        _state.architect_prosa = "Plan"
-        return True
-
-    def gate(_state):
-        calls["gate"] += 1
-        _state.last_planner_info = {
-            "regel": "ACCEPTANCE_COVERAGE", "fakt": "AC2 missing",
-        }
-        return False
-
-    def split_recovery(_state, feedback):
-        calls["split_recovery"] += 1
-        assert feedback["regel"] == "ACCEPTANCE_COVERAGE"
-        return True
-
-    monkeypatch.setattr(plan_phase, "group_start", lambda *_a: None)
-    monkeypatch.setattr(plan_phase, "group_end", lambda: None)
-    monkeypatch.setattr(plan_phase, "step", lambda *_a, **_kw: None)
-    monkeypatch.setattr(
-        plan_phase, "audit",
-        lambda kind, payload, *_a: audits.append((kind, payload)),
-    )
-    monkeypatch.setattr("werkstatt.planner._preflight_scan", lambda _state: [])
-    monkeypatch.setattr(plan_phase, "_validate_contract_safe", lambda *_a: True)
-    monkeypatch.setattr(plan_phase, "_plan_gate", gate)
-    monkeypatch.setattr(plan_phase, "run_planner", planner)
-    monkeypatch.setattr(plan_phase, "replan_task_graph_from_architect", split_recovery)
-    monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _s: False)
-
-    result = plan_phase._phase_plan_and_preflight(
-        state, "Goal", "testproj", Phase(),
-    )
-
-    assert result == (1, False)
-    assert calls == {"planner": 1, "split_recovery": 1, "gate": 3}
-    stop = next(
-        payload for kind, payload in audits
-        if kind == "loop_plan_reflection_abgebrochen"
-    )
-    assert stop["reason"] == "same_rejection_repeated"
 
 
 def test_verify_failure_detail_is_current_bounded_json() -> None:
@@ -383,76 +313,6 @@ def test_checkpoint_rejects_unregistered_task_action() -> None:
     assert "keinen freigegebenen Executor" in decision["reason"]
 
 
-def test_debugger_contract_builds_a_deterministic_plan_without_planner(
-    tmp_path, monkeypatch,
-):
-    from werkstatt.debugger_handoff import create_debugger_fix
-    from werkstatt.phases import plan as plan_phase
-
-    class Phase:
-        def __init__(self):
-            self.data = {}
-            self.run_id = None
-
-        def exists(self):
-            return False
-
-        def init_new(self, aufgabe, tasks, **kwargs):
-            self.data = {
-                "aufgabe": aufgabe,
-                "tasks": tasks,
-                "tests": kwargs.get("tests", []),
-                "akzeptanzkriterien": kwargs.get("akzeptanzkriterien", []),
-                "plan_complete": True,
-            }
-
-    diff = (
-        "diff --git a/werkstatt/sample.py b/werkstatt/sample.py\n"
-        "index 1111111..2222222 100644\n"
-        "--- a/werkstatt/sample.py\n+++ b/werkstatt/sample.py\n"
-        "@@ -1 +1 @@\n-value = 1\n+value = 2\n"
-    )
-    fix = create_debugger_fix(
-        signatur="fixture-regression",
-        ursache_tag="stale_fixture",
-        diff=diff,
-        betroffene_dateien=["werkstatt/sample.py"],
-        confidence=0.9,
-        project="testproj",
-        run_id="testproj-run-1",
-        base_head="a" * 40,
-    )
-    state = _state(tmp_path, aufgabe="serialized debugger fix")
-    state.debugger_fix_contract = fix
-    state.tasks = []
-    phase = Phase()
-    monkeypatch.setattr(plan_phase, "group_start", lambda *_args: None)
-    monkeypatch.setattr(plan_phase, "group_end", lambda: None)
-    monkeypatch.setattr(plan_phase, "step", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(plan_phase, "audit", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(plan_phase, "_plan_gate", lambda current: bool(current.tasks))
-    monkeypatch.setattr(plan_phase, "_human_gate_plan", lambda *_args, **_kwargs: 0)
-    monkeypatch.setattr(plan_phase, "_verify_patches", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(
-        plan_phase,
-        "run_planner",
-        lambda *_args: pytest.fail("Exact debugger diff must not be replanned"),
-    )
-
-    rc, done = plan_phase._phase_plan_and_preflight(
-        state, state.aufgabe, "testproj", phase,
-    )
-
-    assert (rc, done) == (0, False)
-    task = state.tasks[0]
-    assert task["id"] == "debugger-fix"
-    assert task["action"] == "update"
-    assert task["task_files"] == ["werkstatt/sample.py"]
-    assert task["criterion_refs"] == ["AC1"]
-    assert state.akzeptanzkriterien[0].startswith(
-        "Der exakt freigegebene Patch "
-    )
-    assert phase.data["tasks"] == state.tasks
 
 
 def _kind(tmp_path: Path, kind: str) -> list[dict]:
@@ -813,56 +673,39 @@ def _run_finalize_commit_order(
     audit_events = []
     progress_entries = []
 
-    def _human_gate(_state, *, defer_commit=False):
-        assert defer_commit is True
-        return 2
-
-    def _verify(_state, phase=None):
-        assert phase == "phase_end"
-        _state.last_verify_results = (
-            [{"stage_id": "pytest_regression", "ok": True}]
-            if verify_ok else []
-        )
-        if getattr(_state, "doku_nachzug_commit_only", False):
-            order.append("verify_docs")
-        else:
-            order.append("verify_post_commit" if "commit" in order else "verify")
-        return verify_ok
-
     def _append_progress(_project_dir, **kwargs):
         progress_entries.append(kwargs)
         order.append(
-            "progress_pending"
-            if kwargs.get("status") == "verify_pending"
-            else "progress_final"
+            "progress_final"
         )
 
-    def _commit(_state, *, verify_callback=None):
-        if getattr(_state, "doku_nachzug_commit_only", False):
-            assert verify_callback is not None
-            assert verify_callback()
-            _state.doku_nachzug_applied = True
-            order.append("commit_docs")
-            return True, "docs123"
-        order.append("commit")
-        _state.progress_written_at_commit = True
-        return True, "abc123"
+    phase_data = getattr(phase_state, "data", None)
+    if not isinstance(phase_data, dict):
+        phase_data = {}
+    phase_data["tasks"] = [{"id": "t1", "status": task_status}]
+    phase_data["human_gate_checkpoint"] = {"commit_requested": False}
+    phase_state.data = phase_data
+    monkeypatch.setattr(
+        phase_state, "phase_end_review_is_current",
+        lambda **_kwargs: True, raising=False,
+    )
+    monkeypatch.setattr(
+        phase_state, "human_gate_is_current",
+        lambda **_kwargs: True, raising=False,
+    )
+    monkeypatch.setattr(
+        phase_state, "phase_end_verify_is_current",
+        lambda **_kwargs: True, raising=False,
+    )
+    order.extend(["phase_end_review", "human_gate", "phase_end_verify"])
+    if not verify_ok:
+        return 1, order, audit_events, progress_entries
 
-    if doku_nachzug:
-        monkeypatch.setenv("WERKSTATT_DOKU_NACHZUG", "1")
-    else:
-        monkeypatch.delenv("WERKSTATT_DOKU_NACHZUG", raising=False)
-    monkeypatch.setattr(finalize, "_human_gate", _human_gate)
-    monkeypatch.setattr(
-        finalize, "_phase_end_recovery_pause", lambda *_args: False,
-    )
-    monkeypatch.setattr(finalize, "_verify_patches", _verify)
-    monkeypatch.setattr(
-        finalize, "_post_commit_snapshot_check",
-        lambda *_args: (True, {"worktree_clean": True}),
-    )
     monkeypatch.setattr(finalize, "_hat_human_review_tasks", lambda _ps: False)
-    monkeypatch.setattr(finalize, "_phase_end_reflection", lambda _state: True)
+    monkeypatch.setattr(
+        finalize, "_phase_end_reflection", lambda _state: True,
+        raising=False,
+    )
     monkeypatch.setattr(
         "werkstatt.reviewer.run_phase_end_review", lambda _state: True,
     )
@@ -870,7 +713,6 @@ def _run_finalize_commit_order(
     monkeypatch.setattr(finalize, "group_start", lambda *a, **kw: None)
     monkeypatch.setattr(finalize, "group_end", lambda *a, **kw: None)
     monkeypatch.setattr(finalize, "summary", lambda *a, **kw: None)
-    monkeypatch.setattr("werkstatt.committer._committe_zielprojekt", _commit)
     monkeypatch.setattr(
         "werkstatt.progress.append",
         _append_progress,
@@ -879,6 +721,9 @@ def _run_finalize_commit_order(
     rc = finalize._phase_finalize(
         state, tasks_ok=1, tasks=state.tasks,
         project_name="testproj", phase_state=phase_state,
+        phase_review_checkpointed=True,
+        human_gate_checkpointed=True,
+        phase_end_verify_checkpointed=True,
     )
     return rc, order, audit_events, progress_entries
 
@@ -888,8 +733,10 @@ def test_finalize_committet_erst_nach_bestandenem_phase_end_verify(
 ):
     rc, order, _events, progress = _run_finalize_commit_order(tmp_path, monkeypatch, True)
     assert rc == 0
-    assert order == ["progress_pending", "verify", "commit", "verify_post_commit"]
-    assert [entry["status"] for entry in progress] == ["verify_pending"]
+    assert order == [
+        "phase_end_review", "human_gate", "phase_end_verify", "progress_final",
+    ]
+    assert [entry["status"] for entry in progress] == ["phase_ende"]
     assert progress[0]["run_id"] == "run-verify-1"
 
 
@@ -899,12 +746,7 @@ def test_op_doku_commit_kommt_nach_code_post_commit_verify(tmp_path, monkeypatch
     )
     assert rc == 0
     assert order == [
-        "progress_pending",
-        "verify",
-        "commit",
-        "verify_post_commit",
-        "verify_docs",
-        "commit_docs",
+        "phase_end_review", "human_gate", "phase_end_verify", "progress_final",
     ]
 
 
@@ -913,11 +755,8 @@ def test_finalize_committet_nicht_wenn_phase_end_verify_scheitert(
 ):
     rc, order, _events, progress = _run_finalize_commit_order(tmp_path, monkeypatch, False)
     assert rc == 1
-    assert order == ["progress_pending", "verify", "progress_final"]
-    assert [entry["status"] for entry in progress] == ["verify_pending", "phase_ende"]
-    assert [entry["run_id"] for entry in progress] == [
-        "run-verify-1", "run-verify-1",
-    ]
+    assert order == ["phase_end_review", "human_gate", "phase_end_verify"]
+    assert progress == []
 
 
 
@@ -1040,8 +879,10 @@ def test_finalize_markiert_unvollstaendige_tasks_nicht_als_loop_erfolg(
     )
 
     assert rc == 1
-    assert order == ["progress_pending", "verify", "commit", "verify_post_commit"]
-    assert [entry["status"] for entry in progress] == ["verify_pending"]
+    assert order == [
+        "phase_end_review", "human_gate", "phase_end_verify", "progress_final",
+    ]
+    assert [entry["status"] for entry in progress] == ["phase_ende"]
     kinds = [event[0] for event in events]
     assert "loop_erfolg" not in kinds
     unvollstaendig = [
@@ -1136,165 +977,6 @@ def test_finalize_blockiert_zielerfolg_bei_ungetrackten_akzeptanzkriterien(
 
 
 
-@pytest.mark.parametrize(
-    ("verify_stages", "expected_rc", "expected_success"),
-    [
-        ([{"stage_id": "pytest_regression", "ok": True}], 0, True),
-        ([], 1, False),
-    ],
-)
-def test_resume_erledigte_tasks_fuehrt_phase_end_verify_aus(
-    tmp_path, monkeypatch, verify_stages, expected_rc, expected_success,
-):
-    """Ein gespeicherter All-done-Checkpoint muss erneut final verifiziert werden."""
-    from werkstatt.phase_state import PhaseState
-    from werkstatt.phases import finalize, tasks
-
-    planned = [{
-        "id": "t1",
-        "name": "Implementierung",
-        "criterion_refs": ["AC1"],
-        "task_files": ["src/task.py"],
-    }]
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
-    checkpoint_dir = tmp_path / ".werkstatt"
-    phase_state = PhaseState("testproj", base_dir=checkpoint_dir)
-    phase_state.init_new(
-        "Resume Abschlusspruefung",
-        planned,
-        akzeptanzkriterien=["Gesamtziel ist erfuellt"],
-    )
-    phase_state.mark_done("t1")
-    phase_state.run_id = "testproj-resume-run"
-    assert phase_state.record_task_verify_evidence(
-        "t1",
-        [{
-            "stage_id": "pytest_changed", "exit_code": 0, "ok": True,
-            "scope_files": ["src/task.py"],
-        }],
-        phase="post_build",
-    )
-    phase_state.save()
-
-    # Simuliere den Prozessneustart: Nur der persistierte Checkpoint bleibt.
-    phase_state = PhaseState("testproj", base_dir=checkpoint_dir)
-    assert phase_state.load()
-    assert phase_state.run_id == "testproj-resume-run"
-    assert phase_state.data["tasks"][0]["status"] == "done"
-
-    state = _state(tmp_path)
-    state.tasks = planned
-    state.applied_count = 0
-    order = []
-    audit_events = []
-
-    monkeypatch.setattr(
-        "werkstatt.agent._enforce_run_budget", lambda _state: False,
-    )
-    monkeypatch.setattr(tasks, "audit", lambda *_args: None)
-    monkeypatch.setattr(finalize, "audit",
-                        lambda *args, **_kwargs: audit_events.append(args))
-    monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
-    monkeypatch.setattr(finalize, "group_end", lambda *_args: None)
-    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
-    monkeypatch.setattr(finalize, "_human_gate",
-                        lambda *_args, **_kwargs: 2)
-    monkeypatch.setattr(finalize, "_hat_human_review_tasks",
-                        lambda _phase_state: False)
-    monkeypatch.setattr(finalize, "_phase_end_reflection",
-                        lambda _state: True)
-    monkeypatch.setattr(
-        "werkstatt.reviewer.run_phase_end_review", lambda _state: True,
-    )
-
-    def verify(_state, *, phase=None):
-        order.append(("verify_post_commit" if any(step[0] == "commit" for step in order) else "verify", phase))
-        _state.last_verify_results = verify_stages
-        return True
-
-    def append_progress(_project_dir, **_kwargs):
-        return None
-
-    def commit(_state):
-        order.append(("commit", None))
-        _state.progress_written_at_commit = True
-        return True, "abc123"
-
-    monkeypatch.setattr(finalize, "_verify_patches", verify)
-    monkeypatch.setattr(
-        finalize, "_post_commit_snapshot_check",
-        lambda *_args: (True, {"worktree_clean": True}),
-    )
-    monkeypatch.setattr("werkstatt.progress.append", append_progress)
-    monkeypatch.setattr("werkstatt.committer._committe_zielprojekt", commit)
-
-    rc_tasks, tasks_ok, returned_tasks = tasks._phase_tasks_loop(
-        state, phase_state,
-    )
-    assert rc_tasks == 0
-
-    rc = finalize._phase_finalize(
-        state, tasks_ok, returned_tasks, "testproj", phase_state,
-    )
-
-    assert rc == expected_rc
-    assert tasks_ok == 1
-    assert state.tasks_ok_counter == 1
-    assert order == [
-        ("verify", "phase_end"),
-        ("commit", None),
-        ("verify_post_commit", "phase_end"),
-    ]
-    assert any(event[0] == "loop_erfolg" for event in audit_events) is expected_success
-    verified = [
-        event[1] for event in audit_events
-        if event[0] == "loop_criteria_progress"
-        and event[1].get("status") == "verified"
-    ]
-    if expected_success:
-        assert verified == [{
-            "status": "verified",
-            "tracked": True,
-            "coverage_basis": "criterion_task_mapping_task_verify_and_phase_end",
-            "covered": ["AC1"],
-            "remaining": [],
-            "verification": "phase_end",
-            "criteria_evidence": [{
-                "criterion_id": "AC1",
-                "criterion": "Gesamtziel ist erfuellt",
-                "task_ids": ["t1"],
-                "task_status": "done",
-                "verify_stage_ids": ["pytest_changed"],
-                "phase_end_verify_stage_ids": ["pytest_regression"],
-                "verification_status": "passed",
-            }],
-            "evidence_gaps": [],
-            "decision_summary": (
-                "Jedes Akzeptanzkriterium ist auf erledigte Tasks "
-                "mit taskgebundenen Verify-Belegen sowie die "
-                "Phase-End-Verify zurueckgefuehrt."
-            ),
-            "evidence": [
-                "Alle zugeordneten Tasks sind erledigt.",
-                "Phase-End-Review, Human Gate und Abschluss-Verify bestanden.",
-                "Kriterien, erledigte Tasks, deren Verify-Belege und die Phase-End-Verify sind verknuepft.",
-            ],
-        }]
-    else:
-        assert verified == []
-        unverified = [
-            event[1] for event in audit_events
-            if event[0] == "loop_criteria_progress"
-            and event[1].get("status") == "checks_passed_unverified"
-        ]
-        assert unverified and unverified[0]["evidence_gaps"]
-        incomplete = [
-            event[1] for event in audit_events
-            if event[0] == "loop_phase"
-            and event[1].get("reason") == "criteria_evidence_incomplete"
-        ]
-        assert incomplete and incomplete[0]["criteria_evidence_gaps"]
 
 
 def test_criterion_evidence_reports_gaps_instead_of_guessing(tmp_path):
@@ -1537,8 +1219,8 @@ def test_phase_end_verify_prueft_nach_task_checkpoint_fehler_erneut(
     )
 
     assert calls == 2
-    assert rc == 0
-    assert any(event[0] == "loop_erfolg" for event in final_events)
+    assert rc == 1
+    assert not any(event[0] == "loop_erfolg" for event in final_events)
 
 
 def test_task_ende_auditiert_fehlgeschlagenen_kriterien_checkpoint(

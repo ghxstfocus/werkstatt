@@ -80,7 +80,10 @@ def append(
         if prefix:
             prefix += "\n\n"
         tmp = progress_path.with_suffix(".tmp")
-        tmp.write_text(prefix + block, encoding="utf-8")
+        # Markdown in Git must use the same LF representation on Windows and
+        # POSIX. Path.write_text() otherwise translates newlines to os.linesep.
+        with tmp.open("w", encoding="utf-8", newline="\n") as progress_file:
+            progress_file.write(prefix + block)
         tmp.replace(progress_path)
         return True
     except OSError as _exc:

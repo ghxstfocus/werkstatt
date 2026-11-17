@@ -38,3 +38,30 @@ def mk_state(**overrides) -> RunState:
             )
         setattr(state, k, v)
     return state
+
+
+def coordinator_decision_for_task(phase_state, state: RunState) -> dict:
+    """Build the persisted action envelope used by the production dispatcher."""
+    from werkstatt.checkpoint_coordinator import choose_task_checkpoint_action
+
+    decision = choose_task_checkpoint_action(
+        phase_state, phase_state.get_next_task(), state=state,
+    )
+    action_by_decision = {
+        "execute_planned_task": "execute_task_checkpoint",
+        "verify_task_checkpoint": "verify_task_checkpoint",
+        "review_task_checkpoint": "review_task_checkpoint",
+        "complete_task_checkpoint": "complete_task_checkpoint",
+        "recover_verify_failure_checkpoint": "recover_verify_failure_checkpoint",
+        "reject_stale_verify_failure_checkpoint": "reject_stale_verify_failure_checkpoint",
+        "resolve_blocked_graph": "resolve_task_graph",
+        "replan_unassigned_criteria": "replan_unassigned_criteria",
+        "replan_failed_criteria": "replan_failed_criteria",
+        "run_phase_end_verify": "phase_end_verify",
+    }
+    return {
+        **decision,
+        "coordinator_action": action_by_decision.get(
+            str(decision.get("decision")), "reject_checkpoint",
+        ),
+    }

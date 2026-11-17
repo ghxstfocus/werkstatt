@@ -755,11 +755,11 @@ _TL_LABELS: dict[str, str] = {
     "explorer_messung": "Explorer: Messung",
     "explorer_messung_findings": "Explorer: Befunde",
     "explorer_result": "Explorer: Ergebnis",
-    "loop_explorer_ok": "Explorer: abgeschlossen",
-    "loop_explorer_leer": "Explorer: leer",
-    "loop_explorer_ergaenzt": "Explorer: ergaenzt",
-    "loop_explorer_suchbegriffe": "Explorer: Suchbegriffe",
-    "loop_explorer_related_files_failed": "Explorer: Related-File-Scan fehlgeschlagen",
+    "loop_explorer_ok": "Projektkontext: bereit",
+    "loop_explorer_leer": "Projektkontext: keine Treffer",
+    "loop_explorer_ergaenzt": "Projektkontext: Belege gesammelt",
+    "loop_explorer_suchbegriffe": "Kontextsuche: Suchbegriffe",
+    "loop_explorer_related_files_failed": "Kontextsuche: Dateibeziehungen nicht verfügbar",
     "loop_debugger_fix_plan": "Debugger-Fix: exakten Patch planen",
     "loop_debugger_fix_prepared": "Debugger-Fix: freigegebenen Patch vorbereiten",
     "loop_debugger_fix_rejected": "Debugger-Fix: freigegebenen Patch abgelehnt",
@@ -779,6 +779,7 @@ _TL_LABELS: dict[str, str] = {
     "loop_reflection_chat_builder_result": "Builder nach Chat-Kurskorrektur",
     "planner_plan_abgelehnt": "Architect: Plan nach API-Pruefung abgelehnt",
     "scout_context_budget": "Scout: Kontextbudget",
+    "project_coordinator_context_budget": "Koordinator: Kontextbudget",
     "planner_scout_context_budget_blocked": "Scout: Pflichtkontext ueber Budget",
     "builder_patches_erstellt": "Builder: Patches erstellt",
     "builder_keine_patches_gold": "Builder: keine Patches",
@@ -849,7 +850,7 @@ _TL_PHASEN_NAMEN: dict[str, str] = {
     "human_gate": "Human-Gate",
     "end_review": "Phase-Review",
     "reflection": "Reflection",
-    "explorer": "Explorer",
+    "explorer": "Projektkontext",
     "architect": "Architect",
     "planner": "Planner",
     "builder": "Builder",
@@ -859,7 +860,7 @@ _TL_PHASEN_NAMEN: dict[str, str] = {
     "build": "Build",
     "review": "Review",
     "reflect": "Reflection",
-    "explore": "Explorer",
+    "explore": "Kontext",
 }
 
 
@@ -1043,6 +1044,35 @@ def _tl_detail(kind: str, payload: dict[str, Any]) -> str:
             f"Entscheidung: {decision}; naechster Schritt: {next_step}. "
             f"{reason}"
         ).strip()
+    if kind == "loop_run_coordinator_decision":
+        decision = str(payload.get("decision") or "unbekannt")
+        action = str(payload.get("action") or payload.get("next_executor") or "")
+        reason = str(payload.get("reason") or "")[:180]
+        choice = payload.get("coordinator_model_choice")
+        if isinstance(choice, dict):
+            role = choice.get("role")
+            source = choice.get("source")
+            if role in {"scout", "architect"}:
+                code = str(choice.get("reason_code") or "")
+                if source == "project_chat_model":
+                    reason = (
+                        "Der Projektchat ruft Scout fuer zusaetzliche "
+                        "Repository-Belege."
+                        if role == "scout"
+                        else "Die aktuellen Quellbelege reichen fuer den "
+                        "Architect; Scout wird ausgelassen."
+                    )
+                elif code == "coordinator_model_unavailable":
+                    reason = (
+                        "Chat-Modell nicht verfuegbar; die beleggebundene "
+                        "Regelwahl nutzt den vorhandenen Quellbeleg."
+                    )
+                else:
+                    reason = (
+                        "Mehrdeutige Rollenwahl: Chat-Modell nicht genutzt; "
+                        "die sichere Regelwahl bleibt Architect."
+                    )
+        return f"Zielsteuerung: {decision}; naechster Schritt: {action}. {reason}".strip()
     if kind == "loop_task_start":
         return str(payload.get("text", ""))
     if kind in ("loop_task_ok", "loop_task_failed"):
@@ -1233,10 +1263,10 @@ _TL_AGENT_ROLLEN: dict[str, str] = {
 
 _TL_KIND_ROLLEN: tuple[tuple[str, str], ...] = (
     # Loop-emittierte Rollen-Events haben "loop_"-Prefix
-    # (loop_explorer_*, loop_scout_*, loop_planner_*, loop_architect_*).
+    # (loop_explorer_* is now the legacy name for project-context tools).
     # Die reinen Prefixe (explorer_*, ...) matchen nur Events von
     # den Rollen-Agenten selbst.
-    ("loop_explorer_", "explorer"),
+    ("loop_explorer_", "project_context_tools"),
     ("loop_scout_", "scout"),
     ("loop_planner_", "planner"),
     ("loop_architect_", "architect"),
@@ -1439,6 +1469,7 @@ def _tl_aggregate_aktiv(
         or kind in (
             "llm_call", "llm_call_start", "llm_call_heartbeat",
             "loop_task_start", "gate_open",
+            "loop_run_coordinator_decision",
         )
         or (
             kind.startswith("chat_job_")
@@ -1680,9 +1711,9 @@ def aggregate_swimlane(
     # Aktiv-Rolle aus letztem Event
     aktiv = _tl_aggregate_aktiv(events_sorted)
 
-    # Lanes in Rollen-Reihenfolge (ADSK: Explorer zuerst, Loop zuletzt)
+    # Lanes fuer Rollen und bedarfsgesteuerte Kontextwerkzeuge.
     ROLLEN_REIHENFOLGE = [
-        "explorer", "scout", "architect", "planner",
+        "project_context_tools", "scout", "architect", "planner",
         "builder", "verify", "reviewer", "reflection", "loop",
     ]
     lanes_liste: list[dict[str, Any]] = []
@@ -2740,10 +2771,10 @@ def aggregate_plan_versions(
 def aggregate_handoffs(
     projekt: str, run_id: str | None = None
 ) -> list[dict[str, Any]]:
-    """Rollen-Kette mit Übergaben (Explorer -> Scout -> Architect -> ...)."""
+    """Rollen- und Werkzeugschritte des Runs in zeitlicher Reihenfolge."""
     events = _audit_events(run_id)
     ROLLEN = [
-        ("explorer", "Explorer"),
+        ("loop_explorer", "Projektkontext"),
         ("scout", "Scout"),
         ("architect", "Architect"),
         ("planner", "Planner"),

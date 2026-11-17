@@ -56,6 +56,12 @@ def _kind(tmp_path: Path, kind: str) -> list[dict]:
     return [e for e in _audit_events(tmp_path) if e.get("kind") == kind]
 
 
+def _write_lf(path: Path, content: str) -> None:
+    """Keep synthetic Git fixtures platform independent."""
+    with path.open("w", encoding="utf-8", newline="\n") as fixture:
+        fixture.write(content)
+
+
 def _init_repo(tmp_path: Path) -> None:
     """Legt ein echtes Git-Repo in tmp_path an, mit einem Initial-Commit."""
     env = {
@@ -71,7 +77,7 @@ def _init_repo(tmp_path: Path) -> None:
                    cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "init@test"],
                    cwd=tmp_path, check=True)
-    (tmp_path / "seed.txt").write_text("seed\n")
+    _write_lf(tmp_path / "seed.txt", "seed\n")
     subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, env=e)
     subprocess.run(["git", "commit", "-qm", "init"],
                    cwd=tmp_path, check=True, env=e)
@@ -104,7 +110,7 @@ def test_committe_working_tree_clean(tmp_path):
 def test_committe_erfolg(tmp_path):
     """Datei geaendert -> Commit angelegt, sha zurueck, Audit."""
     _init_repo(tmp_path)
-    (tmp_path / "neu.py").write_text("def f(): pass\n")
+    _write_lf(tmp_path / "neu.py", "def f(): pass\n")
     s = _state(tmp_path)
     ok, sha = loop._committe_zielprojekt(s)
     assert ok is True, sha
@@ -127,7 +133,7 @@ def test_committe_postcheck_faengt_neue_aenderungen_nach_commit_ab(
 ):
     """Der Commit gilt nicht als fertig, wenn nach dem Commit neue Aenderungen auftauchen."""
     _init_repo(tmp_path)
-    (tmp_path / "neu.py").write_text("def f(): pass\n")
+    _write_lf(tmp_path / "neu.py", "def f(): pass\n")
     s = _state(tmp_path)
 
     from werkstatt import loop as loop_mod
@@ -136,7 +142,7 @@ def test_committe_postcheck_faengt_neue_aenderungen_nach_commit_ab(
     def _inject_after_commit(argv, **kwargs):
         result = original_run(argv, **kwargs)
         if "commit" in argv and result.returncode == 0:
-            (tmp_path / "parallel.py").write_text("parallel change\n")
+            _write_lf(tmp_path / "parallel.py", "parallel change\n")
         return result
 
     monkeypatch.setattr(loop_mod.subprocess, "run", _inject_after_commit)
@@ -157,7 +163,7 @@ def test_committe_postcheck_faengt_neue_aenderungen_nach_commit_ab(
 def test_committe_postcheck_erkennt_parallelen_head_commit(tmp_path, monkeypatch):
     """Ein fremder Folge-Commit darf nicht als eigener Commit verifiziert werden."""
     _init_repo(tmp_path)
-    (tmp_path / "neu.py").write_text("def f(): pass\n")
+    _write_lf(tmp_path / "neu.py", "def f(): pass\n")
     s = _state(tmp_path)
 
     from werkstatt import loop as loop_mod
@@ -196,7 +202,7 @@ def test_committe_postcheck_erkennt_vom_hook_geaenderten_index_tree(
 ):
     """Ein Hook darf den vor dem Commit gepinnten Index-Inhalt nicht still veraendern."""
     _init_repo(tmp_path)
-    (tmp_path / "neu.py").write_text("def f(): pass\n")
+    _write_lf(tmp_path / "neu.py", "def f(): pass\n")
     s = _state(tmp_path)
 
     from werkstatt import loop as loop_mod
@@ -204,7 +210,7 @@ def test_committe_postcheck_erkennt_vom_hook_geaenderten_index_tree(
 
     def _rewrite_staged_file_during_commit(argv, **kwargs):
         if "commit" in argv and "--allow-empty" not in argv:
-            (tmp_path / "neu.py").write_text("def f(): return 'hook'\n")
+            _write_lf(tmp_path / "neu.py", "def f(): return 'hook'\n")
             original_run(
                 ["git", "-C", str(tmp_path), "add", "neu.py"],
                 capture_output=True,
@@ -232,7 +238,7 @@ def test_committe_postcheck_erkennt_vom_hook_geaenderten_index_tree(
 def test_committe_autor_aus_state(tmp_path):
     """git_author_name/email aus state werden im Commit verwendet."""
     _init_repo(tmp_path)
-    (tmp_path / "neu.py").write_text("x\n")
+    _write_lf(tmp_path / "neu.py", "x\n")
     s = _state(tmp_path, git_author_name="Alice",
                git_author_email="alice@example.com")
     ok, _ = loop._committe_zielprojekt(s)
@@ -247,7 +253,7 @@ def test_committe_autor_aus_state(tmp_path):
 def test_committe_git_add_fehler(tmp_path, monkeypatch):
     """git add rc!=0 -> (False, ...)."""
     _init_repo(tmp_path)
-    (tmp_path / "x.py").write_text("x\n")
+    _write_lf(tmp_path / "x.py", "x\n")
     s = _state(tmp_path)
 
     from werkstatt import loop as loop_mod
@@ -273,7 +279,7 @@ def test_committe_git_add_fehler(tmp_path, monkeypatch):
 def test_committe_git_commit_fehler(tmp_path, monkeypatch):
     """git commit rc!=0 -> (False, ...) + fehler-Audit."""
     _init_repo(tmp_path)
-    (tmp_path / "x.py").write_text("x\n")
+    _write_lf(tmp_path / "x.py", "x\n")
     s = _state(tmp_path)
 
     from werkstatt import loop as loop_mod
@@ -429,9 +435,9 @@ def test_real_stash_restore_survives_concurrent_push(tmp_path):
     git = ["git", "-C", str(tmp_path)]
     run = subprocess.run
     seed = tmp_path / "seed.txt"
-    seed.write_text("run-owned staged change\n")
+    _write_lf(seed, "run-owned staged change\n")
     run([*git, "add", "seed.txt"], check=True)
-    seed.write_text("run-owned unstaged change\n")
+    _write_lf(seed, "run-owned unstaged change\n")
     run_stash = loop._git_stash_owned(tmp_path)
     assert run_stash is not None
 
@@ -440,7 +446,7 @@ def test_real_stash_restore_survives_concurrent_push(tmp_path):
     def _concurrent_push(argv, **kwargs):
         result = run(argv, **kwargs)
         if argv[3:5] == ["stash", "list"]:
-            newer_file.write_text("user's newer stash\n")
+            _write_lf(newer_file, "user's newer stash\n")
             run(
                 [*git, "stash", "push", "-u", "-m", "foreign"],
                 capture_output=True, check=True,
@@ -467,14 +473,14 @@ def test_real_stash_restore_survives_concurrent_push(tmp_path):
 def test_real_stash_conflict_remains_recoverable(tmp_path):
     _init_repo(tmp_path)
     ziel = tmp_path / "seed.txt"
-    ziel.write_text("user change\n")
+    _write_lf(ziel, "user change\n")
     assert loop._git_stash(tmp_path) is True
     stash_sha = subprocess.run(
         ["git", "-C", str(tmp_path), "rev-parse", "refs/stash"],
         capture_output=True, text=True, check=True,
     ).stdout.strip()
 
-    ziel.write_text("loop change\n")
+    _write_lf(ziel, "loop change\n")
     subprocess.run(["git", "-C", str(tmp_path), "add", "seed.txt"], check=True)
     subprocess.run(
         ["git", "-C", str(tmp_path), "commit", "-m", "loop change"],

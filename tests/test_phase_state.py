@@ -21,6 +21,170 @@ def test_init_new_und_load(tmp_path):
     assert ps2.data["tasks"][0]["status"] == "pending"
 
 
+def test_plan_candidate_roundtrip_binds_goal_run_and_preflight_evidence(
+    tmp_path,
+):
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.run_id = "run-1"
+    digest = phase.record_plan_candidate(
+        goal="Implement AC1",
+        run_id="run-1",
+        tasks=[{"id": "t1", "criterion_refs": ["AC1"]}],
+        tests=["pytest -q"],
+        criteria=["AC1"],
+        phases=[],
+        architect_prose="Scoped plan",
+        preflight_findings=[{"klasse": "test", "datei": "tests/test_old.py"}],
+    )
+
+    resumed = PhaseState("demo", base_dir=tmp_path)
+    assert resumed.load()
+    candidate = resumed.load_plan_candidate(goal="Implement AC1", run_id="run-1")
+    assert candidate is not None
+    assert candidate["preflight_findings"] == [{
+        "klasse": "test", "datei": "tests/test_old.py",
+    }]
+    assert resumed.plan_candidate_is_approved(
+        goal="Implement AC1", run_id="run-1",
+    ) is False
+    assert resumed.load_plan_candidate(goal="Different goal", run_id="run-1") is None
+    assert resumed.load_plan_candidate(goal="Implement AC1", run_id="other-run") is None
+
+    record = resumed.data["plan_candidate_checkpoint"]
+    record["payload"]["preflight_findings"][0]["klasse"] = "changed"
+    assert resumed.load_plan_candidate(goal="Implement AC1", run_id="run-1") is None
+    assert record["candidate_sha256"] == digest
+
+
+def test_preflight_checkpoint_roundtrip_rejects_tampering_and_resets_old_role(
+    tmp_path,
+):
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.run_id = "old-run"
+    phase.data["planner_role_stage"] = "architect"
+    phase.data["planner_role_goal_sha256"] = "old-goal-hash"
+    findings = [{"klasse": "test", "datei": "tests/test_api.py"}]
+    phase.record_preflight_checkpoint(
+        goal="Current goal", run_id="new-run", findings=findings,
+    )
+    assert "planner_role_stage" not in phase.data
+
+    resumed = PhaseState("demo", base_dir=tmp_path)
+    assert resumed.load()
+    assert resumed.load_preflight_checkpoint(
+        goal="Current goal", run_id="new-run",
+    ) == findings
+    record = resumed.data["preflight_checkpoint"]
+    record["payload"]["findings"][0]["klasse"] = "changed"
+    assert resumed.load_preflight_checkpoint(
+        goal="Current goal", run_id="new-run",
+    ) is None
+
+
+def test_task_review_checkpoint_is_bound_to_current_verify_and_source(tmp_path):
+    source = tmp_path / "src" / "feature.py"
+    source.parent.mkdir()
+    source.write_text("value = 1\n", encoding="utf-8")
+    phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    phase.init_new(
+        "Update feature",
+        [{
+            "id": "t1", "name": "Update feature", "action": "update",
+            "task_files": ["src/feature.py"], "criterion_refs": ["AC1"],
+        }],
+        akzeptanzkriterien=["feature updated"],
+    )
+    phase.run_id = "review-run"
+    phase.mark_running("t1")
+    assert phase.record_task_verify_evidence(
+        "t1",
+        [{
+            "stage_id": "pytest", "ok": True, "exit_code": 0,
+            "scope_files": ["src/feature.py"],
+        }],
+        phase="post_build",
+    )
+
+    assert phase.record_task_review_checkpoint(
+        "t1", verify_warnings=["bounded warning"],
+    )
+    assert phase.task_review_checkpoint_is_current("t1")
+    assert phase.data["tasks"][0]["review_checkpoint"]["verify_warnings"] == [
+        "bounded warning",
+    ]
+
+    source.write_text("value = 2\n", encoding="utf-8")
+    assert not phase.task_review_checkpoint_is_current("t1")
+
+
+def test_task_build_checkpoint_schedules_separate_verify_action(tmp_path):
+    source = tmp_path / "src" / "feature.py"
+    source.parent.mkdir()
+    source.write_text("value = 2\n", encoding="utf-8")
+    phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    phase.init_new(
+        "Update feature",
+        [{
+            "id": "t1", "name": "Update feature", "action": "update",
+            "task_files": ["src/feature.py"], "criterion_refs": ["AC1"],
+        }],
+        akzeptanzkriterien=["feature updated"],
+    )
+    phase.run_id = "build-run"
+    phase.mark_running("t1")
+
+    assert phase.record_task_build_checkpoint("t1")
+    assert phase.task_build_checkpoint_is_current("t1")
+    next_task = phase.get_next_task()
+    assert next_task is not None
+    assert next_task["verification_only"] is True
+    assert next_task["action"] == "verify"
+
+    source.write_text("value = 3\n", encoding="utf-8")
+    assert not phase.task_build_checkpoint_is_current("t1")
+
+    phase.update_task("t1", "failed", failure="verify_failed")
+    assert phase.get_task("t1").get("build_checkpoint") is None
+    assert phase.get_task("t1").get("verification_pending") is None
+    assert phase.get_next_task() is None
+
+
+def test_verify_failure_checkpoint_is_hash_bound_and_selected_for_recovery(tmp_path):
+    source = tmp_path / "src" / "feature.py"
+    source.parent.mkdir()
+    source.write_text("value = 2\n", encoding="utf-8")
+    phase = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    phase.init_new(
+        "Update feature",
+        [{
+            "id": "t1", "name": "Update feature", "action": "update",
+            "task_files": ["src/feature.py"], "criterion_refs": ["AC1"],
+        }],
+        akzeptanzkriterien=["feature updated"],
+    )
+    phase.run_id = "verify-failure-run"
+    phase.mark_running("t1")
+    assert phase.record_task_build_checkpoint("t1")
+    assert phase.record_task_verify_failure_checkpoint(
+        "t1", ["ruff: E501 line too long"],
+    )
+    assert phase.task_verify_failure_checkpoint_is_current("t1")
+    selected = phase.get_next_task()
+    assert selected is not None
+    assert selected["verify_recovery_only"] is True
+    assert selected["verify_recovery_checkpoint_current"] is True
+
+    source.write_text("value = 3\n", encoding="utf-8")
+    assert not phase.task_verify_failure_checkpoint_is_current("t1")
+    selected = phase.get_next_task()
+    assert selected is not None
+    assert selected["verify_recovery_only"] is True
+    assert selected["verify_recovery_checkpoint_current"] is False
+
+    phase.update_task("t1", "human_review", failure="stale")
+    assert phase.get_task("t1").get("verify_failure_checkpoint") is None
+
+
 def test_init_new_persistiert_criterion_refs_ueber_reload(tmp_path):
     ps = PhaseState("testprojekt", base_dir=tmp_path)
     ps.init_new(
@@ -318,6 +482,62 @@ def test_init_new_verwirft_ungueltige_criterion_refs(tmp_path):
         ps.init_new("X", [{"id": "t1", "criterion_refs": ["AC1", 2]}])
 
     assert not ps.exists()
+
+
+def test_phase_end_verify_failure_has_one_recovery_per_worktree(
+    tmp_path, monkeypatch,
+):
+    from werkstatt import failure_record
+
+    phase = PhaseState("demo", base_dir=tmp_path)
+    phase.run_id = "verify-run"
+    phase.init_new(
+        "Complete goal",
+        [{"id": "t1", "name": "Implement", "status": "done"}],
+        akzeptanzkriterien=["AC1"],
+    )
+    phase.bind_approved_plan()
+    fingerprint = {"value": "a" * 64}
+    monkeypatch.setattr(
+        failure_record, "_worktree_fingerprint",
+        lambda _path: fingerprint["value"],
+    )
+    failed = {
+        "failure_id": "failure-1",
+        "artifact_ref": "audit-logs/run/failures/phase-end.json",
+        "work_sha": "c" * 40,
+        "worktree_fingerprint": "a" * 64,
+        "failed_stages": [{
+            "stage_id": "pytest_full", "exit_code": 1,
+            "error_excerpt": "AssertionError",
+        }],
+    }
+
+    assert phase.record_phase_end_verify_failure(
+        failed, project_dir=tmp_path,
+    )
+    assert phase.phase_end_verify_failure_is_current(project_dir=tmp_path)
+    claimed = phase.claim_phase_end_verify_recovery(project_dir=tmp_path)
+    assert claimed is not None
+    assert claimed["status"] == "attempted"
+    assert not phase.phase_end_verify_failure_is_current(project_dir=tmp_path)
+    assert not phase.record_phase_end_verify_failure(
+        {**failed, "failure_id": "failure-2"}, project_dir=tmp_path,
+    )
+
+    fingerprint["value"] = "b" * 64
+    assert phase.record_phase_end_verify_failure(
+        {
+            **failed,
+            "failure_id": "failure-3",
+            "worktree_fingerprint": "b" * 64,
+        },
+        project_dir=tmp_path,
+    )
+    assert phase.phase_end_verify_failure_is_current(project_dir=tmp_path)
+    assert phase.data["phase_end_verify_failure_checkpoint"][
+        "attempted_worktree_sha256"
+    ] == ["a" * 64]
 
 
 def test_append_followup_tasks_persistiert_und_ist_idempotent(tmp_path):

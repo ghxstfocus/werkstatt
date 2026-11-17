@@ -205,6 +205,261 @@ class PhaseState:
         self.data["approved_plan_sha256"] = fingerprint
         return fingerprint
 
+    def record_preflight_checkpoint(
+        self, *, goal: str, run_id: str, findings: list[dict[str, Any]],
+    ) -> str:
+        """Persist bounded preflight evidence for the current goal and run."""
+        if (
+            not isinstance(goal, str) or not goal
+            or not isinstance(run_id, str) or not run_id
+            or not isinstance(findings, list) or len(findings) > 500
+            or any(not isinstance(item, dict) for item in findings)
+        ):
+            raise ValueError("Preflight-Checkpoint hat ungueltige Pflichtfelder")
+        payload = {
+            "schema_version": 1,
+            "run_id": run_id,
+            "project": self.project_name,
+            "goal_sha256": hashlib.sha256(goal.encode("utf-8")).hexdigest(),
+            "findings": findings,
+        }
+        try:
+            encoded = json.dumps(
+                payload, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"), allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError, UnicodeEncodeError) as exc:
+            raise ValueError("Preflight-Checkpoint ist nicht serialisierbar") from exc
+        if len(encoded) > 200_000:
+            raise ValueError("Preflight-Checkpoint ueberschreitet das Groessenlimit")
+        digest = hashlib.sha256(encoded).hexdigest()
+        goal_digest = payload["goal_sha256"]
+        current_run_id = self.run_id or self.data.get("run_id")
+        role_goal_digest = self.data.get("planner_role_goal_sha256")
+        if (
+            (current_run_id is not None and current_run_id != run_id)
+            or (
+                role_goal_digest is not None
+                and role_goal_digest != goal_digest
+            )
+        ):
+            self.data.pop("planner_role_stage", None)
+            self.data.pop("planner_role_goal_sha256", None)
+        self.data["preflight_checkpoint"] = {
+            "schema_version": 1,
+            "run_id": run_id,
+            "project": self.project_name,
+            "goal_sha256": goal_digest,
+            "findings_sha256": digest,
+            "payload_chars": len(encoded),
+            "payload": payload,
+        }
+        self.run_id = run_id
+        self.save()
+        return digest
+
+    def load_preflight_checkpoint(
+        self, *, goal: str, run_id: str,
+    ) -> list[dict[str, Any]] | None:
+        """Return preflight findings only when identity and digest are current."""
+        record = self.data.get("preflight_checkpoint")
+        if (
+            not isinstance(record, dict)
+            or record.get("schema_version") != 1
+            or record.get("run_id") != run_id
+            or record.get("project") != self.project_name
+            or record.get("goal_sha256") != hashlib.sha256(
+                goal.encode("utf-8"),
+            ).hexdigest()
+        ):
+            return None
+        payload = record.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        try:
+            encoded = json.dumps(
+                payload, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"), allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError, UnicodeEncodeError):
+            return None
+        findings = payload.get("findings")
+        if (
+            len(encoded) > 200_000
+            or len(encoded) != record.get("payload_chars")
+            or hashlib.sha256(encoded).hexdigest() != record.get("findings_sha256")
+            or payload.get("schema_version") != 1
+            or payload.get("run_id") != run_id
+            or payload.get("project") != self.project_name
+            or payload.get("goal_sha256") != record.get("goal_sha256")
+            or not isinstance(findings, list)
+            or len(findings) > 500
+            or any(not isinstance(item, dict) for item in findings)
+        ):
+            return None
+        return findings
+
+    def record_plan_candidate(
+        self,
+        *,
+        goal: str,
+        run_id: str,
+        tasks: list[dict[str, Any]],
+        tests: list[Any],
+        criteria: list[Any],
+        phases: list[dict[str, Any]],
+        architect_prose: str,
+        preflight_findings: list[dict[str, Any]] | None = None,
+    ) -> str:
+        """Persist a bounded, run-bound plan proposal before human approval."""
+        if (
+            not isinstance(goal, str) or not goal
+            or not isinstance(run_id, str) or not run_id
+            or not isinstance(tasks, list) or not tasks
+            or any(not isinstance(item, dict) for item in tasks)
+            or not isinstance(tests, list)
+            or not isinstance(criteria, list)
+            or not isinstance(phases, list)
+            or any(not isinstance(item, dict) for item in phases)
+            or not isinstance(architect_prose, str)
+            or (
+                preflight_findings is not None
+                and (
+                    not isinstance(preflight_findings, list)
+                    or len(preflight_findings) > 500
+                    or any(not isinstance(item, dict) for item in preflight_findings)
+                )
+            )
+        ):
+            raise ValueError("Plan-Kandidat hat ungueltige Pflichtfelder")
+        payload: dict[str, Any] = {
+            "schema_version": 1,
+            "run_id": run_id,
+            "project": self.project_name,
+            "goal_sha256": hashlib.sha256(goal.encode("utf-8")).hexdigest(),
+            "tasks": tasks,
+            "tests": tests,
+            "akzeptanzkriterien": criteria,
+            "phasen": phases,
+            "architect_prosa": architect_prose,
+            "preflight_findings": preflight_findings or [],
+        }
+        try:
+            encoded = json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError, UnicodeEncodeError) as exc:
+            raise ValueError("Plan-Kandidat ist nicht serialisierbar") from exc
+        if len(encoded) > 200_000:
+            raise ValueError("Plan-Kandidat ueberschreitet das Groessenlimit")
+        digest = hashlib.sha256(encoded).hexdigest()
+        self.data["plan_candidate_checkpoint"] = {
+            "schema_version": 1,
+            "run_id": run_id,
+            "project": self.project_name,
+            "goal_sha256": payload["goal_sha256"],
+            "candidate_sha256": digest,
+            "payload": payload,
+            "payload_chars": len(encoded),
+        }
+        self.save()
+        return digest
+
+    def load_plan_candidate(
+        self, *, goal: str, run_id: str,
+    ) -> dict[str, Any] | None:
+        """Return a candidate only if its identity, size, and digest match."""
+        record = self.data.get("plan_candidate_checkpoint")
+        if (
+            not isinstance(record, dict)
+            or record.get("schema_version") != 1
+            or record.get("run_id") != run_id
+            or record.get("project") != self.project_name
+            or record.get("goal_sha256") != hashlib.sha256(
+                goal.encode("utf-8"),
+            ).hexdigest()
+        ):
+            return None
+        payload = record.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        try:
+            encoded = json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError, UnicodeEncodeError):
+            return None
+        digest = hashlib.sha256(encoded).hexdigest()
+        if (
+            len(encoded) > 200_000
+            or len(encoded) != record.get("payload_chars")
+            or digest != record.get("candidate_sha256")
+            or payload.get("schema_version") != 1
+            or payload.get("run_id") != run_id
+            or payload.get("project") != self.project_name
+            or payload.get("goal_sha256") != record.get("goal_sha256")
+            or not isinstance(payload.get("tasks"), list)
+            or not payload["tasks"]
+            or any(not isinstance(item, dict) for item in payload["tasks"])
+            or not isinstance(payload.get("tests"), list)
+            or not isinstance(payload.get("akzeptanzkriterien"), list)
+            or not isinstance(payload.get("phasen"), list)
+            or any(not isinstance(item, dict) for item in payload["phasen"])
+            or not isinstance(payload.get("architect_prosa"), str)
+            or not isinstance(payload.get("preflight_findings", []), list)
+            or len(payload.get("preflight_findings", [])) > 500
+            or any(
+                not isinstance(item, dict)
+                for item in payload.get("preflight_findings", [])
+            )
+        ):
+            return None
+        return payload
+
+    def approve_plan_candidate(
+        self, *, goal: str, run_id: str, candidate_sha256: str,
+    ) -> bool:
+        """Bind an explicit human approval to this exact current proposal."""
+        payload = self.load_plan_candidate(goal=goal, run_id=run_id)
+        record = self.data.get("plan_candidate_checkpoint")
+        if (
+            payload is None
+            or not isinstance(record, dict)
+            or record.get("candidate_sha256") != candidate_sha256
+        ):
+            return False
+        record["approval_status"] = "approved"
+        record["approved_candidate_sha256"] = candidate_sha256
+        self.save()
+        return True
+
+    def plan_candidate_is_approved(
+        self, *, goal: str, run_id: str,
+    ) -> bool:
+        """Return true only for a current proposal with a matching gate proof."""
+        if self.load_plan_candidate(goal=goal, run_id=run_id) is None:
+            return False
+        record = self.data.get("plan_candidate_checkpoint")
+        return bool(
+            isinstance(record, dict)
+            and record.get("approval_status") == "approved"
+            and record.get("approved_candidate_sha256")
+            == record.get("candidate_sha256")
+        )
+
+    def clear_plan_candidate(self) -> None:
+        """Remove the unapproved proposal after approval or rejection."""
+        if self.data.pop("plan_candidate_checkpoint", None) is not None:
+            self.save()
+
     def approved_plan_is_current(self) -> bool:
         """Check that mutable phase state still matches its approved plan."""
         if self.data.get("plan_checkpoint_version") != 1:
@@ -353,6 +608,259 @@ class PhaseState:
             and isinstance(evidence_sha256, str)
             and isinstance(stage_ids, list)
             and bool(stage_ids)
+            and self.approved_plan_is_current()
+        )
+
+    def record_phase_end_verify_failure(
+        self, failure_record: dict[str, Any], *, project_dir: Path,
+    ) -> bool:
+        """Persist bounded failure evidence for a coordinator recovery step."""
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        plan_fingerprint = self.approved_plan_fingerprint()
+        worktree_fingerprint = _worktree_fingerprint(project_dir)
+        failed_stages = failure_record.get("failed_stages")
+        artifact_ref = failure_record.get("artifact_ref")
+        failure_id = failure_record.get("failure_id")
+        work_sha = failure_record.get("work_sha")
+        recorded_fingerprint = failure_record.get("worktree_fingerprint")
+        if (
+            not self.run_id
+            or plan_fingerprint is None
+            or not self.approved_plan_is_current()
+            or not isinstance(worktree_fingerprint, str)
+            or not isinstance(artifact_ref, str)
+            or not artifact_ref
+            or not isinstance(failure_id, str)
+            or not isinstance(work_sha, str)
+            or len(work_sha) not in {40, 64}
+            or any(char not in "0123456789abcdef" for char in work_sha)
+            or recorded_fingerprint != worktree_fingerprint
+            or not isinstance(failed_stages, list)
+            or not failed_stages
+            or any(not isinstance(item, dict) for item in failed_stages)
+        ):
+            return False
+        previous = self.data.get("phase_end_verify_failure_checkpoint")
+        attempted = (
+            previous.get("attempted_worktree_sha256", [])
+            if isinstance(previous, dict) else []
+        )
+        attempted = [
+            value for value in attempted
+            if isinstance(value, str) and len(value) == 64
+        ][:20]
+        if worktree_fingerprint in attempted:
+            return False
+        self.data["phase_end_verify_failure_checkpoint"] = {
+            "schema_version": 1,
+            "run_id": self.run_id,
+            "plan_sha256": plan_fingerprint,
+            "worktree_sha256": worktree_fingerprint,
+            "failure_id": failure_id[:64],
+            "artifact_ref": artifact_ref[:500],
+            "failed_stages": [
+                {
+                    "stage_id": str(item.get("stage_id") or "?")[:120],
+                    "exit_code": item.get("exit_code"),
+                    "error_excerpt": str(item.get("error_excerpt") or "")[:1200],
+                }
+                for item in failed_stages[:12]
+            ],
+            "attempted_worktree_sha256": attempted,
+            "status": "pending",
+        }
+        self.save()
+        return True
+
+    def phase_end_verify_failure_is_current(
+        self, *, project_dir: Path,
+    ) -> bool:
+        """Validate a pending final-verify failure against the current tree."""
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        checkpoint = self.data.get("phase_end_verify_failure_checkpoint")
+        plan_fingerprint = self.approved_plan_fingerprint()
+        current_fingerprint = _worktree_fingerprint(project_dir)
+        return bool(
+            isinstance(checkpoint, dict)
+            and checkpoint.get("schema_version") == 1
+            and checkpoint.get("status") == "pending"
+            and checkpoint.get("run_id") == self.run_id
+            and checkpoint.get("plan_sha256") == plan_fingerprint
+            and checkpoint.get("worktree_sha256") == current_fingerprint
+            and isinstance(current_fingerprint, str)
+            and isinstance(checkpoint.get("artifact_ref"), str)
+            and isinstance(checkpoint.get("failed_stages"), list)
+            and checkpoint.get("failed_stages")
+            and self.approved_plan_is_current()
+        )
+
+    def claim_phase_end_verify_recovery(
+        self, *, project_dir: Path,
+    ) -> dict[str, Any] | None:
+        """Claim one recovery action for the exact pending failure checkpoint."""
+        if not self.phase_end_verify_failure_is_current(
+            project_dir=project_dir,
+        ):
+            return None
+        checkpoint = self.data.get("phase_end_verify_failure_checkpoint")
+        if not isinstance(checkpoint, dict):
+            return None
+        attempted = checkpoint.get("attempted_worktree_sha256")
+        attempted = attempted if isinstance(attempted, list) else []
+        fingerprint = checkpoint.get("worktree_sha256")
+        if not isinstance(fingerprint, str) or fingerprint in attempted:
+            return None
+        checkpoint["attempted_worktree_sha256"] = [
+            *attempted[-19:], fingerprint,
+        ]
+        checkpoint["status"] = "attempted"
+        self.save()
+        return dict(checkpoint)
+
+    def record_commit_checkpoint(
+        self, *, commit_sha: str, verify_evidence_sha256: str,
+        post_commit_evidence_sha256: str,
+    ) -> None:
+        """Bind an approved commit to the run's successful full verification."""
+        plan_fingerprint = self.approved_plan_fingerprint()
+        gate = self.data.get("human_gate_checkpoint")
+        verify = self.data.get("phase_end_verify_checkpoint")
+        if (
+            not self.run_id
+            or plan_fingerprint is None
+            or not self.approved_plan_is_current()
+            or not isinstance(gate, dict)
+            or gate.get("run_id") != self.run_id
+            or gate.get("plan_sha256") != plan_fingerprint
+            or gate.get("status") != "approved"
+            or gate.get("commit_requested") is not True
+            or not isinstance(verify, dict)
+            or verify.get("run_id") != self.run_id
+            or verify.get("plan_sha256") != plan_fingerprint
+            or verify.get("status") != "passed"
+            or verify.get("evidence_sha256") != verify_evidence_sha256
+            or not isinstance(commit_sha, str)
+            or len(commit_sha) not in {40, 64}
+            or any(char not in "0123456789abcdef" for char in commit_sha)
+            or not isinstance(verify_evidence_sha256, str)
+            or len(verify_evidence_sha256) != 64
+            or any(char not in "0123456789abcdef" for char in verify_evidence_sha256)
+            or not isinstance(post_commit_evidence_sha256, str)
+            or len(post_commit_evidence_sha256) != 64
+            or any(char not in "0123456789abcdef" for char in post_commit_evidence_sha256)
+        ):
+            raise ValueError("Commit kann nicht sicher an Verify gebunden werden")
+        self.data["commit_checkpoint"] = {
+            "schema_version": 1,
+            "run_id": self.run_id,
+            "plan_sha256": plan_fingerprint,
+            "verify_evidence_sha256": verify_evidence_sha256,
+            "post_commit_evidence_sha256": post_commit_evidence_sha256,
+            "commit_sha": commit_sha,
+            "status": "committed",
+        }
+        pending = self.data.get("commit_pending_post_verify_checkpoint")
+        if (
+            isinstance(pending, dict)
+            and pending.get("commit_sha") == commit_sha
+            and pending.get("verify_evidence_sha256") == verify_evidence_sha256
+        ):
+            pending["status"] = "post_commit_verify_passed"
+        self.save()
+
+    def record_commit_pending_post_verify(
+        self, *, commit_sha: str, verify_evidence_sha256: str,
+    ) -> None:
+        """Persist the commit boundary before selecting post-commit Verify."""
+        plan_fingerprint = self.approved_plan_fingerprint()
+        gate = self.data.get("human_gate_checkpoint")
+        verify = self.data.get("phase_end_verify_checkpoint")
+        if (
+            not self.run_id
+            or plan_fingerprint is None
+            or not self.approved_plan_is_current()
+            or not isinstance(gate, dict)
+            or gate.get("run_id") != self.run_id
+            or gate.get("plan_sha256") != plan_fingerprint
+            or gate.get("status") != "approved"
+            or gate.get("commit_requested") is not True
+            or not isinstance(verify, dict)
+            or verify.get("status") != "passed"
+            or verify.get("evidence_sha256") != verify_evidence_sha256
+            or not isinstance(commit_sha, str)
+            or len(commit_sha) not in {40, 64}
+            or any(char not in "0123456789abcdef" for char in commit_sha)
+            or not isinstance(verify_evidence_sha256, str)
+            or len(verify_evidence_sha256) != 64
+            or any(char not in "0123456789abcdef" for char in verify_evidence_sha256)
+        ):
+            raise ValueError("Commit-Pending kann nicht sicher gebunden werden")
+        self.data["commit_pending_post_verify_checkpoint"] = {
+            "schema_version": 1,
+            "run_id": self.run_id,
+            "plan_sha256": plan_fingerprint,
+            "commit_sha": commit_sha,
+            "verify_evidence_sha256": verify_evidence_sha256,
+            "status": "pending_post_commit_verify",
+        }
+        self.save()
+
+    def commit_pending_post_verify_is_current(
+        self, *, commit_sha: str | None,
+    ) -> bool:
+        """Check whether the exact new HEAD still awaits post-commit Verify."""
+        checkpoint = self.data.get("commit_pending_post_verify_checkpoint")
+        plan_fingerprint = self.approved_plan_fingerprint()
+        gate = self.data.get("human_gate_checkpoint")
+        verify = self.data.get("phase_end_verify_checkpoint")
+        return bool(
+            isinstance(checkpoint, dict)
+            and checkpoint.get("schema_version") == 1
+            and checkpoint.get("status") == "pending_post_commit_verify"
+            and checkpoint.get("run_id") == self.run_id
+            and checkpoint.get("plan_sha256") == plan_fingerprint
+            and checkpoint.get("commit_sha") == commit_sha
+            and isinstance(commit_sha, str)
+            and isinstance(verify, dict)
+            and verify.get("status") == "passed"
+            and checkpoint.get("verify_evidence_sha256")
+            == verify.get("evidence_sha256")
+            and isinstance(gate, dict)
+            and gate.get("status") == "approved"
+            and gate.get("commit_requested") is True
+            and self.approved_plan_is_current()
+        )
+
+    def commit_checkpoint_is_current(
+        self, *, commit_sha: str | None,
+    ) -> bool:
+        """Check commit evidence against current run, plan, gate, and HEAD."""
+        checkpoint = self.data.get("commit_checkpoint")
+        plan_fingerprint = self.approved_plan_fingerprint()
+        gate = self.data.get("human_gate_checkpoint")
+        verify = self.data.get("phase_end_verify_checkpoint")
+        return bool(
+            isinstance(checkpoint, dict)
+            and checkpoint.get("schema_version") == 1
+            and checkpoint.get("status") == "committed"
+            and checkpoint.get("run_id") == self.run_id
+            and checkpoint.get("plan_sha256") == plan_fingerprint
+            and checkpoint.get("commit_sha") == commit_sha
+            and isinstance(checkpoint.get("verify_evidence_sha256"), str)
+            and isinstance(checkpoint.get("post_commit_evidence_sha256"), str)
+            and len(checkpoint["post_commit_evidence_sha256"]) == 64
+            and isinstance(gate, dict)
+            and gate.get("run_id") == self.run_id
+            and gate.get("plan_sha256") == plan_fingerprint
+            and gate.get("status") == "approved"
+            and gate.get("commit_requested") is True
+            and isinstance(verify, dict)
+            and verify.get("run_id") == self.run_id
+            and verify.get("plan_sha256") == plan_fingerprint
+            and verify.get("status") == "passed"
+            and checkpoint.get("verify_evidence_sha256") == verify.get("evidence_sha256")
             and self.approved_plan_is_current()
         )
 
@@ -638,6 +1146,25 @@ class PhaseState:
             t.get("id"): t for t in self.data.get("tasks", [])
             if isinstance(t, dict) and t.get("id")
         }
+        for task in self.data.get("tasks", []):
+            failure_checkpoint = (
+                task.get("verify_failure_checkpoint")
+                if isinstance(task, dict) else None
+            )
+            if (
+                isinstance(task, dict)
+                and isinstance(failure_checkpoint, dict)
+                and failure_checkpoint.get("status") == "pending"
+                and task.get("status") == "running"
+            ):
+                recovery_task = dict(task)
+                recovery_task["verify_recovery_only"] = True
+                recovery_task["verify_recovery_checkpoint_current"] = (
+                    self.task_verify_failure_checkpoint_is_current(
+                        str(task.get("id", "")),
+                    )
+                )
+                return recovery_task
         for task in self.data.get("tasks", []):
             if (
                 isinstance(task, dict)
@@ -1010,6 +1537,193 @@ class PhaseState:
                 return True
         return False
 
+    def record_task_review_checkpoint(
+        self,
+        task_id: str,
+        *,
+        verify_warnings: object = None,
+    ) -> bool:
+        """Persist a bounded review handoff bound to current Verify evidence."""
+        task = self.get_task(task_id)
+        evidence = task.get("verify_evidence") if isinstance(task, dict) else None
+        if (
+            not isinstance(task, dict)
+            or task.get("status") != "running"
+            or not self.task_verify_evidence_is_current(task_id, evidence)
+        ):
+            return False
+        warnings = [
+            str(item).replace("\x00", "")[:240]
+            for item in verify_warnings[:12]
+            if isinstance(item, str) and item.strip()
+        ] if isinstance(verify_warnings, list) else []
+        while warnings and len(json.dumps(
+            warnings, ensure_ascii=False,
+        )) > 2_400:
+            warnings.pop()
+        encoded_evidence = json.dumps(
+            evidence, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        task["review_checkpoint"] = {
+            "schema_version": 1,
+            "task_id": task_id,
+            "run_id": self.run_id,
+            "verify_evidence_sha256": hashlib.sha256(
+                encoded_evidence.encode("utf-8"),
+            ).hexdigest(),
+            "verify_warnings": warnings,
+            "status": "pending",
+            "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        }
+        self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+        self.save()
+        return True
+
+    def record_task_build_checkpoint(self, task_id: str) -> bool:
+        """Persist the post-Builder file hashes before Verify is dispatched."""
+        task = self.get_task(task_id)
+        task_files = task.get("task_files") if isinstance(task, dict) else None
+        hashes = self._task_file_hashes(task_files)
+        if (
+            not isinstance(task, dict)
+            or task.get("status") != "running"
+            or hashes is None
+        ):
+            return False
+        task["build_checkpoint"] = {
+            "schema_version": 1,
+            "task_id": task_id,
+            "run_id": self.run_id,
+            "task_file_sha256": hashes,
+            "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        }
+        task["verification_pending"] = True
+        self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+        self.save()
+        return True
+
+    def task_build_checkpoint_is_current(self, task_id: str) -> bool:
+        """Check a Builder handoff against current task-scope file bytes."""
+        task = self.get_task(task_id)
+        checkpoint = task.get("build_checkpoint") if isinstance(task, dict) else None
+        if (
+            not isinstance(task, dict)
+            or not isinstance(checkpoint, dict)
+            or checkpoint.get("schema_version") != 1
+            or checkpoint.get("task_id") != task_id
+            or checkpoint.get("run_id") != self.run_id
+            or task.get("status") != "running"
+        ):
+            return False
+        current_hashes = self._task_file_hashes(task.get("task_files"))
+        return (
+            current_hashes is not None
+            and checkpoint.get("task_file_sha256") == current_hashes
+        )
+
+    def record_task_verify_failure_checkpoint(
+        self, task_id: str, errors: object, *, phase: str = "post_build",
+    ) -> bool:
+        """Persist bounded Verify failure evidence for one coordinator recovery."""
+        task = self.get_task(task_id)
+        if (
+            not isinstance(task, dict)
+            or task.get("status") != "running"
+            or phase != "post_build"
+            or not self.task_build_checkpoint_is_current(task_id)
+        ):
+            return False
+        hashes = self._task_file_hashes(task.get("task_files"))
+        if hashes is None:
+            return False
+        clean_errors = [
+            str(item).replace("\x00", "")[:240]
+            for item in errors[:8]
+            if isinstance(item, str) and item.strip()
+        ] if isinstance(errors, list) else []
+        if not clean_errors:
+            clean_errors = ["verify_failed: no structured stage detail"]
+        payload = {
+            "schema_version": 1,
+            "task_id": task_id,
+            "run_id": self.run_id,
+            "phase": phase,
+            "task_file_sha256": hashes,
+            "verify_errors": clean_errors,
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if len(encoded) > 4_000:
+            return False
+        task["verify_failure_checkpoint"] = {
+            **payload,
+            "evidence_sha256": hashlib.sha256(encoded.encode("utf-8")).hexdigest(),
+            "status": "pending",
+            "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        }
+        task["verification_pending"] = False
+        self.data["updated"] = datetime.datetime.now(datetime.UTC).isoformat()
+        self.save()
+        return True
+
+    def task_verify_failure_checkpoint_is_current(self, task_id: str) -> bool:
+        """Validate Verify failure proof against the same task/run and file bytes."""
+        task = self.get_task(task_id)
+        checkpoint = task.get("verify_failure_checkpoint") if isinstance(task, dict) else None
+        if (
+            not isinstance(task, dict)
+            or not isinstance(checkpoint, dict)
+            or checkpoint.get("schema_version") != 1
+            or checkpoint.get("task_id") != task_id
+            or checkpoint.get("run_id") != self.run_id
+            or checkpoint.get("phase") != "post_build"
+            or checkpoint.get("status") != "pending"
+            or task.get("status") != "running"
+            or not isinstance(checkpoint.get("verify_errors"), list)
+            or len(checkpoint.get("verify_errors", [])) > 8
+            or not all(
+                isinstance(error, str) and len(error) <= 240
+                for error in checkpoint.get("verify_errors", [])
+            )
+            or not isinstance(checkpoint.get("task_file_sha256"), dict)
+        ):
+            return False
+        payload = {
+            key: checkpoint.get(key)
+            for key in (
+                "schema_version", "task_id", "run_id", "phase",
+                "task_file_sha256", "verify_errors",
+            )
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return (
+            checkpoint.get("evidence_sha256")
+            == hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+            and checkpoint.get("task_file_sha256")
+            == self._task_file_hashes(task.get("task_files"))
+        )
+
+    def task_review_checkpoint_is_current(self, task_id: str) -> bool:
+        """Validate a pending review handoff against current source and verify proof."""
+        task = self.get_task(task_id)
+        checkpoint = task.get("review_checkpoint") if isinstance(task, dict) else None
+        evidence = task.get("verify_evidence") if isinstance(task, dict) else None
+        if (
+            not isinstance(task, dict)
+            or not isinstance(checkpoint, dict)
+            or checkpoint.get("schema_version") != 1
+            or checkpoint.get("task_id") != task_id
+            or checkpoint.get("run_id") != self.run_id
+            or checkpoint.get("status") != "pending"
+            or not self.task_verify_evidence_is_current(task_id, evidence)
+        ):
+            return False
+        encoded_evidence = json.dumps(
+            evidence, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        return checkpoint.get("verify_evidence_sha256") == hashlib.sha256(
+            encoded_evidence.encode("utf-8"),
+        ).hexdigest()
+
     def record_task_verify_evidence(
         self,
         task_id: str,
@@ -1110,6 +1824,12 @@ class PhaseState:
         if task is None:
             return
         task["status"] = status
+        if status != "running":
+            task.pop("build_checkpoint", None)
+            task.pop("verification_pending", None)
+            task.pop("verify_failure_checkpoint", None)
+            if status != "done":
+                task.pop("review_checkpoint", None)
         if decision is not None:
             task["decision"] = decision
         if failure is not None:
@@ -1165,6 +1885,7 @@ class PhaseState:
         if _t is not None:
             _t["verdict"] = "verified"
             _t.pop("verification_pending", None)
+            _t.pop("review_checkpoint", None)
             self.save()
 
     def _propagate_failed_to_parents(self, task_id: str) -> None:

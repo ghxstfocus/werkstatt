@@ -650,11 +650,19 @@ def _committe_zielprojekt(
             from werkstatt import progress as _progress_k
             _tasks_len_k = len(state.tasks or [])
             _tasks_ok_k = int(getattr(state, "tasks_ok_counter", 0) or 0)
+            _op_criteria_marker = getattr(
+                state, "op_criteria_progress_marker", None,
+            )
             _progress_k.append(
                 pd,
                 name=f"Phase abgeschlossen: {pn}",
                 status="phase_ende",
-                info=f"tasks_ok={_tasks_ok_k}/{_tasks_len_k}",
+                info=(
+                    f"tasks_ok={_tasks_ok_k}/{_tasks_len_k}"
+                    + ("; " + _op_criteria_marker
+                       if isinstance(_op_criteria_marker, str)
+                       and _op_criteria_marker else "")
+                ),
                 run_id=getattr(state, "run_id", None),
             )
         except Exception:

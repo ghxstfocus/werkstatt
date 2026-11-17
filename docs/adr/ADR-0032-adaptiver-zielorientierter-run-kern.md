@@ -232,8 +232,24 @@ aufweichen.
 ## 5. Rollen und Modellaufrufe nach Bedarf
 
 Rollen beschreiben Faehigkeiten und Qualitaetskontrollen, keine obligatorische
-LLM-Kette. Der deterministische Koordinator entscheidet nach Auftragsrisiko,
-Unsicherheit, Beleglage und erwartbarem Nutzen:
+LLM-Kette. Der Projektchat und der Checkpoint-Koordinator sind eine gemeinsame
+Projektkoordinator-Faehigkeit: Sie nutzen dieselbe Chat-Modellroute und die
+Reasoning-Auswahl des Auftrags. Der Checkpoint-Koordinator ruft diese Faehigkeit
+mit einem eigenen, begrenzten Run-Snapshot auf; er uebernimmt nicht blind den
+gesamten Chatverlauf. Das Modell waehlt aus den fuer den aktuellen Checkpoint
+zugelassenen naechsten Aktionen und begruendet die Wahl anhand von Ziel,
+offenen Kriterien, Belegen, Luecken, Risiko und Budget. Der deterministische
+Validator erzeugt und begrenzt diese Aktionsmenge, prueft den Vorschlag gegen
+Run-ID, aktuelle Beleg-Fingerprints, Freigabe, Scope, Budget und Gates und
+dispatcht nur registrierte Aktionen. Modellfehler oder ungueltige Vorschlaege
+werden sichtbar; sie duerfen weder Kriterien als erfuellt markieren noch
+Freigaben, harte Verify-Pruefungen oder Scope-Grenzen umgehen. Ein
+deterministischer Fallback darf nur eine durch dieselben Belege eindeutig
+bestimmte Aktion auswaehlen, sonst stoppt der Run mit einer gezielten
+Rueckfrage.
+
+Die Rollenwahl beruecksichtigt Auftragsrisiko, Unsicherheit, Beleglage und
+erwartbaren Nutzen:
 
 | Faehigkeit | Wann einsetzen | Regel |
 |---|---|---|

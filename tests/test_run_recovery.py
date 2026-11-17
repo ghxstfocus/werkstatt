@@ -720,7 +720,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "loop.load_env = lambda *_args: None\n"
         "orchestrator.load_project_config = lambda _project: cfg\n"
         "orchestrator.load_docs = lambda *_args: {}\n"
-        "loop._phase_explorer_and_setup = "
+        "loop._phase_project_context_tools = "
         "lambda _state, _goal, _project, saved: (0, saved)\n"
         "finalize.group_start = lambda *_args: None\n"
         "finalize.group_end = lambda *_args: None\n"

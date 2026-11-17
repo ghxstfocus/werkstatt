@@ -52,7 +52,7 @@ def canonical_model_name(model: str) -> str:
 
 def _role_label(role: str) -> str:
     label = role.strip().lower().replace("_", "-")
-    if label == "debugger":
+    if label in {"debugger", "project-coordinator"}:
         return "chat"
     if label.startswith("planner-") and label not in _ROLE_MODELS:
         return "planner"

@@ -134,9 +134,9 @@ def test_checkpoint_selected_direct_builder_skips_planner_roles(
     monkeypatch.setattr(
         "werkstatt.gates._call_hook", lambda *_args, **_kwargs: {"allow": True},
     )
-    from werkstatt.phases.plan import _check_plan_gate_current
+    from werkstatt.gates import _plan_gate
 
-    assert _check_plan_gate_current(state) is True, state.last_planner_info
+    assert _plan_gate(state) is True, state.last_planner_info
 
 
 def test_direct_builder_plan_rejects_source_changed_after_dispatch(

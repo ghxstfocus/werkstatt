@@ -20,6 +20,17 @@ def test_progress_append_und_read(tmp_path):
     assert "builder_failed" in recent
 
 
+def test_progress_append_schreibt_plattformunabhaengig_lf(tmp_path):
+    progress_path = tmp_path / "PROGRESS.md"
+    progress_path.write_bytes(b"# Fortschritt\r\n")
+
+    assert progress.append(tmp_path, name="LF check", status="done") is True
+
+    written = progress_path.read_bytes()
+    assert b"\r" not in written
+    assert written.endswith(b"- **Status:** done\n")
+
+
 def test_progress_read_recent_format_drift(tmp_path):
     """M-307b: kaputter Block wird uebersprungen, nicht gecrasht."""
     progress_path = tmp_path / "PROGRESS.md"

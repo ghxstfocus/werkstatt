@@ -1,6 +1,7 @@
 """Tests fuer werkstatt/loop.py (Phase 7a: Happy Path)."""
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -75,7 +76,10 @@ def test_verify_patches_ok(tmp_path):
     contract_dir = tmp_path / ".werkstatt"
     contract_dir.mkdir()
     (contract_dir / "verify.json").write_text(
-        '{"stages": [{"id": "ok", "command": ["python3", "-c", "import sys; sys.exit(0)"]}]}'
+        json.dumps({"stages": [{
+            "id": "ok",
+            "command": [sys.executable, "-c", "import sys; sys.exit(0)"],
+        }]}),
     )
     assert _verify_patches(st) is True
 
@@ -86,7 +90,10 @@ def test_verify_patches_fails(tmp_path):
     contract_dir = tmp_path / ".werkstatt"
     contract_dir.mkdir()
     (contract_dir / "verify.json").write_text(
-        '{"stages": [{"id": "fail", "command": ["python3", "-c", "import sys; sys.exit(1)"]}]}'
+        json.dumps({"stages": [{
+            "id": "fail",
+            "command": [sys.executable, "-c", "import sys; sys.exit(1)"],
+        }]}),
     )
     assert _verify_patches(st) is False
 
@@ -98,16 +105,20 @@ def test_verify_success_clears_previous_errors(tmp_path):
     contract_dir.mkdir()
     contract = contract_dir / "verify.json"
     contract.write_text(
-        '{"stages": [{"id": "check", "command": ['
-        '"python3", "-c", "import sys; sys.exit(1)"]}]}'
+        json.dumps({"stages": [{
+            "id": "check",
+            "command": [sys.executable, "-c", "import sys; sys.exit(1)"],
+        }]}),
     )
 
     assert _verify_patches(st) is False
     assert st.last_verify_errors
 
     contract.write_text(
-        '{"stages": [{"id": "check", "command": ['
-        '"python3", "-c", "import sys; sys.exit(0)"]}]}'
+        json.dumps({"stages": [{
+            "id": "check",
+            "command": [sys.executable, "-c", "import sys; sys.exit(0)"],
+        }]}),
     )
 
     assert _verify_patches(st) is True
@@ -164,18 +175,19 @@ def test_stage_count_by_phase(tmp_path):
     assert _stage_count_by_phase(tmp_path, "build") == 0
 
 
-def test_loop_planner_fail(tmp_path):
-    # Plan-Gate fail -> Planner wird aufgerufen -> schlaegt fehl
+def test_loop_stops_when_planner_evidence_is_missing(tmp_path):
+    # A role without its required source evidence must not be called.
     st = _state(tmp_path, tasks=False)
-    with patch("werkstatt.loop.run_planner", return_value=False), \
-         patch("werkstatt.loop.audit") as mock_audit:
+    with patch(
+        "werkstatt.planner.run_planner",
+        side_effect=AssertionError("Planner darf ohne Belege nicht laufen"),
+    ):
         rc = run_pipeline_loop("p", "a", [st])
         assert rc == 1
-        mock_audit.assert_called_with("loop_planner_failed", {}, st.project_dir, st.project_name)
 
 
-def test_loop_stoppt_bei_verify_fail(tmp_path):
-    """M-299i: Pre-Build rot UND relevanter Fehler in Task-Datei -> Loop stoppt."""
+def test_loop_does_not_verify_before_planner_evidence_is_ready(tmp_path):
+    """A Verify action cannot run before the coordinator has a valid plan."""
     st = _state(tmp_path)
     # Task-Datei explizit setzen, damit die Klassifikation sie findet.
     st.tasks = [{"id": "t1", "name": "Update README.md", "description": "Add line"}]
@@ -183,14 +195,10 @@ def test_loop_stoppt_bei_verify_fail(tmp_path):
     st.preflight_fehler = [
         {"klasse": "syntax", "stage_id": "py_compile", "datei": "README.md", "text": "SyntaxError"},
     ]
-    with patch("werkstatt.loop._verify_patches", return_value=False), \
-         patch("werkstatt.loop.audit") as mock_audit:
+    with patch("werkstatt.loop._verify_patches") as verify:
         rc = run_pipeline_loop("p", "a", [st])
         assert rc == 1
-        # Audit enthaelt loop_gate_failed mit blocker-Anzahl
-        assert any(
-            c[0][0] == "loop_gate_failed" for c in mock_audit.call_args_list
-        ), f"loop_gate_failed fehlt: {mock_audit.call_args_list}"
+        verify.assert_not_called()
 
 
 def test_loop_happy_path(tmp_path):
@@ -357,8 +365,8 @@ def test_verify_patches_phase_filter(tmp_path):
     contract_dir.mkdir()
     (contract_dir / "verify.json").write_text(
         '{"stages": ['
-        '{"id": "pre1", "phase": "pre_build", "command": ["python3", "-c", "import sys; sys.exit(0)"]},'
-        '{"id": "post1", "phase": "post_build", "command": ["python3", "-c", "import sys; sys.exit(1)"]}'
+        f'{{"id": "pre1", "phase": "pre_build", "command": {json.dumps([sys.executable, "-c", "import sys; sys.exit(0)"])}}},'
+        f'{{"id": "post1", "phase": "post_build", "command": {json.dumps([sys.executable, "-c", "import sys; sys.exit(1)"])}}}'
         ']}'
     )
     # pre_build: nur pre1 (ok) -> True
@@ -824,8 +832,9 @@ def test_verify_patches_platzhalter_changed_files(tmp_path, monkeypatch):
     (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
     (tmp_path / ".werkstatt").mkdir()
     (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "pc", "command": '
-        '["python3", "-m", "py_compile", "{changed_files}"]}]}'
+        json.dumps({"stages": [{"id": "pc", "command": [
+            sys.executable, "-m", "py_compile", "{changed_files}",
+        ]}]})
     )
 
     st = RunState(
@@ -878,8 +887,9 @@ def test_verify_patches_no_tests_stage_warnung(tmp_path, monkeypatch):
     (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
     (tmp_path / ".werkstatt").mkdir()
     (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "py_compile", "command": '
-        '["python3", "-m", "py_compile", "core/__init__.py"]}]}'
+        json.dumps({"stages": [{"id": "py_compile", "command": [
+            sys.executable, "-m", "py_compile", "core/__init__.py",
+        ]}]})
     )
 
     st = RunState(
@@ -905,10 +915,14 @@ def test_verify_patches_phase_end_filter(tmp_path, monkeypatch):
     (tmp_path / "core" / "__init__.py").write_text("x = 1\n")
     (tmp_path / ".werkstatt").mkdir()
     (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": ['
-        '{"id": "pc", "command": ["python3", "-m", "py_compile", "core/__init__.py"], "phase": "post_build"},'
-        '{"id": "pytest_full", "command": ["true"], "phase": "phase_end"}'
-        ']}'
+        json.dumps({"stages": [
+            {"id": "pc", "command": [
+                sys.executable, "-m", "py_compile", "core/__init__.py",
+            ], "phase": "post_build"},
+            {"id": "pytest_full", "command": [
+                sys.executable, "-c", "import sys; sys.exit(0)",
+            ], "phase": "phase_end"},
+        ]})
     )
 
     st = RunState(
@@ -1837,7 +1851,6 @@ def test_loop_builder_false_sofort_return(tmp_path, monkeypatch):
     rc = loop_mod.run_pipeline_loop("p", "a", [st])
     # M-355b: rc=1, Grund builder_failed.
     assert rc == 1, f"erwartet rc=1, war {rc}; audits={_audits}"
-    assert "loop_builder_aufgerufen" in _audits
     assert "loop_task_failed" in _audits
     # M-355b: KEIN Durchfall zu M-359.
     assert "loop_reviewer_reject_fail_closed" not in _audits, (

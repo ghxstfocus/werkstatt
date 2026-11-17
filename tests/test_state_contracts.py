@@ -22,9 +22,10 @@ def _minimal_state(**kwargs):
 
 
 def test_transitions_vollstaendig():
-    """Alle 5 erwarteten Uebergaenge sind definiert."""
+    """Alle Rollen- und Tool-zu-Rollen-Uebergaenge sind definiert."""
     assert set(TRANSITIONS.keys()) == {
-        "explorer->scout", "scout->architect", "architect->planner",
+        "project_context->planner",
+        "scout->architect", "architect->planner",
         "planner->builder", "builder->reviewer",
     }
 
@@ -45,22 +46,22 @@ def test_transitions_felder_sind_runstate_felder():
 # ============================================================
 
 
-def test_validate_transition_leer_failt():
+def test_project_context_contract_leer_failt():
     st = _minimal_state()  # explorer_context = {}
     try:
-        validate_transition("explorer", "scout", st,
+        validate_transition("project_context", "planner", st,
                             audit_fn=lambda *a, **k: None)
     except ContractViolation as e:
-        assert e.transition == "explorer->scout"
+        assert e.transition == "project_context->planner"
         assert "explorer_context" in e.felder
     else:
         raise AssertionError("ContractViolation erwartet")
 
 
-def test_validate_transition_befuellt_passiert():
+def test_project_context_contract_befuellt_passiert():
     st = _minimal_state()
     st.explorer_context = {"findings": "x", "key_files": [{"file": "a.py"}]}
-    validate_transition("explorer", "scout", st,
+    validate_transition("project_context", "planner", st,
                         audit_fn=lambda *a, **k: None)
 
 
@@ -116,11 +117,11 @@ def test_validate_transition_ruft_audit():
 
     st = _minimal_state()
     try:
-        validate_transition("explorer", "scout", st, audit_fn=_fake_audit)
+        validate_transition("project_context", "planner", st, audit_fn=_fake_audit)
     except ContractViolation:
         pass
     assert len(calls) == 1
     args, _ = calls[0]
     assert args[0] == "state_contract_violation"
-    assert args[1]["transition"] == "explorer->scout"
+    assert args[1]["transition"] == "project_context->planner"
     assert "explorer_context" in args[1]["felder"]

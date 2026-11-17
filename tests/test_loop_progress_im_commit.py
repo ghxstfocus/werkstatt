@@ -17,13 +17,17 @@ from factories import mk_state  # noqa: E402
 
 
 def _init_repo(tmp_path: Path) -> None:
+    def _write_lf(path: Path, content: str) -> None:
+        with path.open("w", encoding="utf-8", newline="\n") as fixture:
+            fixture.write(content)
+
     def _git(*args):
         subprocess.run(["git", "-C", str(tmp_path), *args],
                        check=True, capture_output=True)
     _git("init", "-q")
     _git("config", "user.email", "t@t")
     _git("config", "user.name", "t")
-    (tmp_path / "README.md").write_text("init\n")
+    _write_lf(tmp_path / "README.md", "init\n")
     _git("add", "-A")
     _git("commit", "-q", "-m", "init")
 
@@ -50,7 +54,7 @@ class TestProgressImCommit:
     def test_progress_md_ist_im_selben_commit(self, tmp_path: Path) -> None:
         _init_repo(tmp_path)
         (tmp_path / "docs").mkdir()
-        (tmp_path / "docs" / "STATUS.md").write_text("# Status\n")
+        (tmp_path / "docs" / "STATUS.md").write_bytes(b"# Status\n")
         from werkstatt import loop as _loop
         state = _state(tmp_path, [{
             "id": "t1", "status": "done",
@@ -73,9 +77,9 @@ class TestProgressImCommit:
         _init_repo(tmp_path)
         # audit-logs/ wird von audit() ins project_dir geschrieben.
         # Als untracked ignorieren — gehoert nicht zum Commit.
-        (tmp_path / ".gitignore").write_text("audit-logs/\n")
+        (tmp_path / ".gitignore").write_bytes(b"audit-logs/\n")
         (tmp_path / "docs").mkdir()
-        (tmp_path / "docs" / "STATUS.md").write_text("# Status\n")
+        (tmp_path / "docs" / "STATUS.md").write_bytes(b"# Status\n")
         from werkstatt import loop as _loop
         state = _state(tmp_path, [{
             "id": "t1", "status": "done",

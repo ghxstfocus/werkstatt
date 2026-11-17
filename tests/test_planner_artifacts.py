@@ -98,3 +98,27 @@ def test_role_artifact_persists_and_reloads_only_for_bound_run(tmp_path):
         resumed.data["planner_role_artifacts"],
         run_id="run-1", goal="goal",
     )["scout"] == artifact
+
+
+def test_handoff_artifact_survives_store_with_scout_and_architect_outputs():
+    from werkstatt.planner_artifacts import add_role_artifact
+
+    artifacts = {}
+    for role, output, input_hash in (
+        ("scout", {"auftrag_prosa": "Inspect current behavior."}, "a" * 64),
+        ("architect", "A" * 60, "b" * 64),
+        ("planner_handoff", {"architect_input_sha256": "b" * 64}, "c" * 64),
+    ):
+        artifact = make_role_artifact(
+            role, output, run_id="run-1", goal="goal",
+            input_sha256=input_hash,
+        )
+        assert artifact is not None
+        artifacts = add_role_artifact(
+            artifacts, artifact, run_id="run-1", goal="goal",
+        )
+
+    loaded = load_role_artifacts(
+        artifacts, run_id="run-1", goal="goal",
+    )
+    assert set(loaded) == {"scout", "architect", "planner_handoff"}

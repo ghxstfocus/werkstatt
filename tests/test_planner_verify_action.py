@@ -63,7 +63,16 @@ def test_phase_tasks_verify_ruft_run_builder_nicht(monkeypatch):
     monkeypatch.setattr(tasks_mod, "task_done", lambda *a, **k: None)
     monkeypatch.setattr(audit_module, "get_run_id", lambda: "")
 
-    tasks_mod._phase_tasks_loop(state, phase_state)
+    tasks_mod._phase_tasks_loop(
+        state,
+        phase_state,
+        coordinator_decision={
+            "coordinator_action": "execute_task_checkpoint",
+            "decision": "execute_planned_task",
+            "next_task_id": "t1",
+            "next_executor": "verify_only",
+        },
+    )
 
     assert builder_calls == []
     assert len(verify_calls) == 1

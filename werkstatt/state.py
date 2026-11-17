@@ -165,6 +165,10 @@ class RunState:
     # Model-derived Explorer handoffs remain process-local. A fresh worker may
     # restore only the separately hash-bound deterministic single-file skip.
     coordinator_setup_context_ready: bool = False
+    # Finalizer's criteria result is exposed to the run summary after the
+    # coordinator has completed the independent review, gate, Verify and commit
+    # checkpoints.
+    op_criteria_progress_marker: str | None = None
     # Set when a task worker revalidation finds the coordinator's persisted
     # action stale; the outer loop must decide again before dispatching work.
     coordinator_dispatch_stale: bool = False
@@ -175,7 +179,20 @@ class RunState:
     # and choose the next required role. These are transient dispatch fields.
     planner_stop_after_role: str | None = None
     planner_step_yielded: bool = False
+    # The coordinator persists a validated but unapproved plan, then requests
+    # the required human plan gate as its own checkpoint action.
+    planner_defer_plan_approval: bool = False
+    planner_plan_candidate_ready: bool = False
+    planner_plan_approval_checkpointed: bool = False
+    preflight_checkpoint_ready: bool = False
+    # Explicitly authorized only by the bounded direct-builder route; planner
+    # scans are otherwise required when no current preflight checkpoint exists.
+    preflight_checkpoint_skipped: bool = False
     planner_action_role: str | None = None
+    # Checkpoint coordinator's bounded Scout/Architect choice for this single
+    # planner invocation. It is deliberately transient and never persisted.
+    planner_coordinator_role: str | None = None
+    planner_coordinator_source_evidence: tuple[dict[str, Any], ...] = ()
     planner_yielded_after_role: str | None = None
     # Exact-prompt response cache for resumable planning calls. Run-scoped
     # entries are persisted in PhaseState, never in the shared RunRecord.

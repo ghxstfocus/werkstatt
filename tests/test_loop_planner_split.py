@@ -345,29 +345,6 @@ def test_planner_system_ohne_preview_kein_ist_zustand():
 # GOLD 2026-10-30: Scout-Abbruch -> skip_plan_gate
 # =====================================================================
 
-def test_scout_noop_still_requires_plan_gate():
-    """Ein Scout-No-Op wird vor Taskabschluss und Human-Gate freigegeben."""
-    import inspect
-
-    from werkstatt.phases.plan import _phase_plan_and_preflight
-
-    src = inspect.getsource(_phase_plan_and_preflight)
-    start = src.index('if state.auftrag_bereits_erfuellt:')
-    end = src.index('# M-458: Architect-Prosa anzeigen', start)
-    branch = src[start:end]
-    assert '_human_gate_plan(state)' in branch
-    assert branch.index('_human_gate_plan(state)') < branch.index(
-        '_task_ende(state, phase_state, "scout_skip"'
-    )
-    assert branch.index('_human_gate_plan(state)') < branch.index(
-        '_human_gate(state)'
-    )
-    assert '"status": "rejected"' in branch
-    verify_pos = branch.index(
-        '_verify_patches(state, phase="phase_end")'
-    )
-    assert branch.index('_human_gate(state)') < verify_pos
-    assert verify_pos < branch.index('audit("loop_erfolg"')
 
 
 def test_scout_noop_phase_end_verify_runs_full_test_stage():
@@ -384,22 +361,3 @@ def test_scout_noop_phase_end_verify_runs_full_test_stage():
     )
     assert pytest_stage.get("phase") == "phase_end"
     assert "requires" not in pytest_stage
-
-
-def test_scout_abbruch_setzt_tasks_ok():
-    """Bei Scout-Abbruch (auftrag_bereits_erfuellt) wird tasks_ok=1
-    gesetzt, damit K13 den Lauf als Erfolg wertet.
-
-    Regression: Live 2026-10-30 21:59: Commit 30decc63 durch, aber
-    Footer zeigte LOOP FEHLGESCHLAGEN (tasks_ok=0).
-    """
-    import inspect
-
-    from werkstatt import loop as loop_mod
-    # Fix AZ Stufe 8-B: Logik liegt jetzt in _phase_plan_and_preflight.
-    srcs = (
-        inspect.getsource(loop_mod.run_pipeline_loop)
-        + inspect.getsource(loop_mod._phase_plan_and_preflight)
-    )
-    # tasks_ok = 1 muss im Scout-Abbruch-Block stehen
-    assert "tasks_ok = 1" in srcs

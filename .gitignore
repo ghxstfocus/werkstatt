@@ -45,6 +45,9 @@ a8_3_v2.txt
 # Loop-Logs
 logs/
 
+# Local development scratch space; never part of project retrieval or commits.
+/work/
+
 # OP-323: Stream-Events (hochfrequent, nicht ins git)
 audit-logs/stream-*.jsonl
 audit-logs/stream-migrated-*.jsonl

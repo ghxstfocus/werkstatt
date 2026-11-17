@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.factories import coordinator_decision_for_task
+
 
 def test_tasks_py_emittiert_loop_phase_build():
     """Source-Scan: audit('loop_phase', {'phase': 'build'}) muss in
@@ -101,7 +103,10 @@ def test_tasks_loop_resume_counts_persisted_done_tasks(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(tasks, "audit", lambda *_args: None)
 
-    rc, tasks_ok, returned_tasks = tasks._phase_tasks_loop(state, phase_state)
+    rc, tasks_ok, returned_tasks = tasks._phase_tasks_loop(
+        state, phase_state,
+        coordinator_decision=coordinator_decision_for_task(phase_state, state),
+    )
 
     assert rc == 0
     assert tasks_ok == 1
@@ -109,10 +114,66 @@ def test_tasks_loop_resume_counts_persisted_done_tasks(monkeypatch, tmp_path):
     assert state.tasks_ok_counter == 1
 
 
-def test_exhausted_budget_routes_one_pending_write_task_to_chat_recovery(
+def test_builder_failure_returns_to_coordinator_without_inline_recovery(
     monkeypatch, tmp_path,
 ):
-    """A pending Builder task reaches the bounded Chat recovery path at exhaustion."""
+    from tests.factories import mk_state
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.phases import tasks
+
+    source = tmp_path / "sample.py"
+    source.write_text("value = 1\n", encoding="utf-8")
+    planned = [{
+        "id": "t1", "name": "Implementierung", "action": "update",
+        "task_files": ["sample.py"],
+    }]
+    phase_state = PhaseState("testproj", base_dir=tmp_path / ".werkstatt")
+    phase_state.init_new("Ziel", planned)
+    state = mk_state(
+        project_dir=tmp_path, project_name="testproj", aufgabe="Ziel",
+        tasks=planned,
+    )
+    events = []
+    worker_calls = []
+    monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: None)
+    monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _state: False)
+    monkeypatch.setattr(tasks, "audit", lambda *args, **_kwargs: events.append(args))
+    monkeypatch.setattr("werkstatt.progress.append", lambda *_a, **_k: None)
+
+    def builder_failed(*_args, **_kwargs):
+        worker_calls.append("builder")
+        state.builder_failure_reason = "invalid_patch_response"
+        state.builder_failure_detail = "structured patch missing"
+        return False
+
+    monkeypatch.setattr(tasks, "_run_with_progress", builder_failed)
+    monkeypatch.setattr(
+        tasks, "run_reviewer",
+        lambda *_a, **_k: worker_calls.append("reviewer") or True,
+    )
+
+    result = tasks._phase_tasks_loop(
+        state,
+        phase_state,
+        coordinator_decision=coordinator_decision_for_task(
+            phase_state, state,
+        ),
+    )
+
+    assert result[0] == 0
+    assert worker_calls == ["builder"]
+    assert phase_state.get_task("t1")["status"] == "failed"
+    assert any(
+        event[0] == "loop_task_failed"
+        and event[1].get("coordinator_reentry") is True
+        for event in events
+    )
+
+
+def test_exhausted_budget_stops_before_worker_or_chat_recovery(
+    monkeypatch, tmp_path,
+):
+    """Budget exhaustion is a coordinator boundary, not inline role recovery."""
     from werkstatt.phase_state import PhaseState
     from werkstatt.phases import tasks
     from werkstatt.state import RunState
@@ -129,7 +190,7 @@ def test_exhausted_budget_routes_one_pending_write_task_to_chat_recovery(
     )
     state.chat_origin_session_id = "session-1"
     state.tasks = planned
-    reflection_calls = []
+    worker_calls = []
 
     monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: None)
     monkeypatch.setattr(
@@ -140,26 +201,17 @@ def test_exhausted_budget_routes_one_pending_write_task_to_chat_recovery(
     )
     monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: None)
 
-    def builder_blocked(*_args, **_kwargs):
-        state.builder_failure_reason = "run_budget_exhausted"
-        return False
-
-    monkeypatch.setattr(tasks, "_run_with_progress", builder_blocked)
     monkeypatch.setattr(
-        tasks, "_pruefe_prior_failed_dependency",
-        lambda *_args: (False, []),
-    )
-    monkeypatch.setattr(
-        tasks, "_reflection_loop",
-        lambda *args, **kwargs: reflection_calls.append((args, kwargs)) or False,
+        tasks, "_run_with_progress",
+        lambda *_args, **_kwargs: worker_calls.append("builder") or False,
     )
 
-    rc, tasks_ok, _returned = tasks._phase_tasks_loop(state, phase_state)
+    rc, tasks_ok, _returned = tasks._phase_tasks_loop(
+        state, phase_state,
+        coordinator_decision=coordinator_decision_for_task(phase_state, state),
+    )
 
     assert rc == 1
     assert tasks_ok == 0
-    assert len(reflection_calls) == 1
-    assert "Run-Budget ist vor dem Builder-Aufruf erschoepft" in (
-        reflection_calls[0][1]["error_context"]
-    )
-    assert phase_state.get_task("t1")["status"] == "failed"
+    assert worker_calls == []
+    assert phase_state.get_task("t1")["status"] == "pending"

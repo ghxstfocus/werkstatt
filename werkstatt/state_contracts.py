@@ -30,7 +30,7 @@ class ContractViolation(Exception):
 # True = immer Pflicht. "auto" = nicht pruefen (Feld kann legitim
 # leer sein, z.B. Scout wird uebersprungen).
 TRANSITIONS: dict[str, list[tuple[str, bool | str]]] = {
-    "explorer->scout": [
+    "project_context->planner": [
         ("explorer_context", True),
     ],
     "scout->architect": [

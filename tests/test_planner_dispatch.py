@@ -131,19 +131,13 @@ def test_planner_dispatch_rejects_unknown_evidence() -> None:
 def test_planner_dispatch_declares_inputs_missing_and_available_evidence() -> None:
     scout = choose_next_planner_role(
         scout_skip_path=None,
-        available_evidence={
-            "user_goal", "project_inventory", "explorer_evidence",
-        },
+        available_evidence={"user_goal"},
     )
     assert scout.role == "scout"
-    assert scout.required_evidence == (
-        "user_goal", "project_inventory", "explorer_evidence",
-    )
+    assert scout.required_evidence == ("user_goal",)
     assert scout.missing_evidence == ("scout_report",)
     assert scout.missing_inputs == ()
-    assert scout.available_evidence == (
-        "explorer_evidence", "project_inventory", "user_goal",
-    )
+    assert scout.available_evidence == ("user_goal",)
 
     architect = choose_next_planner_role(
         scout_skip_path=None,
@@ -562,3 +556,63 @@ def test_architect_single_file_task_escalates_without_sufficient_evidence(
 
     assert task is None
     assert actual_reason == reason
+
+
+def test_explicit_source_context_is_bounded_current_and_does_not_claim_inventory(
+    tmp_path,
+) -> None:
+    from werkstatt.roles.planner_dispatch import (
+        prepare_explicit_source_context,
+    )
+
+    for relative in ("src/one.py", "src/two.py"):
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("value = 1\n", encoding="utf-8")
+
+    context, reason = prepare_explicit_source_context(
+        "Pruefe src/one.py zusammen mit src/two.py", tmp_path,
+    )
+
+    assert reason == "explicit_current_sources_ready_for_role_dispatch"
+    assert context is not None
+    assert context["dispatch"]["evidence_kind"] == "explicit_source_read"
+    assert context["related_files_scan"]["status"] == "not_requested"
+    assert len(context["key_files"]) == 2
+    for item in context["key_files"]:
+        source = (tmp_path / item["file"]).read_bytes()
+        assert item["source_complete"] is True
+        assert item["source_line_ranges"] == [[1, 1]]
+        assert item["source_sha256"] == hashlib.sha256(source).hexdigest()
+
+    (tmp_path / "src/two.py").write_text("changed = True\n", encoding="utf-8")
+    stale_context, stale_reason = prepare_explicit_source_context(
+        "Pruefe src/one.py zusammen mit src/two.py", tmp_path,
+    )
+    assert stale_reason == "explicit_current_sources_ready_for_role_dispatch"
+    assert stale_context["key_files"][1]["source_sha256"] != (
+        context["key_files"][1]["source_sha256"]
+    )
+
+
+def test_explicit_source_context_falls_back_for_long_or_unsafe_goals(
+    tmp_path,
+) -> None:
+    from werkstatt.roles.planner_dispatch import (
+        prepare_explicit_source_context,
+    )
+
+    long_context, long_reason = prepare_explicit_source_context(
+        "Pruefe src/one.py src/two.py " + ("x" * 12_001), tmp_path,
+    )
+    assert long_context is None
+    assert long_reason == "explicit_sources_goal_outside_limit"
+
+    unsafe_context, unsafe_reason = prepare_explicit_source_context(
+        "Pruefe ../outside.py und src/two.py", tmp_path,
+    )
+    assert unsafe_context is None
+    assert unsafe_reason in {
+        "explicit_sources_need_two_to_four_paths",
+        "explicit_source_path_unsafe",
+    }
