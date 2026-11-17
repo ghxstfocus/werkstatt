@@ -92,7 +92,7 @@ def _task_ende(
     pd = getattr(state, "project_dir", None)
     # OP-064a-Live-Fix (2026-11-01): Spec-Widerspruch aus reflection.py
     # in Sticky-Veto uebersetzen. Der Haupt-Fix sitzt im Caller
-    # (pipeline_phases._phase_tasks_loop, vor _task_ende(ok=True)) —
+    # (pipeline_phases.run_task_checkpoint, vor _task_ende(ok=True)) —
     # damit loop_task_ok nicht auditiert wird. Dieser Guard ist die
     # defensive Schicht: jeder direkte _task_ende(ok=True)-Aufruf
     # landet hier und wird zum human_review statt mark_done.

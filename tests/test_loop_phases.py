@@ -151,7 +151,9 @@ def _audit_events(tmp_path: Path) -> list[dict]:
 def test_checkpoint_selects_registered_executor_for_task_action(
     action: str, executor: str,
 ) -> None:
-    from werkstatt.phases.tasks import _checkpoint_decision_payload
+    from werkstatt.checkpoint_coordinator import (
+        choose_task_checkpoint_action as _checkpoint_decision_payload,
+    )
 
     class Phase:
         def progress(self):
@@ -177,7 +179,7 @@ def test_verify_task_runs_deterministic_verify_without_reviewer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from werkstatt.phase_state import PhaseState
-    from werkstatt.phases import tasks as task_phase
+    from werkstatt.roles import task_dispatch as task_phase
 
     project = tmp_path / "project"
     project.mkdir()
@@ -226,7 +228,7 @@ def test_verify_task_runs_deterministic_verify_without_reviewer(
     monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _state: False)
     monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "")
 
-    rc, tasks_ok, tasks = task_phase._phase_tasks_loop(
+    rc, tasks_ok, tasks = task_phase.run_task_checkpoint(
         state, phase,
         coordinator_decision=coordinator_decision_for_task(phase, state),
     )
@@ -306,7 +308,9 @@ def test_task_checkpoint_persists_only_successful_verify_evidence(tmp_path) -> N
 
 
 def test_checkpoint_rejects_unregistered_task_action() -> None:
-    from werkstatt.phases.tasks import _checkpoint_decision_payload
+    from werkstatt.checkpoint_coordinator import (
+        choose_task_checkpoint_action as _checkpoint_decision_payload,
+    )
 
     class Phase:
         def progress(self):

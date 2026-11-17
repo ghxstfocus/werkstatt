@@ -812,28 +812,6 @@ def test_recovery_reviewer_reserve_requires_a_claimed_builder(
     assert record["checkpoint"].get("reflection_chat_reviewer_calls", 0) == 0
 
 
-def test_chat_recovery_reviewer_runs_inside_bounded_reserve(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from types import SimpleNamespace
-
-    from werkstatt import reviewer
-    from werkstatt.phases import tasks
-
-    state = SimpleNamespace(reflection_chat_builder_reserve_active=False)
-    observed: list[bool] = []
-
-    def run_review(current_state) -> bool:
-        observed.append(current_state.reflection_chat_builder_reserve_active)
-        return True
-
-    monkeypatch.setattr(reviewer, "run_reviewer", run_review)
-
-    assert tasks._run_chat_recovery_reviewer(state) is True
-    assert observed == [True]
-    assert state.reflection_chat_builder_reserve_active is False
-
-
 def test_recovery_builder_reserve_expiry_is_durable(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

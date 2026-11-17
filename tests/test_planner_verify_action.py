@@ -19,7 +19,7 @@ def test_ist_verify_task_klassifiziert_verifikation():
 
 def test_phase_tasks_verify_ruft_run_builder_nicht(monkeypatch):
     import werkstatt.audit as audit_module
-    import werkstatt.phases.tasks as tasks_mod
+    import werkstatt.roles.task_dispatch as tasks_mod
 
     state = mk_state()
     state.tasks = [
@@ -63,7 +63,7 @@ def test_phase_tasks_verify_ruft_run_builder_nicht(monkeypatch):
     monkeypatch.setattr(tasks_mod, "task_done", lambda *a, **k: None)
     monkeypatch.setattr(audit_module, "get_run_id", lambda: "")
 
-    tasks_mod._phase_tasks_loop(
+    tasks_mod.run_task_checkpoint(
         state,
         phase_state,
         coordinator_decision={
@@ -101,7 +101,9 @@ def test_reviewer_filtert_diff_erwartung_bei_verify():
 
 def test_verify_setzt_kein_auftrag_bereits_erfuellt():
     """Checkpoint routes verify tasks away from Builder/idempotency logic."""
-    from werkstatt.phases.tasks import _checkpoint_decision_payload
+    from werkstatt.checkpoint_coordinator import (
+        choose_task_checkpoint_action as _checkpoint_decision_payload,
+    )
 
     class Phase:
         def progress(self):

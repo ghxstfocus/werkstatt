@@ -59,7 +59,6 @@ from werkstatt.phases import (  # Fix AZ Stufe 11: Re-Export
     _phase_end_review_action,
     _phase_end_verify_action,
     _phase_human_gate_action,
-    _phase_tasks_loop,
 )
 from werkstatt.planner import run_planner
 from werkstatt.reflection import (  # Fix AZ Stufe 6: Re-Export
@@ -82,6 +81,7 @@ from werkstatt.render import (
 from werkstatt.reviewer import run_reviewer
 from werkstatt.roles.builder import run_builder
 from werkstatt.roles.project_context import collect_project_context
+from werkstatt.roles.task_dispatch import run_task_checkpoint
 from werkstatt.state import RunState, check_run_lease
 from werkstatt.task_runner import (  # Fix AZ Stufe 7: Re-Export
     _extract_files_from_tasks,
@@ -150,7 +150,6 @@ __all__ = [
     "_normalize_tasks",
     "_patches_wirklich_angewendet",
     "_phase_end_reflection",
-    "_phase_tasks_loop",
     "_plan_gate",
     "_pruefe_prior_failed_dependency",
     "_reflection_loop",
@@ -175,6 +174,7 @@ __all__ = [
     "run_explorer",
     "run_planner",
     "run_reviewer",
+    "run_task_checkpoint",
     "step",
     "summary",
     "task",
@@ -332,7 +332,7 @@ def _persist_run_result(
         # overwrite them with a different exit code or status.
         return
     if run_state is not None:
-        from werkstatt.phases.tasks import _persist_run_checkpoint
+        from werkstatt.run_checkpoint import persist_run_checkpoint
 
         if phase_state is None:
             phase_state = PhaseState(
@@ -345,7 +345,7 @@ def _persist_run_result(
         }
         while True:
             check_run_lease(run_state)
-            _persist_run_checkpoint(
+            persist_run_checkpoint(
                 store, project_name, run_id, phase_state, None,
                 run_state=run_state,
             )
@@ -3225,10 +3225,10 @@ def _run_pipeline_loop_impl(
     while True:
         check_run_lease(state)
         if phase_state is not None:
-            from werkstatt.phases.tasks import _persist_run_checkpoint
+            from werkstatt.run_checkpoint import persist_run_checkpoint
 
             try:
-                _persist_run_checkpoint(
+                persist_run_checkpoint(
                     EventStore(), project_name, get_run_id(), phase_state,
                     phase_state.get_next_task(), run_state=state,
                 )
@@ -3938,7 +3938,7 @@ def _run_pipeline_loop_impl(
             }
         ])
         state.coordinator_dispatch_stale = False
-        _rc_task, tasks_ok, tasks = _phase_tasks_loop(
+        _rc_task, tasks_ok, tasks = run_task_checkpoint(
             state,
             phase_state,
             task_index_offset,

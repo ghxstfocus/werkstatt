@@ -7,18 +7,6 @@ import json
 from werkstatt.state import LLMReply, RunState
 
 
-def test_task_action_policy_lives_in_checkpoint_coordinator() -> None:
-    from werkstatt.checkpoint_coordinator import choose_task_checkpoint_action
-    from werkstatt.phases.tasks import _checkpoint_decision_payload
-
-    assert choose_task_checkpoint_action.__module__ == (
-        "werkstatt.checkpoint_coordinator"
-    )
-    # Existing test/import callers keep a compatibility alias while runtime
-    # policy has a single owner outside the phase executor.
-    assert _checkpoint_decision_payload is choose_task_checkpoint_action
-
-
 def test_checkpoint_role_recommendation_uses_shared_chat_route_and_hashes(
     tmp_path, monkeypatch,
 ) -> None:

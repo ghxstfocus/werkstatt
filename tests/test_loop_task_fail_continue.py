@@ -10,7 +10,7 @@ sys.path.insert(0, "/opt/werkstatt")
 class TestTaskFailContinue:
     def test_builder_hands_off_to_checkpoint_coordinator(self) -> None:
         """Builder must return before inline Verify/Reflection/Reviewer paths."""
-        import werkstatt.phases.tasks as _tasks
+        import werkstatt.roles.task_dispatch as _tasks
 
         src = Path(_tasks.__file__).read_text(encoding="utf-8")
         assert "task_checkpoint_requires_coordinator_decision" in src
@@ -25,9 +25,10 @@ class TestTaskFailContinue:
         import werkstatt.loop as _loop
         import werkstatt.phases as _pp
         import werkstatt.roles.project_context as _ctx
+        import werkstatt.roles.task_dispatch as _task_dispatch
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
-            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_ctx, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
+            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_ctx, _task_dispatch, _pp._review_mod, _pp._finalize_mod]))
         )
         # OP-114 (2026-11-04): Payload wird jetzt via _gate_failed_payload
         # gebaut. Struktur-Anker ist der _verify_patches-Aufruf mit

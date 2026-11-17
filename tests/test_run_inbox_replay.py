@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from werkstatt.event_store import EventStore
-from werkstatt.phases.tasks import _persist_run_checkpoint
+from werkstatt.run_checkpoint import persist_run_checkpoint
 
 
 def test_reclaimed_notice_is_not_projected_twice_after_checkpoint_before_ack(
@@ -36,7 +36,7 @@ def test_reclaimed_notice_is_not_projected_twice_after_checkpoint_before_ack(
     )
 
     with pytest.raises(RuntimeError, match="Run-Inbox-Lease verloren"):
-        _persist_run_checkpoint(
+        persist_run_checkpoint(
             store,
             "demo",
             "run-inbox-replay",
@@ -58,7 +58,7 @@ def test_reclaimed_notice_is_not_projected_twice_after_checkpoint_before_ack(
         )
     monkeypatch.setattr(store, "acknowledge_run_message", acknowledge)
 
-    _persist_run_checkpoint(
+    persist_run_checkpoint(
         store,
         "demo",
         "run-inbox-replay",
@@ -94,7 +94,7 @@ def test_job_notice_consumer_does_not_consume_questions_or_controls(
     )
     phase_state = SimpleNamespace(data={"tasks": []})
 
-    _persist_run_checkpoint(
+    persist_run_checkpoint(
         store,
         "demo",
         "run-inbox-kinds",
@@ -122,7 +122,7 @@ def test_checkpoint_preserves_more_than_fifty_unresolved_chat_followups(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt.phases import tasks
+    import werkstatt.run_checkpoint as checkpoint
 
     store = EventStore(tmp_path / "events.db")
     store.create_run_record(
@@ -144,11 +144,11 @@ def test_checkpoint_preserves_more_than_fifty_unresolved_chat_followups(
                 "request": f"Request {index}",
             },
         )
-    monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(checkpoint, "audit", lambda *_args, **_kwargs: True)
     phase_state = SimpleNamespace(data={"tasks": []})
 
     for _ in range(3):
-        _persist_run_checkpoint(
+        checkpoint.persist_run_checkpoint(
             store,
             "demo",
             "run-many-followups",

@@ -7,9 +7,11 @@ import pytest
 
 from tests.factories import coordinator_decision_for_task
 from werkstatt import run_followups
+from werkstatt.checkpoint_coordinator import (
+    choose_task_checkpoint_action as _checkpoint_decision_payload,
+)
 from werkstatt.phase_state import PhaseState
-from werkstatt.phases import tasks as task_phase
-from werkstatt.phases.tasks import _checkpoint_decision_payload
+from werkstatt.roles import task_dispatch as task_phase
 from werkstatt.state import RunState
 
 _SMALL_UPDATE_DIFF = (
@@ -2383,7 +2385,7 @@ def test_task_loop_dispatches_criteria_replan_at_checkpoint(
         lambda _state, _phase: calls.append("replan") or False,
     )
 
-    result = task_phase._phase_tasks_loop(
+    result = task_phase.run_task_checkpoint(
         state, phase,
         coordinator_decision=coordinator_decision_for_task(phase, state),
     )
@@ -2433,7 +2435,7 @@ def test_successful_criteria_replan_yields_before_new_task_dispatch(
         ),
     )
 
-    result = task_phase._phase_tasks_loop(
+    result = task_phase.run_task_checkpoint(
         state, phase,
         coordinator_decision=coordinator_decision_for_task(phase, state),
     )
@@ -2510,7 +2512,7 @@ def test_task_dispatch_returns_at_next_persisted_boundary(
     monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "")
     monkeypatch.setattr(task_phase, "audit", lambda *_a, **_kw: True)
 
-    result = task_phase._phase_tasks_loop(
+    result = task_phase.run_task_checkpoint(
         state, phase,
         coordinator_decision=coordinator_decision_for_task(phase, state),
     )
@@ -2537,7 +2539,7 @@ def test_task_worker_rechecks_coordinator_choice_before_dispatch(
     monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "")
     monkeypatch.setattr(task_phase, "audit", lambda *_a, **_kw: True)
 
-    result = task_phase._phase_tasks_loop(
+    result = task_phase.run_task_checkpoint(
         state,
         phase,
         coordinator_decision={
@@ -2575,7 +2577,7 @@ def test_task_executor_fails_closed_without_coordinator_choice(
         ) or True,
     )
 
-    result = task_phase._phase_tasks_loop(state, phase)
+    result = task_phase.run_task_checkpoint(state, phase)
 
     assert result[0] == 1
     assert phase.get_task("t1")["status"] == "pending"
@@ -2681,7 +2683,6 @@ def test_task_loop_persists_auditable_checkpoint_decision(tmp_path, monkeypatch)
     monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "demo-run-1")
     monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _state: False)
     monkeypatch.setattr(task_phase, "EventStore", lambda: fake_store)
-    monkeypatch.setattr(task_phase, "_persist_run_checkpoint", lambda *_a, **_kw: None)
     monkeypatch.setattr(task_phase, "audit", lambda *args: audit_events.append(args) or True)
     monkeypatch.setattr(
         run_followups,
@@ -2691,7 +2692,7 @@ def test_task_loop_persists_auditable_checkpoint_decision(tmp_path, monkeypatch)
         ),
     )
 
-    result = task_phase._phase_tasks_loop(
+    result = task_phase.run_task_checkpoint(
         state, phase,
         coordinator_decision=coordinator_decision_for_task(phase, state),
     )

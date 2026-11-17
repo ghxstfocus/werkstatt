@@ -674,7 +674,7 @@ def test_verify_resolves_bare_python3_to_project_venv(tmp_path):
 def test_loop_task_read_only(tmp_path, monkeypatch):
     """One checkpoint reads source evidence without dispatching the Builder."""
     from tests.factories import coordinator_decision_for_task
-    from werkstatt.phases import tasks as task_executor
+    from werkstatt.roles import task_dispatch as task_executor
 
     st = _state(tmp_path)
     st.tasks = [
@@ -708,7 +708,7 @@ def test_loop_task_read_only(tmp_path, monkeypatch):
     )
     monkeypatch.setattr("werkstatt.progress.append", lambda *_args, **_kwargs: None)
 
-    rc, _tasks_ok, _tasks = task_executor._phase_tasks_loop(
+    rc, _tasks_ok, _tasks = task_executor.run_task_checkpoint(
         st,
         ps,
         coordinator_decision=coordinator_decision_for_task(ps, st),

@@ -90,7 +90,7 @@ def _common_mocks(monkeypatch, *, builder_fn, reviewer_fn, reflection_fn):
 
 
 def _capture_audits(monkeypatch, audits: list[tuple]) -> None:
-    from werkstatt.phases import tasks as task_executor
+    from werkstatt.roles import task_dispatch as task_executor
 
     sink = lambda kind, payload, *args, **kwargs: audits.append((kind, payload))
     monkeypatch.setattr(loop_mod, "audit", sink)

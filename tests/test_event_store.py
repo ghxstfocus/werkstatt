@@ -365,7 +365,7 @@ def test_run_inbox_rejects_new_messages_after_terminal_status(
 def test_task_checkpoint_consumes_chat_notice_with_run_record(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt.phases import tasks
+    import werkstatt.run_checkpoint as tasks
 
     audit_events: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
@@ -396,7 +396,7 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
         ],
     })
 
-    tasks._persist_run_checkpoint(
+    tasks.persist_run_checkpoint(
         store, "demo", "run-inbox", phase_state, {"id": "t2"},
     )
 
@@ -434,8 +434,8 @@ def test_task_checkpoint_consumes_chat_notice_with_run_record(
 def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import werkstatt.run_checkpoint as tasks
     from werkstatt import chat_session
-    from werkstatt.phases import tasks
 
     audit_events: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
@@ -464,7 +464,7 @@ def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
         },
     )
 
-    tasks._persist_run_checkpoint(
+    tasks.persist_run_checkpoint(
         store,
         "demo",
         "run-followup",
@@ -507,7 +507,7 @@ def test_task_checkpoint_persists_chat_followup_without_replacing_goal(
     assert checkpoint_events[0]["payload"]["proposal_id"] == "proposal-1"
     assert "Einordnung steht noch aus" in checkpoint_events[0]["payload"]["detail"]
 
-    tasks._persist_run_checkpoint(
+    tasks.persist_run_checkpoint(
         store,
         "demo",
         "run-followup",
@@ -532,7 +532,7 @@ def test_task_checkpoint_rejects_invalid_followup_without_ack(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     request_text: object, error_type: type[Exception], message: str,
 ) -> None:
-    from werkstatt.phases import tasks
+    import werkstatt.run_checkpoint as tasks
 
     monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: True)
     store = EventStore(db_pfad=tmp_path / "events.db")
@@ -550,7 +550,7 @@ def test_task_checkpoint_rejects_invalid_followup_without_ack(
     )
 
     with pytest.raises(error_type, match=message):
-        tasks._persist_run_checkpoint(
+        tasks.persist_run_checkpoint(
             store,
             "demo",
             "run-invalid-followup",
@@ -566,7 +566,7 @@ def test_task_checkpoint_rejects_invalid_followup_without_ack(
 def test_task_checkpoint_retries_chat_notice_audit_idempotently(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt.phases import tasks
+    import werkstatt.run_checkpoint as tasks
 
     audit_ids: list[str] = []
 
@@ -583,10 +583,10 @@ def test_task_checkpoint_retries_chat_notice_audit_idempotently(
     )
     phase_state = SimpleNamespace(data={"tasks": []})
 
-    tasks._persist_run_checkpoint(
+    tasks.persist_run_checkpoint(
         store, "demo", "run-replay", phase_state, None,
     )
-    tasks._persist_run_checkpoint(
+    tasks.persist_run_checkpoint(
         store, "demo", "run-replay", phase_state, None,
     )
 
@@ -596,7 +596,7 @@ def test_task_checkpoint_retries_chat_notice_audit_idempotently(
 def test_task_checkpoint_audits_chat_result_without_copying_answer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt.phases import tasks
+    import werkstatt.run_checkpoint as tasks
 
     audit_events: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
@@ -619,7 +619,7 @@ def test_task_checkpoint_audits_chat_result_without_copying_answer(
         },
     )
 
-    tasks._persist_run_checkpoint(
+    tasks.persist_run_checkpoint(
         store, "demo", "run-result", SimpleNamespace(data={"tasks": []}), None,
     )
 
@@ -653,7 +653,7 @@ def test_task_checkpoint_audits_chat_result_without_copying_answer(
 def test_chat_result_audit_failure_keeps_inbox_unacked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt.phases import tasks
+    import werkstatt.run_checkpoint as tasks
 
     monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: False)
     store = EventStore(db_pfad=tmp_path / "events.db")
@@ -664,7 +664,7 @@ def test_chat_result_audit_failure_keeps_inbox_unacked(
     )
 
     with pytest.raises(RuntimeError, match="konnte nicht auditiert werden"):
-        tasks._persist_run_checkpoint(
+        tasks.persist_run_checkpoint(
             store,
             "demo",
             "run-result-audit-fail",
@@ -686,7 +686,7 @@ def test_chat_result_audit_failure_keeps_inbox_unacked(
 def test_task_checkpoint_does_not_ack_chat_notice_if_audit_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from werkstatt.phases import tasks
+    import werkstatt.run_checkpoint as tasks
 
     monkeypatch.setattr(tasks, "audit", lambda *_args, **_kwargs: False)
     store = EventStore(db_pfad=tmp_path / "events.db")
@@ -697,7 +697,7 @@ def test_task_checkpoint_does_not_ack_chat_notice_if_audit_fails(
     )
 
     with pytest.raises(RuntimeError, match="konnte nicht auditiert werden"):
-        tasks._persist_run_checkpoint(
+        tasks.persist_run_checkpoint(
             store, "demo", "run-audit-fail", SimpleNamespace(data={"tasks": []}), None,
         )
 
@@ -784,8 +784,8 @@ def test_terminal_run_transition_refuses_unacknowledged_inbox(
 def test_run_result_drains_message_arriving_during_terminal_cas(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import werkstatt.run_checkpoint as tasks
     from werkstatt import chat_session, loop, run_followups
-    from werkstatt.phases import tasks
 
     store = EventStore(db_pfad=tmp_path / "events.db")
     store.create_run_record(
@@ -851,7 +851,7 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
         phase.data["tasks"][0]["status"] = "done"
         return 0, 1, phase.data["tasks"]
 
-    monkeypatch.setattr(loop, "_phase_tasks_loop", execute_followup)
+    monkeypatch.setattr(loop, "run_task_checkpoint", execute_followup)
     monkeypatch.setattr(
         "werkstatt.roles.complete_run.run_completion_checkpoint",
         lambda *_args, **_kwargs: 0,
@@ -917,8 +917,8 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
 def test_final_followup_failure_persists_recoverable_run_status(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import werkstatt.run_checkpoint as tasks
     from werkstatt import loop, run_followups
-    from werkstatt.phases import tasks
 
     store = EventStore(db_pfad=tmp_path / "events.db")
     store.create_run_record("demo", "run-final-blocked", "Finish safely")
@@ -970,8 +970,8 @@ def test_final_followup_failure_persists_recoverable_run_status(
 def test_final_followup_gate_timeout_does_not_leave_run_running(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import werkstatt.run_checkpoint as tasks
     from werkstatt import loop, run_followups
-    from werkstatt.phases import tasks
 
     store = EventStore(db_pfad=tmp_path / "events.db")
     store.create_run_record("demo", "run-final-timeout", "Finish safely")

@@ -94,8 +94,8 @@ def test_checkpoint_captures_run_tree_before_ack_and_resumes_jobs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import werkstatt.run_checkpoint as checkpoint
     from werkstatt import chat_jobs
-    from werkstatt.phases import tasks
 
     project_dir = _repo(tmp_path / "project")
     (project_dir / "README.md").write_text("checkpoint state\n", encoding="utf-8")
@@ -125,7 +125,7 @@ def test_checkpoint_captures_run_tree_before_ack_and_resumes_jobs(
     assert jobs.mark_run_inbox_enqueued(job["job_id"])
     monkeypatch.setattr(chat_jobs, "_db_path", lambda _project: job_db)
     monkeypatch.setattr(run_snapshot, "werkstatt_home", lambda: tmp_path / "state")
-    monkeypatch.setattr(tasks, "check_run_lease", lambda _state: None)
+    monkeypatch.setattr(checkpoint, "check_run_lease", lambda _state: None)
     resumed: list[tuple[str, Path]] = []
     monkeypatch.setattr(
         chat_jobs,
@@ -133,7 +133,7 @@ def test_checkpoint_captures_run_tree_before_ack_and_resumes_jobs(
         lambda project, path: resumed.append((project, Path(path))),
     )
 
-    tasks._persist_run_checkpoint(
+    checkpoint.persist_run_checkpoint(
         events,
         "demo",
         "run-2",

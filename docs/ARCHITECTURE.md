@@ -59,7 +59,8 @@ Phase-End-Verify, Commit und Abschluss sind einzeln dispatchbare Aktionen.
 Nach einem Rollen- oder Taskcheckpoint wird die Auswahl neu getroffen;
 Scout/Architect laufen direkt bis zu ihrem Rollencheckpoint, und Builder,
 Verify sowie Reviewer sind fuer Kriterien-Tasks getrennte Taskaktionen.
-Die Task-Aktionspolicy liegt in `werkstatt/checkpoint_coordinator.py`;
+Die Task-Aktionspolicy liegt in `werkstatt/checkpoint_coordinator.py`; der
+einzelne Worker-Aufruf liegt jetzt in `werkstatt/roles/task_dispatch.py`.
 Taskexecutor und historische Phasenfassade duerfen sie nicht als zweite
 Auswahlquelle ersetzen. Hauptlauf und genehmigte Follow-ups verwenden denselben
 Koordinatorvertrag, muessen aber noch in einen gemeinsamen Dispatcher
@@ -71,7 +72,8 @@ Artefakte erhalten; ein ungueltiges oder fehlendes Architect-Artefakt wird
 zum Koordinator zurueckgegeben.
 
 Die Migration ist unvollstaendig: `werkstatt/phases/` enthaelt weiterhin
-Executor- und Kompatibilitaetsmodule. Planner-Taskgraph-Erzeugung nutzt noch
+Review-/Gate-Executor- und Kompatibilitaetsmodule; Setup-/Plan-/Task-Module
+sind noch nicht vollstaendig aus den Laufzeitpfaden entfernt. Planner-Taskgraph-Erzeugung nutzt noch
 einen gebuendelten Executor; einige Erstlauf- und Abschlussentscheidungen
 bleiben deterministisch aneinander gebunden. Eine vollstaendig freie,
 zielorientierte Aktionswahl aus ADR-0032 ist damit noch nicht erreicht.
