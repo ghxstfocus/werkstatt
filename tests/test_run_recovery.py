@@ -705,15 +705,15 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         encoding="utf-8",
     )
     worker_launcher.chmod(0o755)
-    (stub_package / "loop.py").write_text(
+    stub_loop_code = (
         "import os, sys\n"
         "from pathlib import Path\n"
         "Path(os.environ['WERKSTATT_WORKER_BOOT']).write_text('boot', encoding='utf-8')\n"
         "import werkstatt\n"
         "werkstatt.__path__ = [os.environ['WERKSTATT_REAL_PACKAGE']]\n"
         "from werkstatt import loop, orchestrator\n"
-        "from werkstatt.roles import checkpoint_actions as finalize\n"
         "from werkstatt import committer, progress, reviewer\n"
+        "from werkstatt.failure_record import _worktree_fingerprint\n"
         "cfg = {'project_dir': os.environ['WERKSTATT_TEST_PROJECT_DIR'], "
         "'venv_python': sys.executable, 'docs': {}}\n"
         "loop.load_project_config = lambda _project: cfg\n"
@@ -725,29 +725,32 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "finalize.group_start = lambda *_args: None\n"
         "finalize.group_end = lambda *_args: None\n"
         "finalize.summary = lambda *_args: None\n"
-        "finalize._human_gate = lambda *_args, **_kwargs: 2\n"
-        "finalize._hat_human_review_tasks = lambda _phase: False\n"
-        "finalize._phase_end_reflection = lambda _state: True\n"
         "verify_marker = os.environ['WERKSTATT_VERIFY_MARKER']\n"
-        "def _verify_patches(_state, *, phase=None):\n"
-        "    if phase == 'phase_end':\n"
-        "        from pathlib import Path\n"
-        "        Path(verify_marker).write_text('phase_end', encoding='utf-8')\n"
-        "        _state.last_verify_results = [{'stage_id': 'pytest_regression', "
+        "def _phase_end_verify_action(state, *_args, **_kwargs):\n"
+        "    tree = _worktree_fingerprint(Path(state.project_dir))\n"
+        "    Path(verify_marker).write_text('phase_end', encoding='utf-8')\n"
+        "    state.last_verify_results = [{'stage_id': 'pytest_regression', "
+        "'exit_code': 0, 'ok': True, 'scope_files': ['app/resume.py'], "
+        "'phase_end_tree_sha256': tree, 'phase_end_tree_stable': True}]\n"
+        "    return 0\n"
+        "loop._phase_end_verify_action = _phase_end_verify_action\n"
+        "def _verify_patches(state, *, phase=None):\n"
+        "    state.last_verify_results = [{'stage_id': 'pytest_regression', "
         "'exit_code': 0, 'ok': True, 'scope_files': ['app/resume.py']}]\n"
         "    return True\n"
-        "finalize._verify_patches = _verify_patches\n"
-        "finalize._post_commit_snapshot_check = "
+        "loop._verify_patches = _verify_patches\n"
+        "from werkstatt.roles import checkpoint_actions\n"
+        "checkpoint_actions._post_commit_snapshot_check = "
         "lambda *_args: (True, {'worktree_clean': True})\n"
         "progress.append = lambda *_args, **_kwargs: None\n"
-        "committer._committe_zielprojekt = "
-        "lambda state: (setattr(state, 'progress_written_at_commit', True) "
-        "or True, 'committed-resume')\n"
         "reviewer.run_phase_end_review = lambda _state: True\n"
         "loop._git_head = lambda _path: 'base-commit'\n"
         "loop._git_dirty = lambda _path: False\n"
-        "raise SystemExit(loop.main())\n",
-        encoding="utf-8",
+        "raise SystemExit(loop.main())\n"
+    )
+    compile(stub_loop_code, "production_resume_loop_stub", "exec")
+    (stub_package / "loop.py").write_text(
+        stub_loop_code, encoding="utf-8",
     )
     monkeypatch.setenv(
         "WERKSTATT_REAL_PACKAGE", str(repo_root / "werkstatt"),
@@ -927,6 +930,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
                 f"registry={registry_snapshot!r}; bootstrap={bootstrap_started.exists()}; "
                 f"worker_boot={worker_boot.exists()}; "
                 f"package_boot={package_boot.exists()}; "
+                    f"phase_end_verify_ran={verify_marker.exists()}; "
                 f"cmdline={proc_cmdline!r}; state={proc_state!r}; "
                 f"wchan={proc_wchan!r}; env={proc_env!r}; maps={proc_maps!r}; "
                 f"worker_log={log!r}; other_logs={extra_logs!r}"
