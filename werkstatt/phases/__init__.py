@@ -106,7 +106,6 @@ from .explorer import _phase_explorer_and_setup as _phase_explorer_and_setup
 from .explorer import _phase_project_context_tools as _phase_project_context_tools
 from .finalize import _phase_end_review_action as _phase_end_review_action
 from .finalize import _phase_end_verify_action as _phase_end_verify_action
-from .finalize import _phase_finalize as _phase_finalize
 from .finalize import _phase_human_gate_action as _phase_human_gate_action
 from .review import _phase_review_gate as _phase_review_gate
 from .tasks import _phase_tasks_loop as _phase_tasks_loop

@@ -846,13 +846,16 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
     monkeypatch.setattr(loop, "_persist_run_coordinator_decision", lambda *_a, **_k: None)
     dispatched = []
 
-    def execute_followup(_state, phase, max_steps, _offset, *, coordinator_decision):
-        dispatched.append((max_steps, coordinator_decision["next_task_id"]))
+    def execute_followup(_state, phase, _offset, *, coordinator_decision):
+        dispatched.append(coordinator_decision["next_task_id"])
         phase.data["tasks"][0]["status"] = "done"
         return 0, 1, phase.data["tasks"]
 
     monkeypatch.setattr(loop, "_phase_tasks_loop", execute_followup)
-    monkeypatch.setattr(loop, "_phase_finalize", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        "werkstatt.roles.complete_run.run_completion_checkpoint",
+        lambda *_args, **_kwargs: 0,
+    )
     monkeypatch.setattr(loop, "check_run_lease", lambda _state: None)
     monkeypatch.setattr(loop, "audit", lambda *_args, **_kwargs: True)
 
@@ -873,7 +876,12 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
     monkeypatch.setattr(run_followups, "reconcile_chat_followups", reconcile)
     run_state = SimpleNamespace(project_dir=tmp_path, run_lease_check=None)
     phase_state = SimpleNamespace(
-        data={"tasks": [{"id": "followup-t1", "status": "pending"}]},
+        data={
+            "aufgabe": "Finish safely",
+            "run_id": "run-final-race",
+            "tasks": [{"id": "followup-t1", "status": "pending"}],
+        },
+        run_id="run-final-race",
         get_next_task=lambda: next(
             (
                 task for task in phase_state.data["tasks"]
@@ -886,7 +894,7 @@ def test_run_result_drains_message_arriving_during_terminal_cas(
     assert loop._finish_run_after_followups(
         "demo", run_state, phase_state, 0,
     ) == 0
-    assert dispatched == [(1, "followup-t1")]
+    assert dispatched == ["followup-t1"]
 
     record = store.get_run_record("demo", "run-final-race")
     assert record is not None

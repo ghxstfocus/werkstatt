@@ -58,7 +58,6 @@ from werkstatt.phases import (  # Fix AZ Stufe 11: Re-Export
     _normalize_tasks,
     _phase_end_review_action,
     _phase_end_verify_action,
-    _phase_finalize,
     _phase_human_gate_action,
     _phase_project_context_tools,
     _phase_tasks_loop,
@@ -151,7 +150,6 @@ __all__ = [
     "_normalize_tasks",
     "_patches_wirklich_angewendet",
     "_phase_end_reflection",
-    "_phase_finalize",
     "_phase_project_context_tools",
     "_phase_tasks_loop",
     "_plan_gate",
@@ -519,8 +517,6 @@ def _run_human_gate_checkpoint(
             project_name,
         )
         return 3
-    from werkstatt.phases.finalize import _hat_human_review_tasks
-
     if gate_rc == 0 and _hat_human_review_tasks(phase_state):
         audit(
             "loop_human_review_offen",
@@ -3853,13 +3849,15 @@ def _run_pipeline_loop_impl(
                 return commit_rc
             continue
         if action == "finalize_run":
+            from werkstatt.roles.complete_run import run_completion_checkpoint
+
             tasks = state.tasks
             tasks_ok = len([
                 record for record in phase_state.data.get("tasks", [])
                 if isinstance(record, dict) and record.get("status") == "done"
             ])
             check_run_lease(state)
-            finalize_rc = _phase_finalize(
+            finalize_rc = run_completion_checkpoint(
                 state, tasks_ok, tasks, project_name, phase_state,
                 phase_review_checkpointed=True,
                 human_gate_checkpointed=True,

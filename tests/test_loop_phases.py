@@ -24,6 +24,7 @@ import pytest
 
 from tests.factories import coordinator_decision_for_task
 from werkstatt import loop
+from werkstatt.roles import complete_run
 from werkstatt.state import RunState
 
 
@@ -35,7 +36,7 @@ def test_finalize_resume_returns_to_coordinator_without_checkpoints(
     state = _state(tmp_path)
     calls = []
     monkeypatch.setattr(
-        "werkstatt.failure_record._worktree_fingerprint",
+        complete_run, "_worktree_fingerprint",
         lambda _project_dir: "a" * 64,
     )
     monkeypatch.setattr(
@@ -51,7 +52,9 @@ def test_finalize_resume_returns_to_coordinator_without_checkpoints(
         lambda *_args, **_kwargs: calls.append("verify") or 0,
     )
 
-    rc = loop._phase_finalize(state, 1, [{"id": "t1"}], "testproj", phase_state)
+    rc = complete_run.run_completion_checkpoint(
+        state, 1, [{"id": "t1"}], "testproj", phase_state,
+    )
 
     assert rc == 3
     assert calls == []
@@ -709,7 +712,7 @@ def _run_finalize_commit_order(
     if not verify_ok:
         return 1, order, audit_events, progress_entries
 
-    monkeypatch.setattr(finalize, "_hat_human_review_tasks", lambda _ps: False)
+    monkeypatch.setattr(complete_run, "_hat_human_review_tasks", lambda _ps: False)
     monkeypatch.setattr(
         finalize, "_phase_end_reflection", lambda _state: True,
         raising=False,
@@ -717,16 +720,14 @@ def _run_finalize_commit_order(
     monkeypatch.setattr(
         "werkstatt.reviewer.run_phase_end_review", lambda _state: True,
     )
-    monkeypatch.setattr(finalize, "audit", lambda *a, **kw: audit_events.append(a))
-    monkeypatch.setattr(finalize, "group_start", lambda *a, **kw: None)
-    monkeypatch.setattr(finalize, "group_end", lambda *a, **kw: None)
-    monkeypatch.setattr(finalize, "summary", lambda *a, **kw: None)
+    monkeypatch.setattr(complete_run, "audit", lambda *a, **kw: audit_events.append(a))
+    monkeypatch.setattr(complete_run, "summary", lambda *a, **kw: None)
     monkeypatch.setattr(
         "werkstatt.progress.append",
         _append_progress,
     )
 
-    rc = finalize._phase_finalize(
+    rc = complete_run.run_completion_checkpoint(
         state, tasks_ok=1, tasks=state.tasks,
         project_name="testproj", phase_state=phase_state,
         phase_review_checkpointed=True,
@@ -1131,7 +1132,7 @@ def test_finalizer_rejects_task_verify_for_stale_file_content(tmp_path):
     assert rows[0]["verify_stage_ids"] == []
     assert gaps == ["AC1:task_verify_evidence_missing"]
 
-def test_phase_finalize_rejects_review_checkpoint_after_worktree_change(
+def test_completion_rejects_review_checkpoint_after_worktree_change(
     tmp_path, monkeypatch,
 ):
     from werkstatt.phase_state import PhaseState
@@ -1143,7 +1144,7 @@ def test_phase_finalize_rejects_review_checkpoint_after_worktree_change(
     phase_state.record_phase_end_review(worktree_fingerprint="a" * 64)
     state = _state(tmp_path, run_id="run-review")
     monkeypatch.setattr(
-        "werkstatt.failure_record._worktree_fingerprint",
+        complete_run, "_worktree_fingerprint",
         lambda _project_dir: "b" * 64,
     )
     monkeypatch.setattr(
@@ -1153,7 +1154,7 @@ def test_phase_finalize_rejects_review_checkpoint_after_worktree_change(
         ),
     )
 
-    rc = loop._phase_finalize(
+    rc = complete_run.run_completion_checkpoint(
         state,
         0,
         [],

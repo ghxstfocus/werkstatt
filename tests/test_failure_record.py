@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from werkstatt import failure_record
 from werkstatt.phases import finalize
+from werkstatt.roles import complete_run
 from werkstatt.roles.verify_recovery import _error_context
 
 
@@ -14,18 +15,13 @@ def test_finalize_requires_coordinator_checkpoints_and_does_not_run_legacy_chain
     tmp_path: Path, monkeypatch,
 ) -> None:
     events = []
-    monkeypatch.setattr(finalize, "audit", lambda *args: events.append(args))
-
-    def forbidden(*_args, **_kwargs):
-        raise AssertionError("finalize_run must not choose review, gate, or verify")
-
-    monkeypatch.setattr(finalize, "_phase_end_review_action", forbidden)
-    monkeypatch.setattr(finalize, "_phase_human_gate_action", forbidden)
-    monkeypatch.setattr(finalize, "_phase_end_verify_action", forbidden)
+    monkeypatch.setattr(complete_run, "audit", lambda *args: events.append(args))
     state = SimpleNamespace(project_dir=tmp_path, project_name="demo")
     phase_state = SimpleNamespace(data={})
 
-    result = finalize._phase_finalize(state, 0, [], "demo", phase_state)
+    result = complete_run.run_completion_checkpoint(
+        state, 0, [], "demo", phase_state,
+    )
 
     assert result == 3
     assert events[-1][0] == "loop_phase"
