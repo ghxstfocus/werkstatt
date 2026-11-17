@@ -230,6 +230,8 @@ def test_graphify_candidates_use_native_query_order_when_cli_is_available(
     ]
     assert observed["argv"][1:3] == ["query", "checkpoint decision"]
     assert "--graph" in observed["argv"]
+    assert "--budget" in observed["argv"]
+    assert "--depth" not in observed["argv"]
     assert observed["argv"][observed["argv"].index("--seed") + 1] == (
         "werkstatt/phase_state.py"
     )

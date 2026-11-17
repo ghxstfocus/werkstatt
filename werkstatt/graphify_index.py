@@ -459,7 +459,7 @@ def _query_graphify_cli_cached(
     try:
         argv = [
                 executable, "query", query[:2000], "--graph", str(graph_path),
-                "--budget", str(GRAPHIFY_QUERY_BUDGET), "--depth", "2",
+                "--budget", str(GRAPHIFY_QUERY_BUDGET),
             ]
         for seed in seed_paths:
             argv.extend(("--seed", seed))
