@@ -839,11 +839,7 @@ def _phase_tasks_loop(
         }:
             from werkstatt.criteria_replan import replan_unassigned_criteria
 
-            if not replan_unassigned_criteria(
-                state,
-                phase_state,
-                checkpoint_only=max_task_steps is not None,
-            ):
+            if not replan_unassigned_criteria(state, phase_state):
                 phase_state.save()
                 return 1, tasks_ok, tasks
             tasks = [
@@ -854,12 +850,11 @@ def _phase_tasks_loop(
                 )
             ]
             tasks_ok = phase_state.progress().get("done", 0)
-            if max_task_steps is not None:
-                # Planning is one checkpoint action too. Persist its result
-                # and let the coordinator select the next role explicitly.
-                phase_state.save()
-                return 0, tasks_ok, tasks
-            continue
+            # Criteria recovery is a coordination action, never a nested
+            # planner call. Return to the run coordinator even for legacy
+            # callers that requested an unbounded task loop.
+            phase_state.save()
+            return 0, tasks_ok, tasks
         if decision == "resolve_blocked_graph":
             # OP-163: unerfuellte Deps -> als blocked markieren.
             _pending_after = [

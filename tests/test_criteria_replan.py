@@ -79,33 +79,10 @@ def test_replans_only_missing_criteria_and_preserves_completed_tasks(
         budget={"max_llm_calls": 20},
     )
 
-    def fake_planner(addition):
-        assert "AC2: Second criterion" in addition.aufgabe
-        assert "OP-398" not in addition.aufgabe
-        assert len(addition.aufgabe) < 5_000
-        addition.tasks = [{
-            "id": "repair-second",
-            "name": "Complete second criterion",
-            "description": "Implement and verify the second criterion.",
-            "action": "update",
-            "task_files": ["src/two.py"],
-            "dependencies": [],
-            "criterion_refs": ["AC1"],
-            "phase_id": None,
-            "parent_id": None,
-        }]
-        addition.tests = ["pytest tests/test_two.py"]
-        addition.akzeptanzkriterien = ["Second criterion"]
-        addition.phasen = []
-        addition.architect_prosa = "Only the second criterion is planned."
-        addition.llm_calls += 2
-        return True
-
-    monkeypatch.setattr("werkstatt.planner.run_planner", fake_planner)
-    monkeypatch.setattr("werkstatt.gates._plan_gate", lambda _state: True)
+    phase.run_id = state.run_id
     monkeypatch.setattr(
-        "werkstatt.gates._human_gate_plan",
-        lambda _state, kontext="": 0,
+        "werkstatt.planner.run_planner",
+        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
     )
     monkeypatch.setattr(criteria_replan, "audit", lambda *args, **kwargs: True, raising=False)
 
@@ -114,20 +91,17 @@ def test_replans_only_missing_criteria_and_preserves_completed_tasks(
     existing = phase.get_task("existing")
     assert existing["status"] == "done"
     assert existing["criterion_refs"] == ["AC1"]
-    additions = [
-        task for task in phase.data["tasks"]
-        if task.get("source_followup_id", "").startswith("criteria-replan-")
-    ]
-    assert len(additions) == 1
-    assert additions[0]["status"] == "pending"
-    assert additions[0]["criterion_refs"] == ["AC2"]
+    assert len(phase.data["tasks"]) == 1
+    record = criteria_replan.active_criteria_replan(phase)
+    assert record is not None
+    assert record["status"] == "roles_pending"
+    assert "AC2: Second criterion" in record["planner_goal"]
+    assert "OP-398" not in record["planner_goal"]
+    assert len(record["planner_goal"]) < 5_000
     assert phase.data["akzeptanzkriterien"] == [
         "First criterion", "Second criterion",
     ]
-    assert phase.criteria_progress()["valid"] is True
     assert phase.criteria_progress()["uncovered"] == ["AC2"]
-    assert phase.data["criteria_replans"][0]["status"] == "applied"
-    assert state.llm_calls == 2
 
 
 def test_checkpoint_replan_prepares_bounded_subgoal_without_calling_planner(
@@ -158,7 +132,7 @@ def test_checkpoint_replan_prepares_bounded_subgoal_without_calling_planner(
     )
 
     assert criteria_replan.replan_unassigned_criteria(
-        state, phase, checkpoint_only=True,
+        state, phase,
     ) is True
 
     record = criteria_replan.active_criteria_replan(phase)
@@ -201,7 +175,7 @@ def test_checkpoint_replan_candidate_is_gated_before_append(tmp_path, monkeypatc
         lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
     )
     assert criteria_replan.replan_unassigned_criteria(
-        state, phase, checkpoint_only=True,
+        state, phase,
     ) is True
     record = criteria_replan.active_criteria_replan(phase)
     assert record is not None
@@ -249,7 +223,7 @@ def test_checkpoint_replan_candidate_is_gated_before_append(tmp_path, monkeypatc
     assert phase.data["criteria_replans"][0]["status"] == "applied"
 
 
-def test_replan_rejects_planner_that_changes_original_criteria(
+def test_checkpoint_candidate_rejects_planner_that_changes_criteria(
     tmp_path, monkeypatch,
 ):
     phase = PhaseState("demo", base_dir=tmp_path)
@@ -267,35 +241,27 @@ def test_replan_rejects_planner_that_changes_original_criteria(
         api_key="test-key",
         budget={"max_llm_calls": 20},
     )
-    gate_calls = []
-
-    def fake_planner(addition):
-        addition.akzeptanzkriterien = ["Rewritten second criterion"]
-        addition.tasks = [{
-            "id": "repair",
-            "name": "Repair",
-            "description": "Repair changed requirement.",
-            "action": "update",
-            "task_files": ["src/two.py"],
-            "dependencies": [],
-            "criterion_refs": ["AC1"],
-        }]
-        return True
-
-    monkeypatch.setattr("werkstatt.planner.run_planner", fake_planner)
-    monkeypatch.setattr("werkstatt.gates._plan_gate", lambda _state: True)
-    monkeypatch.setattr(
-        "werkstatt.gates._human_gate_plan",
-        lambda *_args, **_kwargs: gate_calls.append(True) or 0,
-    )
-
-    assert criteria_replan.replan_unassigned_criteria(state, phase) is False
+    phase.run_id = state.run_id
+    assert criteria_replan.replan_unassigned_criteria(state, phase) is True
+    state.tasks = [{
+        "id": "repair",
+        "name": "Repair",
+        "description": "Repair second criterion.",
+        "action": "update",
+        "task_files": ["src/two.py"],
+        "dependencies": [],
+        "criterion_refs": ["AC1"],
+    }]
+    state.akzeptanzkriterien = ["Rewritten second criterion"]
+    with pytest.raises(ValueError, match="freigegebene Kriterien veraendert"):
+        criteria_replan.store_criteria_replan_candidate(
+            state, phase, run_id=state.run_id,
+        )
     assert [task["id"] for task in phase.data["tasks"]] == ["existing"]
-    assert phase.data["criteria_replans"][0]["status"] == "failed"
-    assert gate_calls == []
+    assert phase.data["criteria_replans"][0]["status"] == "roles_pending"
 
 
-def test_replans_failed_criterion_after_recovery_and_supersedes_history(
+def test_failed_criterion_replan_preserves_history_until_candidate_approval(
     tmp_path, monkeypatch,
 ):
     phase = PhaseState("demo", base_dir=tmp_path)
@@ -337,78 +303,28 @@ def test_replans_failed_criterion_after_recovery_and_supersedes_history(
         akzeptanzkriterien=list(phase.data["akzeptanzkriterien"]),
         budget={"max_llm_calls": 20},
     )
-    audit_events = []
+    phase.run_id = state.run_id
     monkeypatch.setattr(
-        "werkstatt.audit.audit",
-        lambda kind, payload, *_args, **_kwargs: audit_events.append(
-            (kind, payload),
-        ) or True,
+        "werkstatt.planner.run_planner",
+        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
     )
-
-    def fake_planner(addition):
-        assert "AC2: Second criterion" in addition.aufgabe
-        assert "pytest tests/test_two.py failed" in addition.aufgabe
-        assert "Failed second criterion" in addition.aufgabe
-        assert "untrusted Daten" in addition.aufgabe
-        assert "AC1" not in addition.aufgabe.split("Fehlgeschlagene Task-Belege", 1)[1]
-        addition.tasks = [{
-            "id": "replacement",
-            "name": "Repair second criterion",
-            "description": "Implement and verify the second criterion.",
-            "action": "update",
-            "task_files": ["src/two.py"],
-            "dependencies": [],
-            "criterion_refs": ["AC1"],
-            "phase_id": None,
-            "parent_id": None,
-        }]
-        addition.tests = ["pytest tests/test_two.py"]
-        addition.akzeptanzkriterien = ["Second criterion"]
-        addition.phasen = []
-        addition.architect_prosa = "Targeted recovery plan."
-        return True
-
-    monkeypatch.setattr("werkstatt.planner.run_planner", fake_planner)
-    monkeypatch.setattr("werkstatt.gates._plan_gate", lambda _state: True)
-    monkeypatch.setattr(
-        "werkstatt.gates._human_gate_plan",
-        lambda _state, kontext="": 0,
-    )
-
     assert criteria_replan.replan_unassigned_criteria(state, phase) is True
-
-    start_event = next(
-        payload for kind, payload in audit_events
-        if kind == "loop_phase"
-        and payload.get("phase") == "criteria_replan"
-        and payload.get("status") == "start"
-    )
-    assert start_event["mode"] == "failed_criteria_recovery"
-    assert start_event["reason"] == "failed_task_recovery_exhausted"
-    assert start_event["replaced_task_ids"] == ["failed"]
-
+    record = criteria_replan.active_criteria_replan(phase)
+    assert record is not None
+    assert record["status"] == "roles_pending"
+    assert record["mode"] == "failed_criteria_recovery"
+    assert record["replaced_task_ids"] == ["failed"]
+    assert "AC2: Second criterion" in record["planner_goal"]
+    assert "pytest tests/test_two.py failed" in record["planner_goal"]
+    assert "untrusted Daten" in record["planner_goal"]
+    assert "OP-398" not in record["planner_goal"]
     failed = phase.get_task("failed")
-    assert failed["status"] == "superseded"
+    assert failed["status"] == "failed"
     assert failed["failure"] == "builder_failed"
-    assert failed["superseded_failure"] == "builder_failed"
-    assert failed["superseded_by_replan_id"].startswith("criteria-replan-")
-    replacement = next(
-        task for task in phase.data["tasks"]
-        if task.get("source_followup_id")
-    )
-    assert replacement["criterion_refs"] == ["AC2"]
-    assert phase.criteria_progress()["valid"] is True
-    assert phase.criteria_progress()["uncovered"] == ["AC2"]
-    assert phase.progress() == {
-        "total": 2,
-        "done": 1,
-        "failed": 0,
-        "blocked": 0,
-        "pending": 1,
-    }
+    assert len(phase.data["tasks"]) == 2
 
 
-def test_replans_unassigned_criteria_alongside_safe_failed_recovery(
+def test_checkpoint_replan_combines_failed_and_unassigned_criteria(
     tmp_path, monkeypatch,
 ):
     phase = PhaseState("demo", base_dir=tmp_path)
@@ -435,45 +351,21 @@ def test_replans_unassigned_criteria_alongside_safe_failed_recovery(
         budget={"max_llm_calls": 20},
     )
 
-    def fake_planner(addition):
-        assert "AC2: Second" in addition.aufgabe
-        assert "AC3: Third" in addition.aufgabe
-        addition.tasks = [{
-            "id": "replacement",
-            "name": "Complete remaining criteria",
-            "description": "Address both remaining approved criteria.",
-            "action": "update",
-            "task_files": ["src/remaining.py"],
-            "dependencies": [],
-            "criterion_refs": ["AC1", "AC2"],
-            "phase_id": None,
-            "parent_id": None,
-        }]
-        addition.tests = []
-        addition.akzeptanzkriterien = ["Second", "Third"]
-        addition.phasen = []
-        addition.architect_prosa = "Target the uncovered approved criteria."
-        return True
-
-    monkeypatch.setattr("werkstatt.planner.run_planner", fake_planner)
-    monkeypatch.setattr("werkstatt.gates._plan_gate", lambda _state: True)
+    phase.run_id = state.run_id
     monkeypatch.setattr(
-        "werkstatt.gates._human_gate_plan", lambda *_args, **_kwargs: 0,
+        "werkstatt.planner.run_planner",
+        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
     )
 
-    assert criteria_replan.replan_unassigned_criteria(state, phase) is True, (
-        phase.data.get("criteria_replans", [{}])[0].get("reason")
-    )
-    assert phase.get_task("failed")["status"] == "superseded"
-    replacement = next(
-        task for task in phase.data["tasks"] if task.get("source_followup_id")
-    )
-    assert replacement["criterion_refs"] == ["AC2", "AC3"]
-    assert phase.criteria_progress()["valid"] is True
-    assert phase.criteria_progress()["uncovered"] == ["AC2", "AC3"]
-    assert phase.data["criteria_replans"][0]["mode"] == (
-        "failed_and_unassigned_criteria"
-    )
+    assert criteria_replan.replan_unassigned_criteria(state, phase) is True
+    record = criteria_replan.active_criteria_replan(phase)
+    assert record is not None
+    assert record["mode"] == "failed_and_unassigned_criteria"
+    assert record["criteria_refs"] == ["AC2", "AC3"]
+    assert record["criteria_texts"] == ["Second", "Third"]
+    assert record["replaced_task_ids"] == ["failed"]
+    assert phase.get_task("failed")["status"] == "failed"
+    assert [task["id"] for task in phase.data["tasks"]] == ["done", "failed"]
 
 
 def test_replan_recovers_append_before_ledger_update_for_failed_task(

@@ -354,8 +354,6 @@ def apply_criteria_replan_candidate(
 def replan_unassigned_criteria(
     state: RunState,
     phase_state: PhaseState,
-    *,
-    checkpoint_only: bool = False,
 ) -> bool:
     """Re-plan uncovered approved criteria after an exhausted safe graph.
 
@@ -552,7 +550,6 @@ def replan_unassigned_criteria(
         state.project_name,
     )
 
-    base_calls = state.llm_calls
     addition = deepcopy(state)
     # Do not prepend the full original OP here. It is already persisted on the
     # parent RunState; only the exact uncovered criteria and bounded failure
@@ -599,175 +596,55 @@ def replan_unassigned_criteria(
     addition.explorer_context = {}
     addition.explorer_findings = {}
 
-    if checkpoint_only:
-        # Persist a bounded subgoal and return control to the outer
-        # coordinator. Scout, Architect and Planner-Split then run as
-        # separate role actions with their normal evidence handoffs.
-        record = next((
-            item for item in phase_state.data.get("criteria_replans", [])
-            if isinstance(item, dict) and item.get("replan_id") == replan_id
-        ), None)
-        if not isinstance(record, dict):
-            return False
-        record.update({
-            "status": "roles_pending",
-            "parent_goal": state.aufgabe,
-            "parent_goal_sha256": hashlib.sha256(
-                state.aufgabe.encode("utf-8"),
-            ).hexdigest(),
-            "parent_plan_sha256": phase_state.approved_plan_fingerprint(),
-            "planner_goal": addition.aufgabe,
-            "criteria_refs": list(missing_refs),
-            "criteria_texts": list(missing_criteria),
-            "failed_task_details": failed_task_details,
-            "candidate": None,
-            "planner_role_stage": None,
-        })
-        phase_state.save()
-        state.criteria_replan_id = replan_id
-        state.aufgabe = addition.aufgabe
-        state.tasks = []
-        state.tests = []
-        state.akzeptanzkriterien = []
-        state.phasen = []
-        state.architect_prosa = ""
-        state.scout_auftrag = {}
-        state.scout_api_auszug = {}
-        state.explorer_context = {}
-        state.explorer_findings = {}
-        state.planner_role_artifacts = {}
-        state.planning_response_cache = {}
-        state.coordinator_setup_context_ready = False
-        state.preflight_fehler = []
-        audit(
-            "loop_phase",
-            {
-                "phase": "criteria_replan",
-                "status": "roles_pending",
-                "replan_id": replan_id,
-                "criteria_refs": missing_refs,
-                "mode": replan_mode,
-            },
-            state.project_dir,
-            state.project_name,
-        )
-        return True
-
-    try:
-        from werkstatt.gates import _human_gate_plan, _plan_gate
-        from werkstatt.planner import run_planner
-        from werkstatt.run_followups import _extend_candidate
-
-        if not run_planner(addition):
-            raise RuntimeError("criteria_replan_planner_failed")
-        if addition.akzeptanzkriterien != missing_criteria:
-            raise ValueError("criteria_replan_changed_approved_criteria")
-        if not addition.tasks or not _plan_gate(addition):
-            raise ValueError("criteria_replan_candidate_invalid")
-
-        candidate, new_tasks, _combined, tests, phases = _extend_candidate(
-            state, addition, replan_id,
-        )
-        local_to_original = {
-            f"AC{len(criteria) + index}": ref
-            for index, ref in enumerate(missing_refs, 1)
-        }
-        remapped_by_id: dict[str, list[str]] = {}
-        for task in new_tasks:
-            refs = task.get("criterion_refs")
-            if not isinstance(refs, list) or not refs:
-                raise ValueError("criteria_replan_task_without_criteria")
-            remapped: list[str] = []
-            for ref in refs:
-                original_ref = local_to_original.get(ref)
-                if original_ref is None:
-                    raise ValueError("criteria_replan_task_outside_missing_criteria")
-                remapped.append(original_ref)
-            task["criterion_refs"] = remapped
-            remapped_by_id[str(task["id"])] = remapped
-        for task in candidate.tasks:
-            if isinstance(task, dict) and str(task.get("id")) in remapped_by_id:
-                task["criterion_refs"] = remapped_by_id[str(task["id"])]
-        candidate.akzeptanzkriterien = list(criteria)
-        if not _plan_gate(candidate):
-            raise ValueError("criteria_replan_combined_graph_invalid")
-        gate_result = _human_gate_plan(
-            candidate, kontext="criteria_replan",
-        )
-        if gate_result != 0:
-            _record_attempt(
-                phase_state, replan_id,
-                "pending" if gate_result == 2 else "rejected",
-                gate_result=gate_result,
-            )
-            audit(
-                "loop_phase",
-                {
-                    "phase": "criteria_replan",
-                    "status": "pending" if gate_result == 2 else "rejected",
-                    "replan_id": replan_id,
-                    "criteria_refs": missing_refs,
-                },
-                state.project_dir,
-                state.project_name,
-            )
-            return False
-
-        task_ids = phase_state.append_followup_tasks(
-            new_tasks,
-            criteria=list(criteria),
-            tests=tests,
-            phases=phases,
-            followup_id=replan_id,
-        )
-        if replaced_task_ids:
-            phase_state.supersede_failed_tasks(
-                replaced_task_ids, replan_id=replan_id,
-            )
-        state.tasks = [
-            dict(task) for task in phase_state.data.get("tasks", [])
-            if isinstance(task, dict)
-        ]
-        state.tests = list(phase_state.data.get("tests", []))
-        state.akzeptanzkriterien = list(criteria)
-        state.phasen = list(phase_state.data.get("phasen", []))
-        state.architect_prosa = candidate.architect_prosa
-        _record_attempt(
-            phase_state, replan_id, "applied", task_ids=task_ids,
-        )
-        audit(
-            "loop_phase",
-            {
-                "phase": "criteria_replan",
-                "status": "approved",
-                "replan_id": replan_id,
-                "criteria_refs": missing_refs,
-                "task_ids": task_ids,
-                "llm_calls": max(0, addition.llm_calls - base_calls),
-            },
-            state.project_dir,
-            state.project_name,
-        )
-        return True
-    except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
-        _record_attempt(
-            phase_state, replan_id, "failed",
-            reason=str(exc)[:300],
-        )
-        audit(
-            "loop_phase",
-            {
-                "phase": "criteria_replan",
-                "status": "failed",
-                "replan_id": replan_id,
-                "criteria_refs": missing_refs,
-                "reason": type(exc).__name__,
-            },
-            state.project_dir,
-            state.project_name,
-        )
+    # Persist a bounded subgoal and return control to the outer coordinator.
+    # Scout, Architect and Planner-Split run as separate role actions with
+    # their normal evidence handoffs; this function never calls a Planner.
+    record = next((
+        item for item in phase_state.data.get("criteria_replans", [])
+        if isinstance(item, dict) and item.get("replan_id") == replan_id
+    ), None)
+    if not isinstance(record, dict):
         return False
-    finally:
-        state.llm_calls = max(state.llm_calls, addition.llm_calls)
-        if addition.budget_exhausted_reason:
-            state.budget_exhausted_reason = addition.budget_exhausted_reason
+    record.update({
+        "status": "roles_pending",
+        "parent_goal": state.aufgabe,
+        "parent_goal_sha256": hashlib.sha256(
+            state.aufgabe.encode("utf-8"),
+        ).hexdigest(),
+        "parent_plan_sha256": phase_state.approved_plan_fingerprint(),
+        "planner_goal": addition.aufgabe,
+        "criteria_refs": list(missing_refs),
+        "criteria_texts": list(missing_criteria),
+        "failed_task_details": failed_task_details,
+        "candidate": None,
+        "planner_role_stage": None,
+    })
+    phase_state.save()
+    state.criteria_replan_id = replan_id
+    state.aufgabe = addition.aufgabe
+    state.tasks = []
+    state.tests = []
+    state.akzeptanzkriterien = []
+    state.phasen = []
+    state.architect_prosa = ""
+    state.scout_auftrag = {}
+    state.scout_api_auszug = {}
+    state.explorer_context = {}
+    state.explorer_findings = {}
+    state.planner_role_artifacts = {}
+    state.planning_response_cache = {}
+    state.coordinator_setup_context_ready = False
+    state.preflight_fehler = []
+    audit(
+        "loop_phase",
+        {
+            "phase": "criteria_replan",
+            "status": "roles_pending",
+            "replan_id": replan_id,
+            "criteria_refs": missing_refs,
+            "mode": replan_mode,
+        },
+        state.project_dir,
+        state.project_name,
+    )
+    return True
