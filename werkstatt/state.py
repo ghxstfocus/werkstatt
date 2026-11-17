@@ -183,7 +183,6 @@ class RunState:
     # the required human plan gate as its own checkpoint action.
     planner_defer_plan_approval: bool = False
     planner_plan_candidate_ready: bool = False
-    planner_plan_approval_checkpointed: bool = False
     preflight_checkpoint_ready: bool = False
     # Explicitly authorized only by the bounded direct-builder route; planner
     # scans are otherwise required when no current preflight checkpoint exists.
@@ -356,7 +355,6 @@ class RunState:
     # Vormals nur via state.X = ... gesetzt, nie deklariert. Jetzt sichtbar in
     # @dataclass, durchsuchbar via grep, typsicher in IDE/Static-Analysis.
     _reflection_bug_sigs_vorher: frozenset = field(default_factory=frozenset)
-    _reflection_diff_hash: str | None = None
     aktuelle_task: dict = field(default_factory=dict)
     applied_count: int = 0
     auftrag_bereits_erfuellt: bool = False

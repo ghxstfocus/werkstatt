@@ -1055,6 +1055,151 @@ def _continue_followup_with_coordinator(
             return 1
 
         action = decision.get("coordinator_action")
+        if action in {
+            "planner_scout", "planner_architect", "planner_split",
+            "planner_dispatch", "planner_direct",
+        }:
+            planner_goal = state.aufgabe
+            state.planner_checkpoint_callback = (
+                lambda checkpoint: _persist_run_planner_role_checkpoint(
+                    project_name, run_id, checkpoint, run_state=state,
+                )
+            )
+            state.planning_response_cache_callback = (
+                lambda entry, _goal=planner_goal: _persist_planning_response_cache(
+                    phase_state, entry, run_id=run_id, goal=_goal,
+                )
+            )
+            state.planner_role_artifact_callback = (
+                lambda artifact, _goal=planner_goal: _persist_planner_role_artifact(
+                    phase_state, artifact, run_id=run_id, goal=_goal,
+                )
+            )
+            state.planner_stop_after_role = {
+                "planner_scout": "scout",
+                "planner_architect": "architect",
+            }.get(action)
+            state.planner_action_role = {
+                "planner_scout": "scout",
+                "planner_architect": "architect",
+                "planner_split": "planner_split",
+                "planner_direct": "builder_direct",
+            }.get(action)
+            choice = decision.get("coordinator_model_choice")
+            if isinstance(choice, dict):
+                role = choice.get("role")
+                state.planner_coordinator_role = role if role in {"scout", "architect"} else None
+                evidence = choice.get("source_evidence")
+                state.planner_coordinator_source_evidence = tuple(
+                    item for item in evidence if isinstance(item, dict)
+                ) if isinstance(evidence, list) else ()
+            state.planner_yielded_after_role = None
+            state.planner_step_yielded = False
+            state.planner_defer_plan_approval = True
+            state.planner_plan_candidate_ready = False
+            try:
+                planner_rc, planner_done = _dispatch_planner_checkpoint_action(
+                    state, action, planner_goal, project_name, phase_state,
+                )
+                candidate_ready = state.planner_plan_candidate_ready
+                yielded_after_role = state.planner_yielded_after_role
+            finally:
+                state.planner_defer_plan_approval = False
+                state.planner_plan_candidate_ready = False
+                state.planner_checkpoint_callback = None
+                state.planning_response_cache_callback = None
+                state.planner_role_artifact_callback = None
+                state.planner_stop_after_role = None
+                state.planner_action_role = None
+                state.planner_coordinator_role = None
+                state.planner_coordinator_source_evidence = ()
+                state.planner_yielded_after_role = None
+            if candidate_ready:
+                try:
+                    from werkstatt.run_followups import active_chat_followup
+                    followup_checkpoint = active_chat_followup(phase_state)
+                    if (
+                        followup_checkpoint is not None
+                        and followup_checkpoint.get("status") == "roles_pending"
+                        and followup_checkpoint.get("planner_goal") == planner_goal
+                    ):
+                        from werkstatt.run_followups import (
+                            restore_chat_followup_parent,
+                            store_chat_followup_candidate,
+                        )
+                        store_chat_followup_candidate(
+                            state, phase_state, run_id=run_id,
+                        )
+                        restore_chat_followup_parent(state, phase_state)
+                    elif state.criteria_replan_id:
+                        from werkstatt.criteria_replan import (
+                            restore_criteria_replan_parent,
+                            store_criteria_replan_candidate,
+                        )
+                        store_criteria_replan_candidate(
+                            state, phase_state, run_id=run_id,
+                        )
+                        restore_criteria_replan_parent(state, phase_state)
+                    else:
+                        phase_state.record_plan_candidate(
+                            goal=planner_goal, run_id=run_id,
+                            tasks=state.tasks, tests=list(state.tests or []),
+                            criteria=list(state.akzeptanzkriterien or []),
+                            phases=list(state.phasen or []),
+                            architect_prose=state.architect_prosa or "",
+                            preflight_findings=list(state.preflight_fehler or []),
+                        )
+                    phase_state.save()
+                except (AttributeError, TypeError, ValueError) as exc:
+                    audit("loop_failed", {
+                        "reason": "followup_plan_candidate_persist_failed",
+                        "error": str(exc)[:300], "recoverable": True,
+                    }, state.project_dir, project_name, run_id=run_id)
+                    _persist_run_result(
+                        store, project_name, run_id, 1,
+                        run_state=state, phase_state=phase_state,
+                    )
+                    return 1
+            elif state.planner_step_yielded:
+                completed_role = yielded_after_role or {
+                    "planner_scout": "scout",
+                    "planner_architect": "architect",
+                }.get(action)
+                if completed_role not in {"scout", "architect"}:
+                    _persist_run_result(
+                        store, project_name, run_id, 1,
+                        run_state=state, phase_state=phase_state,
+                    )
+                    return 1
+                try:
+                    _persist_planner_role_stage(
+                        phase_state, completed_role,
+                        run_id=run_id, goal=planner_goal,
+                    )
+                except Exception as exc:
+                    audit("loop_failed", {
+                        "reason": "planner_role_stage_persist_failed",
+                        "role": completed_role, "error": str(exc)[:300],
+                    }, state.project_dir, project_name, run_id=run_id)
+                    _persist_run_result(
+                        store, project_name, run_id, 1,
+                        run_state=state, phase_state=phase_state,
+                    )
+                    return 1
+                continue
+            elif planner_done or planner_rc != 0:
+                _persist_run_result(
+                    store, project_name, run_id, planner_rc or 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return planner_rc or 1
+            else:
+                _persist_run_result(
+                    store, project_name, run_id, 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
+            continue
         if action == "reconcile_chat_followup":
             from werkstatt.run_followups import FollowupReconciliationError
 
@@ -1084,6 +1229,42 @@ def _continue_followup_with_coordinator(
                     },
                     state.project_dir,
                     project_name,
+                )
+                return 1
+            continue
+        if action == "apply_chat_followup_candidate":
+            if phase_state is None:
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=None,
+                )
+                return 1
+            from werkstatt.run_followups import (
+                FollowupReconciliationError,
+                apply_chat_followup_candidate,
+            )
+            try:
+                applied = apply_chat_followup_candidate(
+                    state, phase_state, store, project_name, run_id,
+                )
+            except FollowupReconciliationError as exc:
+                audit("loop_failed", {
+                    "reason": "chat_followup_gate_pending",
+                    "error": str(exc)[:400], "recoverable": True,
+                }, state.project_dir, project_name, run_id=run_id)
+                _persist_run_result(
+                    store, project_name, run_id, 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
+            if not applied:
+                audit("loop_failed", {
+                    "reason": "chat_followup_candidate_invalid",
+                    "recoverable": False,
+                }, state.project_dir, project_name, run_id=run_id)
+                _persist_run_result(
+                    store, project_name, run_id, 1,
+                    run_state=state, phase_state=phase_state,
                 )
                 return 1
             continue
@@ -1596,6 +1777,21 @@ def _finish_run_after_followups(
             )
             return 1
 
+        from werkstatt.run_followups import active_chat_followup
+
+        if active_chat_followup(phase_state) is not None:
+            check_run_lease(state)
+            rc = _continue_followup_with_coordinator(
+                project_name, state, phase_state,
+            )
+            if rc != 0:
+                _persist_run_result(
+                    store, project_name, run_id, rc,
+                    run_state=state, phase_state=phase_state,
+                )
+                return rc
+            continue
+
         if not changed:
             latest = store.get_run_record(project_name, run_id)
             latest_requests = (
@@ -2082,6 +2278,50 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
         active_criteria_replan(phase_state)
         if phase_state is not None else None
     )
+    from werkstatt.run_followups import (
+        FollowupReconciliationError,
+        active_chat_followup,
+        prepare_chat_followup_roles,
+        restore_chat_followup_parent,
+    )
+    active_followup = active_chat_followup(phase_state) if phase_state is not None else None
+    if active_followup is not None and active_replan is None:
+        followup_status = active_followup.get("status")
+        if followup_status == "candidate_pending_approval":
+            restore_chat_followup_parent(state, phase_state)
+            return {
+                "decision": "apply_chat_followup_candidate",
+                "coordinator_action": "apply_chat_followup_candidate",
+                "reason": "chat_followup_candidate_requires_plan_and_human_gates",
+                "next_executor": "plan_and_human_gates",
+                "decision_basis": {
+                    "proposal_id": active_followup.get("proposal_id"),
+                    "candidate_sha256": active_followup.get("candidate_sha256"),
+                    "parent_plan_sha256": active_followup.get("parent_plan_sha256"),
+                },
+            }
+        if followup_status == "roles_pending":
+            try:
+                active_followup = prepare_chat_followup_roles(state, phase_state)
+            except (FollowupReconciliationError, TypeError, ValueError) as exc:
+                return {
+                    "decision": "stop_missing_evidence",
+                    "coordinator_action": "stop_missing_evidence",
+                    "reason": "chat_followup_checkpoint_invalid",
+                    "decision_basis": {"error": str(exc)[:300]},
+                }
+            if active_followup is not None:
+                planner_phase_data = {**phase_data, "tasks": []}
+                from werkstatt.planner_artifacts import load_role_artifacts
+                from werkstatt.planner_replay import load_response_cache
+                state.planner_role_artifacts = load_role_artifacts(
+                    phase_data.get("planner_role_artifacts"),
+                    run_id=state.run_id, goal=state.aufgabe,
+                )
+                state.planning_response_cache = load_response_cache(
+                    phase_data.get("planner_response_cache"),
+                    run_id=state.run_id, goal=state.aufgabe,
+                )
     setup_checkpoint_complete = phase_data.get("setup_complete") is True
     plan_checkpoint_complete = phase_data.get("plan_complete") is True
     plan_goal_matches = phase_data.get("aufgabe") == state.aufgabe
@@ -2106,7 +2346,7 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
             item for item in followups
             if isinstance(item, dict) and item.get("status") == "received"
         ] if isinstance(followups, list) else []
-        if received_followups and active_replan is None:
+        if received_followups and active_replan is None and active_followup is None:
             item = received_followups[0]
             return {
                 "decision": "reconcile_chat_followup",
@@ -3493,6 +3733,42 @@ def _run_pipeline_loop_impl(
                 )
                 return 1
             continue
+        if action == "apply_chat_followup_candidate":
+            if phase_state is None:
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=None,
+                )
+                return 1
+            from werkstatt.run_followups import (
+                FollowupReconciliationError,
+                apply_chat_followup_candidate,
+            )
+            try:
+                applied = apply_chat_followup_candidate(
+                    state, phase_state, EventStore(), project_name, get_run_id(),
+                )
+            except FollowupReconciliationError as exc:
+                audit("loop_failed", {
+                    "reason": "chat_followup_gate_pending",
+                    "error": str(exc)[:400], "recoverable": True,
+                }, state.project_dir, project_name)
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
+            if not applied:
+                audit("loop_failed", {
+                    "reason": "chat_followup_candidate_invalid",
+                    "recoverable": False,
+                }, state.project_dir, project_name)
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
+            continue
         if action == "apply_criteria_replan_candidate":
             if phase_state is None:
                 _persist_run_result(
@@ -3684,6 +3960,7 @@ def _run_pipeline_loop_impl(
                     if isinstance(item, dict)
                 ) if isinstance(source_evidence, list) else ()
             state.planner_yielded_after_role = None
+            state.planner_step_yielded = False
             state.planner_defer_plan_approval = True
             state.planner_plan_candidate_ready = False
             try:
@@ -3708,7 +3985,23 @@ def _run_pipeline_loop_impl(
                 state.planner_yielded_after_role = None
             if candidate_ready:
                 try:
-                    if state.criteria_replan_id:
+                    from werkstatt.run_followups import active_chat_followup
+                    followup_checkpoint = active_chat_followup(phase_state)
+                    if (
+                        followup_checkpoint is not None
+                        and followup_checkpoint.get("status") == "roles_pending"
+                        and followup_checkpoint.get("planner_goal") == planner_goal
+                    ):
+                        from werkstatt.run_followups import (
+                            restore_chat_followup_parent,
+                            store_chat_followup_candidate,
+                        )
+
+                        candidate_digest = store_chat_followup_candidate(
+                            state, phase_state, run_id=get_run_id(),
+                        )
+                        restore_chat_followup_parent(state, phase_state)
+                    elif state.criteria_replan_id:
                         from werkstatt.criteria_replan import (
                             restore_criteria_replan_parent,
                             store_criteria_replan_candidate,
