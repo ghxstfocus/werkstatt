@@ -12,6 +12,7 @@ import math
 import os
 import re
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -267,8 +268,25 @@ def _source_content_tokens(content: str) -> set[str]:
     """Tokenize source identifiers, including ordinary CamelCase boundaries."""
     split_identifiers = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", content)
     tokens = re.findall(r"[A-Za-z0-9]+", content)
+    # Preserve complete snake_case/code-symbol names as discriminative search
+    # terms while retaining their component tokens for natural-language asks.
+    tokens.extend(re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", content))
     tokens.extend(re.findall(r"[A-Za-z0-9]+", split_identifiers))
     return {token.casefold() for token in tokens}
+
+
+@lru_cache(maxsize=4096)
+def _cached_source_content_tokens(
+    path: str, mtime_ns: int, file_size: int,
+) -> frozenset[str]:
+    """Cache retrieval tokens by metadata; selected evidence is reread live.
+
+    The cache is only a navigation index. Every selected file is read again
+    before its hash is emitted, so the cache never serves as source evidence.
+    """
+    del mtime_ns, file_size  # They are part of the cache key for invalidation.
+    content = Path(path).read_bytes().decode("utf-8", errors="replace")
+    return frozenset(_source_content_tokens(content))
 
 
 def _rank_python_paths(
@@ -341,6 +359,12 @@ def _rank_source_files(
             project_dir, query=query, extensions=extensions,
         )
     )
+    explicit_symbol_query = bool(re.search(
+        r"\b[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+\b", query,
+    ))
+    test_intent = bool(re.search(
+        r"\b(?:test|tests|pytest|regression)\b", query, re.IGNORECASE,
+    ))
     query_tokens = _source_content_tokens(query)
     requested_role_tokens = query_tokens & _ROLE_RETRIEVAL_TOKENS
     # "verify" is also a very common task verb (e.g. "verify this task").
@@ -358,30 +382,54 @@ def _rank_source_files(
     large_files_skipped = 0
     total_budget_skipped = 0
     scanned_bytes = 0
+    project_root = Path(project_dir).resolve()
     for path in indexed:
         try:
-            resolved = Path(path).resolve(strict=True)
-            rel = resolved.relative_to(Path(project_dir).resolve()).as_posix()
-            file_size = resolved.stat().st_size
+            candidate = Path(path)
+            relative = candidate.relative_to(project_root)
+            if not relative.parts or ".." in relative.parts:
+                raise ValueError("source_path_outside_project")
+            if candidate.is_symlink():
+                # Inventory walks do not follow symlink directories. Resolve
+                # only a symlink file so external targets remain rejected,
+                # while ordinary files avoid hundreds of realpath syscalls.
+                resolved = candidate.resolve(strict=True)
+                resolved.relative_to(project_root)
+            else:
+                resolved = candidate
+                if not resolved.is_file():
+                    raise FileNotFoundError(path)
+            rel = relative.as_posix()
+            file_stat = resolved.stat()
+            file_size = file_stat.st_size
             if file_size > max_file_bytes:
                 large_files_skipped += 1
                 continue
             if scanned_bytes + file_size > max_total_bytes:
                 total_budget_skipped += 1
                 continue
-            source_bytes = resolved.read_bytes()
-            content = source_bytes.decode("utf-8", errors="replace")
         except (OSError, RuntimeError, ValueError):
             read_failures += 1
             continue
         scanned_bytes += file_size
-        tokens = _source_content_tokens(content)
+        try:
+            tokens = set(_cached_source_content_tokens(
+                str(resolved), file_stat.st_mtime_ns, file_size,
+            ))
+        except OSError:
+            read_failures += 1
+            continue
         path_tokens = _source_content_tokens(rel.replace("/", " "))
         lowered_path = rel.casefold()
         if any(part in lowered_path.split("/") for part in (
             "test", "tests", "__tests__", "spec",
         )) or Path(rel).name.casefold().startswith(("test_", "tests_")):
-            source_weight = 0.65
+            # Symbol-specific implementation queries should prefer source
+            # definitions over their tests; natural-language behavior queries
+            # keep test coverage eligible at the normal supporting weight.
+            source_weight = (
+                0.4 if explicit_symbol_query and not test_intent else 0.65
+            )
         elif Path(rel).suffix.casefold() in {".md", ".rst", ".txt"}:
             source_weight = 0.35
         else:
@@ -391,7 +439,7 @@ def _rank_source_files(
         }:
             source_weight *= 0.35
         documents.append((
-            rel, tokens, hashlib.sha256(source_bytes).hexdigest(), file_size,
+            rel, tokens, "", file_size,
             path_tokens, source_weight,
         ))
 
@@ -464,10 +512,6 @@ def _rank_source_files(
             score *= 0.5
         scored.append((score, index, path, matched, role_path_matches))
     scored.sort(key=lambda row: (-row[0], row[1]))
-    source_records = {
-        path: (digest, size)
-        for path, _tokens, digest, size, _path_tokens, _weight in documents
-    }
     selected = [
         {
             "file": path,
@@ -481,13 +525,33 @@ def _rank_source_files(
             "confidence": "medium",
             "matched_terms": terms[:20],
             "matched_role_path_terms": role_path_matches,
-            "source_sha256": source_records[path][0],
-            "source_bytes": source_records[path][1],
+            "source_sha256": "",
+            "source_bytes": 0,
         }
             for (
                 _score, _index, path, terms, role_path_matches,
             ) in scored[:max(0, limit)]
     ]
+    stale_source_files: list[str] = []
+    live_selected: list[dict[str, Any]] = []
+    for item in selected:
+        try:
+            source_path = (project_root / item["file"]).resolve(strict=True)
+            source_path.relative_to(project_root)
+            source_bytes = source_path.read_bytes()
+            live_tokens = _source_content_tokens(
+                source_bytes.decode("utf-8", errors="replace"),
+            )
+        except OSError:
+            stale_source_files.append(item["file"])
+            continue
+        if not set(item["matched_terms"]).issubset(live_tokens):
+            stale_source_files.append(item["file"])
+            continue
+        item["source_sha256"] = hashlib.sha256(source_bytes).hexdigest()
+        item["source_bytes"] = len(source_bytes)
+        live_selected.append(item)
+    selected = live_selected
     manifest = {
         "indexed_file_scope": (
             "Python-Dateien, kein Vollindex des Projekts"
@@ -514,7 +578,7 @@ def _rank_source_files(
         "matching_file_count": len(scored),
         "selected_files": [item["file"] for item in selected],
         "selected_sources": selected,
-        "stale_source_files": [],
+        "stale_source_files": stale_source_files,
         "matching_files_omitted": max(0, len(scored) - len(selected)),
         "file_size_cap_bytes": max_file_bytes,
         "omissions_are_not_negative_evidence": True,

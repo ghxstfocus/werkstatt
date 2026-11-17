@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
 from werkstatt.explorer import (
+    _cached_source_content_tokens,
     _list_py_file_inventory,
     _list_source_file_inventory,
     _python_inventory_context,
@@ -226,6 +228,26 @@ def test_content_retrieval_excludes_already_selected_and_common_terms(tmp_path):
     assert manifest["common_or_unmatched_tokens_ignored"] == 1
 
 
+def test_content_retrieval_invalidates_cached_tokens_after_file_change(tmp_path):
+    target = tmp_path / "changing.py"
+    target.write_text("quasarledger_marker\n", encoding="utf-8")
+    _cached_source_content_tokens.cache_clear()
+
+    matches, _manifest = _rank_python_source_files(tmp_path, "quasarledger")
+    assert [item["file"] for item in matches] == ["changing.py"]
+
+    previous_stat = target.stat()
+    target.write_text("unrelatedxx_marker\n", encoding="utf-8")
+    os.utime(
+        target,
+        ns=(previous_stat.st_atime_ns, previous_stat.st_mtime_ns + 1_000_000_000),
+    )
+
+    matches, manifest = _rank_python_source_files(tmp_path, "quasarledger")
+    assert matches == []
+    assert manifest["read_failures"] == 0
+
+
 def test_source_retrieval_finds_typescriptx_and_hashes_selected_source(tmp_path):
     target = tmp_path / "frontend" / "dashboard.tsx"
     target.parent.mkdir()
@@ -245,6 +267,52 @@ def test_source_retrieval_finds_typescriptx_and_hashes_selected_source(tmp_path)
     assert ".tsx" in manifest["indexed_extensions"]
     assert ".py" in manifest["indexed_extensions"]
     assert manifest["indexed_file_scope"].startswith("Quell-/Textdateien")
+
+
+def test_source_retrieval_preserves_code_symbols_in_any_project_layout(tmp_path):
+    project_dir = tmp_path / "sample_app"
+    source = project_dir / "src" / "handlers.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "def _run_coordinator_action(state):\n    return state.next_action\n",
+        encoding="utf-8",
+    )
+
+    matches, manifest = _rank_source_files(
+        project_dir,
+        "Find `_run_coordinator_action` and its next action logic",
+    )
+
+    assert [item["file"] for item in matches] == ["src/handlers.py"]
+    assert "_run_coordinator_action" in matches[0]["matched_terms"]
+    assert matches[0]["source_sha256"] == hashlib.sha256(
+        source.read_bytes(),
+    ).hexdigest()
+    assert manifest["inventory_source"] == "filesystem_walk"
+
+
+def test_source_retrieval_rejects_symlinks_outside_project(tmp_path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    outside = tmp_path / "outside.py"
+    outside.write_text(
+        "def quasar_external_symbol(): return True\n",
+        encoding="utf-8",
+    )
+    link = project_dir / "external.py"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError) as exc:
+        import pytest
+
+        pytest.skip(f"Symlinks sind in dieser Umgebung nicht verfuegbar: {exc}")
+
+    matches, manifest = _rank_source_files(
+        project_dir, "Find quasar external symbol",
+    )
+
+    assert matches == []
+    assert manifest["read_failures"] == 1
 
 
 def test_source_inventory_prioritizes_product_code_before_history_and_tests(

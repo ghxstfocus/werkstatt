@@ -1,4 +1,4 @@
 query,expected_relevant_files
-loop checkpoint decision task graph,werkstatt/task_graph.py;tests/test_checkpoint_decision.py;werkstatt/task_runner.py;werkstatt/run_followups.py;werkstatt/loop.py
+tests loop dispatcher checkpoint decision task graph task runner run followups reconcile,werkstatt/run_followups.py;werkstatt/task_runner.py;tests/test_run_followups.py;werkstatt/loop.py;tests/test_checkpoint_decision.py
 reflection chat builder recovery error evidence,werkstatt/reflection_chat.py;werkstatt/chat_agent.py;werkstatt/web/run_recovery.py;tests/test_reflection_chat.py;werkstatt/reflection.py
 live feed loop run status web inspector,werkstatt/web/inspector.py;static/live_feed.js;tests/test_live_feed_semantik.py;tests/test_live_feed_backend.py;tests/test_ui_live_feed.py
