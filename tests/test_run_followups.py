@@ -247,6 +247,62 @@ def test_reconcile_approved_followup_appends_once_and_reports_chat(tmp_path, mon
     assert dispositions[-1][0] == "applied"
 
 
+def test_reconcile_processes_only_one_followup_per_checkpoint(
+    tmp_path, monkeypatch,
+):
+    state, phase, store = _setup(tmp_path)
+    record = store.get_run_record("demo", "run-1")
+    assert record is not None
+    checkpoint = dict(record["checkpoint"])
+    checkpoint["chat_followup_requests"] = [
+        {
+            "proposal_id": "proposal-1",
+            "session_id": "session-1",
+            "request": "Erster bestaetigter Auftrag",
+            "status": "received",
+        },
+        {
+            "proposal_id": "proposal-2",
+            "session_id": "session-1",
+            "request": "Zweiter bestaetigter Auftrag",
+            "status": "received",
+        },
+    ]
+    store.update_run_checkpoint(
+        "demo", "run-1", checkpoint,
+        expected_version=record["checkpoint_version"],
+    )
+    _patch_planning(monkeypatch)
+
+    assert run_followups.reconcile_chat_followups(
+        state, phase, store, "demo", "run-1",
+    ) is True
+    first = store.get_run_record("demo", "run-1")
+    assert first is not None
+    first_requests = first["checkpoint"]["chat_followup_requests"]
+    assert [item["status"] for item in first_requests] == [
+        "applied", "received",
+    ]
+    assert len([
+        item for item in phase.data["tasks"]
+        if item.get("source_followup_id")
+    ]) == 1
+
+    assert run_followups.reconcile_chat_followups(
+        state, phase, store, "demo", "run-1",
+    ) is True
+    second = store.get_run_record("demo", "run-1")
+    assert second is not None
+    second_requests = second["checkpoint"]["chat_followup_requests"]
+    assert [item["status"] for item in second_requests] == [
+        "applied", "applied",
+    ]
+    assert len([
+        item for item in phase.data["tasks"]
+        if item.get("source_followup_id")
+    ]) == 2
+
+
 def test_reconcile_rejected_followup_leaves_main_graph_unchanged(tmp_path, monkeypatch):
     state, phase, store = _setup(tmp_path)
     _patch_planning(monkeypatch, approved=False)

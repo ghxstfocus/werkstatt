@@ -213,7 +213,10 @@ def reconcile_chat_followups(
     from werkstatt.planner import run_planner
 
     changed = False
+    handled_request = False
     for item in requests:
+        if handled_request:
+            break
         if not isinstance(item, dict):
             raise FollowupReconciliationError(
                 "Follow-up-Ledger enthaelt einen ungueltigen Eintrag",
@@ -269,6 +272,7 @@ def reconcile_chat_followups(
                 "Folgeauftrag ist freigegeben und in den Task-Graph aufgenommen.",
                 task_ids=[str(task["id"]) for task in already_added],
             )
+            handled_request = True
             continue
 
         addition = deepcopy(state)
@@ -314,6 +318,7 @@ def reconcile_chat_followups(
                 "pending",
                 "Das Plan-Gate ist abgelaufen. Der Folgeauftrag bleibt offen und wird nicht als abgelehnt gewertet.",
             )
+            handled_request = True
             continue
         if gate_result != 0:
             if getattr(candidate, "last_reject_kind", "") == "plan":
@@ -327,6 +332,7 @@ def reconcile_chat_followups(
                     "rejected",
                     "Der Folgeauftrag wurde im Plan-Gate abgelehnt; der bestehende Task-Graph laeuft weiter.",
                 )
+                handled_request = True
                 continue
             raise FollowupReconciliationError(
                 f"Plan-Gate fuer Folgeauftrag {proposal_id} wurde nicht beantwortet",
@@ -373,6 +379,7 @@ def reconcile_chat_followups(
             audit_id=f"RUN-{run_id}-CHAT-FOLLOWUP-APPLIED-{task_marker}",
         )
         changed = True
+        handled_request = True
     return changed
 
 
