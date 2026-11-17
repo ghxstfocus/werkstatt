@@ -800,6 +800,7 @@ def test_valid_atomic_scout_plan_skips_architect(tmp_path):
     assert st.tasks[0]["task_files"] == ["module.py"]
     assert st.architect_prosa == "[atomarer Plan: Scout]"
     assert st.planner_plan_candidate_ready is True
+    assert st.planner_step_yielded is False
 
 
 def test_invalid_atomic_scout_plan_escalates_to_architect(tmp_path):
