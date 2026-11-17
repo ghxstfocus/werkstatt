@@ -265,7 +265,7 @@ def test_history_repairs_completed_job_turn_after_worker_crash(
     assert events[0]["payload"]["assistant_text"] == "Antwort nach Reconnect"
 
 
-def test_chat_job_rejects_write_mode_without_gate(
+def test_chat_job_rejects_unknown_mode(
     client_and_base: tuple[Any, Path],
 ) -> None:
     client, _base = client_and_base
@@ -274,13 +274,57 @@ def test_chat_job_rejects_write_mode_without_gate(
         json={
             "session_id": "session-1",
             "message": "Aendere Code",
-            "mode": "write",
+            "mode": "admin",
             "idempotency_key": "request-key-0002",
         },
     )
 
     assert response.status_code == 400
-    assert "read- oder debugger-Modus" in response.json()["detail"]
+    assert "read, write oder debugger" in response.json()["detail"]
+
+
+def test_chat_job_accepts_write_mode_and_forwards_it(
+    client_and_base: tuple[Any, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _base = client_and_base
+    from werkstatt import chat_jobs
+    from werkstatt.web import app as app_modul
+
+    monkeypatch.setattr(
+        chat_jobs, "sync_completed_job_turns", lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(app_modul, "_loop_registry", lambda: type(
+        "Registry", (), {"read": lambda _self, _project: None},
+    )())
+    seen: dict[str, Any] = {}
+
+    def _accepted(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        seen["mode"] = args[4]
+        seen["snapshot_on_accept"] = kwargs["snapshot_on_accept"]
+        seen["run_id"] = kwargs["run_id"]
+        return {
+            "job": {"job_id": "d" * 32, "state": "queued", "run_id": None},
+            "created": True,
+        }
+
+    monkeypatch.setattr(chat_jobs, "enqueue_chat_job", _accepted)
+    response = client.post(
+        "/api/projects/demo/chat/jobs",
+        json={
+            "session_id": "session-1",
+            "message": "Bitte pruefe und schlage eine Aenderung vor",
+            "mode": "write",
+            "idempotency_key": "request-write-mode-001",
+        },
+    )
+
+    assert response.status_code == 202
+    assert seen == {
+        "mode": "write",
+        "snapshot_on_accept": True,
+        "run_id": None,
+    }
 
 
 def test_chat_job_get_replays_persisted_events(

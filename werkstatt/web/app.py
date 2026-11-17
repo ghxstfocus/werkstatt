@@ -1731,10 +1731,10 @@ def create_app() -> FastAPI:
                 status_code=413,
                 detail=f"message zu lang (Maximum {MAX_CHAT_MESSAGE_CHARS} Zeichen)",
             )
-        if mode not in ("read", "debugger"):
+        if mode not in ("read", "write", "debugger"):
             raise HTTPException(
                 status_code=400,
-                detail="Hintergrundjobs erlauben nur read- oder debugger-Modus",
+                detail="mode muss read, write oder debugger sein",
             )
         if not isinstance(reasoning_enabled, bool):
             raise HTTPException(
