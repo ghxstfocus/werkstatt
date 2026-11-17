@@ -1,8 +1,10 @@
 from types import SimpleNamespace
 
+from werkstatt import planner
 from werkstatt.roles.planner_split import (
     PlannerSplitInput,
     build_context_manifest,
+    run_planner_split_checkpoint,
     run_planner_split_role,
 )
 
@@ -99,3 +101,65 @@ def test_oversized_task_uses_the_same_worker_on_demand():
     assert calls[0][1]["max_tokens"] == 4000
     assert calls[0][1]["context_manifest"]["scope"] == "single_task"
     assert calls[0][1]["context_manifest"]["task_id"] == "t7"
+
+
+def test_split_checkpoint_runs_from_current_handoff_and_yields_to_coordinator(
+    tmp_path, monkeypatch,
+):
+    state = SimpleNamespace(
+        api_key="test-key",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+        explorer_context={"key_files": [{"file": "src/a.py"}]},
+        architect_prose="A" * 80,
+        scout_auftrag={},
+        architect_scout_source_manifest={},
+        planner_step_yielded=False,
+        planner_yielded_after_role=None,
+        akzeptanzkriterien=["AC1"],
+        tasks=[],
+        phasen=["legacy"],
+        tests=["legacy"],
+    )
+    handoff = {
+        "architect_prose": "A" * 80,
+        "architect_scout_report": {"auftrag_prosa": "evidence"},
+        "source_manifest": {"sources": []},
+        "key_files": ["src/a.py"],
+        "architect_input_sha256": "a" * 64,
+    }
+    checkpoints = []
+    events = []
+    monkeypatch.setattr(
+        planner, "_load_current_planner_split_handoff",
+        lambda _state, _goal: handoff,
+    )
+    monkeypatch.setattr(
+        planner, "_publish_role_checkpoint",
+        lambda _state, *args: checkpoints.append(args),
+    )
+    monkeypatch.setattr(
+        planner, "_zerlege_in_sub_tasks",
+        lambda *_args, **_kwargs: [{
+            "id": "t1", "action": "update", "criterion_refs": ["AC1"],
+        }],
+    )
+    monkeypatch.setattr(
+        planner, "_normalisiere_task_files", lambda tasks, *_args: tasks,
+    )
+    monkeypatch.setattr(
+        planner, "audit", lambda kind, *_args, **_kwargs: events.append(kind),
+    )
+
+    assert run_planner_split_checkpoint(state, goal="approved goal") is True
+    assert [record[0] for record in checkpoints] == [
+        "planner_split", "planner_split",
+    ]
+    assert [record[1] for record in checkpoints] == ["running", "completed"]
+    assert state.tasks[0]["id"] == "t1"
+    assert state.phasen == []
+    assert state.tests == []
+    assert state.planner_step_yielded is True
+    assert state.planner_yielded_after_role == "planner_split"
+    assert "planner_plan_erstellt" in events

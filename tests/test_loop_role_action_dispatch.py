@@ -93,6 +93,40 @@ def test_planner_split_runs_as_role_checkpoint_and_validates_candidate(
     assert state.planner_plan_candidate_ready is True
 
 
+def test_planner_split_checkpoint_dispatch_bypasses_planner_compatibility(
+    monkeypatch,
+):
+    state = RunState(aufgabe="Build the approved graph")
+    calls = []
+
+    def run_split(actual_state, *, goal):
+        calls.append((actual_state, goal))
+        actual_state.tasks = [{"id": "t1", "action": "read"}]
+        actual_state.planner_yielded_after_role = "planner_split"
+        actual_state.planner_step_yielded = True
+        return True
+
+    monkeypatch.setattr(
+        "werkstatt.roles.planner_split.run_planner_split_checkpoint",
+        run_split,
+    )
+    monkeypatch.setattr(
+        "werkstatt.planner.run_planner",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("valid split handoff must not enter Planner facade"),
+        ),
+    )
+    monkeypatch.setattr(loop, "_plan_gate", lambda _state: True)
+
+    result = loop._dispatch_planner_checkpoint_action(
+        state, "planner_split", state.aufgabe, "sample", object(),
+    )
+
+    assert result == (0, False)
+    assert calls == [(state, state.aufgabe)]
+    assert state.planner_plan_candidate_ready is True
+
+
 def test_planner_split_waits_for_refreshed_architect_checkpoint(monkeypatch):
     state = RunState(aufgabe="Build from Architect evidence")
 

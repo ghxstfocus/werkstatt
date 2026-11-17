@@ -1216,7 +1216,9 @@ def _dispatch_planner_checkpoint_action(
         success = _run_selected_planner_role_action(state, action)
         return (0 if success else 1), False
     if action == "planner_split":
-        from werkstatt.planner import run_planner_split_checkpoint
+        from werkstatt.roles.planner_split import (
+            run_planner_split_checkpoint,
+        )
 
         direct_success = run_planner_split_checkpoint(state, goal=aufgabe)
         if direct_success is None:

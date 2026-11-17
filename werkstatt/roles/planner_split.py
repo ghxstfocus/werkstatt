@@ -12,6 +12,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
+
+from werkstatt.task_graph import TaskGraphError
 
 PLANNER_SPLIT_SYSTEM = """Du bist ein Task-Zerleger.
 Du bekommst den Originalauftrag, eine Architect-Prosa und eine Liste von Dateien.
@@ -429,3 +432,126 @@ def run_planner_split_role(
     if not isinstance(content, str) or not content.strip():
         return PlannerSplitOutput(ok=False, error="empty_role_response")
     return PlannerSplitOutput(ok=True, content=content.strip())
+
+
+def run_planner_split_checkpoint(state: Any, *, goal: str) -> bool | None:
+    """Execute one selected Planner-Split checkpoint from a current handoff.
+
+    The run coordinator selects this role at a persisted boundary. Upstream
+    role artifacts and their source hashes are revalidated before compiling
+    the candidate task graph. A missing or stale handoff returns ``None`` so
+    the coordinator can choose the missing prerequisite role.
+
+    Prompt construction and graph normalization remain shared Planner
+    services during the migration, but this role owns the selected execution
+    and its checkpoint outcome.
+    """
+    # Keep these compatibility services lazy: planner imports this module's
+    # prompt/LLM contract, so resolving them at module import would cycle.
+    from werkstatt import planner as services
+
+    handoff = services._load_current_planner_split_handoff(state, goal)
+    if handoff is None:
+        services.audit("planner_role_artifact_rejected", {
+            "role": "planner_handoff",
+            "reason": "missing_or_stale_upstream_evidence",
+        }, state.project_dir, state.project_name)
+        return None
+
+    from werkstatt.rollen import ROLLEN
+    from werkstatt.skills import _merke_geladene_skills, load_all_skills
+
+    try:
+        loaded = ROLLEN["planner"].lade_skills(load_all_skills())
+        if loaded:
+            _merke_geladene_skills(
+                state, [skill.get("name", "") for skill in loaded],
+                rolle="planner",
+            )
+            state.planner_skills_block = "\n\n".join(
+                f"### {skill.get('name', '?')}\n{skill.get('body') or ''}"
+                for skill in loaded if skill.get("body")
+            )
+    except Exception:  # noqa: BLE001 - skill loading remains optional
+        state.planner_skills_block = ""
+
+    state.architect_prosa = handoff["architect_prose"]
+    state.scout_auftrag = dict(handoff["architect_scout_report"])
+    state.architect_scout_source_manifest = dict(handoff["source_manifest"])
+    key_files = list(handoff["key_files"])
+    output_sha = sha256(state.architect_prosa.encode("utf-8")).hexdigest()
+    services._publish_role_checkpoint(
+        state, "planner_split", "running", "current_architect_handoff",
+        {
+            "architect_input_sha256": handoff["architect_input_sha256"],
+            "architect_output_sha256": output_sha,
+            "key_files": key_files,
+        },
+    )
+    try:
+        subtasks = services._zerlege_in_sub_tasks(
+            state.architect_prosa,
+            key_files,
+            state.api_key,
+            state.project_dir,
+            state.project_name,
+            aufgabe=goal,
+            state=state,
+        )
+    except TaskGraphError as exc:
+        services._publish_role_checkpoint(
+            state, "planner_split", "failed", "task_graph_rejected",
+            {"architect_output_sha256": output_sha},
+        )
+        services.audit("planner_plan_abgelehnt", {
+            "grund": str(exc),
+            "quelle": "checkpoint_planner_split",
+        }, state.project_dir, state.project_name)
+        return False
+
+    if subtasks:
+        state.tasks = services._normalisiere_task_files(
+            subtasks, state.explorer_context, state.project_dir,
+            state.project_name,
+        )
+    else:
+        if len(state.akzeptanzkriterien or []) != 1:
+            services.audit("planner_plan_abgelehnt", {
+                "grund": "split_fallback_deckt_nicht_mehrere_kriterien_ab",
+                "kriterien": len(state.akzeptanzkriterien or []),
+            }, state.project_dir, state.project_name)
+            return False
+        fallback = services._topo_sort_tasks(
+            [services._fallback_task_von_prosa(
+                state.architect_prosa, key_files,
+            )],
+            state.project_dir,
+            state.project_name,
+        )
+        if fallback:
+            fallback[0]["criterion_refs"] = ["AC1"]
+        services._validate_criteria_coverage(
+            fallback, state.akzeptanzkriterien,
+        )
+        state.tasks = fallback
+
+    if not state.tasks:
+        return False
+    state.phasen = []
+    state.tests = []
+    services._publish_role_checkpoint(
+        state, "planner_split", "completed", "task_graph_received",
+        {
+            "architect_output_sha256": output_sha,
+            "key_files": key_files,
+        },
+        {"tasks": state.tasks, "criteria": state.akzeptanzkriterien},
+    )
+    services.audit("planner_plan_erstellt", {
+        "tasks": len(state.tasks),
+        "prosa_len": len(state.architect_prosa),
+        "compiler": "validated_role_handoff",
+    }, state.project_dir, state.project_name)
+    state.planner_step_yielded = True
+    state.planner_yielded_after_role = "planner_split"
+    return True
