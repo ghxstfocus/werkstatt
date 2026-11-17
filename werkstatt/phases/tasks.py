@@ -41,30 +41,6 @@ from ._common import (
 )
 
 
-def _verify_failure_detail(state: RunState) -> str | None:
-    """Keep bounded, explicit hard Verify errors for gated checkpoint replan."""
-    errors = getattr(state, "last_verify_errors", None)
-    if not isinstance(errors, list):
-        return None
-    cleaned = [
-        error.strip()[:240]
-        for error in errors[:4]
-        if isinstance(error, str) and error.strip()
-    ]
-    if not cleaned:
-        return None
-    evidence: dict[str, Any] = {"source": "verify", "errors": []}
-    for error in cleaned:
-        candidate = {"source": "verify", "errors": [*evidence["errors"], error]}
-        encoded = json.dumps(candidate, ensure_ascii=False, sort_keys=True)
-        if len(encoded) > 1200:
-            break
-        evidence = candidate
-    if not evidence["errors"]:
-        return None
-    return json.dumps(evidence, ensure_ascii=False, sort_keys=True)
-
-
 def _audit_task_ok(
     transitioned: bool,
     task_id: str,
@@ -87,64 +63,6 @@ def _audit_task_ok(
     if via:
         payload["via"] = via
     audit("loop_task_ok", payload, project_dir, project_name)
-
-
-def _record_task_verify_evidence(
-    state: RunState,
-    phase_state: Any,
-    task_id: str,
-) -> bool:
-    """Persist actual successful verify stages on their criterion-linked task."""
-    task_record = phase_state.get_task(task_id) if phase_state is not None else None
-    if not isinstance(task_record, dict):
-        return True
-    refs = task_record.get("criterion_refs")
-    if not isinstance(refs, list) or not refs:
-        return True
-    recorder = getattr(phase_state, "record_task_verify_evidence", None)
-    recorded = False
-    if callable(recorder):
-        try:
-            recorded = recorder(
-                task_id,
-                getattr(state, "last_verify_results", None),
-                phase="post_build",
-            ) is True
-        except (OSError, RuntimeError, TypeError, ValueError):
-            recorded = False
-    stage_ids = [
-        result.get("stage_id")
-        for result in (getattr(state, "last_verify_results", None) or [])
-        if isinstance(result, dict)
-        and result.get("ok") is True
-        and isinstance(result.get("exit_code"), int)
-        and not isinstance(result.get("exit_code"), bool)
-        and result.get("exit_code") == 0
-        and isinstance(result.get("stage_id"), str)
-    ]
-    payload = {
-        "task_id": task_id,
-        "criterion_refs": refs[:30],
-        "stage_ids": stage_ids[:50],
-    }
-    if recorded:
-        audit(
-            "loop_criteria_task_verify_evidence",
-            payload,
-            state.project_dir,
-            state.project_name,
-        )
-    else:
-        audit(
-            "loop_criteria_task_verify_evidence_missing",
-            {
-                **payload,
-                "reason": "no_successful_task_verify_stages",
-            },
-            state.project_dir,
-            state.project_name,
-        )
-    return recorded
 
 
 def _read_dependency_sources(
@@ -1211,12 +1129,19 @@ def _phase_tasks_loop(
 
         # Verify-Task: deterministische Pruefung ohne unnoetigen Reviewer-LLM.
         if next_executor == "verify_only":
-            _v_ok = bool(_verify_patches(state, phase="post_build"))
-            check_run_lease(state)
-            _evidence_ok = (
-                _record_task_verify_evidence(state, phase_state, task_id)
-                if _v_ok else False
+            from werkstatt.roles.verify_task import (
+                run_task_verify_checkpoint,
+                verify_failure_detail,
             )
+            _verify_result = run_task_verify_checkpoint(
+                state,
+                phase_state,
+                task_id,
+                verify=_verify_patches,
+                audit_call=audit,
+            )
+            _v_ok = _verify_result.verify_ok
+            _evidence_ok = _verify_result.evidence_recorded
             _el_task = time.monotonic() - _t_task
             if _v_ok and _evidence_ok:
                 _build_checkpoint = (
@@ -1289,7 +1214,7 @@ def _phase_tasks_loop(
                     name=task_name,
                     failure=("verify_evidence_missing" if _v_ok else "verify_failed"),
                     failure_detail=(
-                        _verify_failure_detail(state)
+                        verify_failure_detail(state)
                         if not _v_ok else None
                     ),
                 )

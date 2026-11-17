@@ -262,6 +262,8 @@ Letzte Aktualisierung: 2026-11-17.
 
 **Explorer-Retrieval-Eval und Inventargrenzen:** Der Nutzer meldete fuer `bbc9df6` 2.573 bestanden, 5 uebersprungen und einen Fehler: alle drei kuratierten Faelle lieferten Precision@5 = 0. Der Serverlauf auf `07947b3` zeigte 500 gescannte Dateien und ausgewaehlte Pfade ohne Treffer in den erwarteten Gold-Dateien. Der Nutzer bestaetigte fuer `3c9d118` (Git-Ignore-Inventarfix) die Server-Vollsuite mit 2.577 bestanden, 5 uebersprungen und 0 fehlgeschlagen. Anschliessend bestaetigte er fuer `ac8d4f0` (suchbezogene Pfadvorauswahl vor dem 500-Datei-Cap) die Server-Vollsuite mit 2.578 bestanden, 5 uebersprungen und 0 fehlgeschlagen; der gezogene Stand wird durch `git pull` belegt, obwohl der begleitende `test`-Befehl noch `07947b3` als Soll-SHA pruefte. Diese Vollsuite bestaetigt den Checkout-Test, kein Produktions-Retrieval-Monitoring. Explorer-/Retrieval-/Handoff-Gruppe lokal auf `ac8d4f0`: 116 bestanden, 3 uebersprungen; Ruff, Mypy, Driftchecks und Doku-Drift bestanden. OP-405 bleibt offen.
 
+**Task-Verify aus Phasenexecutor extrahiert (lokal, noch nicht serververifiziert):** Die einzeln dispatchte Verify-Aktion und das Binden erfolgreicher Kriterienbelege liegen jetzt in `werkstatt/roles/verify_task.py`; `phases/tasks.py` uebergibt ihr nur den Koordinator-Auftrag und wertet das Ergebnis aus. Fehlerbelege bleiben begrenzt und criteria-linked Verify bleibt fail-closed. Checkpoint-/Task-/Rollen-Gruppe: 122 bestanden; Ruff und dateibezogenes Mypy bestanden. Der komplette Phasenexecutor und Builder-Patchpfad sind weiterhin aktiv und noch nicht entfernt; OP-398 bleibt offen.
+
 ## Sub-OPs
 
 Keine separat startbaren Sub-OPs. Zerlegung erfolgt projektbezogen im Plan-Gate.

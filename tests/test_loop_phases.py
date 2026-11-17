@@ -242,11 +242,11 @@ def test_verify_task_runs_deterministic_verify_without_reviewer(
 
 
 def test_verify_failure_detail_is_current_bounded_json() -> None:
-    from werkstatt.phases.tasks import _verify_failure_detail
+    from werkstatt.roles.verify_task import verify_failure_detail
 
     state = _state(Path("."))
     state.last_verify_errors = [f"stage-{index}: " + "x" * 500 for index in range(8)]
-    detail = _verify_failure_detail(state)
+    detail = verify_failure_detail(state)
 
     assert detail is not None
     assert len(detail) <= 1200
@@ -254,12 +254,12 @@ def test_verify_failure_detail_is_current_bounded_json() -> None:
     assert evidence["source"] == "verify"
     assert evidence["errors"]
     assert len(evidence["errors"]) <= 4
-    assert _verify_failure_detail(_state(Path("."))) is None
+    assert verify_failure_detail(_state(Path("."))) is None
 
 
 def test_task_checkpoint_persists_only_successful_verify_evidence(tmp_path) -> None:
     from werkstatt.phase_state import PhaseState
-    from werkstatt.phases.tasks import _record_task_verify_evidence
+    from werkstatt.roles.verify_task import run_task_verify_checkpoint
 
     phase_state = PhaseState("evidence", base_dir=tmp_path / ".werkstatt")
     phase_state.run_id = "evidence-run"
@@ -285,7 +285,15 @@ def test_task_checkpoint_persists_only_successful_verify_evidence(tmp_path) -> N
         },
     ]
 
-    assert _record_task_verify_evidence(state, phase_state, "t1")
+    result = run_task_verify_checkpoint(
+        state,
+        phase_state,
+        "t1",
+        verify=lambda _state, *, phase: phase == "post_build",
+        audit_call=lambda *_args, **_kwargs: True,
+    )
+    assert result.verify_ok is True
+    assert result.evidence_recorded is True
     evidence = phase_state.get_task("t1")["verify_evidence"]
     assert evidence["criterion_refs"] == ["AC1"]
     assert [item["stage_id"] for item in evidence["stages"]] == [
