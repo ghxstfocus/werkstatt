@@ -24,6 +24,7 @@ _COMPLETED_OP_ROW = re.compile(
     r"(OP-\d+[a-z]?)\s*\|\s*done\s*\|",
     re.MULTILINE | re.IGNORECASE,
 )
+OP_ASSIGNMENT_MAX_CHARS = 20_000
 
 
 def parse_completed_op_ids(
@@ -76,10 +77,111 @@ def _ausfuellbar(value: str | None) -> bool:
     return normalisiert not in _PLACEHOLDER
 
 
+def _latest_criteria_progress(progress_text: str, op_id: str) -> str | None:
+    marker = re.compile(
+        rf"\bOP_PROGRESS\s+op_id={re.escape(op_id.upper())}\b[^\n]*",
+        re.IGNORECASE,
+    )
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in progress_text.splitlines():
+        if line.startswith("## "):
+            if current:
+                blocks.append("\n".join(current))
+            current = [line]
+        elif current:
+            current.append(line)
+    if current:
+        blocks.append("\n".join(current))
+    for block in reversed(blocks):
+        match = marker.search(block)
+        if match:
+            run_match = re.search(r"(?m)^- \*\*Run-ID:\*\*\s*([^\n]+)", block)
+            run_ref = (
+                (run_match.group(1) or "unknown").strip()
+                if run_match else "unknown"
+            )
+            return (
+                match.group(0)
+                + f" evidence_ref=Control/{run_ref}/loop_criteria_progress"
+            )[:1200]
+    return None
+
+
+def op_assignment_from_status(
+    status_text: str,
+    op_id: str,
+    progress_text: str = "",
+) -> str | None:
+    """Build a bounded work order from normative OP fields, not its history."""
+    matches = [
+        match for match in _OP_HEADING.finditer(status_text)
+        if match.group(1).upper() == op_id.upper()
+    ]
+    if len(matches) != 1:
+        return None
+    match = matches[0]
+    all_headings = list(_OP_HEADING.finditer(status_text))
+    index = next(
+        position for position, heading in enumerate(all_headings)
+        if heading.start() == match.start()
+    )
+    end = (
+        all_headings[index + 1].start()
+        if index + 1 < len(all_headings) else len(status_text)
+    )
+    fields = _felder(status_text[match.start():end])
+    lines = [f"{match.group(1).upper()}: {match.group(2).strip()}"]
+    normative_fields = {
+        "status", "typ", "betroffene dateien", "projektziel", "nicht-ziele",
+        "existiert bereits", "fehlt noch", "akzeptanzkriterien", "tests",
+        "architektur-voraussetzung", "blockiert von", "phase", "prioritaet",
+        "priorität", "risiko", "aktueller stand", "noch offen",
+    }
+    for key, label in (
+        ("typ", "Typ"),
+        ("betroffene dateien", "Betroffene Dateien"),
+        ("aktueller stand", "Aktueller Stand"),
+        ("noch offen", "Noch offen"),
+        ("projektziel", "Projektziel"),
+        ("nicht-ziele", "Nicht-Ziele"),
+        ("existiert bereits", "Existiert bereits"),
+        ("fehlt noch", "Fehlt noch"),
+        ("akzeptanzkriterien", "Akzeptanzkriterien"),
+        ("tests", "Tests/Nachweis"),
+        ("architektur-voraussetzung", "Architektur-Voraussetzung"),
+        ("blockiert von", "Blockiert von"),
+        ("phase", "Phase"),
+        ("prioritaet", "Priorität"),
+        ("priorität", "Priorität"),
+        ("risiko", "Risiko"),
+    ):
+        value = fields.get(key)
+        if value is not None and _ausfuellbar(value):
+            lines.append(f"{label}:\n{value.strip()}")
+    progress_notes = [
+        (key, value) for key, value in fields.items()
+        if key not in normative_fields and _ausfuellbar(value)
+    ][-3:]
+    for heading, value in progress_notes:
+        lines.append(f"Aktueller Fortschritt — {heading}:\n{value}")
+    tracked_progress = _latest_criteria_progress(progress_text, op_id)
+    if tracked_progress:
+        lines.append(f"Kriterienfortschritt (neuester PROGRESS-Beleg):\n{tracked_progress}")
+    else:
+        lines.append(
+            "Kriterienfortschritt: kein OP-spezifischer Verify-Eintrag in "
+            "PROGRESS.md gefunden; fruehere Kriterien gelten als unbekannt "
+            "und muessen vor dem Weiterarbeiten geprueft werden."
+        )
+    return "\n\n".join(lines)
+
+
 def select_next_op(
     status_text: str,
     completed_ids: set[str] | frozenset[str] = frozenset(),
     accepted_adrs: set[str] | frozenset[str] = frozenset(),
+    progress_text: str = "",
 ) -> dict[str, Any]:
     """Waehlt startfaehige OPs; erledigte Blocker kommen aus PROGRESS."""
     accepted = {adr_id.upper() for adr_id in accepted_adrs}
@@ -194,6 +296,22 @@ def select_next_op(
             excluded.append({"id": op["id"], "titel": op["titel"], "gruende": reasons})
             continue
 
+        assignment = op_assignment_from_status(
+            status_text, op["id"], progress_text,
+        )
+        if assignment is None or len(assignment) > OP_ASSIGNMENT_MAX_CHARS:
+            excluded.append({
+                "id": op["id"],
+                "titel": op["titel"],
+                "gruende": [
+                    (
+                    "OP-Auftrag aus Pflichtfeldern fehlt oder ueberschreitet "
+                    f"{OP_ASSIGNMENT_MAX_CHARS} Zeichen"
+                    ),
+                ],
+            })
+            continue
+
         priority = fields.get("prioritaet") or fields.get("priorität") or "nicht angegeben"
         risk = fields.get("risiko", "nicht angegeben")
         relevance = fields.get("projektziel", "nicht angegeben")
@@ -209,7 +327,7 @@ def select_next_op(
                 "Akzeptanzkriterien und Tests/Nachweis sind dokumentiert.",
                 f"Prioritaet: {priority}; Risiko: {risk}; Projektziel-Relevanz: {relevance}.",
             ],
-            "aufgabe": op["text"],
+            "aufgabe": assignment,
         })
 
     selected = candidates[0] if len(candidates) == 1 else None

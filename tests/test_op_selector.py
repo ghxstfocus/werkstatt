@@ -3,6 +3,7 @@ from pathlib import Path
 
 from werkstatt.web.op_selector import (
     load_accepted_adr_ids,
+    op_assignment_from_status,
     parse_completed_op_ids,
     select_next_op,
 )
@@ -34,6 +35,56 @@ def test_selects_single_ready_op_and_explains_plan_gate() -> None:
     assert result["auswahl"]["id"] == "OP-001"
     assert "Plan-Gate" in result["begruendung"]
     assert "pytest" in result["auswahl"]["verifikation"]
+
+
+def test_op_assignment_keeps_normative_fields_but_drops_status_history() -> None:
+    history = "\n".join(f"historischer Verlauf {index}" for index in range(4000))
+    status = (
+        "### OP-398: Zielauswahl verbessern\n"
+        "- **Typ:** Verbesserung\n"
+        "- **Status:** open\n"
+        f"{history}\n"
+        "- **Betroffene Dateien:** werkstatt/planner.py\n"
+        "- **Akzeptanzkriterien:**\n- [ ] Auswahl evidenzbasiert.\n"
+        "- **Tests:** pytest -q tests/test_planner.py\n"
+        "- **Update 1 (alt):** Alte Fortschrittsnotiz.\n"
+        "- **Update 2:** Zwischenstand.\n"
+        "- **Update 3:** Bereits erledigte Kriterien sind mit Tests belegt.\n"
+        "- **Update 4 (aktuell):** Der offene Rest bleibt konkret.\n"
+    )
+
+    assignment = op_assignment_from_status(status, "OP-398")
+    selected = select_next_op(status)
+
+    assert assignment is not None
+    assert len(assignment) < 20_000
+    assert "historischer Verlauf" not in assignment
+    assert "Auswahl evidenzbasiert" in assignment
+    assert "pytest -q tests/test_planner.py" in assignment
+    assert "Bereits erledigte Kriterien sind mit Tests belegt." in assignment
+    assert "Update 1 (alt)" not in assignment
+    assert "update 4 (aktuell)" in assignment
+    assert selected["aufgabe"] == assignment
+
+
+def test_op_assignment_includes_latest_criteria_progress_and_marks_missing_state() -> None:
+    status = _op("OP-398", title="Kriterienarbeit")
+    progress = (
+        "## 2026-11-17T10:00:00 -- Phase abgeschlossen: werkstatt\n"
+        "- **Status:** phase_ende\n"
+        "- **Run-ID:** run-op398-123\n"
+        "- **Info:** rc=0; OP_PROGRESS op_id=OP-398 "
+        "criteria_state=verified verified=AC1,AC2 task_covered=AC1,AC2 remaining=none\n"
+    )
+
+    assignment = op_assignment_from_status(status, "OP-398", progress)
+    unknown = op_assignment_from_status(status, "OP-398")
+
+    assert assignment is not None
+    assert "criteria_state=verified verified=AC1,AC2" in assignment
+    assert "evidence_ref=Control/run-op398-123/loop_criteria_progress" in assignment
+    assert unknown is not None
+    assert "fruehere Kriterien gelten als unbekannt" in unknown
 
 
 def test_acceptance_heading_without_list_marker_and_embedded_pytest_are_parsed() -> None:

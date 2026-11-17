@@ -22,7 +22,7 @@ def test_verbotene_tools_fehlen() -> None:
 
 def test_chat_tools_registry_contains_project_actions() -> None:
     erwartet = {
-        "read_file", "grep", "git_log", "git_diff", "github_checks",
+        "read_file", "grep", "graph_query", "git_log", "git_diff", "github_checks",
         "audit_query", "loop_status", "pytest_collect", "diagnose",
         "read_status", "next_op", "server_status", "server_logs", "server_restart",
         "read_chat_history",
@@ -52,7 +52,7 @@ def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
     assert {"pytest_run", "write_temp_test"} <= debugger_names
     assert "loop_status" in read_names
     assert {"server_status", "server_logs"} <= read_names
-    assert len(read_names) == 15
+    assert len(read_names) == 16
     assert {
         "pytest_run", "write_temp_test", "propose_debugger_fix",
         "pytest_debugger_proposal", "debug_workspace_open",
@@ -60,7 +60,7 @@ def test_debugger_tools_are_hidden_outside_debugger_mode() -> None:
         "debug_workspace_diff", "debug_workspace_pytest",
         "propose_debug_workspace_patch",
     } <= debugger_names
-    assert len(debugger_names) == 25
+    assert len(debugger_names) == 26
 
 
 def test_write_mode_exposes_only_isolated_workspace_write_tools() -> None:
@@ -68,7 +68,7 @@ def test_write_mode_exposes_only_isolated_workspace_write_tools() -> None:
         item["function"]["name"]
         for item in chat_tools.openai_schemas(mode="write")
     }
-    assert len(names) == 22
+    assert len(names) == 23
     assert {
         "debug_workspace_open", "debug_workspace_read",
         "debug_workspace_write", "debug_workspace_diff",
@@ -313,7 +313,7 @@ def test_chat_writes_and_tests_only_in_session_worktree(
 
 def test_openai_schemas_anzahl() -> None:
     schemas = chat_tools.openai_schemas()
-    assert len(schemas) == 15
+    assert len(schemas) == 16
     for s in schemas:
         assert s["type"] == "function"
         assert s["function"]["name"] in chat_tools.CHAT_TOOLS
@@ -425,6 +425,141 @@ def test_grep_unterstuetzt_ere_alternation(tmp_path: Path) -> None:
 def test_grep_ohne_pattern() -> None:
     r = chat_tools.execute_tool("grep", {"pattern": ""})
     assert "Fehler" in r
+
+
+def test_graph_query_read_tool_falls_back_when_index_missing(tmp_path: Path):
+    result = chat_tools.execute_tool(
+        "graph_query", {"query": "wie wird projekt status gelesen"},
+        project_dir=tmp_path, mode="read",
+    )
+    assert "Graphify nicht verfuegbar" in result
+    read_names = {
+        item["function"]["name"] for item in chat_tools.openai_schemas(mode="read")
+    }
+    assert "graph_query" in read_names
+
+
+def test_graph_query_keeps_current_candidates_and_marks_partial_staleness(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.refresh_graphify_index",
+        lambda *_args, **_kwargs: {"status": "cli_unavailable"},
+    )
+    monkeypatch.setattr("werkstatt.audit.audit", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.graphify_candidates",
+        lambda *_args, **_kwargs: {
+            "status": "partial_stale",
+            "index_sha256": "a" * 64,
+            "graphify_version": "test",
+            "retrieval_method": "graphify_cli_query",
+            "native_query_status": "native_query",
+            "native_subgraph": "EDGE run() --calls [EXTRACTED]--> checkpoint()",
+            "native_relationship_count": 1,
+            "stale_source_count": 2,
+            "candidates": [{
+                "file": "src/current.py", "score": 1.0,
+                "symbols": [{"symbol": "checkpoint_action"}],
+                "relationships": [{"relation": "calls"}],
+                "source_sha256": "b" * 64,
+            }],
+        },
+    )
+
+    result = chat_tools.execute_tool(
+        "graph_query", {"query": "checkpoint action"},
+        project_dir=tmp_path, mode="read",
+    )
+    payload = json.loads(result)
+
+    assert payload["status"] == "orientierung_mit_veralteten_indexeintraegen"
+    assert payload["refresh_status"] == "cli_unavailable"
+    assert payload["stale_source_count"] == 2
+    assert payload["retrieval_method"] == "graphify_cli_query"
+    assert payload["native_query_status"] == "native_query"
+    assert payload["native_subgraph"] == ""
+    assert payload["native_relationship_count"] == 1
+    assert "nicht vertrauenswuerdige Navigationsdaten" in payload["instruction"]
+    assert payload["candidates"][0]["symbols"][0]["symbol"] == (
+        "checkpoint_action"
+    )
+    assert payload["candidates"][0]["relationships"][0]["relation"] == "calls"
+    assert "read_file" in payload["instruction"]
+
+
+def test_graph_query_refreshes_stale_index_before_returning_candidates(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    calls = 0
+
+    def candidate_result(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"status": "stale", "index_sha256": "a" * 64}
+        return {
+            "status": "ok",
+            "index_sha256": "b" * 64,
+            "graphify_version": "0.9.107",
+            "retrieval_method": "graphify_cli_query",
+            "native_query_status": "native_query",
+            "candidates": [{"file": "src/api.py", "source_sha256": "c" * 64}],
+        }
+
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.graphify_candidates", candidate_result,
+    )
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.refresh_graphify_index",
+        lambda *_args, **_kwargs: {"status": "refreshed", "returncode": 0},
+    )
+    audit_calls = []
+    monkeypatch.setattr(
+        "werkstatt.audit.audit",
+        lambda *args, **kwargs: audit_calls.append((args, kwargs)) or True,
+    )
+
+    result = chat_tools.execute_tool(
+        "graph_query", {"query": "api route"},
+        project_dir=tmp_path, mode="read",
+    )
+    payload = json.loads(result)
+
+    assert calls == 2
+    assert payload["status"] == "orientierung_nur"
+    assert payload["refresh_status"] == "refreshed"
+    assert payload["index_sha256"] == "b" * 64
+    assert audit_calls[0][0][0] == "chat_graphify_refresh"
+
+
+def test_graph_query_drops_all_candidates_when_stale_refresh_fails(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr("werkstatt.audit.audit", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.graphify_candidates",
+        lambda *_args, **_kwargs: {
+            "status": "stale",
+            "index_sha256": "d" * 64,
+            "stale_source_count": 4,
+            "candidates": [{"file": "src/stale.py", "source_sha256": "e" * 64}],
+            "native_subgraph": "EDGE old() --calls--> stale()",
+        },
+    )
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.refresh_graphify_index",
+        lambda *_args, **_kwargs: {"status": "timeout", "timeout_s": 30},
+    )
+
+    result = chat_tools.execute_tool(
+        "graph_query", {"query": "old route"},
+        project_dir=tmp_path, mode="read",
+    )
+
+    assert "Graphify nicht verfuegbar oder nicht aktuell genug" in result
+    assert "stale.py" not in result
+    assert "EDGE old()" not in result
 
 
 def test_unknown_tool_liefert_fehlertext() -> None:
@@ -547,7 +682,7 @@ def test_mode_write_routes_production_writes_through_loop() -> None:
     """Write mode confines edits to an isolated workspace or Loop handoff."""
     schemas = chat_tools.openai_schemas(mode="write")
     names = {item["function"]["name"] for item in schemas}
-    assert len(schemas) == 22
+    assert len(schemas) == 23
     assert {
         "loop_status", "request_loop_action", "debug_workspace_write",
         "debug_workspace_diff", "propose_debug_workspace_patch",
@@ -913,6 +1048,16 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                 "reason": "Builder fuer Task 2.",
                 "executor": "builder",
                 "task_id": "task-2",
+                "coordinator_model_choice": {
+                    "role": "architect",
+                    "source": "project_chat_model",
+                    "reason_code": "source_evidence_sufficient",
+                    "allowed_roles": ["scout", "architect"],
+                    "source_evidence": [{
+                        "path": "src/private.py", "sha256": "f" * 64,
+                    }],
+                    "private_prompt": "never expose",
+                },
                 "preserve_failed_tasks_on_setup": True,
                 "checkpoint_version": 4,
                 "evidence": {
@@ -951,7 +1096,16 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
                         "setup_checkpoint_complete": True,
                         "plan_checkpoint_complete": True,
                         "plan_goal_matches": True,
-                        "setup_context_source": "checkpointed_plan",
+                        "plan_run_matches": True,
+                        "plan_project_matches": True,
+                        "plan_fingerprint_matches": True,
+                        "plan_candidate_current": True,
+                        "plan_candidate_approved": False,
+                        "preflight_checkpoint_current": True,
+                        "preflight_policy": "current_checkpoint",
+                        "candidate_task_count": 2,
+                        "candidate_sha256": "c" * 64,
+                        "setup_context_source": "explicit_current_sources",
                         "task_count": 4,
                         "planner_role_decision": "planner_split",
                         "planner_role_decision_reason": (
@@ -1021,6 +1175,14 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
     )
     assert parsed["checkpoint"]["coordinator_decision"]["executor"] == "builder"
     assert parsed["checkpoint"]["coordinator_decision"][
+        "coordinator_model_choice"
+    ] == {
+        "role": "architect",
+        "source": "project_chat_model",
+        "reason_code": "source_evidence_sufficient",
+        "allowed_roles": ["scout", "architect"],
+    }
+    assert parsed["checkpoint"]["coordinator_decision"][
         "preserve_failed_tasks_on_setup"
     ] is True
     dispatch_evidence = parsed["checkpoint"]["coordinator_decision"]["evidence"]
@@ -1030,7 +1192,16 @@ def test_loop_status_exposes_checkpoint_and_sanitized_events(
         "setup_checkpoint_complete": True,
         "plan_checkpoint_complete": True,
         "plan_goal_matches": True,
-        "setup_context_source": "checkpointed_plan",
+        "plan_run_matches": True,
+        "plan_project_matches": True,
+        "plan_fingerprint_matches": True,
+        "plan_candidate_current": True,
+        "plan_candidate_approved": False,
+        "preflight_checkpoint_current": True,
+        "preflight_policy": "current_checkpoint",
+        "candidate_task_count": 2,
+        "candidate_sha256": "c" * 64,
+        "setup_context_source": "explicit_current_sources",
         "task_count": 4,
         "planner_role_decision": "planner_split",
         "planner_role_decision_reason": (
