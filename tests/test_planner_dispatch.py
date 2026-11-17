@@ -91,8 +91,8 @@ from werkstatt.roles.planner_dispatch import (
                     "goal_already_fulfilled",
                 },
             },
-            None,
-            "scout_reports_goal_already_fulfilled",
+            "architect",
+            "scout_completion_claim_requires_independent_verification",
         ),
     ],
 )

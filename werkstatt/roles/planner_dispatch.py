@@ -759,9 +759,12 @@ def choose_next_planner_role(
 
     if "goal_already_fulfilled" in available:
         return decision(
-            None,
-            "scout_reports_goal_already_fulfilled",
-            ("scout_report", "current_source_evidence"),
+            "architect",
+            "scout_completion_claim_requires_independent_verification",
+            (
+                "user_goal", "scout_report", "current_source_evidence",
+            ),
+            ("architect_plan",),
         )
     if "validated_task_graph" in available:
         reason: str = (

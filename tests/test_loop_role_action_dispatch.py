@@ -14,6 +14,12 @@ def test_selected_scout_and_architect_actions_dispatch_directly_to_role_runner(
         calls.append((state, stop_after_role))
         return True
 
+    monkeypatch.setattr(
+        "werkstatt.roles.scout_execution.run_scout_role_checkpoint",
+        lambda actual_state, *, goal, mark_plan_candidate=None: (
+            calls.append((actual_state, "scout")) or goal == actual_state.aufgabe
+        ),
+    )
     monkeypatch.setattr("werkstatt.planner.run_planner", run_planner)
     state = RunState(aufgabe="Inspect a project source")
 

@@ -458,22 +458,9 @@ def run_planner_split_checkpoint(state: Any, *, goal: str) -> bool | None:
         }, state.project_dir, state.project_name)
         return None
 
-    from werkstatt.rollen import ROLLEN
-    from werkstatt.skills import _merke_geladene_skills, load_all_skills
+    from werkstatt.roles.planner_skills import load_planner_skills
 
-    try:
-        loaded = ROLLEN["planner"].lade_skills(load_all_skills())
-        if loaded:
-            _merke_geladene_skills(
-                state, [skill.get("name", "") for skill in loaded],
-                rolle="planner",
-            )
-            state.planner_skills_block = "\n\n".join(
-                f"### {skill.get('name', '?')}\n{skill.get('body') or ''}"
-                for skill in loaded if skill.get("body")
-            )
-    except Exception:  # noqa: BLE001 - skill loading remains optional
-        state.planner_skills_block = ""
+    load_planner_skills(state)
 
     state.architect_prosa = handoff["architect_prose"]
     state.scout_auftrag = dict(handoff["architect_scout_report"])

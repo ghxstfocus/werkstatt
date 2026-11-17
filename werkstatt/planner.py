@@ -2112,25 +2112,9 @@ def run_planner(
         audit("planner_kein_key", {}, pd, pn)
         return False
     # Stellschrauben 2026-11-03: Planner-Skills.
-    try:
-        from werkstatt.rollen import ROLLEN
-        from werkstatt.skills import (
-            _merke_geladene_skills,
-            load_all_skills,
-        )
-        _all = load_all_skills()
-        _geladen = ROLLEN["planner"].lade_skills(_all)
-        if _geladen:
-            _merke_geladene_skills(
-                state, [s.get("name", "") for s in _geladen], rolle="planner")
-            _lines = ["## SKILLS (planner)"]
-            for _s in _geladen:
-                _b = _s.get("body") or ""
-                if _b:
-                    _lines.append(f"### {_s.get('name','?')}\n{_b}")
-            state.planner_skills_block = "\n\n".join(_lines)
-    except Exception:
-        pass
+    from werkstatt.roles.planner_skills import load_planner_skills
+
+    load_planner_skills(state)
 
     # FIX S 2026-10-31: Deterministischer Pre-Check VOR dem Scout.
     # Wenn Aufgabe "entferne X" ist und X fehlt, Loop sauber beenden.
@@ -2603,30 +2587,21 @@ def run_planner(
         "scout_route_reason": _scout_route_reason,
     }, pd, pn)
 
-    # GOLD 2026-10-30: Scout kann "bereits_erfuellt" melden.
-    # Dann brechen wir ab: kein Architect, kein Planner, kein Builder.
+    # A Scout completion claim is not a completion proof. Keep it visible as
+    # unconfirmed evidence, then let Architect construct an independently
+    # verifiable plan from current source evidence.
     if _scout_report and _scout_report.get("bereits_erfuellt") is True:
-        _role_decision = choose_next_planner_role(
-            scout_skip_path=_scout_skip_path,
-            available_evidence={
-                "scout_report", "current_source_evidence",
-                "goal_already_fulfilled",
-            },
-        )
         audit("planner_role_dispatch_decision", {
-            "next_role": _role_decision.role,
-            "reason": _role_decision.reason,
-            "basis": "validated_scout_report",
+            "next_role": "architect",
+            "reason": "scout_completion_claim_requires_independent_verification",
+            "basis": "unconfirmed_scout_completion_claim",
         }, pd, pn)
         _begr = _scout_report.get("begruendung_erfuellt", "")
         audit("auftrag_bereits_erfuellt",
               {"quelle": "scout",
-               "begruendung": _begr[:300]}, pd, pn)
-        # Flag fuer den Loop setzen
-        state.auftrag_bereits_erfuellt = True
-        state.auftrag_bereits_erfuellt_bestaetigt = False
-        state.auftrag_bereits_erfuellt_quelle = "planner:scout_llm_urteil"
-        return True
+               "begruendung": _begr[:300],
+               "unbestaetigt": True,
+               "naechste_rolle": "architect"}, pd, pn)
 
     if not _scout_report_hat_architect_auftrag(_scout_report):
         audit("planner_scout_json_fehler",

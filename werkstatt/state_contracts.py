@@ -40,6 +40,11 @@ TRANSITIONS: dict[str, list[tuple[str, bool | str]]] = {
     "architect->planner": [
         ("architect_prosa", True),
     ],
+    # Planner workers and the run coordinator exchange only a candidate flag;
+    # plan/human approval remains a separate, mandatory checkpoint.
+    "planner->loop": [
+        ("planner_plan_candidate_ready", "auto"),
+    ],
     "planner->builder": [
         ("tasks", True),
     ],

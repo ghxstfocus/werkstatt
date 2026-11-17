@@ -26,6 +26,7 @@ def test_transitions_vollstaendig():
     assert set(TRANSITIONS.keys()) == {
         "project_context->planner",
         "scout->architect", "architect->planner",
+        "planner->loop",
         "planner->builder", "builder->reviewer",
     }
 

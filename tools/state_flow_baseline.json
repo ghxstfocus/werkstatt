@@ -27,6 +27,7 @@
     "llm_calls",
     "patches",
     "phasen",
+    "planner_plan_candidate_ready",
     "planner_role_artifacts",
     "planner_step_yielded",
     "planner_yielded_after_role",

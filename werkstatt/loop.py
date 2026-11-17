@@ -1040,16 +1040,24 @@ def _continue_followup_with_coordinator(
 
 
 def _run_selected_planner_role_action(state: RunState, action: str) -> bool:
-    """Execute an explicit Planner role checkpoint without its phase wrapper."""
-    stop_after_role = {
-        "planner_scout": "scout",
-        "planner_architect": "architect",
-        "planner_split": "planner_split",
-    }.get(action)
-    if stop_after_role is None:
+    """Execute only the role selected at the current Planner checkpoint."""
+    if action == "planner_scout":
+        from werkstatt.roles.scout_execution import run_scout_role_checkpoint
+
+        return bool(run_scout_role_checkpoint(
+            state,
+            goal=state.aufgabe,
+            mark_plan_candidate=lambda: setattr(
+                state, "planner_plan_candidate_ready", True,
+            ),
+        ))
+    if action not in {"planner_architect", "planner_split"}:
         return False
     from werkstatt.planner import run_planner
 
+    stop_after_role = (
+        "architect" if action == "planner_architect" else "planner_split"
+    )
     return bool(run_planner(state, stop_after_role=stop_after_role))
 
 

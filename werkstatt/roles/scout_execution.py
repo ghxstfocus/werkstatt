@@ -182,3 +182,222 @@ def run_scout_checkpoint(
         reused_artifact=reused_artifact,
         artifact_persisted=artifact_persisted,
     )
+
+
+def run_scout_role_checkpoint(
+    state: Any,
+    *,
+    goal: str,
+    mark_plan_candidate: Callable[[], None] | None = None,
+) -> bool:
+    """Run only the Scout role selected by the persisted run coordinator.
+
+    The Planner module still supplies shared prompt/fingerprint helpers, but
+    Scout execution no longer enters its multi-role compatibility workflow.
+    This boundary persists the Scout result and yields for a fresh coordinator
+    decision, except when a fully validated atomic plan is produced; that plan
+    remains an unapproved candidate for the existing gates.
+    """
+    from werkstatt import planner as shared
+    from werkstatt.checkpoint_coordinator import apply_checkpoint_role_choice
+    from werkstatt.planner_artifacts import (
+        make_role_artifact,
+        validate_role_artifact,
+    )
+    from werkstatt.roles.planner_dispatch import scout_route_decision
+
+    state.planner_step_yielded = False
+    state.planner_yielded_after_role = None
+    explorer_context = state.explorer_context
+    key_files = [
+        item["file"]
+        for item in (
+            explorer_context.get("key_files", [])
+            if isinstance(explorer_context, dict) else []
+        )
+        if isinstance(item, dict) and isinstance(item.get("file"), str)
+    ]
+    skip_path, route_reason = scout_route_decision(
+        goal, explorer_context, state.project_dir,
+    )
+    coordinator_role = getattr(state, "planner_coordinator_role", None)
+    if coordinator_role in {"scout", "architect"}:
+        source_evidence = tuple(
+            item for item in getattr(
+                state, "planner_coordinator_source_evidence", (),
+            )
+            if isinstance(item, dict)
+        )
+        route = apply_checkpoint_role_choice(
+            state.project_dir,
+            role=coordinator_role,
+            deterministic_skip_path=skip_path,
+            source_evidence=source_evidence,
+            deterministic_reason=route_reason,
+        )
+        skip_path = route["skip_path"]
+        route_reason = route["reason"]
+        if coordinator_role == "architect" and skip_path:
+            state.architect_required_source_files = route["source_files"]
+
+    result = run_scout_checkpoint(
+        state,
+        goal=goal,
+        api_key=state.api_key,
+        key_files=key_files,
+        skip_path=skip_path,
+        route_reason=route_reason,
+        services=ScoutRoleServices(
+            direct_plan=shared._deterministic_literal_replace_plan,
+            build_index=shared._baue_api_index,
+            input_fingerprint=shared._scout_input_fingerprint,
+            validate_artifact=validate_role_artifact,
+            run_scout=shared._run_scout,
+            publish_checkpoint=shared._publish_role_checkpoint,
+            audit_call=shared.audit,
+        ),
+    )
+    if result.failure_reason is not None or not isinstance(result.report, dict):
+        return False
+
+    report = result.report
+    if report.get("bereits_erfuellt") is True:
+        reason = str(report.get("begruendung_erfuellt") or "")[:300]
+        shared.audit(
+            "auftrag_bereits_erfuellt",
+            {
+                "quelle": "scout",
+                "begruendung": reason,
+                "unbestaetigt": True,
+                "naechste_rolle": "architect",
+            },
+            state.project_dir,
+            state.project_name,
+        )
+
+    if not shared._scout_report_hat_architect_auftrag(report):
+        shared.audit(
+            "planner_scout_json_fehler",
+            {"grund": "auftrag_prosa_fehlt"},
+            state.project_dir,
+            state.project_name,
+        )
+        return False
+
+    api_excerpt = report.get("api_auszug") or {}
+    state.scout_auftrag = dict(report)
+    state.scout_api_auszug = api_excerpt if isinstance(api_excerpt, dict) else {}
+    contradictions = shared._pruefe_api_widerspruch(
+        report, result.code_index,
+    )
+    if contradictions:
+        shared.audit(
+            "planner_scout_api_widerspruch",
+            {"anzahl": len(contradictions), "widersprueche": contradictions},
+            state.project_dir,
+            state.project_name,
+        )
+        state.scout_auftrag["api_widersprueche"] = contradictions
+
+    if not skip_path and result.input_sha256 and getattr(state, "run_id", None):
+        artifact = make_role_artifact(
+            "scout",
+            report,
+            run_id=state.run_id,
+            goal=goal,
+            input_sha256=result.input_sha256,
+        )
+        callback = getattr(state, "planner_role_artifact_callback", None)
+        if artifact is not None and callable(callback):
+            callback(artifact)
+            artifacts = getattr(state, "planner_role_artifacts", {})
+            artifacts = dict(artifacts) if isinstance(artifacts, dict) else {}
+            artifacts["scout"] = artifact
+            state.planner_role_artifacts = artifacts
+            shared.audit(
+                "planner_role_artifact_persisted",
+                {
+                    "role": "scout",
+                    "input_sha256": result.input_sha256,
+                    "output_sha256": artifact["output_sha256"],
+                },
+                state.project_dir,
+                state.project_name,
+            )
+        elif not result.reused_artifact:
+            shared.audit(
+                "planner_role_artifact_unbound",
+                {"role": "scout", "reason": "artifact_callback_missing"},
+                state.project_dir,
+                state.project_name,
+            )
+            return False
+
+    if report.get("atomarer_plan") is True:
+        atomic_ok, atomic_reason = shared._atomarer_scout_plan_freigabefaehig(
+            report, state.project_dir,
+        )
+        tasks = (
+            shared._tasks_aus_betroffenen_stellen(
+                report, goal, quelle=result.source,
+            ) if atomic_ok else []
+        )
+        if tasks:
+            state.akzeptanzkriterien = [
+                "Alle eindeutig belegten Ersetzungen im atomaren Plan sind umgesetzt."
+            ]
+            for task in tasks:
+                task["criterion_refs"] = ["AC1"]
+            shared._validate_criteria_coverage(tasks, state.akzeptanzkriterien)
+            state.tasks = tasks
+            state.tests = []
+            state.phasen = []
+            state.architect_prosa = f"[atomarer Plan: {result.source}]"
+            state.architect_required_source_files = list(dict.fromkeys(
+                task["task_files"][0]
+                for task in tasks
+                if isinstance(task.get("task_files"), list)
+                and task["task_files"]
+            ))
+            shared._publish_role_checkpoint(
+                state, "architect", "skipped",
+                "deterministic_atomic_plan_evidence_sufficient",
+                report, tasks,
+            )
+            shared._publish_role_checkpoint(
+                state, "planner_split", "skipped",
+                "deterministic_atomic_plan_already_task_graph",
+                tasks, tasks,
+            )
+            shared.audit(
+                "planner_atomarer_plan",
+                {
+                    "tasks": len(tasks),
+                    "dateien": [task["task_files"][0] for task in tasks],
+                    "validierung": atomic_reason,
+                    "quelle": result.source,
+                    "architect": "uebersprungen",
+                },
+                state.project_dir,
+                state.project_name,
+            )
+            if mark_plan_candidate is None:
+                shared.audit(
+                    "planner_atomarer_plan_verworfen",
+                    {"grund": "plan_candidate_callback_missing"},
+                    state.project_dir,
+                    state.project_name,
+                )
+                return False
+            mark_plan_candidate()
+            return True
+        shared.audit(
+            "planner_atomarer_plan_verworfen",
+            {"grund": atomic_reason},
+            state.project_dir,
+            state.project_name,
+        )
+
+    state.planner_step_yielded = True
+    state.planner_yielded_after_role = "scout"
+    return True
