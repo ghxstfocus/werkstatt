@@ -9,7 +9,15 @@ from werkstatt.checkpoint_coordinator import (
     choose_task_checkpoint_action,
 )
 from werkstatt.event_store import EventStore
-from werkstatt.phases._common import (
+from werkstatt.render import (
+    group_end,
+    group_start,
+    task,
+    task_done,
+    task_ok,
+    task_started,
+)
+from werkstatt.runtime_compat._common import (
     _apply_one_patch,
     _call_hook,
     _delete_ziel_erlaubt,
@@ -24,14 +32,6 @@ from werkstatt.phases._common import (
     audit,
     run_builder,
     run_reviewer,
-)
-from werkstatt.render import (
-    group_end,
-    group_start,
-    task,
-    task_done,
-    task_ok,
-    task_started,
 )
 from werkstatt.state import RunState, check_run_lease
 

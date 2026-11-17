@@ -183,7 +183,7 @@ def test_verify_speichert_begrenzte_stage_belege(
 
 
 def test_task_boundary_clears_verify_evidence() -> None:
-    from werkstatt.phases._common import _reset_task_state
+    from werkstatt.runtime_compat._common import _reset_task_state
 
     state = mk_state(
         last_verify_errors=["old"],

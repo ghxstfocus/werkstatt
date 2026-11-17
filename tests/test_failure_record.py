@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from werkstatt import failure_record
-from werkstatt.phases import finalize
+from werkstatt.roles import checkpoint_actions as finalize
 from werkstatt.roles import complete_run
 from werkstatt.roles.verify_recovery import _error_context
 

@@ -275,15 +275,14 @@ from werkstatt.render import (
     group_end,
     group_start,
 )
-from werkstatt.state import RunState
-
-from ._common import (
+from werkstatt.runtime_compat._common import (
     _gate_failed_payload,
     _human_gate,
     _verify_patches,
     _with_spinner,
     audit,
 )
+from werkstatt.state import RunState
 
 
 def _post_commit_snapshot_check(

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from werkstatt.event_store import EventStore
-from werkstatt.phases._common import audit
+from werkstatt.runtime_compat._common import audit
 from werkstatt.state import RunState, check_run_lease
 
 

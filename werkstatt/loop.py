@@ -52,14 +52,6 @@ from werkstatt.git_ops import (  # Fix AZ Stufe 1: Re-Export
 )
 from werkstatt.hooks import _call_hook  # Fix AZ Stufe 2: Re-Export
 from werkstatt.phase_state import PhaseState
-from werkstatt.phases import (  # Fix AZ Stufe 11: Re-Export
-    _gate_failed_payload,
-    _hat_human_review_tasks,
-    _normalize_tasks,
-    _phase_end_review_action,
-    _phase_end_verify_action,
-    _phase_human_gate_action,
-)
 from werkstatt.planner import run_planner
 from werkstatt.reflection import (  # Fix AZ Stufe 6: Re-Export
     _phase_end_reflection,
@@ -80,8 +72,18 @@ from werkstatt.render import (
 )
 from werkstatt.reviewer import run_reviewer
 from werkstatt.roles.builder import run_builder
+from werkstatt.roles.checkpoint_actions import (
+    _phase_end_review_action,
+    _phase_end_verify_action,
+    _phase_human_gate_action,
+)
 from werkstatt.roles.project_context import collect_project_context
 from werkstatt.roles.task_dispatch import run_task_checkpoint
+from werkstatt.runtime_compat import (
+    _gate_failed_payload,
+    _hat_human_review_tasks,
+    _normalize_tasks,
+)
 from werkstatt.state import RunState, check_run_lease
 from werkstatt.task_runner import (  # Fix AZ Stufe 7: Re-Export
     _extract_files_from_tasks,
@@ -736,7 +738,7 @@ def _run_commit_checkpoint(
     check_run_lease(state)
     from werkstatt.failure_record import _worktree_fingerprint
     from werkstatt.phase_state import phase_end_verify_evidence
-    from werkstatt.phases.finalize import _approved_commit
+    from werkstatt.roles.checkpoint_actions import _approved_commit
 
     before = (
         _worktree_fingerprint(Path(state.project_dir))
@@ -787,7 +789,7 @@ def _run_commit_checkpoint(
             project_name,
         )
         return 1
-    from werkstatt.phases.finalize import _post_commit_snapshot_check
+    from werkstatt.roles.checkpoint_actions import _post_commit_snapshot_check
 
     snapshot_ok, snapshot = _post_commit_snapshot_check(
         Path(state.project_dir), commit_sha,
@@ -844,7 +846,7 @@ def _run_post_commit_verify_checkpoint(
         create_failure_record,
     )
     from werkstatt.phase_state import phase_end_verify_evidence
-    from werkstatt.phases.finalize import _post_commit_snapshot_check
+    from werkstatt.roles.checkpoint_actions import _post_commit_snapshot_check
 
     commit_sha = _git_head(Path(state.project_dir)) if state.project_dir else ""
     pending = phase_state.data.get("commit_pending_post_verify_checkpoint")

@@ -71,11 +71,15 @@ fuer die Revalidierung und den Wiederaufbau erforderlicher Scout-/Architect-
 Artefakte erhalten; ein ungueltiges oder fehlendes Architect-Artefakt wird
 zum Koordinator zurueckgegeben.
 
-Die Migration ist unvollstaendig: `werkstatt/phases/` enthaelt weiterhin
-Plan-/Review-/Finalize-Executor- und Kompatibilitaetsmodule; Setup-/Plan-/Task-Module
-sind noch nicht vollstaendig aus den Laufzeitpfaden entfernt. Die verpflichtende
-Schranke nach einer Reviewer-Ablehnung liegt jetzt als `reviewer_rejection_gate`
-in `werkstatt/gates.py`; sie bleibt fail-closed, ist aber kein Phasenmodul mehr.
+Die Migration ist unvollstaendig: Das ehemalige `werkstatt/phases/`-Paket ist
+entfernt. Seine letzten generischen Loop-Kompatibilitaetshelfer liegen unter
+`werkstatt/runtime_compat/`; dort gibt es keine Executor-/Phasenreihenfolge.
+Die verpflichtende Schranke nach einer Reviewer-Ablehnung liegt als
+`reviewer_rejection_gate` in `werkstatt/gates.py`. Review-, Freigabe- und
+Abschluss-Verify-Worker liegen als einzeln dispatchte Aktionen in
+`werkstatt/roles/checkpoint_actions.py`. Planner-/Replan- und Erstlauf- sowie
+Follow-up-Dispatcher sind jedoch noch nicht vollstaendig vereinheitlicht; die
+gesamte adaptive Zielsteuerung ist damit noch nicht bewiesen.
 Planner-Taskgraph-Erzeugung nutzt noch
 einen gebuendelten Executor; einige Erstlauf- und Abschlussentscheidungen
 bleiben deterministisch aneinander gebunden. Eine vollstaendig freie,

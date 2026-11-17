@@ -6,14 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from werkstatt.phase_state import PhaseState
-from werkstatt.phases._common import (
-    _validate_contract_safe,
-    audit,
-)
 from werkstatt.render import (
     group_end,
     group_start,
     step,
+)
+from werkstatt.runtime_compat._common import (
+    _validate_contract_safe,
+    audit,
 )
 from werkstatt.state import RunState
 

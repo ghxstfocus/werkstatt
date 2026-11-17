@@ -845,7 +845,7 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
     """CLI-Resume laedt den Checkpoint und finalisiert denselben Run real."""
     from werkstatt.event_store import EventStore
     from werkstatt.phase_state import PhaseState
-    from werkstatt.phases import finalize
+    from werkstatt.roles import checkpoint_actions as finalize
     from werkstatt.roles import complete_run
 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")

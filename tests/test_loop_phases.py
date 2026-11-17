@@ -63,7 +63,7 @@ def test_finalize_resume_returns_to_coordinator_without_checkpoints(
 def test_op_progress_marker_requires_complete_evidence_for_verified_status(
     monkeypatch,
 ) -> None:
-    from werkstatt.phases import finalize
+    from werkstatt.roles import checkpoint_actions as finalize
 
     state = SimpleNamespace(
         aufgabe="Bearbeite OP-398",
@@ -669,7 +669,7 @@ def _run_finalize_commit_order(
     tmp_path, monkeypatch, verify_ok, *, task_status="done", doku_nachzug=False,
     criteria_progress=None, phase_state=None,
 ):
-    from werkstatt.phases import finalize
+    from werkstatt.roles import checkpoint_actions as finalize
 
     state = _state(tmp_path, run_id="run-verify-1")
     state.tasks = [{"id": "t1"}]
@@ -993,7 +993,7 @@ def test_finalize_blockiert_zielerfolg_bei_ungetrackten_akzeptanzkriterien(
 
 
 def test_criterion_evidence_reports_gaps_instead_of_guessing(tmp_path):
-    from werkstatt.phases.finalize import _criterion_evidence_rows
+    from werkstatt.roles.checkpoint_actions import _criterion_evidence_rows
 
     phase_state = MagicMock()
     phase_state.run_id = "run-1"
@@ -1028,7 +1028,7 @@ def test_criterion_evidence_reports_gaps_instead_of_guessing(tmp_path):
 
 
 def test_criterion_evidence_ignores_superseded_failed_history(tmp_path):
-    from werkstatt.phases.finalize import _criterion_evidence_rows
+    from werkstatt.roles.checkpoint_actions import _criterion_evidence_rows
 
     phase_state = MagicMock()
     phase_state.run_id = "run-replan"
@@ -1079,7 +1079,7 @@ def test_criterion_evidence_ignores_superseded_failed_history(tmp_path):
 def test_criterion_evidence_does_not_reuse_unrelated_run_verify_for_task(
     tmp_path,
 ):
-    from werkstatt.phases.finalize import _criterion_evidence_rows
+    from werkstatt.roles.checkpoint_actions import _criterion_evidence_rows
 
     phase_state = MagicMock()
     phase_state.run_id = "run-1"
@@ -1099,7 +1099,7 @@ def test_criterion_evidence_does_not_reuse_unrelated_run_verify_for_task(
 
 def test_finalizer_rejects_task_verify_for_stale_file_content(tmp_path):
     from werkstatt.phase_state import PhaseState
-    from werkstatt.phases.finalize import _criterion_evidence_rows
+    from werkstatt.roles.checkpoint_actions import _criterion_evidence_rows
 
     project_file = tmp_path / "src" / "task.py"
     project_file.parent.mkdir()
@@ -1152,7 +1152,7 @@ def test_completion_rejects_review_checkpoint_after_worktree_change(
         lambda _project_dir: "b" * 64,
     )
     monkeypatch.setattr(
-        "werkstatt.phases.finalize._human_gate",
+        "werkstatt.roles.checkpoint_actions._human_gate",
         lambda *_args, **_kwargs: pytest.fail(
             "stale review must stop before gate",
         ),

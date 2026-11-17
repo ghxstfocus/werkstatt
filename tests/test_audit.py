@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 from tools import audit as audit_mod
 from werkstatt.gates import _human_gate_plan
-from werkstatt.phases import (
+from werkstatt.runtime_compat import (
     _gate_failed_payload,
     _reviewer_rejected_payload,
 )

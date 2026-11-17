@@ -14,12 +14,12 @@ class TestLoopReviewerDeterministicFail:
         # Fix AZ Stufe 11: Logik liegt jetzt in pipeline_phases.py.
         import werkstatt.gates as _gates
         import werkstatt.loop as _loop
-        import werkstatt.phases as _pp
+        import werkstatt.roles.checkpoint_actions as _actions
         import werkstatt.roles.complete_task as _ctx
         import werkstatt.roles.task_dispatch as _task_dispatch
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
-            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_ctx, _task_dispatch, _gates, _pp._finalize_mod]))
+            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_ctx, _task_dispatch, _gates, _actions]))
         )
         # Nach _with_spinner("Reviewer ...
         assert "state.reviewer_deterministic_fail = False" in src, (

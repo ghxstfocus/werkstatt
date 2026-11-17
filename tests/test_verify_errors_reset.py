@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
 
-from werkstatt.phases import _reset_task_state
+from werkstatt.runtime_compat import _reset_task_state
 
 _here = Path(__file__).parent
 if str(_here) not in sys.path:

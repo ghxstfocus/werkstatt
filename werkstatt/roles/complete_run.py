@@ -7,12 +7,12 @@ from pathlib import Path
 from werkstatt.audit import audit
 from werkstatt.failure_record import _worktree_fingerprint
 from werkstatt.phase_state import phase_end_verify_evidence
-from werkstatt.phases._common import _hat_human_review_tasks
-from werkstatt.phases.finalize import (
+from werkstatt.render import summary
+from werkstatt.roles.checkpoint_actions import (
     _criterion_evidence_rows,
     _post_commit_snapshot_check,
 )
-from werkstatt.render import summary
+from werkstatt.runtime_compat._common import _hat_human_review_tasks
 from werkstatt.state import RunState
 
 

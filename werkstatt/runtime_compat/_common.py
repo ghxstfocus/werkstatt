@@ -1,12 +1,11 @@
-"""Gemeinsame Lazy-Stubs + Helper fuer phases/* (OP-139 Phase 2a).
+"""Shared legacy loop API proxies and small runtime helpers.
 
 Alle werkstatt.loop-Stubs importieren lazy (innerhalb der Funktion),
 um Zirkularitaet beim Modul-Load zu vermeiden. Kein direkter
 from-import von werkstatt.loop auf Modul-Ebene.
 
 extract_audit_bug_summary + RunState werden direkt importiert:
-- werkstatt.reviewer importiert nicht werkstatt.phases (kein Zirkel)
-- werkstatt.state importiert nicht werkstatt.phases (kein Zirkel)
+- reviewer/state avoid importing this compatibility module at import time
 """
 from __future__ import annotations
 

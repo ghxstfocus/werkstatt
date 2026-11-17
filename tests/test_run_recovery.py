@@ -712,7 +712,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         "import werkstatt\n"
         "werkstatt.__path__ = [os.environ['WERKSTATT_REAL_PACKAGE']]\n"
         "from werkstatt import loop, orchestrator\n"
-        "from werkstatt.phases import finalize\n"
+        "from werkstatt.roles import checkpoint_actions as finalize\n"
         "from werkstatt import committer, progress, reviewer\n"
         "cfg = {'project_dir': os.environ['WERKSTATT_TEST_PROJECT_DIR'], "
         "'venv_python': sys.executable, 'docs': {}}\n"

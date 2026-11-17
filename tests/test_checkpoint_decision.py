@@ -1164,7 +1164,7 @@ def test_phase_end_review_action_persists_current_worktree_evidence(
 def test_rejected_phase_end_review_stops_without_inline_role_chain(
     tmp_path, monkeypatch,
 ) -> None:
-    from werkstatt.phases.finalize import _phase_end_review_action
+    from werkstatt.roles.checkpoint_actions import _phase_end_review_action
 
     state = RunState(
         aufgabe="Ziel",
@@ -1303,7 +1303,7 @@ def test_phase_end_verify_action_persists_current_evidence_checkpoint(
 def test_failed_phase_end_verify_yields_to_recovery_checkpoint(
     tmp_path, monkeypatch,
 ) -> None:
-    from werkstatt.phases import finalize
+    from werkstatt.roles import checkpoint_actions as finalize
 
     phase = _phase(tmp_path, [{"id": "t1", "name": "Inspect"}], [])
     phase.run_id = "run-phase-verify-failed"
@@ -1420,7 +1420,7 @@ def test_post_commit_verify_failure_returns_to_coordinator_checkpoint(
         },
     )
     monkeypatch.setattr(
-        "werkstatt.phases.finalize._post_commit_snapshot_check",
+        "werkstatt.roles.checkpoint_actions._post_commit_snapshot_check",
         lambda *_args: (True, {"worktree_clean": True}),
     )
     monkeypatch.setattr("werkstatt.loop.audit", lambda *_args, **_kwargs: True)

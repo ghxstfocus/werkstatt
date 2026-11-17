@@ -24,7 +24,7 @@ def test_validate_contract_safe_ok(tmp_path):
     """Gefuellter explorer_context -> True, kein Audit."""
     from unittest.mock import patch
 
-    from werkstatt import phases as pp
+    from werkstatt import runtime_compat as pp
     st = _state(tmp_path)
     st.explorer_context = {
         "findings": "x",
@@ -32,9 +32,11 @@ def test_validate_contract_safe_ok(tmp_path):
         "next_reads": ["a.py"],
     }
     audited = []
-    with patch("werkstatt.phases._common.audit",
+    with patch("werkstatt.runtime_compat._common.audit",
                       side_effect=lambda k, p, pd, pn: audited.append(k)):
-        ok = pp._validate_contract_safe("explorer", "scout", st, tmp_path, "t")
+        ok = pp._validate_contract_safe(
+            "project_context", "planner", st, tmp_path, "t",
+        )
     assert ok is True
     assert "state_contract_violation" not in audited
 
@@ -43,16 +45,18 @@ def test_validate_contract_safe_leer(tmp_path):
     """Leerer explorer_context -> False + Audit-Event."""
     from unittest.mock import patch
 
-    from werkstatt import phases as pp
+    from werkstatt import runtime_compat as pp
     st = _state(tmp_path)
     audited = []
-    with patch("werkstatt.phases._common.audit",
+    with patch("werkstatt.runtime_compat._common.audit",
                       side_effect=lambda k, p, pd, pn: audited.append((k, p))):
-        ok = pp._validate_contract_safe("explorer", "scout", st, tmp_path, "t")
+        ok = pp._validate_contract_safe(
+            "project_context", "planner", st, tmp_path, "t",
+        )
     assert ok is False
     assert any(k == "state_contract_violation" for k, _ in audited)
     payload = next(p for k, p in audited if k == "state_contract_violation")
-    assert "explorer" in payload.get("transition", "")
+    assert "project_context" in payload.get("transition", "")
     assert payload.get("felder")
 
 
@@ -60,10 +64,10 @@ def test_validate_contract_safe_unbekannter_uebergang(tmp_path):
     """Unbekannter Uebergang -> Noop -> True."""
     from unittest.mock import patch
 
-    from werkstatt import phases as pp
+    from werkstatt import runtime_compat as pp
     st = _state(tmp_path)
     audited = []
-    with patch("werkstatt.phases._common.audit",
+    with patch("werkstatt.runtime_compat._common.audit",
                       side_effect=lambda k, p, pd, pn: audited.append(k)):
         ok = pp._validate_contract_safe("foo", "bar", st, tmp_path, "t")
     assert ok is True
