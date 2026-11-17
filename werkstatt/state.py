@@ -347,6 +347,7 @@ class RunState:
     # this to distinguish recoverable patch/response faults from missing
     # prerequisites or provider failures before scheduling Reflection.
     builder_failure_reason: str = ""
+    builder_failure_detail: str = ""
     patches: list[dict[str, Any]] = field(default_factory=list)
     patches_aktuell_runde: list[dict[str, object]] = \
         field(default_factory=list)

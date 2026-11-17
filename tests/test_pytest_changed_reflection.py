@@ -20,7 +20,7 @@ def _make_state() -> RunState:
         docs={}, agents={}, always={}, optional={},
         file_whitelist=[], api_key="fake", budget={},
         agent_docs={},
-        project_dir=Path("/opt/werkstatt"),
+        project_dir=Path(__file__).resolve().parents[1],
     )
 
 

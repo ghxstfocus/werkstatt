@@ -1,5 +1,8 @@
 """Tests fuer werkstatt/skills.py und werkstatt/tools.py."""
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from werkstatt.skills import (
     load_all_skills,
@@ -44,10 +47,22 @@ def test_skills_summary_ist_kompakt() -> None:
 
 # === tools.py ===
 
-def test_run_readonly_erlaubt_ruff(tmp_path: Path) -> None:
+def test_run_readonly_erlaubt_ruff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     (tmp_path / "a.py").write_text("x = 1\n")
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        calls.append((command, kwargs))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("werkstatt.tools.subprocess.run", fake_run)
     r = run_readonly("ruff check .", tmp_path)
-    assert "error" not in r or r.get("ok") is not None
+    assert r["ok"] is True
+    assert calls[0][0] == ["ruff", "check", "."]
+    assert calls[0][1]["cwd"] == str(tmp_path)
 
 
 def test_run_readonly_blockiert_rm(tmp_path: Path) -> None:
@@ -68,10 +83,21 @@ def test_run_readonly_blockiert_nicht_erlaubt(tmp_path: Path) -> None:
     assert "nicht erlaubt" in r["error"]
 
 
-def test_run_write_erlaubt_ruff_fix(tmp_path: Path) -> None:
+def test_run_write_erlaubt_ruff_fix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     (tmp_path / "a.py").write_text("x=1\n")
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+        calls.append(command)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("werkstatt.tools.subprocess.run", fake_run)
     r = run_write("ruff check --fix .", tmp_path)
-    assert r.get("rc") is not None
+    assert r["rc"] == 0
+    assert calls == [["ruff", "check", "--fix", "."]]
 
 
 def test_run_write_blockiert_trotzdem_rm(tmp_path: Path) -> None:

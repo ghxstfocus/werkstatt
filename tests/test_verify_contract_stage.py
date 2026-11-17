@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "/opt/werkstatt")
-sys.path.insert(0, "/opt/werkstatt/tools")
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 
 import state_inventory
 
@@ -61,8 +63,8 @@ def test_changed_pfad_findet_setattr_auf_unbekanntes_feld(tmp_path):
         "    setattr(state, \"gibt_es_nicht\", True)\n"
     )
     r = subprocess.run(
-        ["python3", "tools/state_inventory.py", "--changed", str(probe)],
-        capture_output=True, text=True, check=False,
+        [sys.executable, str(ROOT / "tools/state_inventory.py"), "--changed", str(probe)],
+        capture_output=True, text=True, check=False, cwd=ROOT,
     )
     assert r.returncode == 1, (
         f"rc={r.returncode}; stdout={r.stdout!r}; stderr={r.stderr!r}"
@@ -83,8 +85,8 @@ def test_changed_pfad_laesst_gueltiges_setattr_durch(tmp_path):
         f"    setattr(state, \"{_feld}\", True)\n"
     )
     r = subprocess.run(
-        ["python3", "tools/state_inventory.py", "--changed", str(probe)],
-        capture_output=True, text=True, check=False,
+        [sys.executable, str(ROOT / "tools/state_inventory.py"), "--changed", str(probe)],
+        capture_output=True, text=True, check=False, cwd=ROOT,
     )
     assert r.returncode == 0, (
         f"rc={r.returncode}; stdout={r.stdout!r}; stderr={r.stderr!r}"

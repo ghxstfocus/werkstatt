@@ -40,7 +40,7 @@ def _schreibe(tmp_path, events: list[dict]) -> None:
 
 
 def test_swimlane_lanes_pro_rolle(projektion, tmp_path):
-    """Explorer + Builder: 2 Lanes mit je einem Balken."""
+    """Kontextwerkzeuge + Builder erscheinen als getrennte Swimlanes."""
     jetzt = datetime.now(UTC)
     _schreibe(tmp_path, [
         {"kind": "loop_started", "run_id": "r1", "project": "werkstatt",
@@ -56,9 +56,11 @@ def test_swimlane_lanes_pro_rolle(projektion, tmp_path):
     ])
     sw = inspector.aggregate_swimlane("werkstatt")
     lanes = {l["rolle"]: l for l in sw["lanes"]}
-    assert "explorer" in lanes, f"Explorer-Lane fehlt: {list(lanes)}"
+    assert "project_context_tools" in lanes, (
+        f"Kontextwerkzeug-Lane fehlt: {list(lanes)}"
+    )
     assert "builder" in lanes, f"Builder-Lane fehlt: {list(lanes)}"
-    assert len(lanes["explorer"]["balken"]) >= 1
+    assert len(lanes["project_context_tools"]["balken"]) >= 1
     assert len(lanes["builder"]["balken"]) >= 1
 
 

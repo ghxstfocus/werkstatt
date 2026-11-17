@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import os
 import signal
 import subprocess
 from pathlib import Path
@@ -468,7 +467,8 @@ def test_main_sigterm_saves_and_restores_stash(tmp_path, monkeypatch):
         lifecycle_calls.append((erfolg, project_name, stopped))
 
     def _request_stop(*_args, **_kwargs):
-        os.kill(os.getpid(), signal.SIGTERM)
+        # Exercise the installed handler without terminating the pytest process.
+        loop._handle_loop_sigterm(signal.SIGTERM, None)
 
     with (
         _silence_renderer(),
@@ -923,6 +923,10 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
         finalize, "_post_commit_snapshot_check",
         lambda *_args: (True, {"worktree_clean": True}),
     )
+    monkeypatch.setattr(
+        complete_run, "_post_commit_snapshot_check",
+        lambda *_args: (True, {"worktree_clean": True}),
+    )
     monkeypatch.setattr("werkstatt.progress.append", lambda *_a, **_kw: None)
     monkeypatch.setattr(
         finalize, "_approved_commit",
@@ -944,6 +948,7 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
         "werkstatt.failure_record._worktree_fingerprint",
         lambda _path: "a" * 64,
     )
+    monkeypatch.setattr(complete_run, "_worktree_fingerprint", lambda _path: "a" * 64)
 
     with _silence_renderer(), _patch_main_config(tmp_path):
         rc = loop.main([

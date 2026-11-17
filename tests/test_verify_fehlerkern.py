@@ -9,6 +9,7 @@ Notes, konnte nicht reparieren.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 sys.path.insert(0, "/opt/werkstatt")
 
@@ -135,9 +136,9 @@ def test_verify_patches_nutzt_extraktor():
     Codepfad-Verifikation per AST-Scan.
     """
     import ast
-    import pathlib
-
-    src = pathlib.Path("/opt/werkstatt/werkstatt/verify.py").read_text()
+    src = (
+        Path(__file__).resolve().parent.parent / "werkstatt" / "verify.py"
+    ).read_text(encoding="utf-8")
     tree = ast.parse(src)
     # Suche: in _verify_patches muss _extrahiere_fehlerkern gerufen werden
     found = False

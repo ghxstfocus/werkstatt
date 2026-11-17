@@ -111,7 +111,7 @@ def test_kein_aktives_event(projektion, tmp_path):
 
 
 def test_loop_prefix_rollen(projektion, tmp_path):
-    """Loop-emittierte Events (loop_explorer_*, loop_architect_*) kriegen Rolle."""
+    """Loop-Events ordnen Kontextwerkzeuge und Architect getrennt zu."""
     jetzt = datetime.now(UTC).isoformat()
     _schreibe(tmp_path, [
         {"kind": "loop_phase", "phase": "vorbereitung", "run_id": "r1",
@@ -127,7 +127,7 @@ def test_loop_prefix_rollen(projektion, tmp_path):
     for k in knoten:
         for ch in k.get("children") or []:
             rollen[ch.get("kind")] = ch.get("rolle")
-    assert rollen.get("loop_explorer_suchbegriffe") == "explorer"
+    assert rollen.get("loop_explorer_suchbegriffe") == "project_context_tools"
     assert rollen.get("loop_architect_ok") == "architect"
 
 

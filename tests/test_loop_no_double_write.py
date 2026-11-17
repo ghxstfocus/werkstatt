@@ -13,8 +13,12 @@ from factories import mk_state  # noqa: E402
 
 
 class TestNoDoubleWrite:
-    def test_applied_count_einmal_pro_patch(self, tmp_path: Path) -> None:
+    def test_applied_count_einmal_pro_patch(self, tmp_path: Path, monkeypatch) -> None:
         import werkstatt.loop as _loop
+        monkeypatch.setattr(
+            "werkstatt.apply_patches._call_hook",
+            lambda *_args, **_kwargs: {"allow": True},
+        )
         (tmp_path / "x.md").write_text("alt\n")
         state = mk_state(
             project_dir=tmp_path,

@@ -25,9 +25,10 @@ from tools.state_inventory import deklarierte_felder
 from werkstatt.state_contracts import TRANSITIONS
 
 ERWARTETE_UEBERGAENGE = frozenset({
-    "explorer->scout",
+    "project_context->planner",
     "scout->architect",
     "architect->planner",
+    "planner->loop",
     "planner->builder",
     "builder->reviewer",
 })

@@ -157,12 +157,15 @@ def reviewer_rejection_gate(state: RunState) -> int:
             audit_safe("loop_human_gate_rejected", {"gate": "phase_review"}, pd, pn)
             return 1
         if answer == "e":
-            print("Bitte Datei manuell bearbeiten, dann Enter.")
-            if not _HEADLESS:
-                try:
-                    input()
-                except EOFError:
-                    return 1
+            continue_answer = _frage_gate(
+                "phase_review_edit_continue",
+                "Datei manuell bearbeiten und danach j zum Fortfahren oder n zum Abbrechen waehlen.",
+                "jn",
+                project_name=state.project_name,
+                state=state,
+            ).strip().lower()
+            if continue_answer != "j":
+                return 1
             continue
         print("Ungueltige Eingabe. Erlaubt: j, n, e.")
 

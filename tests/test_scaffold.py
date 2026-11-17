@@ -28,7 +28,7 @@ def test_substitute_platzhalter():
     out = substitute("{{project_name}} / {{project_dir}} / {{date}}",
                      "demo", Path("/tmp/demo"))
     assert "demo" in out
-    assert "/tmp/demo" in out
+    assert str(Path("/tmp/demo")) in out
     assert heute in out
     assert "{{" not in out
 

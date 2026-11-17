@@ -275,15 +275,26 @@ def _delete_ziel_erlaubt(
     task_files=None -> Reflection-Modus, kein Whitelist-Check.
     Rueckgabe: (ok, grund). grund="" bei ok.
     """
+    _normalized_target = target_rel.as_posix()
     _parts = target_rel.parts
-    if target_rel.is_absolute() or ".." in _parts:
+    if (
+        target_rel.is_absolute()
+        or _normalized_target.startswith("/")
+        or ".." in _parts
+    ):
         return False, "pfad"
     if ".git" in _parts:
         return False, ".git"
     if "data" in _parts and "migrations" in _parts:
         return False, "migrations"
-    if task_files is not None and str(target_rel) not in task_files:
-        return False, "nicht_in_task_files"
+    if task_files is not None:
+        normalized_task_files = {
+            Path(item).as_posix()
+            for item in task_files
+            if isinstance(item, (str, Path))
+        }
+        if _normalized_target not in normalized_task_files:
+            return False, "nicht_in_task_files"
     _pdr = project_dir.resolve()
     try:
         (_pdr / target_rel).resolve().relative_to(_pdr)

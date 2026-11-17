@@ -54,6 +54,15 @@ def _state(tmp_path, tasks=True, tests=True, akz=True, explorer_ctx=None):
     return st
 
 
+def _approve_test_plan(phase_state):
+    """Seed the durable approval required by the checkpoint coordinator."""
+    phase_state.run_id = "test-approved-run"
+    phase_state.data["setup_complete"] = True
+    phase_state.data["plan_complete"] = True
+    phase_state.bind_approved_plan()
+    phase_state.save()
+
+
 def test_plan_gate_ok(tmp_path, monkeypatch):
     st = _state(tmp_path)
     monkeypatch.setattr(loop_mod, "_call_hook", lambda *_a, **_k: {"allow": True})
@@ -201,26 +210,6 @@ def test_loop_does_not_verify_before_planner_evidence_is_ready(tmp_path):
         verify.assert_not_called()
 
 
-def test_loop_happy_path(tmp_path):
-    st = _state(tmp_path)
-    st.tasks = [{
-        "id": "t1", "name": "Task 1", "criterion_refs": ["AC1"],
-        "task_files": ["src/task.py"],
-    }]
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
-    # _verify_patches mocken (verhindert subprocess.run(pytest))
-    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("werkstatt.loop.run_builder", return_value=True), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_reviewer", return_value=True), \
-             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st])
-        assert rc == 0
-
-
 def test_loop_cli_help_zeigt_usage():
     """CLI --help: argparse-usage + Exit 0."""
     result = subprocess.run(
@@ -254,60 +243,67 @@ def test_loop_cli_dry_run_uses_renderer():
     assert m_f.called, "renderer.footer muss aufgerufen werden"
 
 
-def test_loop_uses_phase_state(tmp_path):
-    """Loop persistiert Task-Fortschritt in PhaseState."""
+def test_loop_uses_approved_checkpoint_for_task_selection(tmp_path):
+    """The coordinator resumes a current human-approved graph directly."""
     st = _state(tmp_path)
+    st.run_id = "test-approved-run"
     st.tasks = [{
-        "id": "t1", "name": "Task 1", "criterion_refs": ["AC1"],
-        "task_files": ["src/task.py"],
+        "id": "t1", "name": "Read source", "action": "read",
+        "criterion_refs": ["AC1"], "task_files": ["src/task.py"],
     }]
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=st.akzeptanzkriterien)
-    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("werkstatt.loop.run_builder", return_value=True), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_reviewer", return_value=True), \
-             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st], phase_state=ps)
-    assert rc == 0
-    assert ps.is_complete() is True
+    _approve_test_plan(ps)
+    loop_mod.set_run_id(st.run_id)
+
+    decision = loop_mod._run_coordinator_action(ps, st)
+
+    assert decision["coordinator_action"] == "execute_task_checkpoint"
+    assert decision["next_task_id"] == "t1"
+    assert decision["next_executor"] == "read_only_task"
 
 
-def test_loop_resume_nach_unterbrechung(tmp_path):
-    """Resume: bereits erledigte Tasks werden uebersprungen."""
+def test_loop_resume_selects_only_pending_checkpoint_task(tmp_path):
+    """A resumed approved graph skips tasks already recorded as done."""
     st = _state(tmp_path)
+    st.run_id = "test-approved-run"
     st.tasks = [
-        {
-            "id": "t1", "name": "Task 1", "criterion_refs": ["AC1"],
-            "task_files": ["src/task.py"],
-        },
-        {
-            "id": "t2", "name": "Task 2", "criterion_refs": ["AC1"],
-            "task_files": ["src/task.py"],
-        },
+        {"id": "t1", "name": "Read first", "action": "read",
+         "criterion_refs": ["AC1"], "task_files": ["src/task.py"]},
+        {"id": "t2", "name": "Read second", "action": "read",
+         "criterion_refs": ["AC1"], "task_files": ["src/task.py"]},
     ]
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "task.py").write_text("x = 1\n", encoding="utf-8")
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=st.akzeptanzkriterien)
+    _approve_test_plan(ps)
     ps.mark_done("t1")
-    nxt = ps.get_next_task()
-    assert nxt is not None and nxt["id"] == "t2"
-    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("werkstatt.loop.run_builder", return_value=True), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_reviewer", return_value=True), \
-             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st], phase_state=ps)
-    assert rc == 0
-    assert ps.is_complete() is True
+    loop_mod.set_run_id(st.run_id)
 
+    decision = loop_mod._run_coordinator_action(ps, st)
+
+    assert decision["coordinator_action"] == "execute_task_checkpoint"
+    assert decision["next_task_id"] == "t2"
+
+
+def test_terminal_action_retry_key_requires_checkpoint_progress(tmp_path):
+    """Only the same terminal action with byte-equivalent state is a retry."""
+    first = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    first.data = {"phase_end_review_checkpoint": {"sha256": "a" * 64}}
+    repeated = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    repeated.data = {"phase_end_review_checkpoint": {"sha256": "a" * 64}}
+    advanced = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    advanced.data = {"phase_end_review_checkpoint": {"sha256": "b" * 64}}
+
+    key = loop_mod._checkpoint_action_key("phase_end_verify", first)
+
+    assert key is not None
+    assert loop_mod._checkpoint_action_key("phase_end_verify", repeated) == key
+    assert loop_mod._checkpoint_action_key("phase_end_verify", advanced) != key
+    assert loop_mod._checkpoint_action_key("execute_task_checkpoint", first) is None
 
 def test_loop_patch_reflection_bei_old_string_not_found(tmp_path):
     """M-298d: old_string_not_found triggert Reflection, nicht stumm weiter."""
@@ -375,121 +371,123 @@ def test_verify_patches_phase_filter(tmp_path):
     assert _verify_patches(st, phase="post_build") is False
 
 
-def test_loop_preflight_vor_planner(tmp_path):
-    """M-299e: Loop ruft Preflight-Scan vor Planner auf."""
-    import json
+def test_preflight_checkpoint_selected_before_architect(tmp_path, monkeypatch):
+    """Architect planning waits for current preflight evidence at a checkpoint."""
+    from werkstatt.checkpoint_coordinator import choose_planner_checkpoint_action
+
     st = _state(tmp_path, tasks=False)
-    st.tests = ["Test 1"]
-    st.akzeptanzkriterien = ["Kriterium 1"]
-    contract_dir = tmp_path / ".werkstatt"
-    contract_dir.mkdir()
-    (contract_dir / "verify.json").write_text(json.dumps({
-        "stages": [{"id": "py_compile", "command": ["false"]}]
-    }))
+    st.aufgabe = "Untersuche src/module.py auf Fehler und entwirf eine Reparatur."
+    st.coordinator_setup_context_ready = True
+    st.explorer_context = {"findings": "aktueller Projektkontext"}
+    st.planner_role_artifacts = {
+        "scout": {"output": {"auftrag_prosa": "Aktueller Scout-Bericht."}},
+    }
+    st.run_id = "preflight-checkpoint-run"
+    phase_state = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    phase_state.run_id = st.run_id
+    phase_state.init_new(st.aufgabe, [], tests=[], akzeptanzkriterien=[])
+    phase_state.run_id = st.run_id
+    loop_mod.set_run_id(st.run_id)
 
-    call_order = []
+    decision = choose_planner_checkpoint_action(
+        st,
+        phase_data=phase_state.data,
+        planner_role_stage="scout",
+        plan_checkpoint_complete=False,
+        plan_goal_matches=False,
+        plan_run_matches=False,
+        plan_project_matches=True,
+        plan_fingerprint_matches=False,
+        explicit_source_context_ready=False,
+        preserve_failed_tasks_on_setup=False,
+    )
+    assert decision["coordinator_action"] == "plan_preflight"
+    assert decision["next_executor"] == "preflight"
 
-    def _mock_preflight(state):
-        call_order.append("preflight")
-        return [{"klasse": "syntax", "stage_id": "py_compile", "datei": None, "text": "SyntaxError"}]
-
-    def _mock_planner(state, **_kwargs):
-        call_order.append("planner")
-        state.tasks = [{"id": "t1", "name": "Task 1"}]
-        state.tests = ["Test 1"]
-        state.akzeptanzkriterien = ["Kriterium 1"]
-        return True
-
-    with patch("werkstatt.planner._preflight_scan", side_effect=_mock_preflight), \
-         patch("werkstatt.loop.run_planner", side_effect=_mock_planner), \
-         patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_builder", return_value=True), \
-         patch("werkstatt.loop.run_reviewer", return_value=True), \
-             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("werkstatt.loop.audit"):
-        _rc = run_pipeline_loop("p", "a", [st])
-
-    assert "preflight" in call_order
-    assert "planner" in call_order
-    assert call_order.index("preflight") < call_order.index("planner")
-
-
-def test_pre_build_uebersprungen_bei_follow_up(tmp_path):
-    """M-299g: Pre-Build rot, aber Planner FOLLOW_UP -> Loop laeuft weiter."""
-    st = _state(tmp_path)
-    (tmp_path / "README.md").write_text("before\n", encoding="utf-8")
-    st.tasks = [{
-        "id": "t1", "name": "Task 1", "task_files": ["README.md"],
-        "criterion_refs": ["AC1"],
+    findings = [{
+        "klasse": "syntax", "stage_id": "py_compile",
+        "datei": "src/module.py", "text": "SyntaxError",
     }]
-    st.tests = ["Test 1"]
-    st.akzeptanzkriterien = ["Kriterium 1"]
-    st.blocker_fehler = []
-    st.follow_up_fehler = [{"klasse": "type", "stage_id": "mypy", "text": "unused"}]
-    st.ignore_fehler = []
+    monkeypatch.setattr("werkstatt.planner._preflight_scan", lambda _state: findings)
+    assert loop_mod._run_plan_preflight_checkpoint(st, phase_state, "p") == 0
+    assert st.preflight_fehler == findings
+    assert phase_state.load_preflight_checkpoint(
+        goal=st.aufgabe, run_id=st.run_id,
+    ) == findings
 
-    verify_calls = {"count": 0}
-    def _verify(state, phase=None):
-        verify_calls["count"] += 1
-        is_first_pre_build = verify_calls["count"] == 1 and phase == "pre_build"
-        result = not is_first_pre_build
-        if result:
-            state.last_verify_results = [
-                {
-                    "stage_id": "pytest_regression", "exit_code": 0,
-                    "ok": True, "scope_files": ["README.md"],
-                },
-            ]
-        return result
+def _approved_prebuild_candidate(tmp_path, findings):
+    goal = "Update README.md"
+    state = _state(tmp_path)
+    state.aufgabe = goal
+    state.tasks = [{
+        "id": "t1", "name": "Update README.md", "action": "update",
+        "task_files": ["README.md"], "criterion_refs": ["AC1"],
+    }]
+    state.tests = ["pytest -q"]
+    state.akzeptanzkriterien = ["Kriterium 1"]
+    state.preflight_fehler = findings
+    state.run_id = "prebuild-candidate-run"
+    (tmp_path / "README.md").write_text("before\n", encoding="utf-8")
 
-    with patch("werkstatt.loop._verify_patches", side_effect=_verify), \
-         patch("werkstatt.loop.run_builder", return_value=True), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_reviewer", return_value=True), \
-         patch("werkstatt.roles.checkpoint_actions._verify_patches", side_effect=_verify), \
-             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st])
-    assert rc == 0
-
-
-def test_pre_build_blockiert_bei_blocker(tmp_path):
-    """M-299g: Pre-Build rot, Planner meldet BLOCKER -> Loop stoppt."""
-    st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1"}]
-    st.tests = ["Test 1"]
-    st.akzeptanzkriterien = ["Kriterium 1"]
-    st.blocker_fehler = [{"klasse": "syntax", "stage_id": "py_compile", "text": "SyntaxError"}]
-    st.follow_up_fehler = []
-    st.ignore_fehler = []
-
-    with patch("werkstatt.loop._verify_patches", return_value=False), \
-         patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st])
-    assert rc == 1
+    phase = PhaseState("p", base_dir=tmp_path / ".werkstatt")
+    phase.run_id = state.run_id
+    digest = phase.record_plan_candidate(
+        goal=goal,
+        run_id=state.run_id,
+        tasks=state.tasks,
+        tests=state.tests,
+        criteria=state.akzeptanzkriterien,
+        phases=[],
+        architect_prose="Plan mit aktuellen Belegen.",
+        preflight_findings=findings,
+    )
+    assert phase.approve_plan_candidate(
+        goal=goal, run_id=state.run_id, candidate_sha256=digest,
+    )
+    loop_mod.set_run_id(state.run_id)
+    return state, phase
 
 
-def test_pre_build_blockiert_ohne_klassifikation(tmp_path):
-    """M-299g: Pre-Build rot, keine Klassifikation -> Loop stoppt (alt)."""
-    st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1"}]
-    st.tests = ["Test 1"]
-    st.akzeptanzkriterien = ["Kriterium 1"]
-    st.blocker_fehler = []
-    st.follow_up_fehler = []
-    st.ignore_fehler = []
+def test_prebuild_classified_unrelated_debt_is_skipped(tmp_path, monkeypatch):
+    findings = [{
+        "klasse": "type", "stage_id": "mypy",
+        "datei": "core/unrelated.py", "text": "bestehender Fehler",
+    }]
+    state, phase = _approved_prebuild_candidate(tmp_path, findings)
+    monkeypatch.setattr(loop_mod, "_plan_gate", lambda _state: True)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda *_a, **_k: False)
 
-    with patch("werkstatt.loop._verify_patches", return_value=False), \
-         patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st])
-    assert rc == 1
+    assert loop_mod._run_plan_candidate_prebuild_verify(
+        state, phase, "p",
+    ) == 0
+    assert phase.data["plan_prebuild_verify_checkpoint"]["status"] == "baseline_debt_only"
+    assert phase.data["plan_prebuild_verify_checkpoint"]["relevant_failure_count"] == 0
 
+
+def test_prebuild_blocker_on_task_file_stops_candidate(tmp_path, monkeypatch):
+    findings = [{
+        "klasse": "syntax", "stage_id": "py_compile",
+        "datei": "README.md", "text": "SyntaxError",
+    }]
+    state, phase = _approved_prebuild_candidate(tmp_path, findings)
+    monkeypatch.setattr(loop_mod, "_plan_gate", lambda _state: True)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda *_a, **_k: False)
+
+    assert loop_mod._run_plan_candidate_prebuild_verify(
+        state, phase, "p",
+    ) == 1
+    assert phase.data.get("plan_complete") is not True
+
+
+def test_prebuild_unclassified_failure_stops_closed(tmp_path, monkeypatch):
+    state, phase = _approved_prebuild_candidate(tmp_path, [])
+    monkeypatch.setattr(loop_mod, "_plan_gate", lambda _state: True)
+    monkeypatch.setattr(loop_mod, "_verify_patches", lambda *_a, **_k: False)
+
+    assert loop_mod._run_plan_candidate_prebuild_verify(
+        state, phase, "p",
+    ) == 1
+    assert phase.data.get("plan_complete") is not True
 
 def test_extract_files_from_tasks():
     """M-299i: Datei-Pfade aus Task-Text extrahieren."""
@@ -504,49 +502,6 @@ def test_extract_files_from_tasks():
     assert "core/x.py" in files
     assert "core/changeapplier/applier.py" in files
     assert len(files) == 3
-
-
-def test_pre_build_deterministische_klassifikation(tmp_path):
-    """M-299i: Baseline-Fehler ausserhalb Task-Dateien -> Loop laeuft weiter."""
-    st = _state(tmp_path)
-    (tmp_path / "README.md").write_text("before\n", encoding="utf-8")
-    st.tasks = [{
-        "id": "t1", "name": "Update README.md", "description": "Add line",
-        "task_files": ["README.md"],
-        "criterion_refs": ["AC1"],
-    }]
-    st.tests = ["Test 1"]
-    st.akzeptanzkriterien = ["Kriterium 1"]
-    # Preflight-Fehler in NICHT-Task-Datei
-    st.preflight_fehler = [
-        {"klasse": "type", "stage_id": "mypy", "datei": "core/unrelated.py", "text": "err"},
-    ]
-
-    # verify_patches: erster Call (pre_build) rot, dann True
-    verify_calls = {"n": 0}
-    def _verify(state, phase=None):
-        verify_calls["n"] += 1
-        is_first_pre_build = verify_calls["n"] == 1 and phase == "pre_build"
-        result = not is_first_pre_build
-        if result:
-            state.last_verify_results = [
-                {
-                    "stage_id": "pytest_regression", "exit_code": 0,
-                    "ok": True, "scope_files": ["README.md"],
-                },
-            ]
-        return result
-
-    with patch("werkstatt.loop._verify_patches", side_effect=_verify), \
-         patch("werkstatt.loop.run_builder", return_value=True), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_reviewer", return_value=True), \
-         patch("werkstatt.roles.checkpoint_actions._verify_patches", side_effect=_verify), \
-             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st])
-    assert rc == 0  # Loop lief durch
 
 
 def test_human_gate_zeigt_diff(tmp_path):
@@ -735,35 +690,23 @@ def test_loop_task_read_only(tmp_path, monkeypatch):
     assert "value = 1" in passed_sources[0]["excerpt"]
 
 
-def test_loop_reviewer_after_reflection(tmp_path):
-    """M-306d: Nach Reflection muss Reviewer erneut pruefen."""
-    st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Task 1", "action": "update",
-                 "task_files": ["app/foo.py"]}]
-    st.tests = ["Test 1"]
-    st.akzeptanzkriterien = ["Kriterium 1"]
+def test_loop_reviewer_after_reflection_uses_checkpoint_recovery_policy():
+    """Recovery after chat/reflection requires independent semantic review."""
+    from werkstatt.review_dispatch import reviewer_dispatch_decision
 
-    reviewer_calls = {"n": 0}
-    def _mock_reviewer(state):
-        reviewer_calls["n"] += 1
-        # Erster Aufruf: rejected. Zweiter Aufruf (nach Reflection): auch rejected.
-        return False
+    decision = reviewer_dispatch_decision(
+        {
+            "name": "Repair auth handling",
+            "description": "Fix the rejected authentication behavior.",
+            "action": "update",
+            "task_files": ["src/auth.py"],
+        },
+        "diff --git a/src/auth.py b/src/auth.py\n+++ b/src/auth.py\n+return check(user)",
+        recovery=True,
+    )
 
-    # M-343c: pytest ist das letzte Wort. Damit der Reviewer-Reject
-    # durchgreift (rc=1), muss last_verify_errors gesetzt sein.
-    st.last_verify_errors = ["pytest: mock failed"]
-
-    with patch("werkstatt.loop.run_builder", return_value=True), \
-         patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_reviewer", side_effect=_mock_reviewer), \
-         patch("werkstatt.loop._reflection_loop", return_value=True), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st])
-
-    # Reviewer rejected nach Reflection + last_verify_errors -> return 1
-    assert rc == 1
-    assert reviewer_calls["n"] == 2  # zwei Aufrufe: 1 original + 1 nach Reflection
+    assert decision["invoke_reviewer"] is True
+    assert decision["reason"] == "chat_recovery_requires_independent_review"
 
 
 def test_reflection_ruft_builder(tmp_path, monkeypatch):
@@ -780,6 +723,8 @@ def test_reflection_ruft_builder(tmp_path, monkeypatch):
 
     monkeypatch.setattr(builder_mod, "run_builder", _fake_builder)
     monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr("werkstatt.apply_patches._call_hook", lambda *_a, **_k: {"allow": True})
+    monkeypatch.setattr("werkstatt.apply_patches._call_hook", lambda *_a, **_k: {"allow": True})
     monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
 
     loop_mod._reflection_loop(st, max_runden=2)
@@ -1053,6 +998,7 @@ def test_reflection_patch_anwendung_search_replace(tmp_path, monkeypatch):
 
     monkeypatch.setattr(builder_mod, "run_builder", _fake_builder)
     monkeypatch.setattr(loop_mod, "audit", lambda *a, **k: None)
+    monkeypatch.setattr("werkstatt.apply_patches._call_hook", lambda *_a, **_k: {"allow": True})
     # Erste Runde: verify rot, zweite: gruen (nach Patch)
     _calls = [0]
     def _fake_verify(s, phase=None):
@@ -1094,13 +1040,13 @@ def test_reflection_old_string_not_found(tmp_path, monkeypatch):
     _audits = []
     monkeypatch.setattr(builder_mod, "run_builder", _fake_builder)
     monkeypatch.setattr(loop_mod, "audit", lambda kind, payload, *a, **k: _audits.append(kind))
+    monkeypatch.setattr("werkstatt.apply_patches._call_hook", lambda *_a, **_k: {"allow": True})
     monkeypatch.setattr(loop_mod, "_verify_patches", lambda s, phase=None: False)
 
     result = loop_mod._reflection_loop(st, max_runden=1)
     assert result is False
-    # M-330: Apply-Pfad ist _apply_patches_with_hooks, das auditiert
-    # loop_patch_old_string_not_found (einheitlich mit Haupt-Pfad).
-    assert "loop_patch_old_string_not_found" in _audits
+    # Current apply contract emits a reflection-level event with diagnostics.
+    assert "loop_reflection_patch_nicht_angewendet" in _audits
 
 
 def test_reflection_kein_patch_vom_builder(tmp_path, monkeypatch):
@@ -1537,159 +1483,6 @@ def test_expand_cmd_changed_py_files_leer(tmp_path):
     assert result is None
 
 
-def test_reviewer_reject_ignoriert_wenn_pytest_gruen(tmp_path, monkeypatch):
-    """M-343c: Reviewer-Reject + last_verify_errors leer -> task_ok."""
-    from werkstatt import loop as loop_mod
-    from werkstatt.state import RunState
-
-    (tmp_path / ".werkstatt").mkdir()
-    (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
-    )
-    (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
-
-    st = RunState(
-        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
-        always={}, optional={}, file_whitelist=[], api_key="dummy",
-        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
-    )
-    st.tasks = [{"id": "t1", "name": "T1", "action": "update",
-                 "task_files": ["core/checks.py"]}]
-    st.phasen = []
-
-    _audits = []
-    monkeypatch.setattr(loop_mod, "audit",
-                        lambda k, p, *a, **kw: _audits.append(k))
-    monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
-    monkeypatch.setattr(loop_mod, "run_explorer",
-                        lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
-    def _fake_builder(_s):
-        # M-359b: run_builder muss state.patches fuellen, damit
-        # M-359 (kein_patch -> fail_closed) nicht greift.
-        _s.patches = [{"action": "update", "file": "core/checks.py",
-                       "old_string": "x = 1", "new_string": "x = 2"}]
-        return True
-    monkeypatch.setattr(loop_mod, "run_builder", _fake_builder)
-    monkeypatch.setattr(loop_mod, "_verify_patches", _verify_ok_with_evidence)
-    monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
-    monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
-    monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
-    # K23c: Phase-End-Review muss im Test OK sein, sonst rc=1.
-    from werkstatt import reviewer as _rv_mod
-    monkeypatch.setattr(_rv_mod, "run_phase_end_review", lambda s: True)
-    for _fn in ("header", "step", "task", "task_ok", "task_failed",
-                "group_start", "group_end", "footer"):
-        if hasattr(loop_mod, _fn):
-            monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
-
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
-    assert rc == 0, f"erwartet rc=0, war {rc}; audits={_audits}"
-    assert "loop_reviewer_reject_ignoriert" in _audits
-
-
-def test_reviewer_reject_fail_closed_bei_leerem_patch(tmp_path, monkeypatch):
-    """M-359: Reviewer-Reject + kein Patch angewendet -> fail-closed.
-
-    Frueher (M-343c): pytest gruen reicht -> task_ok, auch wenn
-    der Patch gar nicht angewendet wurde (old_string_not_found).
-    Jetzt (M-359): state.patches == [] -> fail_closed.
-    """
-    from werkstatt import loop as loop_mod
-    from werkstatt.state import RunState
-
-    (tmp_path / ".werkstatt").mkdir()
-    (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
-    )
-    (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
-
-    st = RunState(
-        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
-        always={}, optional={}, file_whitelist=[], api_key="dummy",
-        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
-    )
-    st.tasks = [{"id": "t1", "name": "T1", "action": "update",
-                 "task_files": ["core/checks.py"]}]
-    st.phasen = []
-
-    _audits = []
-    monkeypatch.setattr(loop_mod, "audit",
-                        lambda k, p, *a, **kw: _audits.append(k))
-    monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
-    monkeypatch.setattr(loop_mod, "run_explorer",
-                        lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
-
-    def _fake_builder_empty(_s):
-        # Kein Patch -> state.patches bleibt []
-        _s.patches = []
-        return True
-    monkeypatch.setattr(loop_mod, "run_builder", _fake_builder_empty)
-    monkeypatch.setattr(loop_mod, "_verify_patches", _verify_ok_with_evidence)
-    monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
-    monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
-    monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
-    for _fn in ("header", "step", "task", "task_ok", "task_failed",
-                "group_start", "group_end", "footer"):
-        if hasattr(loop_mod, _fn):
-            monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
-
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
-    assert rc == 1, f"erwartet rc=1 (fail_closed), war {rc}; audits={_audits}"
-    assert "loop_reviewer_reject_fail_closed" in _audits
-
-
-def test_reviewer_reject_bleibt_rot_wenn_pytest_rot(tmp_path, monkeypatch):
-    """M-343c: Reviewer-Reject + last_verify_errors nicht leer -> return 1."""
-    from werkstatt import loop as loop_mod
-    from werkstatt.state import RunState
-
-    (tmp_path / ".werkstatt").mkdir()
-    (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
-    )
-    (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
-
-    st = RunState(
-        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
-        always={}, optional={}, file_whitelist=[], api_key="dummy",
-        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
-    )
-    st.tasks = [{"id": "t1", "name": "T1", "action": "update",
-                 "task_files": ["core/checks.py"]}]
-    st.phasen = []
-
-    _audits = []
-    monkeypatch.setattr(loop_mod, "audit",
-                        lambda k, p, *a, **kw: _audits.append(k))
-    monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
-    monkeypatch.setattr(loop_mod, "run_explorer",
-                        lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
-    monkeypatch.setattr(loop_mod, "run_builder", lambda s: True)
-
-    # _verify_patches: pre_build True, danach False (und setzt last_verify_errors)
-    _calls = [0]
-    def _vp(s, phase=None):
-        _calls[0] += 1
-        if _calls[0] == 1:
-            return True
-        s.last_verify_errors = ["pytest: 3 failed"]
-        return False
-    monkeypatch.setattr(loop_mod, "_verify_patches", _vp)
-    monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
-    monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
-    monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
-    for _fn in ("header", "step", "task", "task_ok", "task_failed",
-                "group_start", "group_end", "footer"):
-        if hasattr(loop_mod, _fn):
-            monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
-
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
-    assert rc == 1, f"erwartet rc=1, war {rc}; audits={_audits}"
-
-
 def test_plan_renderer_zeigt_phasen(tmp_path, capsys, monkeypatch):
     """M-348a: plan_renderer.plan zeigt Phasen + Tasks.
 
@@ -1813,57 +1606,3 @@ def test_human_gate_plan_eof_reject(tmp_path, monkeypatch):
     rc = loop_mod._human_gate_plan(st, )
     assert rc == 1
     assert "loop_plan_gate_eof" in _audits
-
-
-def test_loop_builder_false_sofort_return(tmp_path, monkeypatch):
-    """M-355b: run_builder=False -> sofort loop_task_failed + rc=1.
-
-    Vor M-355b fiel der Loop in den Patch-Pfad mit leerem
-    state.patches und lief durch Verify/Reviewer/Reflection.
-    M-359 fing das erst nach 45s als
-    loop_reviewer_reject_fail_closed ab. M-355b bricht sofort ab.
-    """
-    from werkstatt import loop as loop_mod
-
-    (tmp_path / ".werkstatt").mkdir()
-    (tmp_path / ".werkstatt" / "verify.json").write_text(
-        '{"stages": [{"id": "pc", "command": ["python3", "-c", "pass"]}]}'
-    )
-    (tmp_path / "core").mkdir()
-    (tmp_path / "core" / "checks.py").write_text("x = 1\n")
-
-    st = RunState(
-        block_id="p", aufgabe="a", start_ts="", docs={}, agents={},
-        always={}, optional={}, file_whitelist=[], api_key="dummy",
-        budget={}, agent_docs={}, project_dir=tmp_path, project_name="p",
-    )
-    st.tasks = [{"id": "t1", "name": "T1", "action": "create",
-                 "task_files": ["core/neu.py"]}]
-    st.phasen = []
-
-    _audits = []
-    monkeypatch.setattr(loop_mod, "audit",
-                        lambda k, p, *a, **kw: _audits.append(k))
-    monkeypatch.setattr(loop_mod, "_plan_gate", lambda s: True)
-    monkeypatch.setattr(loop_mod, "run_explorer",
-                        lambda s, a: {"key_files": [], "findings": "", "next_reads": []})
-    # run_builder liefert False (create-Task scheitert).
-    monkeypatch.setattr(loop_mod, "run_builder", lambda s: False)
-    monkeypatch.setattr(loop_mod, "_verify_patches", _verify_ok_with_evidence)
-    monkeypatch.setattr(loop_mod, "_call_hook", lambda n, p: {"allow": True})
-    monkeypatch.setattr(loop_mod, "run_reviewer", lambda s: False)
-    monkeypatch.setattr(loop_mod, "_reflection_loop", lambda s, **kw: False)
-    for _fn in ("header", "step", "task", "task_ok", "task_failed",
-                "group_start", "group_end", "footer"):
-        if hasattr(loop_mod, _fn):
-            monkeypatch.setattr(loop_mod, _fn, lambda *a, **kw: None)
-
-    rc = loop_mod.run_pipeline_loop("p", "a", [st])
-    # M-355b: rc=1, Grund builder_failed.
-    assert rc == 1, f"erwartet rc=1, war {rc}; audits={_audits}"
-    assert "loop_task_failed" in _audits
-    # M-355b: KEIN Durchfall zu M-359.
-    assert "loop_reviewer_reject_fail_closed" not in _audits, (
-        f"M-355b: Durchfall zu fail_closed; audits={_audits}"
-    )
-

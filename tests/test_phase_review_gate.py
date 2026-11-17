@@ -90,8 +90,8 @@ def test_ungueltig_dann_j(monkeypatch):
 
 
 def test_e_dann_n(monkeypatch):
-    """'e' -> manuell, dann 'n' -> 1."""
-    _mock_interactive(monkeypatch, ["e", "", "n"])
+    """'e' -> manuell, bestaetigen, dann 'n' -> 1."""
+    _mock_interactive(monkeypatch, ["e", "j", "n"])
     assert reviewer_rejection_gate(_mk_state()) == 1
 
 

@@ -13,7 +13,7 @@ import pytest
 
 def _fake_popen(
     aufrufe: list[list[str]],
-    pid: int = os.getpid(),
+    pid: int = 987650,
     kwargs_log: list[dict[str, Any]] | None = None,
 ) -> Any:
     """Fabrik fuer einen Fake-Popen, der argv protokolliert."""
@@ -166,7 +166,12 @@ def test_loop_subprozess_start_stop(
             recorded_start_contexts.append(_kwargs.get("start_context"))
             return super().create_run_record(project, run_id, target, **_kwargs)
 
-    fake_popen = _fake_popen(aufrufe, kwargs_log=popen_kwargs)
+    # Never use the pytest worker's PID for a fake child process: a fallback
+    # process handle could otherwise send its stop signal to pytest itself.
+    fake_pid = 987654
+    fake_popen = _fake_popen(
+        aufrufe, pid=fake_pid, kwargs_log=popen_kwargs,
+    )
 
     def _popen_after_run_record(*args: Any, **kwargs: Any) -> Any:
         assert run_records, "RunRecord must exist before worker spawn"
@@ -185,7 +190,7 @@ def test_loop_subprozess_start_stop(
     assert antwort.status_code == 200
     daten = antwort.json()
     assert daten["gestartet"] is True
-    assert daten["pid"] == os.getpid()
+    assert daten["pid"] == fake_pid
     assert aufrufe[0][:5] == [
         sys.executable,
         "-m",
@@ -197,7 +202,9 @@ def test_loop_subprozess_start_stop(
     assert "--run-id" in aufrufe[0]
     assert "--aufgabe" in aufrufe[0]
     task_idx = aufrufe[0].index("--aufgabe")
-    assert "### OP-999: Test" in aufrufe[0][task_idx + 1]
+    loop_goal = aufrufe[0][task_idx + 1]
+    assert loop_goal.startswith("OP-999: Test")
+    assert "### OP-999: Test" not in loop_goal
     run_id_idx = aufrufe[0].index("--run-id")
     assert aufrufe[0][run_id_idx + 1].startswith("demo-")
     assert daten["run_id"] == aufrufe[0][run_id_idx + 1]
@@ -378,7 +385,9 @@ def test_parallele_starts_starten_nur_einen_loop(
     entered = Event()
     release = Event()
     aufrufe: list[list[str]] = []
-    normal = _fake_popen(aufrufe)
+    # The fake child must never share the pytest worker's PID: this test
+    # exercises the stop route after concurrent starts.
+    normal = _fake_popen(aufrufe, pid=987655)
 
     def langsamer_popen(argv: list[str], *args: Any, **kwargs: Any) -> Any:
         entered.set()
@@ -547,6 +556,7 @@ def test_loop_status_recovery_nach_server_neustart(
     from fastapi.testclient import TestClient
 
     from werkstatt.web import app as app_modul
+    from werkstatt.web import loop_registry as registry_modul
     from werkstatt.web.loop_registry import LoopProcessRegistry
 
     docs_dir = tmp_path / "demo" / "docs"
@@ -559,7 +569,10 @@ def test_loop_status_recovery_nach_server_neustart(
         tmp_path / ".werkstatt" / "web-loop-registry.db",
     )
     assert registry.reserve("demo", "run-after-restart") == (True, None)
-    registry.register("demo", "run-after-restart", os.getpid())
+    # Model a live recovered child without registering the pytest worker PID.
+    fake_pid = 987656
+    monkeypatch.setattr(registry_modul, "_pid_alive", lambda *_args: True)
+    registry.register("demo", "run-after-restart", fake_pid)
 
     # Simulate a fresh web worker: only the durable process record remains.
     _reset_loop_registry(app_modul)
@@ -652,7 +665,8 @@ def test_start_waehlt_einzige_pruefbare_offene_op(
     assert audit_events[0][2] == "web_op_selected"
     assert audit_events[0][4]["op_id"] == "OP-101"
     assert antwort.json()["auswahl"]["id"] == "OP-101"
-    assert "### OP-101:" in antwort.json()["aufgabe"]
+    assert antwort.json()["aufgabe"].startswith("OP-101: Eindeutige Arbeit")
+    assert "Akzeptanzkriterien:\nVerhalten ist belegt." in antwort.json()["aufgabe"]
     assert aufrufe
 
 
@@ -793,7 +807,9 @@ def test_autonomous_start_resolves_dependency_completed_in_progress(
     assert antwort.status_code == 200
     assert antwort.json()["gestartet"] is True
     task_idx = aufrufe[0].index("--aufgabe")
-    assert "### OP-322: Arbeit nach erledigtem OP" in aufrufe[0][task_idx + 1]
+    assert aufrufe[0][task_idx + 1].startswith(
+        "OP-322: Arbeit nach erledigtem OP",
+    )
     assert client.post("/api/projects/demo/stop").status_code == 200
 
 

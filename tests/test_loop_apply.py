@@ -18,6 +18,7 @@ keine Audit-Treffer seit 2026-10-19).
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -223,7 +224,12 @@ def test_resolve_venv_cmd_kein_exec_bit(tmp_path):
     exe = tmp_path / ".venv" / "bin" / "pytest"
     exe.write_text("")
     exe.chmod(0o644)
-    assert loop._resolve_venv_cmd(["pytest"], tmp_path) == ["pytest"]
+    result = loop._resolve_venv_cmd(["pytest"], tmp_path)
+    if os.name == "nt":
+        # Windows does not use POSIX execute bits when resolving commands.
+        assert result == [str(exe)]
+    else:
+        assert result == ["pytest"]
 
 
 # =====================================================================

@@ -79,7 +79,9 @@ class TestCommitTaskFilesGuard:
         """Echter Done: task_files im Diff -> Commit."""
         _init_repo(tmp_path)
         (tmp_path / "docs").mkdir()
-        (tmp_path / "docs" / "STATUS.md").write_text("# Status\n")
+        (tmp_path / "docs" / "STATUS.md").write_text(
+            "# Status\n", newline="\n",
+        )
         from werkstatt import loop as _loop
         state = _mk_state(tmp_path, [{
             "id": "t1", "status": "done",

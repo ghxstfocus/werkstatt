@@ -20,8 +20,8 @@ def _lade_pyproject() -> dict:
         return tomllib.load(f)
 
 
-def test_importlinter_unveraendert() -> None:
-    """Import-Linter-Contracts bleiben unveraendert."""
+def test_importlinter_spiegelt_aktuelle_modulgrenzen() -> None:
+    """Import-Linter-Contracts referenzieren vorhandene Modulgrenzen."""
     daten = _lade_pyproject()
     importlinter = daten["tool"]["importlinter"]
     assert importlinter["root_package"] == "werkstatt"
@@ -29,8 +29,13 @@ def test_importlinter_unveraendert() -> None:
     contracts = importlinter["contracts"]
     assert len(contracts) == 3
     assert contracts[0]["name"] == "render ist eine Leaf-Schicht"
-    assert contracts[1]["name"] == "roles.builder kennt keine phases oder web"
-    assert contracts[2]["name"] == "phases kennt keine web"
+    assert contracts[1]["name"] == "roles.builder kennt keine runtime_compat oder web"
+    assert contracts[2]["name"] == "runtime_compat kennt keine web"
+    assert all(
+        "werkstatt.phases" not in contract.get("source_modules", [])
+        and "werkstatt.phases" not in contract.get("forbidden_modules", [])
+        for contract in contracts
+    )
 
 
 def test_ruff_lint_unveraendert() -> None:

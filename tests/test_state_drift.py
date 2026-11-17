@@ -15,10 +15,12 @@ from state_drift import check_drift
 def test_check_heute_gruen():
     """Realer Repo-Zustand ist drift-frei."""
     result = check_drift()
+    from werkstatt import state_contracts
+
     assert result["ok"] is True
     assert result["unbekannte_felder"] == []
     assert result["fehlende_uebergaenge"] == []
-    assert result["n_transitions"] == 5
+    assert result["n_transitions"] == len(state_contracts.TRANSITIONS)
 
 
 def test_check_erkennt_unbekanntes_feld():

@@ -132,3 +132,39 @@ def test_task_completion_invokes_reviewer_only_when_checkpoint_requires_it(
     assert result.status == "completed"
     assert review_calls == [3]
     assert result.tasks_ok_delta == 1
+
+
+def test_task_reviewer_rejection_returns_to_coordinator_as_failed_checkpoint(
+    tmp_path: Path,
+) -> None:
+    state = RunState(project_dir=tmp_path, project_name="demo")
+    phase = _PhaseState()
+    review_calls: list[int] = []
+    task_ends: list[dict[str, object]] = []
+    result = complete_task_checkpoint(
+        state,
+        phase,
+        {"task_files": ["src/auth.py"]},
+        task_id="t1",
+        task_name="Repair auth",
+        task_index=1,
+        decision="review_task_checkpoint",
+        decision_payload=_decision(review=True),
+        services=_services(
+            should_review=True,
+            review_ok=False,
+            review_calls=review_calls,
+            task_end_calls=task_ends,
+        ),
+    )
+
+    assert result.status == "review_rejected"
+    assert result.reason == "reviewer_rejected_at_checkpoint"
+    assert review_calls == [1]
+    assert task_ends == [{
+        "ok": False,
+        "name": "Repair auth",
+        "failure": "reviewer_rejected_at_checkpoint",
+        "failure_detail": "[]",
+    }]
+    assert phase.saved == 1

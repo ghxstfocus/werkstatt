@@ -50,9 +50,11 @@ BASELINE_TOTE = frozenset({
 BASELINE_GETATTR_ONLY = frozenset({
     "_w51g_gemessen",
     "baseline_gruen",
+    "builder_failure_detail",
     "explorer_pytest_laufzeit_s",
     "max_total_llm_s",
     "messungen_nach_apply",
+    "op_criteria_progress_marker",
 })
 
 

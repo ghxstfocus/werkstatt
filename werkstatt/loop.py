@@ -1741,13 +1741,32 @@ def _run_plan_candidate_prebuild_verify(
     verify_ok = _verify_patches(state, phase="pre_build")
     relevant: list[dict[str, Any]] = []
     if not verify_ok:
+        findings = state.preflight_fehler
+        if not isinstance(findings, list) or not findings or any(
+            not isinstance(item, dict)
+            or not isinstance(item.get("klasse"), str)
+            or not item.get("klasse", "").strip()
+            or not isinstance(item.get("stage_id"), str)
+            or not item.get("stage_id", "").strip()
+            for item in findings
+        ):
+            audit(
+                "loop_gate_failed",
+                _gate_failed_payload(
+                    "pre_build",
+                    ["fehlende oder unvollstaendige Preflight-Klassifikation"],
+                ),
+                state.project_dir,
+                project_name,
+            )
+            return 1
         task_files = _extract_files_from_tasks(state.tasks)
         relevant = [
-            item for item in (state.preflight_fehler or [])
-            if isinstance(item, dict)
-            and item.get("datei")
-            and any(
-                item["datei"] in target or target in item["datei"]
+            item for item in findings
+            if not item.get("datei")
+            or any(
+                str(item["datei"]) in target
+                or target in str(item["datei"])
                 for target in task_files
             )
         ]
@@ -3100,6 +3119,34 @@ def run_pipeline_loop(
     return 1
 
 
+_TERMINAL_CHECKPOINT_ACTIONS = frozenset({
+    "phase_end_review", "human_gate", "phase_end_verify",
+    "commit_run", "post_commit_verify", "finalize_run",
+})
+
+
+def _checkpoint_action_key(action: object, phase_state: PhaseState | None) -> tuple[str, str] | None:
+    """Fingerprint terminal action input so an unchanged stale retry stops."""
+    if action not in _TERMINAL_CHECKPOINT_ACTIONS:
+        return None
+    checkpoint_data = phase_state.data if phase_state is not None else {}
+    try:
+        checkpoint_bytes = json.dumps(
+            checkpoint_data,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeEncodeError):
+        checkpoint_bytes = repr(checkpoint_data).encode(
+            "utf-8", errors="replace",
+        )
+    return (
+        str(action), hashlib.sha256(checkpoint_bytes).hexdigest(),
+    )
+
+
 def _run_pipeline_loop_impl(
     project_name: str,
     aufgabe: str,
@@ -3234,6 +3281,7 @@ def _run_pipeline_loop_impl(
     tasks_ok = 0
     tasks = state.tasks
     finalize_rc: int | None = None
+    last_checkpoint_action: tuple[str, str] | None = None
     while True:
         check_run_lease(state)
         if phase_state is not None:
@@ -3287,6 +3335,34 @@ def _run_pipeline_loop_impl(
             )
             return 1
         action = decision.get("coordinator_action")
+        current_checkpoint = _checkpoint_action_key(action, phase_state)
+        if current_checkpoint is not None:
+            if current_checkpoint == last_checkpoint_action:
+                audit(
+                    "loop_failed",
+                    {
+                        "reason": "coordinator_checkpoint_repeated_without_progress",
+                        "action": action,
+                        "checkpoint_sha256": current_checkpoint[1],
+                        "recoverable": True,
+                        "next_step": (
+                            "Die Ursache des stale/rejected Checkpoints beheben "
+                            "und den Run aus dem gespeicherten Stand fortsetzen."
+                        ),
+                    },
+                    state.project_dir,
+                    project_name,
+                )
+                if phase_state is not None:
+                    phase_state.save()
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
+            last_checkpoint_action = current_checkpoint
+        else:
+            last_checkpoint_action = None
         if action == "stop_missing_evidence":
             decision_basis = decision.get("decision_basis")
             missing_inputs = (

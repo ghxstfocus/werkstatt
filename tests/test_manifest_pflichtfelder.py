@@ -13,7 +13,7 @@ PFLICHT = [
     "entry", "status", "roadmap", "architecture",
     "conventions", "adr_index", "glossary",
 ]
-BASE = Path("/opt/werkstatt")
+BASE = Path(__file__).resolve().parents[1]
 
 # Was §3 als verboten listet, unveraendert — diese Strings MUESSEN im Text stehen.
 VERBOTEN_ORIGINAL = [

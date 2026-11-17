@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-PLANNER = Path("/opt/werkstatt/werkstatt/planner.py")
+PLANNER = Path(__file__).resolve().parents[1] / "werkstatt" / "planner.py"
 
 
 def test_vage_keywords_in_planner():

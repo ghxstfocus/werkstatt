@@ -24,7 +24,7 @@ sys.path.insert(0, "/opt/werkstatt")
 def _finde_rollen_zugriffe() -> set[str]:
     """AST-Scan: welche ROLLEN["<name>"]-Subscripts gibt es in werkstatt/?"""
     gesehen: set[str] = set()
-    root = pathlib.Path("/opt/werkstatt/werkstatt")
+    root = pathlib.Path(__file__).resolve().parent.parent / "werkstatt"
     for py in root.rglob("*.py"):
         if "__pycache__" in str(py):
             continue

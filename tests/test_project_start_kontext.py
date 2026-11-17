@@ -72,8 +72,10 @@ def client_mit_projekt(monkeypatch, tmp_path):
     app_modul._LOOP_LOG_HANDLES.clear()
 
 
-def test_start_mit_op_id_uebergibt_volltext(client_mit_projekt, monkeypatch):
-    """POST /start mit op_id -> --aufgabe enthaelt den VOLLEN OP-Block."""
+def test_start_mit_op_id_uebergibt_kompakten_op_kontext(
+    client_mit_projekt, monkeypatch,
+):
+    """POST /start uebergibt nur den gewaehlten, kompakten OP-Kontext."""
     client, app_modul, _ = client_mit_projekt
     aufrufe: list[list[str]] = []
     monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
@@ -85,7 +87,8 @@ def test_start_mit_op_id_uebergibt_volltext(client_mit_projekt, monkeypatch):
     idx = argv.index("--aufgabe")
     aufgabe = argv[idx + 1]
     assert "require_ws_auth" in aufgabe, f"Suchbegriff fehlt: {aufgabe[:300]!r}"
-    assert "### OP-999" in aufgabe
+    assert aufgabe.startswith("OP-999: Test-Aufgabe")
+    assert "### OP-999" not in aufgabe
     assert "### OP-1000" not in aufgabe, "Nachfolge-OP darf nicht mit"
 
 

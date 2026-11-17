@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 from concurrent.futures import Future
 from pathlib import Path
 from types import SimpleNamespace
@@ -124,7 +125,12 @@ def test_checkpoint_captures_run_tree_before_ack_and_resumes_jobs(
     )
     assert jobs.mark_run_inbox_enqueued(job["job_id"])
     monkeypatch.setattr(chat_jobs, "_db_path", lambda _project: job_db)
-    monkeypatch.setattr(run_snapshot, "werkstatt_home", lambda: tmp_path / "state")
+    # Keep Git metadata below Windows' legacy MAX_PATH limit while retaining
+    # the real managed-root and cleanup policy.
+    monkeypatch.setattr(
+        run_snapshot, "werkstatt_home",
+        lambda: Path(tempfile.gettempdir()) / "werkstatt-snapshot-tests",
+    )
     monkeypatch.setattr(checkpoint, "check_run_lease", lambda _state: None)
     resumed: list[tuple[str, Path]] = []
     monkeypatch.setattr(
@@ -144,6 +150,7 @@ def test_checkpoint_captures_run_tree_before_ack_and_resumes_jobs(
 
     saved = jobs.get(job["job_id"])
     assert saved is not None
+    assert saved["run_snapshot_path"] is not None, saved.get("error")
     snapshot = run_snapshot.validate_project_snapshot(
         Path(saved["run_snapshot_path"]),
         project_dir,
@@ -172,7 +179,10 @@ def test_run_job_uses_then_removes_checkpoint_snapshot(
 
     project_dir = _repo(tmp_path / "project")
     (project_dir / "README.md").write_text("captured state\n", encoding="utf-8")
-    monkeypatch.setattr(run_snapshot, "werkstatt_home", lambda: tmp_path / "state")
+    monkeypatch.setattr(
+        run_snapshot, "werkstatt_home",
+        lambda: Path(tempfile.gettempdir()) / "werkstatt-snapshot-tests",
+    )
     chat_db = tmp_path / "chat.db"
     monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
     jobs = ChatJobStore(tmp_path / "jobs.db")

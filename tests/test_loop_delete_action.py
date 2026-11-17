@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 sys.path.insert(0, "/opt/werkstatt")
 
 import werkstatt.loop as _loop
@@ -74,7 +76,12 @@ class TestDeleteZielErlaubt:
         aussen = tmp_path / "aussen.py"
         aussen.write_text("# x")
         link = project / "link.py"
-        link.symlink_to(aussen)
+        try:
+            link.symlink_to(aussen)
+        except OSError as exc:
+            if getattr(exc, "winerror", None) == 1314:
+                pytest.skip("Symlinks sind in dieser Windows-Umgebung gesperrt")
+            raise
         ok, grund = _loop._delete_ziel_erlaubt(
             Path("link.py"), None, project,
         )
