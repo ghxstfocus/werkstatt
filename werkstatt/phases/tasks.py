@@ -8,7 +8,6 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from werkstatt.antipattern import scan_patches
 from werkstatt.checkpoint_coordinator import (
     choose_task_checkpoint_action as _checkpoint_decision_payload,
 )
@@ -850,7 +849,7 @@ def _phase_tasks_loop(
         task(i, len(tasks), task_name)
         audit("loop_task_start", {"task_id": task_id, "name": task_name}, pd, pn)
 
-        # Builder fuer diesen Task
+        # Builder role for the coordinator-selected write task.
         state.aktuelle_task = task_obj
         # OP-166: per-Task-State reset, sonst leaken Fehler aus
         # vorherigen Tasks in Reflection (Loop-Test-4 t7-Bug).
@@ -1350,363 +1349,113 @@ def _phase_tasks_loop(
             group_end()
             return 0, tasks_ok, tasks
 
-        antipatterns = scan_patches(list(state.patches or []))
-        if antipatterns:
+        from werkstatt.roles.builder_apply import (
+            BuilderApplyServices,
+            apply_builder_patch_set,
+        )
+
+        apply_result = apply_builder_patch_set(
+            state,
+            task_obj,
+            task_id=str(task_id),
+            debugger_fix_bound=(
+                debugger_fix is not None
+                and isinstance(task_obj, dict)
+                and task_obj.get("id") == "debugger-fix"
+            ),
+            services=BuilderApplyServices(
+                audit_call=audit,
+                call_hook=_call_hook,
+                get_git_diff=_get_git_diff_for_hook,
+                apply_one_patch=_apply_one_patch,
+                delete_allowed=_delete_ziel_erlaubt,
+                ruff_fix_changed=_ruff_fix_changed,
+            ),
+        )
+        if apply_result.status == "antipattern_veto":
             audit(
                 "loop_task_antipattern_veto",
                 {
                     "task_id": task_id,
-                    "count": len(antipatterns),
-                    "kinds": [item.kind for item in antipatterns[:5]],
-                    "files": [item.file for item in antipatterns[:5]],
+                    "count": apply_result.finding_count,
+                    "kinds": list(apply_result.finding_kinds),
+                    "files": list(apply_result.finding_files),
                 },
                 pd,
                 pn,
             )
-            reason = f"antipattern:{antipatterns[0].kind}"
+            reason = f"antipattern:{apply_result.reason}"
             phase_state.mark_vetoed(task_id, grund=reason)
             _task_ende(
-                state,
-                phase_state,
-                task_id,
-                ok=False,
-                name=task_name,
-                human_review=True,
-                failure=reason,
+                state, phase_state, task_id, ok=False, name=task_name,
+                human_review=True, failure=reason,
             )
             phase_state.save()
             group_end()
             return 0, tasks_ok, tasks
 
-        # GOLD 2026-10-30: Wenn der Builder das auftrag_bereits_erfuellt-
-        # Flag gesetzt hat (weil die Zieldatei den Zielzustand schon
-        # enthaelt), ist der Task erfuellt. Kein Hook, kein Apply, kein
-        # Reviewer. Live-Beleg 21:18:37: Builder setzte Flag, Hook liess
-        # durch, Apply-Loop lief mit leerem state.patches,
-        # reviewer_kein_diff_aber_patches -> fail-closed.
-        if (state.auftrag_bereits_erfuellt
-            and state.auftrag_bereits_erfuellt_bestaetigt):
-            audit("auftrag_bereits_erfuellt",
-                  {"task_id": i,
-                   "name": task_name,
-                   "reason": "loop_flag_vor_hook"},
-                  pd, pn)
+        if apply_result.status == "already_fulfilled":
+            audit(
+                "auftrag_bereits_erfuellt",
+                {"task_id": i, "name": task_name, "reason": "loop_flag_vor_hook"},
+                pd,
+                pn,
+            )
             state.auftrag_bereits_erfuellt = False
-            # GOLD 2026-10-30: tasks_ok auch bei auftrag_bereits_erfuellt
-            # hochzaehlen. Sonst zeigt der Footer "1/5", obwohl alle 5
-            # Tasks done sind (Live-Beleg 2026-10-30 21:41:45).
             tasks_ok += 1
             state.tasks_ok_counter = tasks_ok
             _audit_task_ok(
-                _task_ende(state, phase_state, task_id, ok=True,
-                           name=task_name),
+                _task_ende(state, phase_state, task_id, ok=True, name=task_name),
                 task_id, task_name, pd, pn,
                 via="auftrag_bereits_erfuellt_pre_hook",
             )
-            continue
+            phase_state.save()
+            group_end()
+            return 0, tasks_ok, tasks
 
-        # PreToolUse-Hook (Phase 15): Patch pruefen, BEVOR er angewendet wird.
-        # GOLD 2026-10-30: Wenn ein Patch blockiert wird, ueberspringen
-        # wir den Apply-Loop komplett. Vorher rief "break" nur aus der
-        # Hook-Schleife aus — der Apply-Loop darunter wendete dieselben
-        # blockierten Patches trotzdem an (Audit loop_patch_updated).
-        patches = state.patches
-        _hook_blocked = False
-        _blocked_reason = ""
-        for patch in patches:
-            if not isinstance(patch, dict):
-                continue
-            if patch.get("approved_debugger_exact") is True and not (
-                debugger_fix is not None
-                and isinstance(task_obj, dict)
-                and task_obj.get("id") == "debugger-fix"
-            ):
+        if apply_result.status != "applied":
+            failure = (
+                f"hook_blocked: {apply_result.reason}"[:120]
+                if apply_result.status == "hook_blocked"
+                else "simplify_hook_blocked"
+                if apply_result.status == "simplify_blocked"
+                else apply_result.reason[:120] or "builder_apply_failed"
+            )
+            scope_rejected = apply_result.status == "scope_rejected"
+            if scope_rejected and apply_result.reason == "unbound_approved_debugger_patch":
                 audit(
                     "loop_debugger_fix_rejected",
                     {"reason": "unbound_exact_patch_marker", "task_id": task_id},
                     pd,
                     pn,
                 )
-                _task_ende(
-                    state, phase_state, task_id, ok=False,
-                    name=task_name, failure="approved_debugger_diff_rejected",
-                )
-                phase_state.save()
-                return 1, tasks_ok, tasks
-            action = patch.get("action", "update")
-            patch_text = patch.get("new_string", "") or patch.get("content", "")
-            hook_res = _call_hook("pre_tool_use.py", {
-                "patch": patch_text,
-                "action": action,
-                "project_dir": str(pd),
-            })
-            if not hook_res.get("allow", False):
-                audit("loop_hook_blocked",
-                      {"hook": "pre_tool_use",
-                       "reason": hook_res.get("reason", "")}, pd, pn)
-                _hook_blocked = True
-                _blocked_reason = hook_res.get("reason", "")
-                break
-        if _hook_blocked:
-            # GOLD 2026-10-30: ZUERST pruefen, ob der Builder das
-            # auftrag_bereits_erfuellt-Flag gesetzt hat (weil die
-            # Zieldatei den Zielzustand schon enthaelt). Dann ist der
-            # Hook-Block irrelevant — der Task ist erfuellt.
-            # Live-Beleg 2026-10-30 20:52:18: Hook blockte import math,
-            # _reflection_loop gab True (weil Verify wegen leerer
-            # Stage-Skipping gruen war), Task wurde als ok markiert,
-            # ohne dass etwas geprueft wurde.
-            if (state.auftrag_bereits_erfuellt
-                and state.auftrag_bereits_erfuellt_bestaetigt):
-                audit("auftrag_bereits_erfuellt",
-                      {"task_id": i,
-                       "name": task_name,
-                       "reason": "hook_blocked_aber_erfuellt",
-                       "blocked_reason": _blocked_reason},
-                      pd, pn)
-                state.auftrag_bereits_erfuellt = False
-                tasks_ok += 1
-                state.tasks_ok_counter = tasks_ok
-                _audit_task_ok(
-                    _task_ende(state, phase_state, task_id, ok=True,
-                               name=task_name),
-                    task_id, task_name, pd, pn,
-                    via="auftrag_bereits_erfuellt",
-                )
-                continue
-            failure = f"hook_blocked: {_blocked_reason}"[:120]
+            if scope_rejected:
+                phase_state.mark_vetoed(task_id, grund=failure)
             transitioned = _task_ende(
-                state, phase_state, task_id, ok=False, name=task_name,
+                state,
+                phase_state,
+                task_id,
+                ok=False,
+                name=task_name,
+                human_review=scope_rejected,
                 failure=failure,
+                failure_detail=apply_result.reason[:1200],
             )
             audit(
                 "loop_task_failed",
-                {"task_id": task_id, "reason": failure,
-                 "coordinator_reentry": True, "transitioned": transitioned},
-                pd, pn,
+                {
+                    "task_id": task_id,
+                    "reason": failure,
+                    "coordinator_reentry": not scope_rejected,
+                    "transitioned": transitioned,
+                },
+                pd,
+                pn,
             )
             phase_state.save()
             group_end()
-            return 0, tasks_ok, tasks
+            return (1 if scope_rejected else 0), tasks_ok, tasks
 
-        # Patches anwenden (create + update) — NACH dem Hook.
-        # K50b: applied_count zaehlen.
-        state.applied_count = 0
-        backup_dir = Path(pd) / ".werkstatt" / "backups"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        _allowed_for_task: set[str] = set()
-        for _t_av in (state.tasks or []):
-            if isinstance(_t_av, dict) and _t_av.get("id") == task_id:
-                _allowed_for_task = set(_t_av.get("task_files") or [])
-                break
-        for patch in patches:
-            if not isinstance(patch, dict):
-                continue
-            action = patch.get("action", "update")
-            file = patch.get("file", "")
-            if not file:
-                continue
-            target = Path(pd) / file
-
-            if action == "create":
-                content = patch.get("content", "")
-                if not content:
-                    continue
-                if target.exists():
-                    audit("loop_patch_file_exists", {"file": file}, pd, pn)
-                    continue
-                target.parent.mkdir(parents=True, exist_ok=True)
-                # FIX N 2026-10-31: Write-Fehler fail-closed.
-                try:
-                    check_run_lease(state)
-                    if patch.get("approved_debugger_exact") is True:
-                        with target.open("w", encoding="utf-8", newline="") as handle:
-                            handle.write(content)
-                    else:
-                        target.write_text(content)
-                except OSError as _e:
-                    audit("loop_patch_write_failed",
-                          {"file": file, "fehler": str(_e)[:200]}, pd, pn)
-                    continue
-                state.applied_count += 1
-                audit("loop_patch_created", {"file": file}, pd, pn)
-            elif action == "update":
-                old_str = patch.get("old_string", "")
-                new_str = patch.get("new_string", "")
-                if not old_str or not new_str:
-                    continue
-                if not target.exists():
-                    audit("loop_patch_file_missing", {"file": file}, pd, pn)
-                    continue
-                exact_debugger_patch = (
-                    patch.get("approved_debugger_exact") is True
-                )
-                file_content = (
-                    target.read_bytes().decode("utf-8")
-                    if exact_debugger_patch else target.read_text()
-                )
-                _neu_content2, _match2 = _apply_one_patch(
-                    file_content, old_str, new_str,
-                )
-                # FIX W 2026-10-31: Doppel-Schreiben entfernt. Der
-                # alte write_text+applied_count++ stand hier VOR
-                # dem "erst pruefen, dann schreiben"-Check. Live-
-                # Beleg: applied_count doppelt gezaehlt, und
-                # Schreibfehler beim ersten write_text unbehandelt.
-                # Der korrekte Pfad ist weiter unten (try/except).
-                if _match2 == "fail":
-                    audit("loop_patch_old_string_not_found",
-                          {"file": file, "old": old_str[:50]}, pd, pn)
-                    failure = f"old_string_not_found:{file}"[:120]
-                    transitioned = _task_ende(
-                        state, phase_state, task_id, ok=False,
-                        name=task_name, failure=failure,
-                    )
-                    audit(
-                        "loop_task_failed",
-                        {"task_id": task_id, "reason": failure,
-                         "coordinator_reentry": True,
-                         "transitioned": transitioned},
-                        pd, pn,
-                    )
-                    phase_state.save()
-                    group_end()
-                    return 0, tasks_ok, tasks
-                # M-351a: Patch mit identischem Inhalt = no_effect.
-                if old_str == new_str and _match2 == "exact":
-                    audit("loop_patch_no_effect", {"file": file}, pd, pn)
-                    continue
-                if _match2 != "exact":
-                    audit("loop_patch_fallback_used",
-                          {"file": file, "match": _match2}, pd, pn)
-                # GOLD 2026-10-30: Erst pruefen, ob new_str im neuen
-                # Inhalt steht, DANN schreiben. Vorher wurde
-                # geschrieben, applied_count++, dann geprueft. Bei
-                # loop_patch_not_applied war applied_count trotzdem
-                # >0 -> _patches_wirklich_angewendet True ->
-                # reviewer_reject_ignoriert -> task_ok obwohl Patch
-                # nicht angewendet. Live-Beleg 2026-10-30 22:35.
-                if new_str not in _neu_content2:
-                    audit("loop_patch_not_applied_vor_schreiben",
-                          {"file": file}, pd, pn)
-                    failure = f"patch_not_applied:{file}"[:120]
-                    transitioned = _task_ende(
-                        state, phase_state, task_id, ok=False,
-                        name=task_name, failure=failure,
-                    )
-                    audit(
-                        "loop_task_failed",
-                        {"task_id": task_id, "reason": failure,
-                         "coordinator_reentry": True,
-                         "transitioned": transitioned},
-                        pd, pn,
-                    )
-                    phase_state.save()
-                    group_end()
-                    return 0, tasks_ok, tasks
-                # FIX N 2026-10-31: Write-Fehler fail-closed.
-                try:
-                    check_run_lease(state)
-                    if exact_debugger_patch:
-                        with target.open(
-                            "w", encoding="utf-8", newline="",
-                        ) as handle:
-                            handle.write(_neu_content2)
-                    else:
-                        target.write_text(_neu_content2)
-                except OSError as _e:
-                    audit("loop_patch_write_failed",
-                          {"file": file, "fehler": str(_e)[:200]}, pd, pn)
-                    _task_ende(state, phase_state, task_id,
-                               ok=False, name=task_name,
-                               failure="patch_write_failed")
-                    break
-                # M-298d: Post-Apply-Verifikation (Profi-Ansatz
-                # Overwatcher/Claude-Code edit-verifier).
-                _after = (
-                    target.read_bytes().decode("utf-8")
-                    if exact_debugger_patch else target.read_text()
-                )
-                if new_str not in _after:
-                    audit("loop_patch_not_applied", {"file": file}, pd, pn)
-                    failure = f"post_write_patch_check_failed:{file}"[:120]
-                    transitioned = _task_ende(
-                        state, phase_state, task_id, ok=False,
-                        name=task_name, failure=failure,
-                    )
-                    audit(
-                        "loop_task_failed",
-                        {"task_id": task_id, "reason": failure,
-                         "coordinator_reentry": True,
-                         "transitioned": transitioned},
-                        pd, pn,
-                    )
-                    phase_state.save()
-                    group_end()
-                    return 0, tasks_ok, tasks
-                    break
-                # FIX AI 2026-10-31: applied_count++ erst NACH
-                # erfolgreichem Post-Verify. Vorher (Fix W) wurde
-                # der alte applied_count++ entfernt, aber nirgends
-                # neu hinzugefuegt. Folge: _patches_wirklich_angewendet
-                # war False, auch bei sauber angewendetem Patch.
-                # Position: nach write_text + nach _after-Check.
-                state.applied_count += 1
-                audit("loop_patch_updated", {"file": file}, pd, pn)
-            elif action == "delete":
-                # Fix AV: Datei loeschen. Whitelist = task_files der aktuellen Task.
-                _ok_del, _grund_del = _delete_ziel_erlaubt(
-                    Path(file), _allowed_for_task, Path(pd),
-                )
-                if not _ok_del:
-                    audit("loop_patch_delete_blocked",
-                          {"file": file, "grund": _grund_del}, pd, pn)
-                    continue
-                if not target.exists():
-                    audit("loop_patch_delete_skip_missing",
-                          {"file": file}, pd, pn)
-                    continue
-                try:
-                    check_run_lease(state)
-                    target.unlink()
-                except OSError as _e:
-                    audit("loop_patch_delete_failed",
-                          {"file": file, "fehler": str(_e)[:200]}, pd, pn)
-                    continue
-                state.applied_count += 1
-                audit("loop_patch_deleted", {"file": file}, pd, pn)
-
-        # M-334b/M-351: post_tool_use entfernt (prueft Werkstatt statt
-        # Zielprojekt). _verify_patches prueft das Zielprojekt.
-
-        # Simplify-Hook (Phase 11)
-        hook_res = _call_hook("simplify.py", {"diff": _get_git_diff_for_hook()})
-        if not hook_res.get("allow", False):
-            audit("loop_hook_blocked", {"hook": "simplify", "reason": hook_res.get("reason", "")}, pd, pn)
-            failure = "simplify_hook_blocked"
-            transitioned = _task_ende(
-                state, phase_state, task_id, ok=False, name=task_name,
-                failure=failure,
-                failure_detail=str(hook_res.get("reason", ""))[:1200],
-            )
-            audit(
-                "loop_task_failed",
-                {"task_id": task_id, "reason": failure,
-                 "coordinator_reentry": True, "transitioned": transitioned},
-                pd, pn,
-            )
-            phase_state.save()
-            group_end()
-            return 0, tasks_ok, tasks
-
-        # M-467: ruff --fix auf geaenderte Dateien (deterministisch).
-        # GOLD 2026-10-30: ausgelagert nach _ruff_fix_changed, damit
-        # dieselbe Logik auch in der Reflection-Schleife laeuft.
-        _ruff_fix_changed(state)
-
-        # Builder is one coordinator action. Verify and Reviewer are dispatched
-        # separately from the persisted build checkpoint; this worker must not
-        # fall back to an inline build -> verify -> review sequence.
         checkpointed = phase_state.record_task_build_checkpoint(task_id)
         if checkpointed:
             audit(

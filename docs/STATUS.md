@@ -265,6 +265,8 @@ Letzte Aktualisierung: 2026-11-17.
 
 **Task-Verify aus Phasenexecutor extrahiert (lokal, noch nicht serververifiziert):** Die einzeln dispatchte Verify-Aktion und das Binden erfolgreicher Kriterienbelege liegen jetzt in `werkstatt/roles/verify_task.py`; `phases/tasks.py` uebergibt ihr nur den Koordinator-Auftrag und wertet das Ergebnis aus. Fehlerbelege bleiben begrenzt und criteria-linked Verify bleibt fail-closed. Checkpoint-/Task-/Rollen-Gruppe: 122 bestanden; Ruff und dateibezogenes Mypy bestanden. Der komplette Phasenexecutor und Builder-Patchpfad sind weiterhin aktiv und noch nicht entfernt; OP-398 bleibt offen.
 
+**Builder-Schreibausfuehrung aus dem Task-Phasenmodul geloest (lokal, noch nicht serververifiziert):** Patch-Satz-Validierung, PreToolUse, Antipattern-Veto, Schreiben und Post-Write-Nachweis sowie Simplify-/Ruff-Schritte liegen jetzt in `werkstatt/roles/builder_apply.py`. Der komplette Satz wird vor der ersten Mutation gegen `task_files`, Pfadtraversal und Projektroot geprueft; PreToolUse-Ablehnung oder Scope-Verletzung schreibt nichts. Verify und Reviewer bleiben separate Koordinatoraktionen. Checkpoint-/Builder-/Task-Gruppe: 125 bestanden; Ruff und dateibezogenes Mypy bestanden. Der umgebende Task-Executor verbleibt noch in `phases/tasks.py`; keine Vollsuite-, CI-, Server- oder Produktionsverifikation.
+
 ## Sub-OPs
 
 Keine separat startbaren Sub-OPs. Zerlegung erfolgt projektbezogen im Plan-Gate.
