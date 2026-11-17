@@ -846,6 +846,7 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
     from werkstatt.event_store import EventStore
     from werkstatt.phase_state import PhaseState
     from werkstatt.phases import finalize
+    from werkstatt.roles import complete_run
 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     monkeypatch.setenv("WERKSTATT_HOME", str(tmp_path / "werkstatt-home"))
@@ -905,15 +906,15 @@ def test_cli_resume_fuehrt_persistierte_done_tasks_bis_phase_end_verify(
         return True, repository_head
 
     monkeypatch.setattr(
-        loop, "_phase_project_context_tools",
+        loop, "collect_project_context",
         lambda _state, _goal, _project, saved: (0, saved),
     )
     monkeypatch.setattr(finalize, "group_start", lambda *_args: None)
     monkeypatch.setattr(finalize, "group_end", lambda *_args: None)
-    monkeypatch.setattr(finalize, "summary", lambda *_args: None)
+    monkeypatch.setattr(complete_run, "summary", lambda *_args: None)
     monkeypatch.setattr(finalize, "_human_gate", lambda *_args, **_kw: 2)
     monkeypatch.setattr(
-        finalize, "_hat_human_review_tasks", lambda _phase: False,
+        complete_run, "_hat_human_review_tasks", lambda _phase: False,
     )
     monkeypatch.setattr(finalize, "_verify_patches", verify)
     monkeypatch.setattr(loop, "_verify_patches", verify)

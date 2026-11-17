@@ -112,7 +112,7 @@ nicht, dass alle OP-399-Akzeptanzkriterien bereits umgesetzt sind.
 ### 2.1 Explorer und Projektkontext
 
 Der Loop startet keine Explorer-LLM-Rolle. Kontextwerkzeuge in
-`werkstatt/phases/explorer.py` kombinieren deterministische Messungen,
+`werkstatt/roles/project_context.py` kombiniert deterministische Messungen,
 Graphify-Navigation und aktuelle, hashgebundene Quellbelege. Der Adapter
 arbeitet relativ zum ausgewaehlten Projekt-Root und speichert den Graphify-
 Index projektlokal; Graphkandidaten sind Navigationshinweise, keine

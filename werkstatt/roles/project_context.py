@@ -6,17 +6,16 @@ from pathlib import Path
 from typing import Any
 
 from werkstatt.phase_state import PhaseState
+from werkstatt.phases._common import (
+    _validate_contract_safe,
+    audit,
+)
 from werkstatt.render import (
     group_end,
     group_start,
     step,
 )
 from werkstatt.state import RunState
-
-from ._common import (
-    _validate_contract_safe,
-    audit,
-)
 
 
 def _append_graphify_candidates(
@@ -52,7 +51,7 @@ def _append_graphify_candidates(
     return added
 
 
-def _phase_project_context_tools(
+def collect_project_context(
     state: RunState,
     aufgabe: str,
     project_name: str,
@@ -651,8 +650,3 @@ def _phase_project_context_tools(
             )
 
     return 0, phase_state
-
-
-# Compatibility export for older CLI/test integrations. The loop dispatcher
-# uses the tool-oriented name and does not invoke the Explorer model role.
-_phase_explorer_and_setup = _phase_project_context_tools

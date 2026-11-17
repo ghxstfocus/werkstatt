@@ -24,9 +24,10 @@ class TestTaskFailContinue:
         # Laufzeitcode liegt im Koordinator und seinen aktiven Checkpoint-Executoren.
         import werkstatt.loop as _loop
         import werkstatt.phases as _pp
+        import werkstatt.roles.project_context as _ctx
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
-            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_pp._explorer_mod, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
+            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_ctx, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
         )
         # OP-114 (2026-11-04): Payload wird jetzt via _gate_failed_payload
         # gebaut. Struktur-Anker ist der _verify_patches-Aufruf mit

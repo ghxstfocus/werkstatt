@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from tools import graphify_eval
-from werkstatt.phases.explorer import _append_graphify_candidates
+from werkstatt.roles.project_context import _append_graphify_candidates
 from werkstatt.state import LLMReply, RunState
 
 
@@ -125,7 +125,7 @@ def test_explorer_prioritizes_only_fresh_native_graphify(
 ) -> None:
     from werkstatt import explorer
     from werkstatt.phase_state import PhaseState
-    from werkstatt.phases import explorer as explorer_actions
+    from werkstatt.roles import project_context as explorer_actions
 
     paths = []
     content_paths = []
@@ -180,7 +180,7 @@ def test_explorer_prioritizes_only_fresh_native_graphify(
         ),
     )
 
-    result, _phase_state = explorer_actions._phase_project_context_tools(
+    result, _phase_state = explorer_actions.collect_project_context(
         state, state.aufgabe, "demo", PhaseState("demo", tmp_path / ".werkstatt"),
     )
 

@@ -7,7 +7,6 @@ Re-exports remain for callers migrating from the former phase-oriented API.
 from __future__ import annotations
 
 # Modul-Referenzen (fuer AST-Guard-Tests)
-from . import explorer as _explorer_mod  # noqa: F401
 from . import finalize as _finalize_mod  # noqa: F401
 from . import review as _review_mod  # noqa: F401
 from . import tasks as _tasks_mod  # noqa: F401
@@ -102,8 +101,6 @@ from ._common import (
 )
 
 # Historical callable names retained as compatibility exports.
-from .explorer import _phase_explorer_and_setup as _phase_explorer_and_setup
-from .explorer import _phase_project_context_tools as _phase_project_context_tools
 from .finalize import _phase_end_review_action as _phase_end_review_action
 from .finalize import _phase_end_verify_action as _phase_end_verify_action
 from .finalize import _phase_human_gate_action as _phase_human_gate_action

@@ -59,7 +59,6 @@ from werkstatt.phases import (  # Fix AZ Stufe 11: Re-Export
     _phase_end_review_action,
     _phase_end_verify_action,
     _phase_human_gate_action,
-    _phase_project_context_tools,
     _phase_tasks_loop,
 )
 from werkstatt.planner import run_planner
@@ -82,6 +81,7 @@ from werkstatt.render import (
 )
 from werkstatt.reviewer import run_reviewer
 from werkstatt.roles.builder import run_builder
+from werkstatt.roles.project_context import collect_project_context
 from werkstatt.state import RunState, check_run_lease
 from werkstatt.task_runner import (  # Fix AZ Stufe 7: Re-Export
     _extract_files_from_tasks,
@@ -150,7 +150,6 @@ __all__ = [
     "_normalize_tasks",
     "_patches_wirklich_angewendet",
     "_phase_end_reflection",
-    "_phase_project_context_tools",
     "_phase_tasks_loop",
     "_plan_gate",
     "_pruefe_prior_failed_dependency",
@@ -166,6 +165,7 @@ __all__ = [
     "_with_spinner",
     "annotations",
     "audit",
+    "collect_project_context",
     "group_end",
     "group_start",
     "header",
@@ -3424,15 +3424,15 @@ def _run_pipeline_loop_impl(
                 )
                 return preflight_rc
             continue
-        if action == "collect_project_context":
+        if action == "refresh_project_evidence":
             check_run_lease(state)
             if decision.get("preserve_failed_tasks_on_setup") is True:
-                _rc_exp, phase_state = _phase_project_context_tools(
+                _rc_exp, phase_state = collect_project_context(
                     state, aufgabe, project_name, phase_state,
                     preserve_failed_tasks=True,
                 )
             else:
-                _rc_exp, phase_state = _phase_project_context_tools(
+                _rc_exp, phase_state = collect_project_context(
                     state, aufgabe, project_name, phase_state,
                 )
             if _rc_exp != 0 or phase_state is None:

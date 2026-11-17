@@ -445,7 +445,7 @@ def choose_planner_checkpoint_action(
         }
 
     action = (
-        "collect_project_context" if next_role == "refresh_evidence"
+        "refresh_project_evidence" if next_role == "refresh_evidence"
         else "stop_missing_evidence" if next_role == "stop_missing_evidence"
         else f"planner_{next_role}"
     )

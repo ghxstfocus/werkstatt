@@ -14,23 +14,21 @@ class TestLoopReviewerDeterministicFail:
         # Fix AZ Stufe 11: Logik liegt jetzt in pipeline_phases.py.
         import werkstatt.loop as _loop
         import werkstatt.phases as _pp
+        import werkstatt.roles.complete_task as _ctx
         src = (
             Path(_loop.__file__).read_text(encoding="utf-8")
-            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_pp._explorer_mod, _pp._plan_mod, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
+            + ("\n".join(Path(m.__file__).read_text(encoding="utf-8") for m in [_ctx, _pp._tasks_mod, _pp._review_mod, _pp._finalize_mod]))
         )
         # Nach _with_spinner("Reviewer ...
         assert "state.reviewer_deterministic_fail = False" in src, (
             "Loop initialisiert reviewer_deterministic_fail nicht"
         )
-        # Und prueft es nach not _rev_ok
-        idx = src.find("if not _rev_ok:")
+        # Reviewer-Ablehnung wird aus dem Task-Abschlussworker gemeldet.
+        idx = src.find("if not services.review(state, task_index):")
         assert idx > 0
         block = src[idx:idx + 2000]
-        assert "reviewer_deterministic_fail" in block, (
-            "Loop prueft reviewer_deterministic_fail nicht nach Reviewer-Fail"
-        )
-        assert "reviewer_unvollstaendig" in block, (
-            "Loop setzt failure='reviewer_unvollstaendig' nicht"
+        assert "reviewer_rejected_at_checkpoint" in block, (
+            "Task role does not persist the reviewer rejection outcome"
         )
 
     def test_reviewer_setzt_flag_bei_unvollstaendig(self) -> None:

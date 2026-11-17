@@ -2,6 +2,6 @@
 
 Rollenmodule: builder/, builder_apply.py, complete_run.py, complete_task.py,
 planner_split.py, read_only_task.py, verify_task.py und verify_recovery.py. Rollen werden
-bedarfsgesteuert am Checkpoint dispatcht; Phasenmodule dienen als
-Executor-/Kompatibilitaetsgrenze und duerfen keine globale Reihenfolge erzwingen.
+bedarfsgesteuert am Checkpoint dispatcht; Phasenmodule dienen als Executor-
+und Kompatibilitaetsgrenze und duerfen keine globale Reihenfolge erzwingen.
 """

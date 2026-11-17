@@ -28,7 +28,7 @@ def _state(tmp_path: Path, aufgabe: str):
         explorer_context=None,
         explorer_findings={},
         suchbegriffe=[],
-        # Felder, die _phase_explorer_and_setup ab Zeile 220+ liest:
+        # Felder, die collect_project_context ab Zeile 220+ liest:
         tasks=None,
         auftrag_bereits_erfuellt=False,
         auftrag_bereits_erfuellt_bestaetigt=False,
@@ -46,7 +46,7 @@ def test_grep_fallback_findet_dateien_bei_backtick_suchbegriff(tmp_path):
         "def foo():\n    pass\n"
     )
 
-    from werkstatt.phases import explorer as exp
+    from werkstatt.roles import project_context as exp
 
     state = _state(tmp_path, "OP-XXX: DRY-Migration auf `require_ws_auth`")
 
@@ -58,7 +58,7 @@ def test_grep_fallback_findet_dateien_bei_backtick_suchbegriff(tmp_path):
         patch.object(exp, "step"),
         patch.object(exp, "audit"),
     ):
-        _rc, _ps = exp._phase_explorer_and_setup(
+        _rc, _ps = exp.collect_project_context(
             state,
             "OP-XXX: DRY-Migration auf `require_ws_auth`",
             "test",
@@ -98,7 +98,7 @@ def test_inhaltssuche_findet_auftragsbegriff_ohne_pfad_oder_backticks(tmp_path):
         "export function quasarLedgerSync() { return 2; }\n",
         encoding="utf-8",
     )
-    from werkstatt.phases import explorer as exp
+    from werkstatt.roles import project_context as exp
 
     task = "Finde die QuasarLedger synchronization logic"
     state = _state(tmp_path, task)
@@ -109,7 +109,7 @@ def test_inhaltssuche_findet_auftragsbegriff_ohne_pfad_oder_backticks(tmp_path):
         patch.object(exp, "step"),
         patch.object(exp, "audit"),
     ):
-        exp._phase_explorer_and_setup(state, task, "test", None)
+        exp.collect_project_context(state, task, "test", None)
 
     context = state.explorer_context
     evidence = next(
@@ -138,7 +138,7 @@ def test_content_retrieval_from_explorer_is_reused_for_architect_handoff(
         encoding="utf-8",
     )
     from werkstatt import explorer as explorer_module
-    from werkstatt.phases import explorer as phase_explorer
+    from werkstatt.roles import project_context as phase_explorer
 
     task = "Finde die QuasarLedger synchronization logic"
     source_candidates, _retrieval = explorer_module._rank_source_files(
@@ -153,7 +153,7 @@ def test_content_retrieval_from_explorer_is_reused_for_architect_handoff(
         patch.object(phase_explorer, "step"),
         patch.object(phase_explorer, "audit"),
     ):
-        phase_explorer._phase_explorer_and_setup(state, task, "test", None)
+        phase_explorer.collect_project_context(state, task, "test", None)
 
     evidence = next(
         item for item in state.explorer_context["key_files"]
@@ -170,7 +170,7 @@ def test_content_retrieval_from_explorer_is_reused_for_architect_handoff(
 def test_leerer_retrievalbericht_bleibt_fuer_scout_erhalten(tmp_path):
     (tmp_path / "alpha.py").write_text("def alpha():\n    pass\n", encoding="utf-8")
     (tmp_path / "beta.py").write_text("def beta():\n    pass\n", encoding="utf-8")
-    from werkstatt.phases import explorer as exp
+    from werkstatt.roles import project_context as exp
 
     task = "Suche nach dem seltenen Begriff QuasarLedgerNonce"
     state = _state(tmp_path, task)
@@ -181,7 +181,7 @@ def test_leerer_retrievalbericht_bleibt_fuer_scout_erhalten(tmp_path):
         patch.object(exp, "step"),
         patch.object(exp, "audit"),
     ):
-        rc, _ = exp._phase_explorer_and_setup(state, task, "test", None)
+        rc, _ = exp.collect_project_context(state, task, "test", None)
 
     assert rc == 0
     assert state.explorer_context["key_files"] == []
@@ -196,7 +196,7 @@ def test_explorer_vorschau_wird_vor_handoff_aus_repo_neu_gelesen(tmp_path):
     source = tmp_path / "src" / "core.py"
     source.write_text("def actual_source():\n    return 7\n")
 
-    from werkstatt.phases import explorer as exp
+    from werkstatt.roles import project_context as exp
 
     state = _state(tmp_path, "Analysiere src/core.py")
     untrusted_preview = "FORGED PREVIEW"
@@ -219,7 +219,7 @@ def test_explorer_vorschau_wird_vor_handoff_aus_repo_neu_gelesen(tmp_path):
         patch.object(exp, "step"),
         patch.object(exp, "audit"),
     ):
-        exp._phase_explorer_and_setup(
+        exp.collect_project_context(
             state, "Analysiere src/core.py", "test", None,
         )
 
@@ -238,7 +238,7 @@ def test_eindeutige_literalersetzung_ueberspringt_explorer_llm(tmp_path):
     target = tmp_path / "werkstatt" / "sample.py"
     target.parent.mkdir()
     target.write_text("value = 'old_value'\n", encoding="utf-8")
-    from werkstatt.phases import explorer as exp
+    from werkstatt.roles import project_context as exp
 
     aufgabe = "Ersetze `old_value` durch `new_value` in werkstatt/sample.py"
     state = _state(tmp_path, aufgabe)
@@ -253,7 +253,7 @@ def test_eindeutige_literalersetzung_ueberspringt_explorer_llm(tmp_path):
         patch.object(exp, "step"),
         patch.object(exp, "audit"),
     ):
-        rc, _phase_state = exp._phase_explorer_and_setup(
+        rc, _phase_state = exp.collect_project_context(
             state, aufgabe, "test", None,
         )
 
@@ -267,7 +267,7 @@ def test_eng_einzeldatei_aenderung_ueberspringt_explorer_llm(tmp_path):
     target = tmp_path / "werkstatt" / "sample.py"
     target.parent.mkdir()
     target.write_text("value = 1\n", encoding="utf-8")
-    from werkstatt.phases import explorer as exp
+    from werkstatt.roles import project_context as exp
 
     aufgabe = "Aendere den Wert in werkstatt/sample.py"
     state = _state(tmp_path, aufgabe)
@@ -282,7 +282,7 @@ def test_eng_einzeldatei_aenderung_ueberspringt_explorer_llm(tmp_path):
         patch.object(exp, "step"),
         patch.object(exp, "audit"),
     ):
-        rc, _phase_state = exp._phase_explorer_and_setup(
+        rc, _phase_state = exp.collect_project_context(
             state, aufgabe, "test", None,
         )
 
@@ -294,7 +294,7 @@ def test_eng_einzeldatei_aenderung_ueberspringt_explorer_llm(tmp_path):
 def test_graphify_runs_from_complete_explorer_seeds_after_five_direct_files(
     tmp_path: Path, monkeypatch,
 ):
-    from werkstatt.phases import explorer as phase_explorer
+    from werkstatt.roles import project_context as phase_explorer
 
     paths = [f"src/module_{index}.py" for index in range(5)]
     for index, relative in enumerate(paths):
@@ -330,7 +330,7 @@ def test_graphify_runs_from_complete_explorer_seeds_after_five_direct_files(
         patch.object(phase_explorer, "step"),
         patch.object(phase_explorer, "audit"),
     ):
-        rc, _phase_state = phase_explorer._phase_explorer_and_setup(
+        rc, _phase_state = phase_explorer.collect_project_context(
             state, task, "test", None,
         )
 
@@ -347,7 +347,7 @@ def test_failed_related_file_scan_is_visible_and_disables_explorer_skip(
     target.parent.mkdir(parents=True)
     target.write_text("value = 1\n", encoding="utf-8")
     from werkstatt import explorer as explorer_module
-    from werkstatt.phases import explorer as phase_explorer
+    from werkstatt.roles import project_context as phase_explorer
 
     monkeypatch.setattr(
         explorer_module,
@@ -368,7 +368,7 @@ def test_failed_related_file_scan_is_visible_and_disables_explorer_skip(
             side_effect=lambda *args: audit_events.append(args),
         ),
     ):
-        rc, _phase_state = phase_explorer._phase_explorer_and_setup(
+        rc, _phase_state = phase_explorer.collect_project_context(
             state, task, "test", None,
         )
 
@@ -393,7 +393,7 @@ def test_diagnostische_einzeldatei_nutzt_keine_explorer_llm_rolle(tmp_path):
     target = tmp_path / "werkstatt" / "sample.py"
     target.parent.mkdir()
     target.write_text("value = 1\n", encoding="utf-8")
-    from werkstatt.phases import explorer as exp
+    from werkstatt.roles import project_context as exp
 
     aufgabe = "Pruefe die Ursache in werkstatt/sample.py"
     state = _state(tmp_path, aufgabe)
@@ -408,7 +408,7 @@ def test_diagnostische_einzeldatei_nutzt_keine_explorer_llm_rolle(tmp_path):
         patch.object(exp, "step"),
         patch.object(exp, "audit"),
     ):
-        rc, _phase_state = exp._phase_explorer_and_setup(
+        rc, _phase_state = exp.collect_project_context(
             state, aufgabe, "test", None,
         )
 
