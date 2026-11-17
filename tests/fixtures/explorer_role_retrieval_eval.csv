@@ -2,11 +2,11 @@ query,required_files,forbidden_files
 builder Pflichtkontext context budget manifest required_context_complete ask_llm hash regression test,werkstatt/roles/builder/run.py;tests/test_builder_context_budget.py,tests/test_scout_context_budget.py
 Scout Architect Handoff source excerpts original line numbers sha256 manifest omitted files context,werkstatt/scout.py;werkstatt/architect.py,
 chat approved plan exact handoff loop_checkpoint_decision safe coordinator,werkstatt/chat_tools.py;werkstatt/reflection_chat.py,werkstatt/debugger_handoff.py
-verify failed task evidence checkpoint coordinator replan next action run dispatcher approved plan fingerprint persisted phase state loop loop_run_coordinator_decision,werkstatt/criteria_replan.py;werkstatt/phase_state.py;werkstatt/loop.py,
+verify failed task evidence checkpoint coordinator replan next action run dispatcher approved plan fingerprint persisted phase state phase_state loop loop_run_coordinator_decision,werkstatt/criteria_replan.py;werkstatt/phase_state.py;werkstatt/loop.py,
 Explorer deterministisches Projektdatei-Inventar Inhaltssuche key_files gezielt nachladen,werkstatt/explorer.py,
 Scout breite Recherche Diagnose Ursache Widerspruch API Quellvorschau,werkstatt/scout.py;werkstatt/diagnose.py,tests/test_reflection_spec_widerspruch.py
 Architect Plan API Preflight constraints Dokumentkontext Scout Quellenbelege source excerpts original line numbers SHA256,werkstatt/architect.py;werkstatt/scout.py,
-Planner Architect-Prosa task graph split dependencies acceptance criteria task_files planner_dispatch role selection choose_next_planner_role,werkstatt/planner_task_compiler.py;werkstatt/task_graph.py;werkstatt/roles/planner_split.py;werkstatt/roles/planner_dispatch.py,
+Planner Architect-Prosa task graph task_graph split planner_split dependencies acceptance criteria task_files planner_dispatch planner_task_compiler role selection choose_next_planner_role,werkstatt/planner_task_compiler.py;werkstatt/task_graph.py;werkstatt/roles/planner_split.py;werkstatt/roles/planner_dispatch.py,
 Builder roles builder run.py Pflichtkontext Verify errors Reflection feedback Budget,werkstatt/roles/builder/run.py,
 Reviewer reviewer.py Diff scope Findings Verify changed files Review-Kontext,werkstatt/reviewer.py,
 Verify verify.py _verify_patches Stage-IDs Post-Build Phase-End Vollsuite,werkstatt/verify.py,

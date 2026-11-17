@@ -114,3 +114,7 @@ def test_role_information_queries_retrieve_required_sources_with_live_hashes() -
             assert selected_by_path[relative_path]["source_bytes"] == len(
                 source_bytes
             )
+            if relative_path == "werkstatt/phase_state.py":
+                assert "phase_state" in selected_by_path[relative_path][
+                    "matched_explicit_symbols"
+                ]

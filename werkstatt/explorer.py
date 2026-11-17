@@ -359,9 +359,11 @@ def _rank_source_files(
             project_dir, query=query, extensions=extensions,
         )
     )
-    explicit_symbol_query = bool(re.search(
-        r"\b[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+\b", query,
+    explicit_query_symbols = set(re.findall(
+        r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b",
+        query.casefold(),
     ))
+    explicit_symbol_query = bool(explicit_query_symbols)
     test_intent = bool(re.search(
         r"\b(?:test|tests|pytest|regression)\b", query, re.IGNORECASE,
     ))
@@ -463,7 +465,11 @@ def _rank_source_files(
             term for term, count in frequencies.items()
             if count > 0 and count * 2 < len(documents)
         }
-    scored: list[tuple[float, int, str, list[str], list[str]]] = []
+    scored: list[
+        tuple[
+            float, int, str, list[str], list[str], list[str], list[str], list[str],
+        ]
+    ] = []
     for index, (
         path, tokens, _digest, file_size, path_tokens, source_weight,
     ) in enumerate(documents):
@@ -471,7 +477,13 @@ def _rank_source_files(
             continue
         matched = sorted(term for term in discriminative if term in tokens)
         path_matches = sorted(term for term in query_tokens if term in path_tokens)
-        if not matched:
+        explicit_path_matches = sorted(
+            explicit_query_symbols.intersection(path_tokens),
+        )
+        explicit_content_matches = sorted(
+            explicit_query_symbols.intersection(tokens),
+        )
+        if not matched and not explicit_path_matches:
             continue
         idf = lambda term: math.log1p(  # noqa: E731
             (len(documents) - frequencies.get(term, 0) + 0.5)
@@ -499,6 +511,14 @@ def _rank_source_files(
             content_score / length_penalty + 2.0 * path_score
             + role_path_score
         )
+        if explicit_path_matches:
+            score += sum(
+                2.0 * idf(term) for term in explicit_path_matches
+            )
+        if explicit_content_matches:
+            score += sum(
+                1.0 * idf(term) for term in explicit_content_matches
+            )
         if (
             requested_role_tokens
             and not role_path_matches
@@ -510,13 +530,26 @@ def _rank_source_files(
             # budget terms overlap. Keep the candidate searchable, but rank it
             # below same-role evidence and unlabelled supporting sources.
             score *= 0.5
-        scored.append((score, index, path, matched, role_path_matches))
+        scored.append((
+            score,
+            index,
+            path,
+            matched,
+            path_matches,
+            role_path_matches,
+            explicit_path_matches,
+            explicit_content_matches,
+        ))
     scored.sort(key=lambda row: (-row[0], row[1]))
-    selected = [
+    selected: list[dict[str, Any]] = [
         {
             "file": path,
             "why": (
-                "Inhaltstreffer fuer spezifische Auftragsbegriffe"
+                (
+                    "Exakter Dateipfadtreffer fuer Codebezeichner"
+                    if not terms and not role_path_matches
+                    else "Inhaltstreffer fuer spezifische Auftragsbegriffe"
+                )
                 + (
                     "; explizite Rollenbegriffe im Quellpfad"
                     if role_path_matches else ""
@@ -524,12 +557,16 @@ def _rank_source_files(
             ),
             "confidence": "medium",
             "matched_terms": terms[:20],
+            "matched_path_terms": path_terms[:20],
+            "matched_explicit_symbols": explicit_symbols[:20],
+            "matched_explicit_content_symbols": content_symbols[:20],
             "matched_role_path_terms": role_path_matches,
             "source_sha256": "",
             "source_bytes": 0,
         }
             for (
-                _score, _index, path, terms, role_path_matches,
+                _score, _index, path, terms, path_terms, role_path_matches,
+                explicit_symbols, content_symbols,
             ) in scored[:max(0, limit)]
     ]
     stale_source_files: list[str] = []
