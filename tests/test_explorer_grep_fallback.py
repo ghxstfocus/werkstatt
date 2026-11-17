@@ -52,7 +52,7 @@ def test_grep_fallback_findet_dateien_bei_backtick_suchbegriff(tmp_path):
 
     # run_explorer leer mocken (deterministisch, kein LLM)
     with (
-        patch.object(exp, "run_explorer", return_value={}),
+        patch.object(exp, "run_explorer", create=True, return_value={}),
         patch.object(exp, "group_start"),
         patch.object(exp, "group_end"),
         patch.object(exp, "step"),
@@ -103,7 +103,7 @@ def test_inhaltssuche_findet_auftragsbegriff_ohne_pfad_oder_backticks(tmp_path):
     task = "Finde die QuasarLedger synchronization logic"
     state = _state(tmp_path, task)
     with (
-        patch.object(exp, "run_explorer", return_value={}),
+        patch.object(exp, "run_explorer", create=True, return_value={}),
         patch.object(exp, "group_start"),
         patch.object(exp, "group_end"),
         patch.object(exp, "step"),
@@ -141,28 +141,13 @@ def test_content_retrieval_from_explorer_is_reused_for_architect_handoff(
     from werkstatt.phases import explorer as phase_explorer
 
     task = "Finde die QuasarLedger synchronization logic"
-    source_candidates, retrieval = explorer_module._rank_source_files(
+    source_candidates, _retrieval = explorer_module._rank_source_files(
         tmp_path, task, limit=5,
     )
     assert source_candidates[0]["file"] == "src/beta.tsx"
     state = _state(tmp_path, task)
 
-    def retrieval_must_not_run_again(*_args, **_kwargs):
-        raise AssertionError("Explorer-Inhaltssuche darf nicht doppelt laufen")
-
-    monkeypatch.setattr(
-        explorer_module, "_rank_source_files", retrieval_must_not_run_again,
-    )
     with (
-        patch.object(
-            phase_explorer,
-            "run_explorer",
-            return_value={
-                "findings": "content retrieval complete",
-                "key_files": [],
-                "content_retrieval": retrieval,
-            },
-        ),
         patch.object(phase_explorer, "group_start"),
         patch.object(phase_explorer, "group_end"),
         patch.object(phase_explorer, "step"),
@@ -176,7 +161,10 @@ def test_content_retrieval_from_explorer_is_reused_for_architect_handoff(
     )
     assert evidence["source_sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
     assert "000001 | export function quasarLedgerSync()" in evidence["preview"]
-    assert state.explorer_context["content_retrieval"] == retrieval
+    assert state.explorer_context["content_retrieval"]["selected_files"] == [
+        "src/beta.tsx",
+    ]
+    assert state.explorer_context["dispatch"]["role"] == "project_context_tools"
 
 
 def test_leerer_retrievalbericht_bleibt_fuer_scout_erhalten(tmp_path):
@@ -187,7 +175,7 @@ def test_leerer_retrievalbericht_bleibt_fuer_scout_erhalten(tmp_path):
     task = "Suche nach dem seltenen Begriff QuasarLedgerNonce"
     state = _state(tmp_path, task)
     with (
-        patch.object(exp, "run_explorer", return_value={}),
+        patch.object(exp, "run_explorer", create=True, return_value={}),
         patch.object(exp, "group_start"),
         patch.object(exp, "group_end"),
         patch.object(exp, "step"),
@@ -215,7 +203,7 @@ def test_explorer_vorschau_wird_vor_handoff_aus_repo_neu_gelesen(tmp_path):
     with (
         patch.object(
             exp,
-            "run_explorer",
+            "run_explorer", create=True,
             return_value={
                 "findings": "Vorschlag",
                 "key_files": [{
@@ -257,7 +245,7 @@ def test_eindeutige_literalersetzung_ueberspringt_explorer_llm(tmp_path):
 
     with (
         patch.object(
-            exp, "run_explorer",
+            exp, "run_explorer", create=True,
             side_effect=AssertionError("Explorer-LLM waere hier redundant"),
         ),
         patch.object(exp, "group_start"),
@@ -286,7 +274,7 @@ def test_eng_einzeldatei_aenderung_ueberspringt_explorer_llm(tmp_path):
 
     with (
         patch.object(
-            exp, "run_explorer",
+            exp, "run_explorer", create=True,
             side_effect=AssertionError("Explorer-LLM ist fuer das enge Ziel redundant"),
         ),
         patch.object(exp, "group_start"),
@@ -303,6 +291,55 @@ def test_eng_einzeldatei_aenderung_ueberspringt_explorer_llm(tmp_path):
     assert "werkstatt/sample.py" in files
 
 
+def test_graphify_runs_from_complete_explorer_seeds_after_five_direct_files(
+    tmp_path: Path, monkeypatch,
+):
+    from werkstatt.phases import explorer as phase_explorer
+
+    paths = [f"src/module_{index}.py" for index in range(5)]
+    for index, relative in enumerate(paths):
+        path = tmp_path / relative
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(f"VALUE_{index} = {index}\n", encoding="utf-8")
+    task = "Pruefe " + " ".join(paths)
+    state = _state(tmp_path, task)
+    observed: dict[str, object] = {}
+
+    def graph_query(*_args, **kwargs):
+        observed["seed_paths"] = kwargs.get("seed_paths")
+        observed["seed_sha256"] = kwargs.get("seed_sha256")
+        return {
+            "status": "ok", "candidates": [], "seed_paths": paths[:3],
+            "index_sha256": "a" * 64,
+        }
+
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.graphify_candidates", graph_query,
+    )
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.refresh_graphify_index",
+        lambda *_args: {"status": "not_needed"},
+    )
+    with (
+        patch.object(
+            phase_explorer, "run_explorer", create=True,
+            return_value={"findings": "Five explicit files were read."},
+        ),
+        patch.object(phase_explorer, "group_start"),
+        patch.object(phase_explorer, "group_end"),
+        patch.object(phase_explorer, "step"),
+        patch.object(phase_explorer, "audit"),
+    ):
+        rc, _phase_state = phase_explorer._phase_explorer_and_setup(
+            state, task, "test", None,
+        )
+
+    assert rc == 0
+    assert observed["seed_paths"] == paths[:3]
+    assert set(observed["seed_sha256"]) == set(paths)
+    assert len(state.explorer_context["key_files"]) == 5
+
+
 def test_failed_related_file_scan_is_visible_and_disables_explorer_skip(
     tmp_path, monkeypatch,
 ):
@@ -317,18 +354,11 @@ def test_failed_related_file_scan_is_visible_and_disables_explorer_skip(
         "_verwandte_dateien",
         lambda *_args: (_ for _ in ()).throw(OSError("private path detail")),
     )
-    explorer_calls = []
     audit_events = []
     task = "Aendere den Wert in werkstatt/sample.py"
     state = _state(tmp_path, task)
 
     with (
-        patch.object(
-            phase_explorer, "run_explorer",
-            side_effect=lambda *_args: explorer_calls.append(True) or {
-                "findings": "Explorer context",
-            },
-        ),
         patch.object(phase_explorer, "group_start"),
         patch.object(phase_explorer, "group_end"),
         patch.object(phase_explorer, "step"),
@@ -343,7 +373,7 @@ def test_failed_related_file_scan_is_visible_and_disables_explorer_skip(
         )
 
     assert rc == 0
-    assert explorer_calls == [True]
+    assert state.explorer_context["dispatch"]["role"] == "project_context_tools"
     assert state.explorer_context["related_files_scan"] == {
         "status": "failed",
         "explicit_file_count": 1,
@@ -358,8 +388,8 @@ def test_failed_related_file_scan_is_visible_and_disables_explorer_skip(
     )
 
 
-def test_diagnostische_einzeldatei_laesst_explorer_llm_aktiv(tmp_path):
-    """Diagnoseauftraege bleiben trotz explizitem Pfad im Explorationspfad."""
+def test_diagnostische_einzeldatei_nutzt_keine_explorer_llm_rolle(tmp_path):
+    """Diagnoseauftraege erhalten Quellenbelege ohne Explorer-Modellaufruf."""
     target = tmp_path / "werkstatt" / "sample.py"
     target.parent.mkdir()
     target.write_text("value = 1\n", encoding="utf-8")
@@ -369,7 +399,10 @@ def test_diagnostische_einzeldatei_laesst_explorer_llm_aktiv(tmp_path):
     state = _state(tmp_path, aufgabe)
 
     with (
-        patch.object(exp, "run_explorer", return_value={}) as run_explorer,
+        patch.object(
+            exp, "run_explorer", create=True,
+            side_effect=AssertionError("Explorer-Rolle wurde entfernt"),
+        ),
         patch.object(exp, "group_start"),
         patch.object(exp, "group_end"),
         patch.object(exp, "step"),
@@ -380,4 +413,9 @@ def test_diagnostische_einzeldatei_laesst_explorer_llm_aktiv(tmp_path):
         )
 
     assert rc == 0
-    run_explorer.assert_called_once_with(state, aufgabe)
+    evidence = next(
+        item for item in state.explorer_context["key_files"]
+        if item["file"] == "werkstatt/sample.py"
+    )
+    assert evidence["source_complete"] is True
+    assert state.explorer_context["dispatch"]["role"] == "project_context_tools"

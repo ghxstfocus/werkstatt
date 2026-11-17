@@ -1,4 +1,4 @@
-"""Phase: _phase_explorer_and_setup (OP-139 Phase 2b)."""
+"""Tool-oriented project-context collection for checkpoint dispatch."""
 from __future__ import annotations
 
 import time
@@ -16,11 +16,43 @@ from werkstatt.state import RunState
 from ._common import (
     _validate_contract_safe,
     audit,
-    run_explorer,
 )
 
 
-def _phase_explorer_and_setup(
+def _append_graphify_candidates(
+    explorer_result: dict[str, Any],
+    seen: set[str],
+    candidates: object,
+    search_terms: list[str],
+    evidence_factory,
+) -> int:
+    """Use Graphify only for remaining source slots after direct retrieval."""
+    key_files = explorer_result.get("key_files")
+    if not isinstance(key_files, list) or not isinstance(candidates, list):
+        return 0
+    added = 0
+    for candidate in candidates:
+        if len(key_files) >= 5:
+            break
+        if not isinstance(candidate, dict):
+            continue
+        relative = candidate.get("file")
+        if not isinstance(relative, str) or not relative or relative in seen:
+            continue
+        evidence = evidence_factory(
+            relative,
+            str(candidate.get("why") or "Graphify candidate"),
+            "medium",
+            6000,
+            search_terms=search_terms,
+        )
+        seen.add(relative)
+        key_files.append(evidence)
+        added += 1
+    return added
+
+
+def _phase_project_context_tools(
     state: RunState,
     aufgabe: str,
     project_name: str,
@@ -28,8 +60,7 @@ def _phase_explorer_and_setup(
     *,
     preserve_failed_tasks: bool = False,
 ):
-    """Phase 1 (Fix AZ Stufe 8-A, 2026-10-31): Explorer + Preflight +
-    PhaseState-Init.
+    """Collect deterministic project evidence before role selection.
 
     Setzt state.explorer_context. Rueckgabe: (rc, phase_state).
     rc=0 -> weiter mit Plan-Gate. rc=1 -> Loop-Abbruch (Preflight).
@@ -56,8 +87,7 @@ def _phase_explorer_and_setup(
     else:
         _explorer_request = aufgabe
 
-    # 0b. Explorer (Phase 14, read-only). Einmal pro Loop-Lauf.
-    # M-396: Ueberspringen, wenn die Aufgabe explizite Dateien nennt.
+    # Read-only request path discovery. Explicit user paths stay pinned.
     import re as _re_explorer
     if debugger_fix is None:
         _explizite_dateien = _re_explorer.findall(
@@ -66,8 +96,7 @@ def _phase_explorer_and_setup(
         )
 
     # GOLD 2026-10-30: Suchbegriffe aus der Aufgabe extrahieren.
-    # Der Explorer nutzt sie, um bei grossen Dateien die relevanten
-    # Zeilen zu finden statt stumpf erste 100 + letzte 50.
+    # Excerpts use these terms to select relevant lines in large files.
     _suchbegriffe: list[str] = []
     # Backticks: `foo_bar`, `nth-child(n+4)` — volle Kette in Backticks
     for _m in _re_explorer.finditer(r'`([^`]{2,120})`', _explorer_request):
@@ -131,7 +160,7 @@ def _phase_explorer_and_setup(
     # explizites Einzeldatei-Aenderungsziel bestaetigt. Deterministische
     # Datei-/Verwandtschaftsbelege werden unten trotzdem aufgebaut. Breite,
     # diagnostische und mehrdeutige Auftraege bleiben im Explorer-Pfad.
-    group_start("Phase 1: Explorer")
+    group_start("Kontext: Graphify und Quellen")
     _t_exp = time.monotonic()
     _skip_reason = "kein_deterministischer_literalplan"
     _skip_explorer = debugger_fix is not None
@@ -181,30 +210,40 @@ def _phase_explorer_and_setup(
                 _skip_explorer = False
                 _skip_reason = "related_file_scan_failed"
 
-    if _skip_explorer:
-        _skip_file = _explizite_dateien[0]
-        _explorer_ergaenzung = {
-            "findings": (
-                "Explizites Einzeldatei-Ziel ist durch den deterministischen "
-                "Planner-Router bestaetigt; kein Explorer-LLM-Aufruf."
-            ),
-            "key_files": [{
-                "file": _skip_file,
-                "why": "explizites Ziel vom Scout-Router als eng bestaetigt",
+    # Project context is assembled with tools, not an Explorer model role.
+    # Graphify and the source reader below provide navigation and current
+    # hash-bound excerpts; deterministic measurements remain available as
+    # evidence without paying for a separate exploratory LLM call.
+    from werkstatt.explorer import _format_findings, _messen
+
+    _measurements = _messen(_explorer_request, Path(pd))
+    _measurement_files: list[dict[str, Any]] = []
+    for _measurement_name, _measurement in _measurements.items():
+        if _measurement_name == "migrations":
+            continue
+        for _measurement_path in _measurement.get("dateien", []):
+            if (
+                not isinstance(_measurement_path, str)
+                or _measurement_path.endswith(".md")
+                or _measurement_path.startswith("docs/")
+            ):
+                continue
+            _measurement_files.append({
+                "file": _measurement_path,
+                "why": f"{_measurement_name}-Messung",
                 "confidence": "high",
-            }],
-            "next_reads": [],
-        }
-        audit("loop_explorer_skipped", {
-            "grund": _skip_reason,
-            "datei": _skip_file,
-            "beleg": "expliziter_pfad_und_narrow_edit_router",
-        }, pd, pn)
-    else:
-        _explorer_ergaenzung = run_explorer(state, _explorer_request) or {}
-        audit("loop_explorer_required", {
-            "grund": _skip_reason,
-        }, pd, pn)
+            })
+    _explorer_ergaenzung = {
+        "findings": _format_findings(_measurements) if _measurements else "",
+        "key_files": _measurement_files,
+        "next_reads": [item["file"] for item in _measurement_files],
+    }
+    audit("loop_explorer_ergaenzt", {
+        "method": "deterministic_measurements_and_graphify",
+        "measurement_count": len(_measurements),
+        "measurement_file_count": len(_measurement_files),
+        "explorer_model_calls": 0,
+    }, pd, pn)
     _explorer_key = _explorer_ergaenzung.get("key_files") or []
     if not isinstance(_explorer_key, list):
         _explorer_key = []
@@ -251,11 +290,12 @@ def _phase_explorer_and_setup(
         "next_reads": list(_explorer_ergaenzung.get("next_reads") or []),
         "content_retrieval": _explorer_retrieval or {},
         "dispatch": {
-            "role": "explorer",
-            "selected": "skip" if _skip_explorer else "invoke",
-            "reason": _skip_reason,
+            "role": "project_context_tools",
+            "selected": "deterministic",
+            "reason": "graphify_and_current_source_retrieval",
             "evidence_kind": (
-                "deterministic" if _skip_explorer else "model_or_tool"
+                "explicit_source_read"
+                if _explizite_dateien else "graph_navigation"
             ),
         },
         "related_files_scan": {
@@ -343,50 +383,170 @@ def _phase_explorer_and_setup(
             explorer_result["key_files"].append(_evidence)
     # Retrieve matching source by content as a bounded supplement to path-only
     # Explorer results. Missing files/index entries remain unknown, not negative.
-    if (
-        not _skip_explorer
-        and not isinstance(_explorer_retrieval, dict)
-        and len(explorer_result["key_files"]) < 5
-    ):
-        from werkstatt.explorer import _rank_source_files
+    from werkstatt.graphify_index import (
+        graphify_candidates,
+        refresh_graphify_index,
+    )
 
+    _graph_seeds = [
+        str(item["file"])
+        for item in explorer_result["key_files"]
+        if isinstance(item, dict)
+        and isinstance(item.get("file"), str)
+        and item.get("source_complete") is True
+        and isinstance(item.get("source_sha256"), str)
+    ][:3]
+    _graph_seed_sha256 = {
+        str(item["file"]): str(item["source_sha256"])
+        for item in explorer_result["key_files"]
+        if isinstance(item, dict)
+        and isinstance(item.get("file"), str)
+        and item.get("source_complete") is True
+        and isinstance(item.get("source_sha256"), str)
+    }
+    _graph_retrieval = graphify_candidates(
+        Path(pd), _explorer_request + " " + " ".join(_suchbegriffe),
+        limit=8,
+        seed_paths=_graph_seeds,
+        seed_sha256=_graph_seed_sha256,
+    )
+    _graph_refresh: dict[str, Any] | None = None
+    if _graph_retrieval.get("status") in {
+        "unavailable", "stale", "partial_stale", "invalid_index",
+    }:
+        _graph_refresh = refresh_graphify_index(Path(pd))
+        if _graph_refresh.get("status") == "refreshed":
+            _graph_retrieval = graphify_candidates(
+                Path(pd), _explorer_request + " " + " ".join(_suchbegriffe),
+                limit=8,
+                seed_paths=_graph_seeds,
+                seed_sha256=_graph_seed_sha256,
+            )
+    _graph_retrieval["refresh_attempted"] = _graph_refresh is not None
+    explorer_result["graphify_retrieval"] = _graph_retrieval
+    audit("loop_explorer_graphify", {
+        "status": _graph_retrieval.get("status"),
+        "retrieval_method": _graph_retrieval.get("retrieval_method"),
+        "native_query_status": _graph_retrieval.get("native_query_status"),
+        "native_node_count": _graph_retrieval.get("native_node_count", 0),
+        "native_relationship_count": _graph_retrieval.get(
+            "native_relationship_count", 0,
+        ),
+        "ignored_source_count": _graph_retrieval.get("ignored_source_count", 0),
+        "refresh_status": _graph_refresh.get("status") if _graph_refresh else "not_needed",
+        "candidate_count": len(_graph_retrieval.get("candidates") or []),
+        "ast_symbol_count": sum(
+            len(item.get("symbols") or [])
+            for item in _graph_retrieval.get("candidates") or []
+            if isinstance(item, dict)
+        ),
+        "relationship_count": sum(
+            len(item.get("relationships") or [])
+            for item in _graph_retrieval.get("candidates") or []
+            if isinstance(item, dict)
+        ),
+        "stale_source_count": _graph_retrieval.get("stale_source_count", 0),
+        "stale_relationship_count": _graph_retrieval.get(
+            "stale_relationship_count", 0,
+        ),
+        "index_sha256": _graph_retrieval.get("index_sha256"),
+        "seed_paths": _graph_retrieval.get("seed_paths", []),
+    }, pd, pn)
+    _graphify_primary = (
+        _graph_retrieval.get("retrieval_method") == "graphify_cli_query"
+        and _graph_retrieval.get("status") == "ok"
+        and _graph_retrieval.get("stale_source_count", 0) == 0
+    )
+
+    def _add_graphify_candidates(selection_order: str) -> None:
+        added = _append_graphify_candidates(
+            explorer_result,
+            _seen,
+            _graph_retrieval.get("candidates") if _graph_retrieval else [],
+            _suchbegriffe,
+            _file_evidence,
+        )
+        if not added:
+            return
+        audit(
+            "loop_explorer_graphify",
+            {"status": _graph_retrieval.get("status"),
+             "selection_order": selection_order,
+             "selected_count": added,
+             "candidate_count": len(
+                 _graph_retrieval.get("candidates") or [],
+             ),
+             "ast_symbol_count": sum(
+                 len(item.get("symbols") or [])
+                 for item in _graph_retrieval.get("candidates") or []
+                 if isinstance(item, dict)
+             ),
+             "relationship_count": sum(
+                 len(item.get("relationships") or [])
+                 for item in _graph_retrieval.get("candidates") or []
+                 if isinstance(item, dict)
+             ),
+             "stale_relationship_count": _graph_retrieval.get(
+                 "stale_relationship_count", 0,
+             ),
+             "index_sha256": _graph_retrieval.get("index_sha256")},
+            pd, pn,
+        )
+
+    # Prefer Graphify only when its native query is available and the index
+    # is fully current. The Werkstatt ranking fallback is weaker in the
+    # checked-in retrieval evaluation, so direct content matches stay first.
+    if _graphify_primary:
+        _add_graphify_candidates("fresh_native_graphify_before_content_fallback")
+    from werkstatt.explorer import _rank_source_files
+
+    _source_matches: list[dict[str, Any]] = []
+    _retrieval_manifest: dict[str, Any] = {}
+    _retrieval_reused = (
+        isinstance(_explorer_retrieval, dict)
+        and _explorer_retrieval.get("index_scan_succeeded") is True
+    )
+    if len(explorer_result["key_files"]) < 5 and not _retrieval_reused:
         _source_matches, _retrieval_manifest = _rank_source_files(
             Path(pd), _explorer_request + " " + " ".join(_suchbegriffe),
             exclude=set(_seen),
             limit=5 - len(explorer_result["key_files"]),
         )
+    if _retrieval_manifest:
         explorer_result["content_retrieval"] = _retrieval_manifest
-        if not _source_matches:
-            audit(
-                "loop_explorer_grep_fallback",
-                {"result": "no_specific_content_match",
-                 "retrieval": _retrieval_manifest},
-                pd, pn,
-            )
-        for _match in _source_matches:
-            _rel = str(_match["file"])
-            _matched_terms = list(dict.fromkeys([
-                *_suchbegriffe,
-                *[
-                    str(term) for term in _match.get("matched_terms", [])
-                    if isinstance(term, str)
-                ],
-            ]))
-            _seen.add(_rel)
-            explorer_result["key_files"].append(_file_evidence(
-                _rel,
-                str(_match.get("why") or "Inhaltstreffer"),
-                str(_match.get("confidence") or "medium"),
-                6000,
-                search_terms=_matched_terms,
-            ))
-            audit(
-                "loop_explorer_grep_fallback",
-                {"file": _rel,
-                 "begriffe": _match.get("matched_terms", []),
-                 "retrieval": _retrieval_manifest},
-                pd, pn,
-            )
+    if not _source_matches and not _retrieval_reused:
+        audit(
+            "loop_explorer_grep_fallback",
+            {"result": "no_specific_content_match",
+             "retrieval": _retrieval_manifest},
+            pd, pn,
+        )
+    for _match in _source_matches:
+        _rel = str(_match["file"])
+        _matched_terms = list(dict.fromkeys([
+            *_suchbegriffe,
+            *[
+                str(term) for term in _match.get("matched_terms", [])
+                if isinstance(term, str)
+            ],
+        ]))
+        _seen.add(_rel)
+        explorer_result["key_files"].append(_file_evidence(
+            _rel,
+            str(_match.get("why") or "Inhaltstreffer"),
+            str(_match.get("confidence") or "medium"),
+            6000,
+            search_terms=_matched_terms,
+        ))
+        audit(
+            "loop_explorer_grep_fallback",
+            {"file": _rel,
+             "begriffe": _match.get("matched_terms", []),
+             "retrieval": _retrieval_manifest},
+            pd, pn,
+        )
+    if not _graphify_primary:
+        _add_graphify_candidates("after_current_content_fallback")
 
     audit("loop_explorer_ergaenzt",
           {"explizit": len(_explizite_dateien[:5]),
@@ -408,26 +568,26 @@ def _phase_explorer_and_setup(
           pd, pn)
     _el_exp = time.monotonic() - _t_exp
     if explorer_result.get("key_files"):
-        step(1, "Explorer", f"{len(explorer_result['key_files'])} files", elapsed_s=_el_exp)
+        step(1, "Projektkontext", f"{len(explorer_result['key_files'])} Dateien", elapsed_s=_el_exp)
         audit("loop_explorer_ok", {"files": len(explorer_result["key_files"])}, pd, pn)
     else:
-        step(1, "Explorer", "0 files", ok=False, elapsed_s=_el_exp)
+        step(1, "Projektkontext", "0 Dateien", ok=False, elapsed_s=_el_exp)
         audit("loop_explorer_leer", {}, pd, pn)
     # Preserve the retrieval coverage even when it found no source file so
     # Scout can distinguish a bounded no-match from complete negative evidence.
     state.explorer_context = explorer_result
     group_end()
 
-    # OP-136a: Contract-Validierung explorer->scout.
-    # Nur wenn der Loop tatsaechlich plant (kein Resume, kein
-    # "bereits erfuellt"). Sonst laeuft er mit vorbelegten Tasks
-    # (Test-Mocks, Resume) weiter.
+    # Required context contract before the planner can choose its next role.
+    # Skip it only for resume and already-satisfied runs with existing tasks.
     _skip_explorer_check = (
         bool(getattr(state, "tasks", None))
         or state.auftrag_bereits_erfuellt
     )
     if (not _skip_explorer_check
-            and not _validate_contract_safe("explorer", "scout", state, pd, pn)):
+            and not _validate_contract_safe(
+                "project_context", "planner", state, pd, pn,
+            )):
         return 1, phase_state
 
     # FIX AN 2026-10-31: Schreibrechte-Preflight fuer Task-Dateien.
@@ -491,3 +651,8 @@ def _phase_explorer_and_setup(
             )
 
     return 0, phase_state
+
+
+# Compatibility export for older CLI/test integrations. The loop dispatcher
+# uses the tool-oriented name and does not invoke the Explorer model role.
+_phase_explorer_and_setup = _phase_project_context_tools
