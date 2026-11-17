@@ -71,7 +71,7 @@ def test_replans_only_missing_criteria_and_preserves_completed_tasks(
         project_dir=tmp_path,
         project_name="demo",
         run_id="run-criteria-gap",
-        aufgabe="Goal",
+        aufgabe="OP-398 " + "long original request detail " * 3000,
         api_key="test-key",
         tasks=list(phase.data["tasks"]),
         tests=list(phase.data["tests"]),
@@ -81,6 +81,8 @@ def test_replans_only_missing_criteria_and_preserves_completed_tasks(
 
     def fake_planner(addition):
         assert "AC2: Second criterion" in addition.aufgabe
+        assert "OP-398" not in addition.aufgabe
+        assert len(addition.aufgabe) < 5_000
         addition.tasks = [{
             "id": "repair-second",
             "name": "Complete second criterion",

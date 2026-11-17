@@ -313,9 +313,17 @@ def replan_unassigned_criteria(
 
     base_calls = state.llm_calls
     addition = deepcopy(state)
+    # Do not prepend the full original OP here. It is already persisted on the
+    # parent RunState; only the exact uncovered criteria and bounded failure
+    # evidence are needed to generate a replacement task graph. Repeating a
+    # long OP on every recovery can exceed Scout/Architect context budgets.
     addition.aufgabe = (
-        f"{state.aufgabe}\n\n"
-        "## Checkpoint-Neuplanung: nur offene bestehende Kriterien\n"
+        "## Checkpoint-Neuplanung: nur offene, bereits freigegebene Kriterien\n"
+        "Ergaenze den bestehenden Task-Graph ausschliesslich fuer die unten "
+        "genannten offenen Kriterien. Das urspruengliche Nutzerziel und die "
+        "Freigabe bleiben unveraendert. Nutze nur die hier angegebenen "
+        "Kriterien und Fehlerbelege; fordere fehlende noetige Informationen "
+        "gezielt an.\n"
         + (
             "Vorherige Tasks sind nach ihrer Recovery fehlgeschlagen. Nutze "
             "die protokollierte Fehlerursache, um denselben Fehlansatz nicht "
