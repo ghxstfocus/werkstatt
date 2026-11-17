@@ -3102,6 +3102,35 @@ def _select_loop_run_id(
     return new_run_id
 
 
+def _run_scoped_phase_state(
+    project_name: str,
+    project_dir: Path,
+    run_id: str,
+) -> PhaseState:
+    """Create or resume an isolated durable checkpoint for direct API calls.
+
+    The CLI supplies its explicitly selected project checkpoint. Callers of
+    ``run_pipeline_loop`` that omit it still need durable coordinator state;
+    keep those runs under a run-specific directory so they cannot overwrite a
+    different run's project-level resume checkpoint.
+    """
+    if not isinstance(run_id, str) or not run_id or len(run_id) > 240:
+        raise ValueError("Ungueltige Run-ID fuer den Phase-State")
+    run_key = hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:32]
+    phase_state = PhaseState(
+        project_name,
+        base_dir=project_dir / ".werkstatt" / "runs" / run_key,
+    )
+    if phase_state.exists():
+        if not phase_state.load():
+            raise ValueError("Vorhandener Run-Checkpoint ist ungueltig")
+        if phase_state.run_id != run_id:
+            raise ValueError("Run-Checkpoint gehoert zu einer anderen Run-ID")
+    else:
+        phase_state.run_id = run_id
+    return phase_state
+
+
 def run_pipeline_loop(
     project_name: str,
     aufgabe: str,
@@ -3120,6 +3149,22 @@ def run_pipeline_loop(
     store = EventStore()
     run_id = _select_loop_run_id(project_name, state, phase_state, store)
     state.run_id = run_id
+    if phase_state is None:
+        try:
+            phase_state = _run_scoped_phase_state(
+                project_name, state.project_dir, run_id,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            audit(
+                "loop_failed",
+                {
+                    "reason": "run_checkpoint_initialization_failed",
+                    "error": str(exc)[:300],
+                },
+                state.project_dir,
+                project_name,
+            )
+            return 1
     store.create_run_record(
         project_name, run_id, aufgabe, base_commit=_git_head(state.project_dir),
     )
