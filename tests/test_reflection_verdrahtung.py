@@ -88,10 +88,10 @@ def test_geladene_skills_wird_respektiert(monkeypatch) -> None:
 ## test_reflection_doku_listet_drei_varianten
 
 
-def test_reflection_doku_listet_drei_varianten() -> None:
-    """Die Modul-Doku von reflection.py nennt die drei Reflection-Varianten."""
+def test_reflection_doku_listet_aktive_varianten() -> None:
+    """Die Modul-Doku nennt nur noch produktive Reflection-Varianten."""
     src = Path(_refl.__file__).read_text(encoding="utf-8")
     doc = ast.get_docstring(ast.parse(src)) or ""
     assert "post_build" in doc
     assert "phase_end" in doc
-    assert "plan_reject" in doc
+    assert "plan_reject" not in doc

@@ -13,7 +13,6 @@ class Phase(str, Enum):
     PRE_BUILD = "pre_build"
     SCOUT = "scout"
     PLAN_GATE = "plan_gate"
-    PLAN_REJECT = "plan_reject"
 
     # Pro Task
     TASK_START = "task_start"

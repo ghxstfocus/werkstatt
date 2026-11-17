@@ -76,14 +76,6 @@ _reg(Control(
     hart=True, prioritaet=10,
 ))
 _reg(Control(
-    name="plan_reject_reflection",
-    phase=Phase.PLAN_REJECT,
-    fn=reflection._plan_reject_reflection,
-    source="werkstatt.reflection._plan_reject_reflection",
-    description="Planner-Reflection nach Plan-Reject",
-    hart=True, prioritaet=10,
-))
-_reg(Control(
     name="phase_end_reflection",
     phase=Phase.PHASE_END,
     fn=reflection._phase_end_reflection,
