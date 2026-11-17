@@ -3943,7 +3943,6 @@ def _run_pipeline_loop_impl(
         _rc_task, tasks_ok, tasks = _phase_tasks_loop(
             state,
             phase_state,
-            1,
             task_index_offset,
             coordinator_decision=decision,
         )

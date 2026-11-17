@@ -671,20 +671,17 @@ def _persist_run_checkpoint(
 def _phase_tasks_loop(
     state: RunState,
     phase_state,
-    max_task_steps: int | None = None,
     task_index_offset: int = 0,
     *,
     coordinator_decision: dict[str, Any] | None = None,
 ) -> tuple[int, int, list]:
     """Execute one coordinator-selected task checkpoint.
 
-    ``max_task_steps`` limits this call to the requested number of worker
-    actions so the outer coordinator can reassess evidence and choose again.
+    Each call may execute at most one worker action. The outer coordinator
+    must reassess the persisted evidence before selecting another action.
     Return ``(rc, tasks_ok, tasks)``; the caller persists failures and
     dispatches again from the resulting checkpoint.
     """
-    if max_task_steps is not None and max_task_steps < 1:
-        raise ValueError("max_task_steps must be positive or None")
     if task_index_offset < 0:
         raise ValueError("task_index_offset must be non-negative")
     pd = state.project_dir
@@ -813,7 +810,7 @@ def _phase_tasks_loop(
         decision_payload = coordinator_decision
 
         decision = decision_payload["decision"]
-        if max_task_steps is not None and task_steps >= max_task_steps:
+        if task_steps >= 1:
             # A checkpoint may now request a different role (verify, review,
             # or recovery) after the previous action. Do not run that second
             # role under the stale coordinator decision.

@@ -2354,7 +2354,7 @@ def test_task_loop_dispatches_criteria_replan_at_checkpoint(
     )
 
     result = task_phase._phase_tasks_loop(
-        state, phase, max_task_steps=1,
+        state, phase,
         coordinator_decision=coordinator_decision_for_task(phase, state),
     )
 
@@ -2404,7 +2404,7 @@ def test_successful_criteria_replan_yields_before_new_task_dispatch(
     )
 
     result = task_phase._phase_tasks_loop(
-        state, phase, max_task_steps=1,
+        state, phase,
         coordinator_decision=coordinator_decision_for_task(phase, state),
     )
 
@@ -2481,7 +2481,7 @@ def test_task_dispatch_returns_at_next_persisted_boundary(
     monkeypatch.setattr(task_phase, "audit", lambda *_a, **_kw: True)
 
     result = task_phase._phase_tasks_loop(
-        state, phase, max_task_steps=1,
+        state, phase,
         coordinator_decision=coordinator_decision_for_task(phase, state),
     )
 
@@ -2510,7 +2510,6 @@ def test_task_worker_rechecks_coordinator_choice_before_dispatch(
     result = task_phase._phase_tasks_loop(
         state,
         phase,
-        max_task_steps=1,
         coordinator_decision={
             "coordinator_action": "execute_task_checkpoint",
             "decision": "execute_planned_task",
@@ -2601,20 +2600,6 @@ def test_changed_read_dependency_precedes_pending_builder(tmp_path) -> None:
     assert decision["next_task_id"] == "read"
     assert decision["next_executor"] == "read_only_task"
     assert decision["stale_tasks_queued"] == ["read"]
-
-
-def test_task_dispatch_rejects_empty_step_limit(tmp_path) -> None:
-    phase = _phase(
-        tmp_path,
-        [{"id": "t1", "action": "read", "criterion_refs": ["AC1"]}],
-        ["Inventory is complete"],
-    )
-    state = RunState(project_dir=tmp_path, project_name="demo")
-
-    import pytest
-
-    with pytest.raises(ValueError, match="max_task_steps"):
-        task_phase._phase_tasks_loop(state, phase, max_task_steps=0)
 
 
 def test_checkpoint_carries_compact_verify_evidence_without_raw_output(
