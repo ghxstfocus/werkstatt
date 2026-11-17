@@ -7,6 +7,8 @@
     "akzeptanzkriterien",
     "api_index_cache",
     "applied_count",
+    "architect_execution_context_manifest",
+    "architect_project_docs_manifest",
     "architect_prosa",
     "architect_reasoning_enabled",
     "architect_required_source_files",

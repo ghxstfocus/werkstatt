@@ -114,23 +114,24 @@ def test_planner_split_action_compiles_from_handoff_without_run_planner(
     assert [task["id"] for task in state.tasks] == ["t1"]
 
 
-def test_stale_handoff_returns_to_planner_for_role_refresh(tmp_path, monkeypatch):
+def test_stale_handoff_yields_to_coordinator_for_role_refresh(
+    tmp_path, monkeypatch,
+):
     state, goal, source = _state_with_persisted_handoff(tmp_path)
     source.write_text("def changed():\n    return False\n", encoding="utf-8")
     calls = []
 
-    def refresh_upstream(actual_state, *, stop_after_role):
-        calls.append((actual_state, stop_after_role))
-        actual_state.planner_step_yielded = True
-        actual_state.planner_yielded_after_role = "architect"
-        return True
-
-    monkeypatch.setattr("werkstatt.planner.run_planner", refresh_upstream)
+    monkeypatch.setattr(
+        "werkstatt.planner.run_planner",
+        lambda *_args, **_kwargs: calls.append("legacy_runner_called"),
+    )
 
     result = loop._dispatch_planner_checkpoint_action(
         state, "planner_split", goal, "sample", object(),
     )
 
     assert result == (0, False)
-    assert calls == [(state, "planner_split")]
+    assert calls == []
     assert state.planner_plan_candidate_ready is False
+    assert state.planner_step_yielded is True
+    assert state.planner_yielded_after_role == "scout"
