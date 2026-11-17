@@ -1019,425 +1019,26 @@ def _continue_followup_with_coordinator(
     state: RunState,
     phase_state: PhaseState,
 ) -> int:
-    """Resume approved follow-up work through persisted coordinator actions."""
-    store = EventStore()
-    run_id = get_run_id()
-    while True:
-        check_run_lease(state)
-        from werkstatt.phases.tasks import _persist_run_checkpoint
-
-        _persist_run_checkpoint(
-            store, project_name, run_id, phase_state,
-            phase_state.get_next_task(), run_state=state,
-        )
-        decision = _run_coordinator_action(phase_state, state)
+    """Resume accepted follow-up work through the single run coordinator."""
+    parent_goal = phase_state.data.get("aufgabe")
+    if not isinstance(parent_goal, str) or not parent_goal.strip():
         audit(
-            "loop_run_coordinator_decision",
-            _coordinator_decision_audit_payload(run_id, decision),
+            "loop_failed",
+            {"reason": "followup_parent_goal_missing", "recoverable": False},
             state.project_dir,
             project_name,
+            run_id=get_run_id(),
         )
-        try:
-            _persist_run_coordinator_decision(
-                store, project_name, run_id, decision, run_state=state,
-            )
-        except RuntimeError as exc:
-            audit(
-                "loop_failed",
-                {
-                    "reason": "coordinator_decision_persist_failed",
-                    "error": str(exc)[:300],
-                    "followup_resume": True,
-                },
-                state.project_dir,
-                project_name,
-            )
-            return 1
-
-        action = decision.get("coordinator_action")
-        if action in {
-            "planner_scout", "planner_architect", "planner_split",
-            "planner_dispatch", "planner_direct",
-        }:
-            planner_goal = state.aufgabe
-            state.planner_checkpoint_callback = (
-                lambda checkpoint: _persist_run_planner_role_checkpoint(
-                    project_name, run_id, checkpoint, run_state=state,
-                )
-            )
-            state.planning_response_cache_callback = (
-                lambda entry, _goal=planner_goal: _persist_planning_response_cache(
-                    phase_state, entry, run_id=run_id, goal=_goal,
-                )
-            )
-            state.planner_role_artifact_callback = (
-                lambda artifact, _goal=planner_goal: _persist_planner_role_artifact(
-                    phase_state, artifact, run_id=run_id, goal=_goal,
-                )
-            )
-            state.planner_stop_after_role = {
-                "planner_scout": "scout",
-                "planner_architect": "architect",
-            }.get(action)
-            state.planner_action_role = {
-                "planner_scout": "scout",
-                "planner_architect": "architect",
-                "planner_split": "planner_split",
-                "planner_direct": "builder_direct",
-            }.get(action)
-            choice = decision.get("coordinator_model_choice")
-            if isinstance(choice, dict):
-                role = choice.get("role")
-                state.planner_coordinator_role = role if role in {"scout", "architect"} else None
-                evidence = choice.get("source_evidence")
-                state.planner_coordinator_source_evidence = tuple(
-                    item for item in evidence if isinstance(item, dict)
-                ) if isinstance(evidence, list) else ()
-            state.planner_yielded_after_role = None
-            state.planner_step_yielded = False
-            state.planner_defer_plan_approval = True
-            state.planner_plan_candidate_ready = False
-            try:
-                planner_rc, planner_done = _dispatch_planner_checkpoint_action(
-                    state, action, planner_goal, project_name, phase_state,
-                )
-                candidate_ready = state.planner_plan_candidate_ready
-                yielded_after_role = state.planner_yielded_after_role
-            finally:
-                state.planner_defer_plan_approval = False
-                state.planner_plan_candidate_ready = False
-                state.planner_checkpoint_callback = None
-                state.planning_response_cache_callback = None
-                state.planner_role_artifact_callback = None
-                state.planner_stop_after_role = None
-                state.planner_action_role = None
-                state.planner_coordinator_role = None
-                state.planner_coordinator_source_evidence = ()
-                state.planner_yielded_after_role = None
-            if candidate_ready:
-                try:
-                    from werkstatt.run_followups import active_chat_followup
-                    followup_checkpoint = active_chat_followup(phase_state)
-                    if (
-                        followup_checkpoint is not None
-                        and followup_checkpoint.get("status") == "roles_pending"
-                        and followup_checkpoint.get("planner_goal") == planner_goal
-                    ):
-                        from werkstatt.run_followups import (
-                            restore_chat_followup_parent,
-                            store_chat_followup_candidate,
-                        )
-                        store_chat_followup_candidate(
-                            state, phase_state, run_id=run_id,
-                        )
-                        restore_chat_followup_parent(state, phase_state)
-                    elif state.criteria_replan_id:
-                        from werkstatt.criteria_replan import (
-                            restore_criteria_replan_parent,
-                            store_criteria_replan_candidate,
-                        )
-                        store_criteria_replan_candidate(
-                            state, phase_state, run_id=run_id,
-                        )
-                        restore_criteria_replan_parent(state, phase_state)
-                    else:
-                        phase_state.record_plan_candidate(
-                            goal=planner_goal, run_id=run_id,
-                            tasks=state.tasks, tests=list(state.tests or []),
-                            criteria=list(state.akzeptanzkriterien or []),
-                            phases=list(state.phasen or []),
-                            architect_prose=state.architect_prosa or "",
-                            preflight_findings=list(state.preflight_fehler or []),
-                        )
-                    phase_state.save()
-                except (AttributeError, TypeError, ValueError) as exc:
-                    audit("loop_failed", {
-                        "reason": "followup_plan_candidate_persist_failed",
-                        "error": str(exc)[:300], "recoverable": True,
-                    }, state.project_dir, project_name, run_id=run_id)
-                    _persist_run_result(
-                        store, project_name, run_id, 1,
-                        run_state=state, phase_state=phase_state,
-                    )
-                    return 1
-            elif state.planner_step_yielded:
-                completed_role = yielded_after_role or {
-                    "planner_scout": "scout",
-                    "planner_architect": "architect",
-                }.get(action)
-                if completed_role not in {"scout", "architect"}:
-                    _persist_run_result(
-                        store, project_name, run_id, 1,
-                        run_state=state, phase_state=phase_state,
-                    )
-                    return 1
-                try:
-                    _persist_planner_role_stage(
-                        phase_state, completed_role,
-                        run_id=run_id, goal=planner_goal,
-                    )
-                except Exception as exc:
-                    audit("loop_failed", {
-                        "reason": "planner_role_stage_persist_failed",
-                        "role": completed_role, "error": str(exc)[:300],
-                    }, state.project_dir, project_name, run_id=run_id)
-                    _persist_run_result(
-                        store, project_name, run_id, 1,
-                        run_state=state, phase_state=phase_state,
-                    )
-                    return 1
-                continue
-            elif planner_done or planner_rc != 0:
-                _persist_run_result(
-                    store, project_name, run_id, planner_rc or 1,
-                    run_state=state, phase_state=phase_state,
-                )
-                return planner_rc or 1
-            else:
-                _persist_run_result(
-                    store, project_name, run_id, 1,
-                    run_state=state, phase_state=phase_state,
-                )
-                return 1
-            continue
-        if action == "reconcile_chat_followup":
-            from werkstatt.run_followups import FollowupReconciliationError
-
-            if phase_state is None:
-                audit(
-                    "loop_failed",
-                    {"reason": "chat_followup_without_phase_checkpoint"},
-                    state.project_dir,
-                    project_name,
-                )
-                _persist_run_result(
-                    EventStore(), project_name, get_run_id(), 1,
-                    run_state=state, phase_state=None,
-                )
-                return 1
-            try:
-                _reconcile_chat_followup_checkpoint(
-                    project_name, state, phase_state,
-                )
-            except FollowupReconciliationError as exc:
-                audit(
-                    "loop_failed",
-                    {
-                        "reason": "chat_followup_reconciliation",
-                        "error": str(exc)[:500],
-                        "followup_resume": True,
-                    },
-                    state.project_dir,
-                    project_name,
-                )
-                return 1
-            continue
-        if action == "apply_chat_followup_candidate":
-            if phase_state is None:
-                _persist_run_result(
-                    EventStore(), project_name, get_run_id(), 1,
-                    run_state=state, phase_state=None,
-                )
-                return 1
-            from werkstatt.run_followups import (
-                FollowupReconciliationError,
-                apply_chat_followup_candidate,
-            )
-            try:
-                applied = apply_chat_followup_candidate(
-                    state, phase_state, store, project_name, run_id,
-                )
-            except FollowupReconciliationError as exc:
-                audit("loop_failed", {
-                    "reason": "chat_followup_gate_pending",
-                    "error": str(exc)[:400], "recoverable": True,
-                }, state.project_dir, project_name, run_id=run_id)
-                _persist_run_result(
-                    store, project_name, run_id, 1,
-                    run_state=state, phase_state=phase_state,
-                )
-                return 1
-            if not applied:
-                audit("loop_failed", {
-                    "reason": "chat_followup_candidate_invalid",
-                    "recoverable": False,
-                }, state.project_dir, project_name, run_id=run_id)
-                _persist_run_result(
-                    store, project_name, run_id, 1,
-                    run_state=state, phase_state=phase_state,
-                )
-                return 1
-            continue
-        if action == "plan_approval_gate":
-            gate_rc = _run_plan_candidate_approval(
-                state, phase_state, project_name,
-            )
-            if gate_rc != 0:
-                return gate_rc
-            continue
-        if action == "plan_prebuild_verify":
-            verify_rc = _run_plan_candidate_prebuild_verify(
-                state, phase_state, project_name,
-            )
-            if verify_rc != 0:
-                return verify_rc
-            continue
-        if action == "phase_end_review":
-            review_rc = _run_phase_end_review_checkpoint(
-                state, phase_state, project_name,
-            )
-            if review_rc != 0:
-                return review_rc
-            continue
-        if action == "human_gate":
-            gate_rc = _run_human_gate_checkpoint(
-                state, phase_state, project_name,
-            )
-            if gate_rc == 3:
-                continue
-            if gate_rc != 0:
-                return gate_rc
-            continue
-        if action == "recover_phase_end_verify_checkpoint":
-            recovery_rc = _run_phase_end_verify_recovery_checkpoint(
-                state, phase_state, project_name,
-            )
-            if recovery_rc == 3:
-                continue
-            return recovery_rc
-        if action == "reject_stalled_phase_end_verify_recovery":
-            audit(
-                "loop_verify_recovery_stalled",
-                {
-                    "reason": "same_worktree_after_coordinator_recovery",
-                    "decision_summary": (
-                        "Der Koordinator wiederholt keine Recovery ohne "
-                        "veraenderten Arbeitsstand."
-                    ),
-                },
-                state.project_dir,
-                project_name,
-            )
-            return 1
-        if action == "phase_end_verify":
-            verify_rc = _run_phase_end_verify_checkpoint(
-                state, phase_state, project_name,
-            )
-            if verify_rc == 3:
-                continue
-            if verify_rc != 0:
-                return verify_rc
-            continue
-        if action == "post_commit_verify":
-            post_verify_rc = _run_post_commit_verify_checkpoint(
-                state, phase_state, project_name,
-            )
-            if post_verify_rc == 3:
-                continue
-            if post_verify_rc != 0:
-                return post_verify_rc
-            continue
-        if action == "commit_run":
-            commit_rc = _run_commit_checkpoint(
-                state, phase_state, project_name,
-            )
-            if commit_rc == 3:
-                continue
-            if commit_rc != 0:
-                return commit_rc
-            continue
-        if action == "finalize_run":
-            tasks = state.tasks
-            tasks_ok = len([
-                record for record in phase_state.data.get("tasks", [])
-                if isinstance(record, dict) and record.get("status") == "done"
-            ])
-            rc = _phase_finalize(
-                state, tasks_ok, tasks, project_name, phase_state,
-                phase_review_checkpointed=True,
-                human_gate_checkpointed=True,
-                phase_end_verify_checkpointed=True,
-                commit_checkpointed=(
-                    phase_state.data.get("human_gate_checkpoint", {}).get(
-                        "commit_requested",
-                    ) is True
-                ),
-            )
-            if rc == 3:
-                continue
-            return rc
-
-        if action not in {
-            "execute_task_checkpoint",
-            "verify_task_checkpoint",
-            "review_task_checkpoint",
-            "complete_task_checkpoint",
-            "recover_verify_failure_checkpoint",
-            "reject_stale_verify_failure_checkpoint",
-            "recover_phase_end_verify_checkpoint",
-            "reject_stalled_phase_end_verify_recovery",
-            "resolve_task_graph",
-            "replan_unassigned_criteria",
-            "replan_failed_criteria",
-            "human_gate",
-        }:
-            audit(
-                "loop_failed",
-                {
-                    "reason": "unsupported_followup_checkpoint_action",
-                    "action": str(action or "")[:120],
-                },
-                state.project_dir,
-                project_name,
-            )
-            return 1
-
-        def progress_snapshot() -> tuple[tuple[str, str, str], ...]:
-            records = phase_state.data.get("tasks", [])
-            if not isinstance(records, list):
-                return ()
-            return tuple(
-                (
-                    str(item.get("id", "")),
-                    str(item.get("status", "")),
-                    str(item.get("failure", "")),
-                )
-                for item in records if isinstance(item, dict)
-            )
-
-        before = progress_snapshot()
-        task_index_offset = len([
-            record for record in phase_state.data.get("tasks", [])
-            if isinstance(record, dict)
-            and record.get("status") in {
-                "done", "failed", "blocked", "vetoed", "split",
-            }
-        ])
-        state.coordinator_dispatch_stale = False
-        rc, _tasks_ok, _tasks = _phase_tasks_loop(
-            state,
-            phase_state,
-            1,
-            task_index_offset,
-            coordinator_decision=decision,
-        )
-        check_run_lease(state)
-        if state.coordinator_dispatch_stale:
-            continue
-        if rc != 0:
-            return rc
-        if before == progress_snapshot():
-            audit(
-                "loop_failed",
-                {
-                    "reason": "followup_checkpoint_no_progress",
-                    "action": action,
-                    "next_task_id": decision.get("next_task_id"),
-                },
-                state.project_dir,
-                project_name,
-            )
-            return 1
+        return 1
+    return _run_pipeline_loop_impl(
+        project_name,
+        parent_goal,
+        [state],
+        phasen_state=state,
+        phase_state=phase_state,
+        continuation=True,
+        finish_followups=False,
+    )
 
 
 def _run_selected_planner_role_action(state: RunState, action: str) -> bool:
@@ -3498,6 +3099,8 @@ def _run_pipeline_loop_impl(
     *,
     phasen_state: RunState | None = None,
     phase_state: PhaseState | None = None,
+    continuation: bool = False,
+    finish_followups: bool = True,
 ) -> int:
     """Execute coordinator-selected actions and persist each safe checkpoint."""
 
@@ -3509,16 +3112,17 @@ def _run_pipeline_loop_impl(
     if not get_run_id():
         set_run_id(f"{project_name}-{time.strftime('%Y%m%d-%H%M%S')}")
 
-    header(f"{project_name} — {aufgabe[:50]}")
+    if not continuation:
+        header(f"{project_name} — {aufgabe[:50]}")
 
-    # OP-303: Loop-Start-Marker fuer Run-Status pro OP.
-    import re as _re_loop
-    _op_m = _re_loop.search(r"\bOP-(\d+[a-z]?)\b", aufgabe or "")
-    _op_id_start = ("OP-" + _op_m.group(1)) if _op_m else ""
-    audit("loop_started", {
-        "op_id": _op_id_start,
-        "aufgabe_kurz": (aufgabe or "")[:200],
-    }, Path("."), project_name)
+        # OP-303: Loop-Start-Marker fuer Run-Status pro OP.
+        import re as _re_loop
+        _op_m = _re_loop.search(r"\bOP-(\d+[a-z]?)\b", aufgabe or "")
+        _op_id_start = ("OP-" + _op_m.group(1)) if _op_m else ""
+        audit("loop_started", {
+            "op_id": _op_id_start,
+            "aufgabe_kurz": (aufgabe or "")[:200],
+        }, Path("."), project_name)
 
     # Projekt-Pfad aus Config aufloesen, falls nicht gesetzt
     if state is not None and getattr(state, "project_dir", None) is None:
@@ -4394,9 +3998,11 @@ def _run_pipeline_loop_impl(
     # Finalize only after the current checkpoint explicitly requests it.
     check_run_lease(state)
     rc = finalize_rc if finalize_rc is not None else 1
-    return _finish_run_after_followups(
-        project_name, state, phase_state, rc,
-    )
+    if finish_followups:
+        return _finish_run_after_followups(
+            project_name, state, phase_state, rc,
+        )
+    return rc
 
 
 def _k13_rc(rc: int, tasks_ok: int) -> int:

@@ -394,3 +394,29 @@ def test_finalization_race_resumes_followup_through_coordinator(tmp_path, monkey
     assert loop._finish_run_after_followups("demo", state, phase, 0) == 0
     assert calls == {"persist": 2, "resume": 1}
     assert run_followups.active_chat_followup(phase) is not None
+
+
+def test_followup_resume_uses_main_coordinator_dispatcher(tmp_path, monkeypatch):
+    from werkstatt import loop
+
+    state, phase, _store = _setup(tmp_path)
+    captured = {}
+
+    def resume(project, goal, state_ref, **kwargs):
+        captured.update({
+            "project": project,
+            "goal": goal,
+            "state": state_ref[0],
+            **kwargs,
+        })
+        return 0
+
+    monkeypatch.setattr(loop, "_run_pipeline_loop_impl", resume)
+
+    assert loop._continue_followup_with_coordinator("demo", state, phase) == 0
+    assert captured["project"] == "demo"
+    assert captured["goal"] == "Hauptziel"
+    assert captured["state"] is state
+    assert captured["phase_state"] is phase
+    assert captured["continuation"] is True
+    assert captured["finish_followups"] is False
