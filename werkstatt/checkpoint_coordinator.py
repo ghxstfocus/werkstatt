@@ -317,9 +317,26 @@ def choose_planner_checkpoint_action(
         available.update({"project_inventory", "explorer_evidence"})
     if scout_skip_target:
         available.add("explorer_source_evidence")
-    if planner_role_stage in {"scout", "architect"}:
+    # Stage markers are progress telemetry, not evidence. Only persisted,
+    # run/goal/hash-validated role artifacts can unlock a downstream role.
+    role_artifacts = getattr(state, "planner_role_artifacts", {})
+    if not isinstance(role_artifacts, dict):
+        role_artifacts = {}
+    scout_artifact = role_artifacts.get("scout")
+    scout_report = (
+        scout_artifact.get("output")
+        if isinstance(scout_artifact, dict) else None
+    )
+    if isinstance(scout_report, dict):
         available.update({"scout_report", "current_source_evidence"})
-    if planner_role_stage == "architect":
+        if scout_report.get("bereits_erfuellt") is True:
+            available.add("goal_already_fulfilled")
+    architect_artifact = role_artifacts.get("architect")
+    architect_output = (
+        architect_artifact.get("output")
+        if isinstance(architect_artifact, dict) else None
+    )
+    if isinstance(architect_output, str) and len(architect_output.strip()) >= 50:
         available.update({
             "architect_plan", "architect_prose", "acceptance_criteria",
             "current_source_manifest",
@@ -336,7 +353,7 @@ def choose_planner_checkpoint_action(
     selected_role = role_decision.role
     if (
         not role_decision.missing_inputs
-        and planner_role_stage is None
+        and not role_artifacts.get("scout")
         and role_decision.role == "architect"
         and scout_skip_target
     ):
@@ -394,8 +411,8 @@ def choose_planner_checkpoint_action(
         }[selected_role]
         reason = (
             "scout_skipped:" + scout_route_reason
-            if planner_role_stage is None
-            and selected_role == "architect"
+            if selected_role == "architect"
+            and not role_artifacts.get("scout")
             and scout_route_reason
             else role_decision.reason
         )

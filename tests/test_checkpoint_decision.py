@@ -469,10 +469,23 @@ def test_role_is_selected_before_role_specific_preflight(tmp_path, monkeypatch) 
     assert initial["coordinator_action"] == "planner_scout"
     assert initial["decision_basis"]["preflight_checkpoint_current"] is False
 
+    # A stage marker is telemetry only. It cannot substitute for a persisted
+    # Scout result and must not advance the role selection.
     phase.data["planner_role_stage"] = "scout"
     phase.data["planner_role_goal_sha256"] = hashlib.sha256(
         goal.encode("utf-8"),
     ).hexdigest()
+    stage_only = loop._run_coordinator_action(phase, state)
+    assert stage_only["coordinator_action"] == "planner_scout"
+
+    from werkstatt.planner_artifacts import make_role_artifact
+
+    state.planner_role_artifacts = {
+        "scout": make_role_artifact(
+            "scout", {"auftrag_prosa": "Belegte Untersuchung"},
+            run_id="preflight-run", goal=goal, input_sha256="a" * 64,
+        ),
+    }
     after_scout = loop._run_coordinator_action(phase, state)
     assert after_scout["coordinator_action"] == "plan_preflight"
     assert after_scout["decision_basis"]["selected_planner_role"] == "architect"
@@ -955,21 +968,38 @@ def test_run_coordinator_selects_scout_without_setup_and_hydrates_plan_on_resume
         b"Goal",
     ).hexdigest()
     assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
+        "planner_scout"
+    )
+    from werkstatt.planner_artifacts import make_role_artifact
+
+    state.planner_role_artifacts = {
+        "scout": make_role_artifact(
+            "scout", {"auftrag_prosa": "Current Scout evidence"},
+            run_id="run-1", goal="Goal", input_sha256="b" * 64,
+        ),
+    }
+    assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
         "planner_architect"
     )
     resumed_phase.data["planner_role_stage"] = "architect"
+    state.planner_role_artifacts["architect"] = make_role_artifact(
+        "architect", "A validated architect output containing sufficient current planning evidence.",
+        run_id="run-1", goal="Goal", input_sha256="c" * 64,
+    )
     selected_split = _run_coordinator_action(resumed_phase, state)
     assert selected_split["coordinator_action"] == "planner_split"
     assert selected_split["next_executor"] == "planner_split"
-    # Role-stage progress is run and goal scoped; a stale stage cannot skip
-    # the Scout on another run or a changed goal.
+    # Neither a stale stage nor artifacts from another run/goal may skip
+    # Scout; production resume loads only matching artifacts.
     state.run_id = "other-run"
+    state.planner_role_artifacts = {}
     _record_preflight(resumed_phase, state)
     assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
         "planner_scout"
     )
     state.run_id = "run-1"
     state.aufgabe = "Other goal"
+    state.planner_role_artifacts = {}
     _record_preflight(resumed_phase, state)
     assert _run_coordinator_action(resumed_phase, state)["coordinator_action"] == (
         "planner_scout"
@@ -1064,7 +1094,7 @@ def test_run_coordinator_selects_scout_without_setup_and_hydrates_plan_on_resume
     assert resumed_state.tasks[0]["id"] == "task-1"
 
 
-def test_planner_role_stage_persists_for_same_run_and_goal(tmp_path) -> None:
+def test_planner_role_stage_is_telemetry_not_role_evidence(tmp_path) -> None:
     import pytest
 
     from werkstatt.loop import (
@@ -1084,7 +1114,7 @@ def test_planner_role_stage_persists_for_same_run_and_goal(tmp_path) -> None:
     state.coordinator_setup_context_ready = True
     _record_preflight(resumed, state)
     decision = _run_coordinator_action(resumed, state)
-    assert decision["coordinator_action"] == "planner_architect"
+    assert decision["coordinator_action"] == "planner_scout"
     assert decision["decision_basis"]["planner_role_stage"] == "scout"
 
     with pytest.raises(ValueError, match="Rollenstage"):
