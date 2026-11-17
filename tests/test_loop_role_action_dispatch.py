@@ -10,17 +10,25 @@ def test_selected_scout_and_architect_actions_dispatch_directly_to_role_runner(
 ):
     calls = []
 
-    def run_planner(state, *, stop_after_role):
-        calls.append((state, stop_after_role))
-        return True
-
     monkeypatch.setattr(
         "werkstatt.roles.scout_execution.run_scout_role_checkpoint",
         lambda actual_state, *, goal, mark_plan_candidate=None: (
             calls.append((actual_state, "scout")) or goal == actual_state.aufgabe
         ),
     )
-    monkeypatch.setattr("werkstatt.planner.run_planner", run_planner)
+    monkeypatch.setattr(
+        "werkstatt.roles.architect_execution.run_architect_role_checkpoint",
+        lambda actual_state, *, goal: (
+            calls.append((actual_state, "architect"))
+            or goal == actual_state.aufgabe
+        ),
+    )
+    monkeypatch.setattr(
+        "werkstatt.planner.run_planner",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("selected roles must not enter Planner runner"),
+        ),
+    )
     state = RunState(aufgabe="Inspect a project source")
 
     assert loop._run_selected_planner_role_action(state, "planner_scout")
@@ -82,20 +90,23 @@ def test_planner_split_runs_as_role_checkpoint_and_validates_candidate(
     calls = []
     state = RunState(aufgabe="Build the approved graph")
 
-    def run_planner(actual_state, *, stop_after_role):
-        calls.append((actual_state, stop_after_role))
+    def run_split(actual_state, *, goal):
+        calls.append((actual_state, goal))
         actual_state.tasks = [{"id": "t1", "action": "read"}]
         actual_state.planner_step_yielded = True
         actual_state.planner_yielded_after_role = "planner_split"
         return True
 
-    monkeypatch.setattr("werkstatt.planner.run_planner", run_planner)
+    monkeypatch.setattr(
+        "werkstatt.roles.planner_split.run_planner_split_checkpoint",
+        run_split,
+    )
     monkeypatch.setattr(loop, "_plan_gate", lambda _state: True)
 
     assert loop._dispatch_planner_checkpoint_action(
         state, "planner_split", state.aufgabe, "sample", object(),
     ) == (0, False)
-    assert calls == [(state, "planner_split")]
+    assert calls == [(state, state.aufgabe)]
     assert state.planner_plan_candidate_ready is True
 
 
@@ -136,13 +147,10 @@ def test_planner_split_checkpoint_dispatch_bypasses_planner_compatibility(
 def test_planner_split_waits_for_refreshed_architect_checkpoint(monkeypatch):
     state = RunState(aufgabe="Build from Architect evidence")
 
-    def run_planner(actual_state, *, stop_after_role):
-        assert stop_after_role == "planner_split"
-        actual_state.planner_step_yielded = True
-        actual_state.planner_yielded_after_role = "architect"
-        return True
-
-    monkeypatch.setattr("werkstatt.planner.run_planner", run_planner)
+    monkeypatch.setattr(
+        "werkstatt.roles.planner_split.run_planner_split_checkpoint",
+        lambda *_args, **_kwargs: None,
+    )
     monkeypatch.setattr(
         loop, "_plan_gate",
         lambda *_args: (_ for _ in ()).throw(
@@ -153,6 +161,8 @@ def test_planner_split_waits_for_refreshed_architect_checkpoint(monkeypatch):
     assert loop._dispatch_planner_checkpoint_action(
         state, "planner_split", state.aufgabe, "sample", object(),
     ) == (0, False)
+    assert state.planner_step_yielded is True
+    assert state.planner_yielded_after_role == "scout"
     assert state.planner_plan_candidate_ready is False
 
 
@@ -160,7 +170,12 @@ def test_planner_split_candidate_still_fails_closed_at_plan_gate(monkeypatch):
     state = RunState(aufgabe="Build the approved graph")
     state.tasks = [{"id": "t1"}]
     monkeypatch.setattr(
-        "werkstatt.planner.run_planner", lambda *_args, **_kwargs: True,
+        "werkstatt.roles.planner_split.run_planner_split_checkpoint",
+        lambda actual_state, *, goal: (
+            setattr(actual_state, "planner_yielded_after_role", "planner_split")
+            or setattr(actual_state, "planner_step_yielded", True)
+            or True
+        ),
     )
     monkeypatch.setattr(loop, "_plan_gate", lambda _state: False)
 

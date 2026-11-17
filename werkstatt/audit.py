@@ -84,6 +84,7 @@ _AUDIT_KINDS_BEKANNT = _AUDIT_KINDS_BEKANNT | frozenset(
         "loop_task_antipattern_veto",
         "loop_run_coordinator_decision",
         "planner_architect_context_budget",
+        "planner_architect_handoff_missing",
         "planner_architect_reasoning_route",
         "planner_role_dispatch_decision",
         "loop_planner_required_evidence_unavailable",

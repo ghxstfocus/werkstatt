@@ -337,7 +337,6 @@ def test_loop_patch_post_apply_verify(tmp_path):
     (tmp_path / "README.md").write_text("# Test\n")
     # Patch ersetzt String, aber write schlaegt fehl (simuliert via Patch-Mock)
     with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.loop.run_planner", return_value=True), \
          patch("werkstatt.loop.run_builder", return_value=True), \
          patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
          patch("werkstatt.loop.run_reviewer", return_value=True), \

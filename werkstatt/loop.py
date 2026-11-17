@@ -52,7 +52,6 @@ from werkstatt.git_ops import (  # Fix AZ Stufe 1: Re-Export
 )
 from werkstatt.hooks import _call_hook  # Fix AZ Stufe 2: Re-Export
 from werkstatt.phase_state import PhaseState
-from werkstatt.planner import run_planner
 from werkstatt.reflection import (  # Fix AZ Stufe 6: Re-Export
     _phase_end_reflection,
     _reflection_loop,
@@ -174,7 +173,6 @@ __all__ = [
     "log_line",
     "run_builder",
     "run_explorer",
-    "run_planner",
     "run_reviewer",
     "run_task_checkpoint",
     "step",
@@ -1051,14 +1049,17 @@ def _run_selected_planner_role_action(state: RunState, action: str) -> bool:
                 state, "planner_plan_candidate_ready", True,
             ),
         ))
-    if action not in {"planner_architect", "planner_split"}:
-        return False
-    from werkstatt.planner import run_planner
+    if action == "planner_architect":
+        from werkstatt.roles.architect_execution import (
+            run_architect_role_checkpoint,
+        )
 
-    stop_after_role = (
-        "architect" if action == "planner_architect" else "planner_split"
-    )
-    return bool(run_planner(state, stop_after_role=stop_after_role))
+        return bool(run_architect_role_checkpoint(
+            state, goal=state.aufgabe,
+        ))
+    if action != "planner_split":
+        return False
+    return False
 
 
 def _prepare_direct_builder_candidate(
@@ -1230,11 +1231,14 @@ def _dispatch_planner_checkpoint_action(
 
         direct_success = run_planner_split_checkpoint(state, goal=aufgabe)
         if direct_success is None:
-            # Missing or stale handoffs re-enter the compatibility planner,
-            # which refreshes only the missing upstream role and yields back.
-            split_success = _run_selected_planner_role_action(state, action)
-        else:
-            split_success = direct_success
+            # The candidate can become stale between selection and execution.
+            # Return to the coordinator; it will reselect from current
+            # run-bound role artifacts rather than entering a multi-role
+            # Planner fallback which could silently call Scout or Architect.
+            state.planner_step_yielded = True
+            state.planner_yielded_after_role = "scout"
+            return 0, False
+        split_success = direct_success
         if not split_success:
             return 1, False
         if (
