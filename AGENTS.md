@@ -51,15 +51,16 @@ entscheidet der Checkpoint-Koordinator anhand Auftrag, Risiko und Beleglage:
   Plan-/Freigabeschritt deterministisch validiert. Keine Rolle darf aus einer
   frueheren Rolle allein eine Pflichtreihenfolge fuer kuenftige Runs ableiten.
 
-`werkstatt/phases/plan.py` und der alte Plan-/Retry-Executor sind entfernt;
-die produktive Planroute laeuft ausschliesslich ueber typisierte
-Koordinatoraktionen und den gespeicherten Plan-Kandidaten. Die verbleibenden
-Dateien unter `werkstatt/phases/` enthalten waehrend der Migration noch
-Executor-Implementierungen und Kompatibilitaetsfassade. Sie duerfen keine
-globale Setup->Plan->Task->Finalize-Reihenfolge erzwingen. Der persistierte
-Checkpoint-Koordinator waehlt jede naechste Aktion anhand Ziel, Risiko,
-aktueller Evidenz, Fortschritt, Freigabe und Budget; erforderliche Sicherheits-
-und Ergebnis-Gates bleiben eigenstaendige, verbindliche Aktionen.
+Das Paket `werkstatt/phases/` und seine Executor-Implementierungen sind
+entfernt. Der persistierte Checkpoint-Koordinator waehlt jede naechste Aktion
+anhand Ziel, Risiko, aktueller Evidenz, Fortschritt, Freigabe und Budget;
+erforderliche Sicherheits- und Ergebnis-Gates bleiben eigenstaendige,
+verbindliche Aktionen. `werkstatt/runtime_compat/` enthaelt noch
+Kompatibilitaets-Proxies fuer schrittweise ausgeloeste Laufzeithelfer; diese
+Proxies duerfen weder Rollenarbeit ausfuehren noch eine globale
+Setup->Plan->Task->Finalize-Reihenfolge erzwingen. Eine einheitliche,
+vollstaendig zielorientierte Koordinatorsteuerung aller Erstlaeufe,
+Fortsetzungen und Gate-Recovery-Pfade ist weiter zu verifizieren.
 - Spec-First mit unabhaengigem Spec-Builder, eingefrorenem Test-Hash und
   abgeschirmtem Blind-Builder ist in der Produktionssteuerung noch nicht
   verdrahtet (OP-398); vorhandene `test_spec`-Module nicht als aktiven Pfad
@@ -102,8 +103,11 @@ nicht mehr als aktive Arbeit oder Kriterienbeleg gewertet. Auch diese
 Erweiterung verlangt dieselben Kriterientexte und erneut Plan- und Human-Gate;
 Blockaden, Gate-Ablehnungen und unbekannte Fehlerursachen werden nicht
 automatisch neu geplant. Der Checkpoint ist keine reine Timeline-Anzeige.
-Setup und Planfreigabe bleiben im aktuellen Migrationsstand noch explizite
-Vorbereitungsaktionen; die vollstaendige Phasenabloesung aus ADR-0032 ist offen.
+Setup-Kontextbeschaffung, Planfreigabe und Task-/Gate-Recovery bleiben eigene
+Koordinatoraktionen mit ihren jeweils notwendigen Voraussetzungen. Die
+verbleibende Arbeit ist, saemtliche Start-, Fortsetzungs- und Recovery-Pfade
+gegen unnoetige Rollenaufrufe und implizite feste Reihenfolgen zu pruefen und
+die Auswahl anhand aktueller Ziel- und Checkpoint-Belege zu verifizieren.
 
 Rollen-Kontextbudgets muessen die tatsaechlich uebergebene Information
 abbilden: keine stillen Vorab-Slices vor dem Budgetierer. Ganze optionale

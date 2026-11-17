@@ -2208,6 +2208,7 @@ def run_planner(
         raise ValueError("ungueltiger Planner-Rollengrenzpunkt")
     state.planner_step_yielded = False
     state.planner_yielded_after_role = None
+    state.planner_plan_candidate_ready = False
     pd = state.project_dir
     pn = state.project_name
     api_key = state.api_key
@@ -2583,6 +2584,7 @@ def run_planner(
                 and _direct_source_sha256
             ):
                 state.tasks = [_direct_task]
+                state.planner_plan_candidate_ready = True
                 state.tests = [
                     (
                         "Die fuer geaenderte Dateien konfigurierte Verify-Suite "
@@ -2885,7 +2887,9 @@ def run_planner(
                 _atom_tasks, state.akzeptanzkriterien,
             )
             state.tasks = _atom_tasks
-            # Marker, damit _plan_gate den Plan als gueltig sieht.
+            # The atomic evidence may skip Architect and Planner-Split, but
+            # the resulting graph is still only a candidate for human review.
+            state.planner_plan_candidate_ready = True
             state.architect_prosa = f"[atomarer Plan: {_scout_source}]"
             state.akzeptanzkriterien = list(
                 state.akzeptanzkriterien or []
@@ -3033,6 +3037,7 @@ def run_planner(
             )
         else:
             state.tasks = _independent_file_tasks
+            state.planner_plan_candidate_ready = True
             state.akzeptanzkriterien = _independent_criteria
             state.phasen = []
             state.tests = []
@@ -3098,6 +3103,7 @@ def run_planner(
             _single_file_reason = f"taskgraph_validation_failed:{str(exc)[:180]}"
         else:
             state.tasks = _single_file_tasks
+            state.planner_plan_candidate_ready = True
             state.phasen = []
             state.tests = []
             _role_decision = choose_next_planner_role(
@@ -3221,6 +3227,10 @@ def run_planner(
     if stop_after_role == "planner_split" and state.tasks:
         state.planner_step_yielded = True
         state.planner_yielded_after_role = "planner_split"
+    if state.tasks:
+        # A graph made through the compatibility orchestrator must follow the
+        # same candidate persistence and human-approval path as direct split.
+        state.planner_plan_candidate_ready = True
 
     return bool(state.tasks)
 

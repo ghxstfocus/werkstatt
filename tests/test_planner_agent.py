@@ -585,6 +585,7 @@ def test_architect_single_file_plan_skips_planner_split_with_current_evidence(
     assert st.tasks[0]["task_files"] == ["src/module.py"]
     assert st.akzeptanzkriterien == [st.aufgabe]
     assert st.tasks[0]["criterion_refs"] == ["AC1"]
+    assert st.planner_plan_candidate_ready is True
     assert [(item["role"], item["status"]) for item in role_checkpoints][-1] == (
         "planner_split", "skipped",
     )
@@ -655,6 +656,7 @@ def test_architect_independent_file_set_skips_planner_split_with_current_evidenc
     ]
     assert st.akzeptanzkriterien == [st.aufgabe]
     assert all(task["criterion_refs"] == ["AC1"] for task in st.tasks)
+    assert st.planner_plan_candidate_ready is True
 
 
 def test_complex_single_file_request_keeps_architect_reasoning_enabled(tmp_path):
@@ -797,6 +799,7 @@ def test_valid_atomic_scout_plan_skips_architect(tmp_path):
     assert len(st.tasks) == 1
     assert st.tasks[0]["task_files"] == ["module.py"]
     assert st.architect_prosa == "[atomarer Plan: Scout]"
+    assert st.planner_plan_candidate_ready is True
 
 
 def test_invalid_atomic_scout_plan_escalates_to_architect(tmp_path):
