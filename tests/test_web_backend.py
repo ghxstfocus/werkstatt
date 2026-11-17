@@ -77,6 +77,22 @@ def _reset_loop_registry(app_modul: Any) -> None:
     app_modul._PAUSIERTE_LOOPS.clear()
 
 
+def _fake_worker_is_alive(
+    monkeypatch: pytest.MonkeyPatch, pid: int,
+) -> None:
+    """Make registry liveness agree with a Popen fake used by control tests."""
+    from werkstatt.web import loop_registry
+
+    real_pid_alive = loop_registry._pid_alive
+
+    def _pid_alive(candidate: int | None, identity: str | None = None) -> bool:
+        if candidate == pid:
+            return True
+        return real_pid_alive(candidate, identity)
+
+    monkeypatch.setattr(loop_registry, "_pid_alive", _pid_alive)
+
+
 def test_failed_worker_spawn_marks_run_record_failed(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
@@ -169,6 +185,7 @@ def test_loop_subprozess_start_stop(
     # Never use the pytest worker's PID for a fake child process: a fallback
     # process handle could otherwise send its stop signal to pytest itself.
     fake_pid = 987654
+    _fake_worker_is_alive(monkeypatch, fake_pid)
     fake_popen = _fake_popen(
         aufrufe, pid=fake_pid, kwargs_log=popen_kwargs,
     )
@@ -387,7 +404,9 @@ def test_parallele_starts_starten_nur_einen_loop(
     aufrufe: list[list[str]] = []
     # The fake child must never share the pytest worker's PID: this test
     # exercises the stop route after concurrent starts.
-    normal = _fake_popen(aufrufe, pid=987655)
+    fake_pid = 987655
+    _fake_worker_is_alive(monkeypatch, fake_pid)
+    normal = _fake_popen(aufrufe, pid=fake_pid)
 
     def langsamer_popen(argv: list[str], *args: Any, **kwargs: Any) -> Any:
         entered.set()
@@ -439,7 +458,11 @@ def test_pause_resume_loop_control(
     app_modul._PAUSIERTE_LOOPS.clear()
 
     aufrufe: list[list[str]] = []
-    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    fake_pid = 987656
+    _fake_worker_is_alive(monkeypatch, fake_pid)
+    monkeypatch.setattr(
+        app_modul.subprocess, "Popen", _fake_popen(aufrufe, pid=fake_pid),
+    )
     signale: list[tuple[int, int]] = []
     monkeypatch.setattr(
         app_modul.os, "killpg",
@@ -798,7 +821,11 @@ def test_autonomous_start_resolves_dependency_completed_in_progress(
     if app_modul.os.name == "posix":
         monkeypatch.setattr(app_modul.os, "killpg", lambda *_: None)
     aufrufe: list[list[str]] = []
-    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    fake_pid = 987657
+    _fake_worker_is_alive(monkeypatch, fake_pid)
+    monkeypatch.setattr(
+        app_modul.subprocess, "Popen", _fake_popen(aufrufe, pid=fake_pid),
+    )
     monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
 
     client = TestClient(app_modul.app)
@@ -840,7 +867,11 @@ def test_autonomous_start_uses_status_done_ledger_dependency(
     if app_modul.os.name == "posix":
         monkeypatch.setattr(app_modul.os, "killpg", lambda *_: None)
     aufrufe: list[list[str]] = []
-    monkeypatch.setattr(app_modul.subprocess, "Popen", _fake_popen(aufrufe))
+    fake_pid = 987658
+    _fake_worker_is_alive(monkeypatch, fake_pid)
+    monkeypatch.setattr(
+        app_modul.subprocess, "Popen", _fake_popen(aufrufe, pid=fake_pid),
+    )
     monkeypatch.setattr(app_modul, "EventStore", _NullEventStore)
 
     client = TestClient(app_modul.app)

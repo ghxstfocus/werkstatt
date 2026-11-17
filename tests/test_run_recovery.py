@@ -867,7 +867,7 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
         worker = app_module._LAUFENDE_LOOPS.get("demo")
         assert worker is not None
         assert app_module._LOOP_RUN_IDS["demo"] == run_id
-        assert worker.wait(timeout=30) == 0
+        worker_returncode = worker.wait(timeout=30)
 
         deadline = time.monotonic() + 15
         record = None
@@ -930,6 +930,19 @@ def test_resume_endpoint_runs_production_cli_to_completed_run(
                 f"cmdline={proc_cmdline!r}; state={proc_state!r}; "
                 f"wchan={proc_wchan!r}; env={proc_env!r}; maps={proc_maps!r}; "
                 f"worker_log={log!r}; other_logs={extra_logs!r}"
+            )
+        if worker_returncode != 0:
+            log_path = project_dir / ".werkstatt" / "logs" / f"loop-{run_id}.log"
+            worker_log = (
+                log_path.read_text(encoding="utf-8", errors="replace")[-12000:]
+                if log_path.is_file()
+                else "(no worker log)"
+            )
+            pytest.fail(
+                f"Resume-Worker endete mit {worker_returncode}; "
+                f"run_status={record['status']!r}; "
+                f"checkpoint={record.get('checkpoint')!r}; "
+                f"worker_log={worker_log!r}"
             )
         assert record["run_id"] == run_id
         assert record["checkpoint_version"] > failed_record["checkpoint_version"]
