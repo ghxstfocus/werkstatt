@@ -165,12 +165,6 @@ def _validate_contract_safe(
         return False
 
 
-def run_planner(*args, **kwargs):
-    """Late-Binding-Proxy fuer werkstatt.loop.run_planner."""
-    from werkstatt.loop import run_planner as _orig
-    return _orig(*args, **kwargs)
-
-
 def replan_task_graph_from_architect(*args, **kwargs):
     """Late-Binding-Proxy fuer die isolierte Planner-Recovery-Rolle."""
     from werkstatt.planner_recovery import replan_task_graph_from_architect as _orig

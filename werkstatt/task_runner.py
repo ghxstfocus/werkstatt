@@ -23,12 +23,6 @@ def _verify_patches(*args, **kwargs):
     return _orig(*args, **kwargs)
 
 
-def run_planner(*args, **kwargs):
-    """Late-Binding-Proxy fuer werkstatt.loop.run_planner."""
-    from werkstatt.loop import run_planner as _orig
-    return _orig(*args, **kwargs)
-
-
 def _hat_op_nnn(state) -> bool:
     """OP-063: True, wenn state.aufgabe ein OP-NNN nennt.
 

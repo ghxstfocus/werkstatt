@@ -5,6 +5,14 @@ from werkstatt.roles.planner_dispatch import prepare_direct_builder_context
 from werkstatt.state import RunState
 
 
+def test_active_runtime_exposes_no_planner_compatibility_runner():
+    from werkstatt import runtime_compat, task_runner
+
+    assert not hasattr(loop, "run_planner")
+    assert not hasattr(runtime_compat, "run_planner")
+    assert not hasattr(task_runner, "run_planner")
+
+
 def test_selected_scout_and_architect_actions_dispatch_directly_to_role_runner(
     monkeypatch,
 ):
