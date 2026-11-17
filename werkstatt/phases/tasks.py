@@ -1,7 +1,6 @@
 """Checkpoint task executor and evidence-based task recovery."""
 from __future__ import annotations
 
-import json
 import sqlite3
 import time
 from hashlib import sha256
@@ -895,134 +894,52 @@ def _phase_tasks_loop(
         if decision in {
             "review_task_checkpoint", "complete_task_checkpoint",
         }:
-            if next_executor not in {"reviewer", "task_completion"}:
-                phase_state.save()
-                return 1, tasks_ok, tasks
-            record = phase_state.get_task(task_id)
-            review_checkpoint = (
-                record.get("review_checkpoint")
-                if isinstance(record, dict) else None
-            )
-            if (
-                not isinstance(review_checkpoint, dict)
-                or phase_state.task_review_checkpoint_is_current(task_id) is not True
-            ):
-                audit(
-                    "loop_coordinator_dispatch_stale",
-                    {
-                        "action": decision,
-                        "task_id": task_id,
-                        "reason": "review_checkpoint_verify_evidence_missing_or_stale",
-                    },
-                    pd, pn,
-                )
-                phase_state.save()
-                state.coordinator_dispatch_stale = True
-                return 0, tasks_ok, tasks
-
-            review_warnings = review_checkpoint.get("verify_warnings")
-            review_warnings = (
-                review_warnings if isinstance(review_warnings, list) else []
-            )
             from werkstatt.review_dispatch import reviewer_dispatch_decision
             from werkstatt.reviewer import _get_git_diff
+            from werkstatt.roles.complete_task import (
+                TaskCompletionServices,
+                complete_task_checkpoint,
+            )
 
-            try:
-                current_diff = _get_git_diff(
-                    project_dir=pd, task_files=task_obj.get("task_files"),
-                )
-            except (OSError, RuntimeError, TypeError, ValueError):
-                current_diff = None
-            current_review = reviewer_dispatch_decision(
+            completion = complete_task_checkpoint(
+                state,
+                phase_state,
                 task_obj,
-                current_diff,
-                verify_warnings=review_warnings,
-                recovery=bool(
-                    getattr(state, "reflection_chat_builder_reserve_active", False)
-                    or getattr(state, "reflection_chat_evidence", None)
+                task_id=str(task_id),
+                task_name=task_name,
+                task_index=i,
+                decision=decision,
+                decision_payload=decision_payload,
+                services=TaskCompletionServices(
+                    audit_call=audit,
+                    get_git_diff=_get_git_diff,
+                    reviewer_dispatch_decision=reviewer_dispatch_decision,
+                    review=lambda current_state, task_index: _with_spinner(
+                        f"Reviewer t{task_index}",
+                        lambda: run_reviewer(current_state),
+                    ),
+                    task_end=_task_ende,
+                    audit_task_ok=_audit_task_ok,
+                    reviewer_rejected_payload=_reviewer_rejected_payload,
+                    check_lease=check_run_lease,
                 ),
             )
-            should_review = current_review.get("invoke_reviewer") is True
-            persisted_dispatch = decision_payload.get("review_dispatch")
-            persisted_evidence = (
-                persisted_dispatch.get("evidence")
-                if isinstance(persisted_dispatch, dict) else None
-            )
-            if (
-                (decision == "review_task_checkpoint") != should_review
-                or not isinstance(persisted_evidence, dict)
-                or current_review.get("evidence", {}).get("diff_sha256")
-                != persisted_evidence.get("diff_sha256")
-            ):
-                audit(
-                    "loop_coordinator_dispatch_stale",
-                    {
-                        "action": decision,
-                        "task_id": task_id,
-                        "reason": "review_dispatch_evidence_changed",
-                    },
-                    pd, pn,
-                )
+            if completion.status == "stale":
                 phase_state.save()
                 state.coordinator_dispatch_stale = True
+                group_end()
+                return 0, tasks_ok, tasks
+            if completion.status == "failed":
+                phase_state.save()
+                group_end()
+                return 1, tasks_ok, tasks
+            if completion.status == "review_rejected":
+                group_end()
                 return 0, tasks_ok, tasks
 
-            if should_review:
-                state.reviewer_bugs = []
-                state.reviewer_deterministic_fail = False
-                _review_ok = _with_spinner(
-                    f"Reviewer t{i}", lambda: run_reviewer(state),
-                )
-                check_run_lease(state)
-                if not _review_ok:
-                    review_failure = json.dumps(
-                        state.reviewer_bugs or [], ensure_ascii=False,
-                    )[:1200]
-                    transitioned = _task_ende(
-                        state, phase_state, task_id, ok=False,
-                        name=task_name,
-                        failure="reviewer_rejected_at_checkpoint",
-                        failure_detail=review_failure,
-                    )
-                    if not transitioned:
-                        phase_state.save()
-                        return 1, tasks_ok, tasks
-                    audit(
-                        "loop_reviewer_rejected",
-                        _reviewer_rejected_payload(
-                            task_id, {"bugs": state.reviewer_bugs or []},
-                        ),
-                        pd, pn,
-                    )
-                    phase_state.save()
-                    return 0, tasks_ok, tasks
-
-            transitioned = _task_ende(
-                state, phase_state, task_id, ok=True, name=task_name,
-            )
-            if not transitioned:
-                phase_state.save()
-                return 1, tasks_ok, tasks
-            tasks_ok += 1
+            tasks_ok += completion.tasks_ok_delta
             state.tasks_ok_counter = tasks_ok
-            _audit_task_ok(
-                transitioned, task_id, task_name, pd, pn,
-                via=("reviewer_checkpoint" if should_review
-                     else "coordinator_checkpoint"),
-            )
-            audit(
-                "loop_reviewer_checkpoint_completed",
-                {
-                    "task_id": task_id,
-                    "reviewer_invoked": should_review,
-                    "decision": decision,
-                    "diff_sha256": current_review.get(
-                        "evidence", {},
-                    ).get("diff_sha256"),
-                },
-                pd, pn,
-            )
-            phase_state.save()
+            group_end()
             return 0, tasks_ok, tasks
 
         if next_executor == "builder":
