@@ -671,8 +671,11 @@ def test_verify_resolves_bare_python3_to_project_venv(tmp_path):
     assert captured[0][1:4] == ["-m", "ruff", "check"]
 
 
-def test_loop_task_read_only(tmp_path):
-    """M-306d: read-only Task erzeugt keinen Patch."""
+def test_loop_task_read_only(tmp_path, monkeypatch):
+    """One checkpoint reads source evidence without dispatching the Builder."""
+    from tests.factories import coordinator_decision_for_task
+    from werkstatt.phases import tasks as task_executor
+
     st = _state(tmp_path)
     st.tasks = [
         {"id": "t1", "name": "Lesen", "action": "read",
@@ -687,23 +690,29 @@ def test_loop_task_read_only(tmp_path):
     ps = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     ps.init_new("a", st.tasks, tests=st.tests, akzeptanzkriterien=[])
 
+    events = []
     builder_calls = []
-    builder_tasks = []
-    def _mock_builder(state):
-        builder_calls.append(state.aktuelle_task.get("id"))
-        builder_tasks.append(dict(state.aktuelle_task))
-        state.patches = []
-        return True
+    monkeypatch.setattr("werkstatt.audit.get_run_id", lambda: "")
+    monkeypatch.setattr("werkstatt.agent._enforce_run_budget", lambda _state: False)
+    monkeypatch.setattr(
+        task_executor, "audit", lambda *args, **_kwargs: events.append(args),
+    )
+    monkeypatch.setattr(task_executor, "group_start", lambda *_args: None)
+    monkeypatch.setattr(task_executor, "group_end", lambda: None)
+    monkeypatch.setattr(task_executor, "task", lambda *_args: None)
+    monkeypatch.setattr(task_executor, "task_started", lambda *_args: None)
+    monkeypatch.setattr(task_executor, "task_ok", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        task_executor, "_run_with_progress",
+        lambda *_args, **_kwargs: builder_calls.append("builder") or False,
+    )
+    monkeypatch.setattr("werkstatt.progress.append", lambda *_args, **_kwargs: None)
 
-    with patch("werkstatt.loop.run_builder", side_effect=_mock_builder), \
-         patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.phases.finalize._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_planner", return_value=True), \
-         patch("werkstatt.loop.run_reviewer", return_value=True), \
-             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st], phase_state=ps)
+    rc, _tasks_ok, _tasks = task_executor._phase_tasks_loop(
+        st,
+        ps,
+        coordinator_decision=coordinator_decision_for_task(ps, st),
+    )
 
     assert rc == 0
     read_task = next(
@@ -712,12 +721,13 @@ def test_loop_task_read_only(tmp_path):
     )
     assert read_task["read_evidence"]["files"]["app/foo.py"]["bytes"] > 0
     assert len(read_task["read_evidence"]["files"]["app/foo.py"]["sha256"]) == 64
-    # t1 (read) sollte NICHT im builder_calls sein
-    assert "t1" not in builder_calls
-    # t2 (write) sollte drin sein
-    assert "t2" in builder_calls
-    builder_task = next(item for item in builder_tasks if item["id"] == "t2")
-    passed_sources = builder_task["checkpoint_read_source_evidence"]
+    assert builder_calls == []
+    next_task = ps.get_task("t2")
+    assert next_task is not None
+    passed_sources, error = task_executor._read_dependency_sources(
+        st, ps, next_task,
+    )
+    assert error == ""
     assert passed_sources[0]["read_task_id"] == "t1"
     assert passed_sources[0]["source_sha256"] == read_task["read_evidence"][
         "files"

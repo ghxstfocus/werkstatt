@@ -1166,56 +1166,19 @@ def _phase_tasks_loop(
         # M-306d Fix 1: Pro-Task action-Check. read-only Tasks
         # read their approved source scope and persist exact provenance.
         if next_executor == "read_only_task":
-            read_files = task_obj.get("task_files")
-            read_evidence: list[dict[str, Any]] = []
-            read_error = ""
-            if not isinstance(read_files, list) or not read_files:
-                read_error = "read_task_scope_missing"
-            elif len(read_files) > 50:
-                read_error = "read_task_scope_too_large"
-            else:
-                try:
-                    root = Path(pd).resolve(strict=True)
-                    total_bytes = 0
-                    seen_paths: set[str] = set()
-                    for raw_path in read_files:
-                        if not isinstance(raw_path, str) or not raw_path.strip():
-                            raise ValueError("read_task_path_invalid")
-                        relative = Path(raw_path)
-                        if (
-                            relative.is_absolute()
-                            or ".." in relative.parts
-                            or raw_path.replace("\\", "/").startswith("/")
-                        ):
-                            raise ValueError("read_task_path_outside_project")
-                        target = (root / relative).resolve(strict=True)
-                        target.relative_to(root)
-                        if not target.is_file():
-                            raise ValueError("read_task_source_not_file")
-                        normalized = target.relative_to(root).as_posix()
-                        if normalized in seen_paths:
-                            raise ValueError("read_task_duplicate_path")
-                        seen_paths.add(normalized)
-                        source_bytes = target.read_bytes()
-                        total_bytes += len(source_bytes)
-                        if len(source_bytes) > 1_000_000 or total_bytes > 4_000_000:
-                            raise ValueError("read_task_source_over_budget")
-                        read_evidence.append({
-                            "file": normalized,
-                            "sha256": sha256(source_bytes).hexdigest(),
-                            "bytes": len(source_bytes),
-                            "lines": source_bytes.count(b"\n")
-                            + int(bool(source_bytes) and not source_bytes.endswith(b"\n")),
-                        })
-                    recorder = getattr(
-                        phase_state, "record_task_read_evidence", None,
-                    )
-                    if not callable(recorder) or recorder(
-                        task_id, read_evidence,
-                    ) is not True:
-                        read_error = "read_task_evidence_not_persisted"
-                except (OSError, RuntimeError, TypeError, ValueError) as exc:
-                    read_error = str(exc)[:120]
+            from werkstatt.roles.read_only_task import read_task_scope_evidence
+
+            read_evidence, read_error = read_task_scope_evidence(
+                pd, task_obj.get("task_files"),
+            )
+            if not read_error:
+                recorder = getattr(
+                    phase_state, "record_task_read_evidence", None,
+                )
+                if not callable(recorder) or recorder(
+                    task_id, read_evidence,
+                ) is not True:
+                    read_error = "read_task_evidence_not_persisted"
             if read_error:
                 audit(
                     "loop_task_read_only",
