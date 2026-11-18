@@ -263,6 +263,47 @@ def _budget_builder_context(
     return (None if metadata["blocked"] else prompt), metadata
 
 
+def _task_acceptance_criteria_context(
+    state: RunState,
+    task: dict,
+) -> str | None:
+    """Render only approved criteria assigned to the current build task.
+
+    Frozen Spec-First test files are deliberately not read. ``None`` signals
+    a malformed criterion handoff and blocks the Builder model call.
+    """
+    raw_refs = task.get("criterion_refs")
+    if raw_refs is None or raw_refs == []:
+        return ""
+    if not isinstance(raw_refs, list) or not raw_refs:
+        return None
+    criteria = getattr(state, "akzeptanzkriterien", None)
+    if not isinstance(criteria, list):
+        return None
+    selected: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for reference in raw_refs:
+        if not isinstance(reference, str):
+            return None
+        match = re.fullmatch(r"AC([1-9][0-9]*)", reference)
+        if match is None or reference in seen:
+            return None
+        index = int(match.group(1)) - 1
+        if index >= len(criteria):
+            return None
+        criterion = criteria[index]
+        if not isinstance(criterion, str) or not criterion.strip():
+            return None
+        selected.append((reference, criterion.strip()))
+        seen.add(reference)
+    return (
+        "## FREIGEGEBENE AKZEPTANZKRITERIEN FUER DIESEN TASK\n"
+        + json.dumps(selected, ensure_ascii=False)
+        + "\nDiese Kriterien sind verbindliche Verhaltensziele. Die separaten, "
+        "eingefrorenen Testdateien und Assertions sind nicht Teil deines Kontexts."
+    )
+
+
 def _build_patches_fuer_datei(
     state: RunState,
     zieldatei: str,
@@ -634,9 +675,16 @@ def _build_patches_fuer_datei(
             _skills_block = _akt_block + "\n"
     except Exception:
         pass
+    _criteria_context = _task_acceptance_criteria_context(
+        state, _task if isinstance(_task, dict) else {},
+    )
+    if _criteria_context is None:
+        _builder_failure(state, "invalid_task_acceptance_criteria")
+        return []
     _required_context = [
         ("ZIELDATEI", f"## ZIELDATEI: {zieldatei}"),
         ("TASK", f"## TASK: {_task_name}\n## TASK-BESCHREIBUNG: {_task_desc}"),
+        ("TASK_ACCEPTANCE_CRITERIA", _criteria_context),
         (
             "CHECKPOINT_READ_SOURCE_EVIDENCE",
             (
