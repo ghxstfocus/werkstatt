@@ -8661,3 +8661,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Vor jeder heuristischen Zusatzkante wird geprueft, ob der bestehende Voraussetzungspfad dadurch zyklisch wuerde. Solche Heuristikkanten werden ausgelassen und im `planner_deps_abgeleitet`-Audit gezaehlt. Explizite Planner-Kanten werden nicht umgeschrieben und bleiben durch den Graphvalidator fail-closed geprueft.
 - **Verifikation lokal:** Dependency-/Sortier-/Planner-Split-Gruppe: 32 bestanden; Ruff und Diff-Check bestanden.
 - **Grenze:** Der konkrete alte Graph ist nicht verfuegbar; explizite Kantenzyklen werden weiterhin abgelehnt. Kein Server- oder Folge-Run-Nachweis.
+
+# 2026-11-19 – Taskgraph-Audit zeigt Kanten statt nur IDs
+- **Aenderung:** `planner_deps_zyklus` auditiert jetzt die begrenzten Abhaengigkeitskanten der zyklischen Tasks; `planner_deps_abgeleitet` nennt bis zu 40 von der Heuristik uebersprungene Kanten. Damit ist ein verbleibender Explizitzyklus gezielt korrigierbar.
+- **Verifikation lokal:** Dependency-/Sortier-/Planner-Split-Gruppe: 32 bestanden; Ruff und Diff-Check bestanden.
+- **Grenze:** Kein Server- oder Folge-Run-Nachweis.

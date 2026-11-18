@@ -233,6 +233,7 @@ def _leite_deps_deterministisch(
     _arch_tasks: set[str] = set()
     _quelle_parts: list[str] = []
     heuristic_cycle_edges_skipped = 0
+    heuristic_edges_skipped: list[dict[str, str]] = []
     if found and arch_deps:
         _quelle_parts.append("architect")
         for t in tasks:
@@ -321,6 +322,11 @@ def _leite_deps_deterministisch(
                             tasks, _tid, dependency_id,
                         ):
                             heuristic_cycle_edges_skipped += 1
+                            if len(heuristic_edges_skipped) < 40:
+                                heuristic_edges_skipped.append({
+                                    "task_id": _tid,
+                                    "dependency_id": dependency_id,
+                                })
                             continue
                         _alt.add(dependency_id)
                     t["dependencies"] = sorted(_alt)
@@ -344,6 +350,7 @@ def _leite_deps_deterministisch(
                 "quelle": _quelle,
                 "tasks_mit_deps": _mit,
                 "heuristic_cycle_edges_skipped": heuristic_cycle_edges_skipped,
+                "heuristic_edges_skipped": heuristic_edges_skipped,
             }
             if audit_call is None:
                 audit("planner_deps_abgeleitet", payload, pd, pn)
@@ -472,6 +479,16 @@ def _topo_sort_tasks(
                 payload = {
                     "zyklische_ids": cyclic_ids,
                     "anzahl_tasks": len(tasks),
+                    "zyklische_kanten": {
+                        task_id: sorted(
+                            dependency
+                            for dependency in (
+                                by_id[task_id].get("dependencies") or []
+                            )
+                            if isinstance(dependency, str)
+                        )[:20]
+                        for task_id in cyclic_ids[:20]
+                    },
                 }
                 if audit_call is None:
                     audit("planner_deps_zyklus", payload, pd, pn)

@@ -74,6 +74,13 @@ def test_zyklus_wird_vor_planfreigabe_abgelehnt_und_auditiert() -> None:
         _topo_sort_tasks(tasks, pd=Path("/tmp/x"), pn="test")
     kinds = [call.args[0] for call in mock_audit.call_args_list]
     assert "planner_deps_zyklus" in kinds
+    cycle_event = next(
+        call for call in mock_audit.call_args_list
+        if call.args[0] == "planner_deps_zyklus"
+    )
+    assert cycle_event.args[1]["zyklische_kanten"] == {
+        "t1": ["t2"], "t2": ["t1"],
+    }
 
 
 def test_unbekannte_abhaengigkeit_wird_abgelehnt() -> None:
