@@ -303,13 +303,26 @@ Arbeite die Informationskette in dieser Reihenfolge ab:
    read_chat_history seitenweise nach. Nutze next_before_seq fuer aeltere
    Seiten. Bei einem gekuerzten Turn nutze event_seq, field und next_start,
    bis truncated=false ist. Fehlende Turns sind kein Beleg fuer Irrelevanz
-   oder Nichtwissen.
+   oder Nichtwissen. Wenn eine read_file-Ausgabe im Chat-Kontext mit einem
+   Fortsetzungsaufruf gekuerzt wurde, fuehre genau diesen Leseaufruf aus,
+   bevor du den Quelltext bewertest. Ein Suchtreffer ohne Quelltext ist ein
+   Fundhinweis, kein Beleg fuer Funktionsverhalten.
 4. Waehle die Handlung nach Nutzerabsicht und Risiko: beantworten, gezielt
    weiter pruefen, einen konkreten Plan empfehlen, eine Rueckfrage stellen oder
    einen ausdruecklich beauftragten Auftrag an den Loop uebergeben. Fuehre keine
    Aktion aus, die nicht durch ein verfuegbares Werkzeug und dessen
    Freigaberegeln gedeckt ist; ein Rollenprompt verleiht keine zusaetzlichen
    Systemrechte.
+
+Wenn der Nutzer eine von dir angebotene Option waehlt, fuehre den naechsten
+Schritt genau dieser Route aus und halte die Wahl ueber Folgefragen hinweg
+fest. Frage nicht erneut nach derselben Auswahl oder Freigabe fuer eine
+lesende, reversible Pruefung. Wechsle nicht still zu einer anderen Option;
+wenn die gewaehlte Route blockiert ist, nenne den konkreten Befund und setze
+mit dem naechsten belegbaren Schritt derselben Route fort. Leere grep- oder
+audit_query-Ergebnisse gelten nur fuer den abgefragten Text, Scope und
+Datenstand. Behaupte daraus nicht, ein Codepfad oder Ereignis existiere nicht;
+pruefe die aufrufende Stelle, Registry/Schema oder eine gezielte Folgeabfrage.
 
 Waehle Informationen fuer jede Rolle bzw. jeden Empfaenger passend zum Auftrag:
 ein Loop-Handoff enthaelt das unveraenderte Nutzerziel, belegten Scope,
@@ -449,9 +462,9 @@ Bei Projekt-, Test-, Diff- oder Laufzeitfragen nutze die passenden Tools
 statt zu raten. Wenn Belege fehlen, sage, was noch geprueft werden muss."""
 
 
-_CHAT_HISTORY_CHAR_BUDGET = 24_000
+_CHAT_HISTORY_CHAR_BUDGET = 48_000
 MAX_CHAT_MESSAGE_CHARS = 200_000
-_CHAT_USER_MESSAGE_PROMPT_BUDGET = 24_000
+_CHAT_USER_MESSAGE_PROMPT_BUDGET = MAX_CHAT_MESSAGE_CHARS
 _CHAT_HISTORY_COMPACT_NOTE = (
     "Aeltere Dialogturns oder Werkzeugdetails wurden fuer das Kontextbudget "
     "gekuerzt. Der vollstaendige Verlauf bleibt gespeichert. Behandle die "
@@ -681,9 +694,10 @@ def _baue_messages(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 
-_CHAT_ACTIVE_TOOL_CHAR_BUDGET = 24_000
-_CHAT_ACTIVE_TOOL_RECENT_BUDGET = 18_000
-_CHAT_ACTIVE_TOOL_SUMMARY_BUDGET = 6_000
+_CHAT_PROVIDER_CHAR_BUDGET = 420_000
+_CHAT_ACTIVE_TOOL_CHAR_BUDGET = 280_000
+_CHAT_ACTIVE_TOOL_RECENT_BUDGET = 240_000
+_CHAT_ACTIVE_TOOL_SUMMARY_BUDGET = 32_000
 _CHAT_ACTIVE_TOOL_SUMMARY_MARKER = "[Verdichtete Werkzeughistorie]"
 
 
@@ -726,6 +740,133 @@ def _runde_zusammenfassen(runde: list[dict[str, Any]]) -> str:
     return "\n".join(teile)
 
 
+def _read_file_kontextauszug(
+    content: str, budget: int, args: dict[str, Any],
+) -> str:
+    """Keep a contiguous read_file prefix and provide an exact next read."""
+    if budget <= 0:
+        return ""
+    if len(content) <= budget:
+        return content
+    path = str(args.get("path", ""))
+    line_mode = args.get("start_line") is not None or args.get("end_line") is not None
+    try:
+        first_line = max(1, int(args.get("start_line", 1) or 1))
+    except (TypeError, ValueError):
+        first_line = 1
+    requested_end = args.get("end_line")
+
+    if line_mode and content.startswith("[Gelesene Zeilen:"):
+        header, separator, body = content.partition("\n")
+        selected: list[str] = []
+
+        def line_continuation(next_line: int) -> dict[str, Any]:
+            result: dict[str, Any] = {
+                "path": path,
+                "start_line": next_line,
+            }
+            if requested_end is not None:
+                result["end_line"] = requested_end
+            return result
+
+        def line_marker(next_line: int) -> str:
+            return (
+                "\n[Chat-Kontext gekuerzt: zusammenhaengender Zeilenanfang. "
+                "Fortsetzen mit read_file(" +
+                json.dumps(line_continuation(next_line), ensure_ascii=False)
+                + ")]"
+            )
+
+        if len(header) + len(separator) + len(line_marker(first_line)) > budget:
+            return content[:budget]
+        for line in body.splitlines(keepends=True):
+            candidate = selected + [line]
+            if (
+                len(header) + len(separator) + len("".join(candidate))
+                + len(line_marker(first_line + len(candidate))) > budget
+            ):
+                break
+            selected = candidate
+        if not selected:
+            offset_match = re.search(r"Startzeichenoffset:\s*(\d+)", header)
+            if offset_match:
+                start = int(offset_match.group(1))
+                continuation_args: dict[str, Any] = {
+                    "path": path,
+                    "start": start,
+                    "end": start + max(1, budget - len(line_marker(first_line))),
+                }
+                marker = (
+                    "\n[Chat-Kontextlimit; die angeforderte Zeile ist zu gross. "
+                    "Weiterlesen mit read_file(" +
+                    json.dumps(continuation_args, ensure_ascii=False) + ")]"
+                )
+                return header + separator + marker
+            else:
+                return content[:budget]
+        next_line = first_line + len(selected)
+        return header + separator + "".join(selected) + line_marker(next_line)
+
+    # Character and tail reads stay contiguous too. For tail reads, the
+    # returned header provides the absolute first character offset.
+    try:
+        char_start = int(args.get("start", 0) or 0)
+    except (TypeError, ValueError):
+        char_start = 0
+    header_match = re.match(r"\[Dateiende-Auszug: Zeichen (\d+) bis ", content)
+    if header_match:
+        char_start = int(header_match.group(1))
+        metadata, _separator, _body = content.partition("\n")
+        prefix_length = min(len(content), max(0, budget - len(metadata) - 400))
+    else:
+        prefix_length = min(len(content), max(0, budget - 400))
+
+    for _ in range(10):
+        visible_prefix = content[:prefix_length]
+        if header_match:
+            char_offset = char_start + len(visible_prefix.partition("\n")[2])
+        else:
+            char_offset = char_start + len(visible_prefix)
+        continuation_args = {"path": path, "start": char_offset}
+        if args.get("end") is not None:
+            continuation_args["end"] = args["end"]
+        marker = (
+            "\n[Chat-Kontext gekuerzt: zusammenhaengender Anfang. "
+            "Fortsetzen mit read_file(" +
+            json.dumps(continuation_args, ensure_ascii=False) + ")]"
+        )
+        new_length = max(0, budget - len(marker))
+        if new_length == prefix_length:
+            break
+        prefix_length = new_length
+    visible_prefix = content[:prefix_length]
+    if header_match:
+        char_offset = char_start + len(visible_prefix.partition("\n")[2])
+    else:
+        char_offset = char_start + len(visible_prefix)
+    continuation_args = {"path": path, "start": char_offset}
+    if args.get("end") is not None:
+        continuation_args["end"] = args["end"]
+    marker = (
+        "\n[Chat-Kontext gekuerzt: zusammenhaengender Anfang. "
+        "Fortsetzen mit read_file(" +
+        json.dumps(continuation_args, ensure_ascii=False) + ")]"
+    )
+    if len(visible_prefix) + len(marker) > budget:
+        visible_prefix = visible_prefix[:max(0, budget - len(marker))]
+        if header_match:
+            char_offset = char_start + len(visible_prefix.partition("\n")[2])
+        else:
+            char_offset = char_start + len(visible_prefix)
+        continuation_args["start"] = char_offset
+        marker = (
+            "\n[Chat-Kontext gekuerzt: zusammenhaengender Anfang. "
+            "Fortsetzen mit read_file(" +
+            json.dumps(continuation_args, ensure_ascii=False) + ")]"
+        )
+    return visible_prefix + marker
+
+
 def _kuerze_werkzeugrunde(
     runde: list[dict[str, Any]], budget: int,
 ) -> list[dict[str, Any]]:
@@ -738,11 +879,26 @@ def _kuerze_werkzeugrunde(
         index for index, message in enumerate(gekuerzt)
         if message.get("role") == "tool"
     ]
+    calls = {
+        str(call.get("id", "?")): call.get("function") or {}
+        for message in gekuerzt
+        for call in (message.get("tool_calls") or [])
+    }
     rest = max(0, budget - call_size)
     anteil = rest // max(1, len(result_indices))
     for index in result_indices:
         content = str(gekuerzt[index].get("content") or "")
-        gekuerzt[index]["content"] = _komprimiere_text(content, anteil)
+        fn = calls.get(str(gekuerzt[index].get("tool_call_id", "?")), {})
+        if fn.get("name") == "read_file":
+            try:
+                args = json.loads(str(fn.get("arguments", "{}")))
+            except (TypeError, json.JSONDecodeError):
+                args = {}
+            gekuerzt[index]["content"] = _read_file_kontextauszug(
+                content, anteil, args if isinstance(args, dict) else {},
+            )
+        else:
+            gekuerzt[index]["content"] = _komprimiere_text(content, anteil)
     return gekuerzt
 
 
@@ -752,6 +908,18 @@ def _begrenze_aktiven_turn(
     """Verdichtet abgeschlossene Werkzeugrunden; der persistente Event-Store bleibt vollstaendig."""
     prefix = messages[:turn_start + 1]
     tail = messages[turn_start + 1:]
+    prefix_size = sum(_message_size(message) for message in prefix)
+    active_budget = min(
+        _CHAT_ACTIVE_TOOL_CHAR_BUDGET,
+        max(0, _CHAT_PROVIDER_CHAR_BUDGET - prefix_size),
+    )
+    reserve_for_summary = min(
+        _CHAT_ACTIVE_TOOL_SUMMARY_BUDGET, active_budget // 4,
+    )
+    recent_budget = min(
+        _CHAT_ACTIVE_TOOL_RECENT_BUDGET,
+        max(0, active_budget - reserve_for_summary),
+    )
     runden: list[list[dict[str, Any]]] = []
     loose: list[dict[str, Any]] = []
     aktuell: list[dict[str, Any]] | None = None
@@ -785,13 +953,13 @@ def _begrenze_aktiven_turn(
     raw_size = 0
     for round_messages in reversed(runden):
         size = sum(_message_size(message) for message in round_messages)
-        if raw_size + size <= _CHAT_ACTIVE_TOOL_RECENT_BUDGET:
+        if raw_size + size <= recent_budget:
             raw_rounds.append(round_messages)
             raw_size += size
             continue
         if not raw_rounds:
             raw_rounds.append(_kuerze_werkzeugrunde(
-                round_messages, _CHAT_ACTIVE_TOOL_RECENT_BUDGET,
+                round_messages, recent_budget,
             ))
         break
     raw_rounds.reverse()
@@ -803,7 +971,12 @@ def _begrenze_aktiven_turn(
         if not all(id(message) in raw_ids for message in round_messages)
     ]
     summary = "\n".join(part for part in carry + older_summaries if part)
-    summary = _komprimiere_text(summary, _CHAT_ACTIVE_TOOL_SUMMARY_BUDGET)
+    notes_size = sum(_message_size(message) for message in notes)
+    summary_budget = min(
+        _CHAT_ACTIVE_TOOL_SUMMARY_BUDGET,
+        max(0, active_budget - raw_size - notes_size),
+    )
+    summary = _komprimiere_text(summary, summary_budget)
     suffix: list[dict[str, Any]] = []
     if summary:
         suffix.append({
@@ -819,8 +992,13 @@ def _begrenze_aktiven_turn(
         suffix.extend(dict(message) for message in round_messages)
     if notes:
         suffix.append(dict(notes[-1]))
-    if sum(_message_size(message) for message in suffix) > _CHAT_ACTIVE_TOOL_CHAR_BUDGET:
-        overflow = sum(_message_size(message) for message in suffix) - _CHAT_ACTIVE_TOOL_CHAR_BUDGET
+    if sum(_message_size(message) for message in suffix) > active_budget:
+        overflow = sum(_message_size(message) for message in suffix) - active_budget
+        suffix_calls = {
+            str(call.get("id", "?")): call.get("function") or {}
+            for message in suffix
+            for call in (message.get("tool_calls") or [])
+        }
         for message in suffix:
             if overflow <= 0:
                 break
@@ -828,8 +1006,20 @@ def _begrenze_aktiven_turn(
                 continue
             content = str(message.get("content") or "")
             reduction = min(overflow, len(content))
-            message["content"] = _komprimiere_text(content, len(content) - reduction)
-            overflow -= reduction
+            new_budget = len(content) - reduction
+            fn = suffix_calls.get(str(message.get("tool_call_id", "?")), {})
+            if fn.get("name") == "read_file":
+                try:
+                    args = json.loads(str(fn.get("arguments", "{}")))
+                except (TypeError, json.JSONDecodeError):
+                    args = {}
+                compacted = _read_file_kontextauszug(
+                    content, new_budget, args if isinstance(args, dict) else {},
+                )
+            else:
+                compacted = _komprimiere_text(content, new_budget)
+            message["content"] = compacted
+            overflow -= max(0, len(content) - len(compacted))
     return [*prefix, *suffix]
 
 

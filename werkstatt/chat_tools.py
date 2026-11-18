@@ -51,7 +51,7 @@ _CHAT_HISTORY_CUTOFF_SEQ: ContextVar[int | None] = ContextVar(
 _CHAT_HISTORY_SESSION_ID_KONTEXT: ContextVar[str] = ContextVar(
     "werkstatt_chat_history_session_id", default="",
 )
-_MAX_READ_BYTES = 50_000
+_MAX_READ_BYTES = 160_000
 _MAX_GREP_TREFFER = 30
 _TIMEOUT_GREP_S = 10
 _TIMEOUT_GIT_S = 30
@@ -349,8 +349,9 @@ def _resolved_safe(pfad: str) -> Path | None:
 
 def _read_file_tail(pfad: Path, tail_chars: int) -> str:
     """Return a bounded end excerpt with its true character offsets."""
-    if tail_chars < 1 or tail_chars > 49_000:
-        return "Fehler: tail_chars muss zwischen 1 und 49000 liegen"
+    max_tail_chars = _MAX_READ_BYTES - 1_000
+    if tail_chars < 1 or tail_chars > max_tail_chars:
+        return f"Fehler: tail_chars muss zwischen 1 und {max_tail_chars} liegen"
     content_byte_limit = _MAX_READ_BYTES - 512
     teile: deque[tuple[str, int]] = deque()
     bytezahl = 0
@@ -398,6 +399,7 @@ def _read_file_lines(
     bytezahl = 0
     letzte_zeile = start_line - 1
     zeichen_offset = 0
+    start_zeichen_offset: int | None = None
     naechster_zeichen_offset: int | None = None
     truncated = False
     try:
@@ -408,6 +410,8 @@ def _read_file_lines(
                     continue
                 if end_line is not None and aktuelle_zeile > end_line:
                     break
+                if start_zeichen_offset is None:
+                    start_zeichen_offset = zeichen_offset
                 zeilen_bytes = len(zeile.encode("utf-8"))
                 if bytezahl + zeilen_bytes > content_byte_limit:
                     truncated = True
@@ -428,7 +432,10 @@ def _read_file_lines(
                 f"Gezielt ab dieser Zeile mit read_file(start={naechster_zeichen_offset}) lesen."
             )
         return f"Keine Datei-Zeilen ab {start_line} vorhanden."
-    marker = f"[Gelesene Zeilen: {start_line}-{letzte_zeile}"
+    marker = (
+        f"[Gelesene Zeilen: {start_line}-{letzte_zeile}; "
+        f"Startzeichenoffset: {start_zeichen_offset}"
+    )
     if truncated:
         if naechster_zeichen_offset is not None:
             marker += (
@@ -532,7 +539,7 @@ def _read_file(args: dict[str, Any]) -> str:
                 fortsetzen += f", end={end}"
             fortsetzen += ")"
             marker = (
-                "\n[Ausgabe gekürzt: maximal 50 KB. start/end sind "
+                f"\n[Ausgabe gekürzt: maximal {_MAX_READ_BYTES // 1000} KB. start/end sind "
                 "0-basierte Zeichen-Offsets, keine Zeilennummern. "
                 f"Fortsetzen mit {fortsetzen}.]"
             )
@@ -2769,7 +2776,7 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
             "Liest Datei-Inhalt. Fuer Zeilennummern aus grep start_line/end_line "
             "nutzen (1-basiert, end_line inklusive); fuer beliebige Bereiche "
             "start/end als 0-basierte Zeichen-Offsets nutzen (keine Zeilennummern; "
-            "max 50 KB). Fuer aktuelle Eintraege "
+            f"max {_MAX_READ_BYTES // 1000} KB). Fuer aktuelle Eintraege "
             "tail_chars nutzen: liefert Dateiende-Auszug, Gesamtlaenge und "
             "Offsets. Gekuerzte Ausgaben nennen den naechsten start-Offset zur Fortsetzung."
         ),
@@ -2784,7 +2791,7 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
                 "tail_chars": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 49000,
+                    "maximum": _MAX_READ_BYTES - 1_000,
                 },
             },
             "required": ["path"],

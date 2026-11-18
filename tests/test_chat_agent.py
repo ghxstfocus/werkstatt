@@ -41,6 +41,13 @@ def test_prompt_directs_recent_append_only_reads_to_tail_evidence():
     assert "read_chat_history seitenweise nach" in chat_agent._SYSTEM_PROMPT
 
 
+def test_prompt_continues_truncated_reads_and_preserves_user_choice():
+    assert "fuehre genau diesen Leseaufruf aus" in chat_agent._SYSTEM_PROMPT
+    assert "halte die Wahl ueber Folgefragen hinweg fest" in chat_agent._SYSTEM_PROMPT
+    assert "Leere grep- oder" in chat_agent._SYSTEM_PROMPT
+    assert "Beweise fuer Funktionsverhalten" in chat_agent._SYSTEM_PROMPT
+
+
 def test_write_mode_prompt_requires_isolated_workspace_and_handoff_gate() -> None:
     prompt = " ".join(chat_agent._WRITE_PROMPT.split())
     assert "debug_workspace_open" in prompt
@@ -113,7 +120,7 @@ def test_chat_loop_rejects_non_boolean_reasoning_setting(session: ChatSession) -
         chat_agent.chat_loop(session, "Frage", reasoning_enabled="high")
 
 
-def test_large_pasted_jsonl_is_compacted_but_session_event_stays_unchanged():
+def test_large_pasted_jsonl_is_preserved_for_model_and_session():
     records = [
         {"seq": i, "ts": f"2026-11-14T10:{i:02}:00Z", "kind": "loop_step", "payload": {}}
         for i in range(30)
@@ -136,13 +143,8 @@ def test_large_pasted_jsonl_is_compacted_but_session_event_stays_unchanged():
     messages = chat_agent._baue_messages(events)
     prompt_text = messages[-1]["content"]
 
-    assert len(prompt_text) <= chat_agent._CHAT_USER_MESSAGE_PROMPT_BUDGET
-    assert "PLEASE ANALYZE THIS RUN" in prompt_text
-    assert "END OF ATTACHED LOG" in prompt_text
-    assert "loop_verify_failed" in prompt_text
-    assert "reviewer_phase_rejected" in prompt_text
-    assert "run-important" in prompt_text
-    assert "mixed-log-regression-marker" in prompt_text
+    assert len(prompt_text) == len(original)
+    assert prompt_text == original
     assert events[0]["payload"]["text"] == original
 
 
@@ -1413,7 +1415,12 @@ def test_chat_history_truncation_obeys_character_budget(monkeypatch) -> None:
     assert chat_agent._CHAT_HISTORY_COMPACT_NOTE in messages[0]["content"]
 
 
-def test_active_tool_context_is_bounded_and_latest_evidence_survives() -> None:
+def test_active_tool_context_is_bounded_and_latest_evidence_survives(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(chat_agent, "_CHAT_ACTIVE_TOOL_CHAR_BUDGET", 11_000)
+    monkeypatch.setattr(chat_agent, "_CHAT_ACTIVE_TOOL_RECENT_BUDGET", 6_000)
+    monkeypatch.setattr(chat_agent, "_CHAT_ACTIVE_TOOL_SUMMARY_BUDGET", 5_000)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": "system"},
         {"role": "user", "content": "do the work"},
@@ -1451,4 +1458,33 @@ def test_active_tool_context_is_bounded_and_latest_evidence_survives() -> None:
     assert "BEGIN-0" in serialized
     assert messages == original
     assert len(compacted) < len(messages)
+
+
+def test_read_file_context_compaction_is_contiguous_and_resumable() -> None:
+    args = {"path": "planner.py", "start_line": 20, "end_line": 120}
+    content = (
+        "[Gelesene Zeilen: 20-120; Startzeichenoffset: 100]\n"
+        + "".join(f"Zeile {number:03d}\n" for number in range(20, 121))
+    )
+
+    result = chat_agent._read_file_kontextauszug(content, 600, args)
+
+    assert len(result) <= 600
+    assert result.startswith("[Gelesene Zeilen: 20-120;")
+    assert "Zeile 020\n" in result
+    assert "Zeile 120\n" not in result
+    assert "Chat-Kontext gekuerzt: zusammenhaengender Zeilenanfang" in result
+    assert '"start_line":' in result
+
+
+def test_read_file_character_context_compaction_reports_exact_next_offset() -> None:
+    content = "x" * 10_000
+    args = {"path": "large.py", "start": 100, "end": 20_000}
+
+    result = chat_agent._read_file_kontextauszug(content, 600, args)
+
+    assert len(result) <= 600
+    assert result.startswith("x" * 260)
+    prefix_length = result.index("\n")
+    assert f'"start": {100 + prefix_length}' in result
 

@@ -405,9 +405,9 @@ def test_read_file_tail_rejects_conflicting_or_unbounded_ranges(tmp_path):
         {"path": "progress.md", "tail_chars": 10, "start": 1},
         project_dir=tmp_path,
     )
-    assert "zwischen 1 und 49000" in chat_tools.execute_tool(
+    assert "zwischen 1 und 159000" in chat_tools.execute_tool(
         "read_file",
-        {"path": "progress.md", "tail_chars": 50_000},
+        {"path": "progress.md", "tail_chars": 160_000},
         project_dir=tmp_path,
     )
 
@@ -1537,6 +1537,18 @@ def test_read_file_utf8_output_is_capped_even_with_large_end(tmp_path):
 
     assert result
     assert len(result.encode("utf-8")) <= chat_tools._MAX_READ_BYTES
+
+
+def test_read_file_returns_full_source_below_expanded_limit(tmp_path):
+    source = "def item():\n    return 1\n" * 3_000
+    datei = tmp_path / "large-source.py"
+    datei.write_text(source, encoding="utf-8")
+
+    result = chat_tools.execute_tool(
+        "read_file", {"path": "large-source.py"}, project_dir=tmp_path,
+    )
+
+    assert result == source
 
 
 def test_read_file_validiert_offsets_und_haelt_bereich_semantik(tmp_path):
