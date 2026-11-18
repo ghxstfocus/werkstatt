@@ -46,7 +46,7 @@ def test_prompt_continues_truncated_reads_and_preserves_user_choice():
     assert "fuehre genau diesen Leseaufruf aus" in prompt
     assert "halte die Wahl ueber Folgefragen hinweg fest" in prompt
     assert "Leere grep- oder" in prompt
-    assert "Beweise fuer Funktionsverhalten" in prompt
+    assert "kein Beleg fuer Funktionsverhalten" in prompt
 
 
 def test_write_mode_prompt_requires_isolated_workspace_and_handoff_gate() -> None:
