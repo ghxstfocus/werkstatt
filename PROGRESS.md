@@ -8556,3 +8556,7 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 # 2026-11-18 – Architect-Kontext aus dem Planner herausgeloest
 - **Aenderung:** Fingerprint, Pflichtkontextbudget, Scout-Auftragsvalidierung, erledigte Projektpunkte und Migrationsstatus/-kollisionen in `werkstatt/architect_context.py` verschoben. Aktive Architect-, Scout- und Control-Aufrufer sowie Tests binden das Modul direkt; Planner-Alt-Exports fuer diese Helfer sind entfernt.
 - **Verifikation lokal:** Architect-/Migrations-/Control-Gruppe: 56 bestanden; Retrieval-/Planner-Dispatch-/Handoff-/Loop-Rollenrouting-Gruppe: 51 bestanden. Ruff, gezieltes Mypy fuer fuenf Runtime-Module, Control-Drift und State-Inventur bestanden. Vollsuite/Servernachlauf fehlt.
+
+# 2026-11-18 – Verify-Preflight aus dem Planner geloest
+- **Aenderung:** Klassifikation und Ausfuehrung der Verify-Vorpruefungen liegen jetzt in `werkstatt/verify.py`; Loop und Control-Registry rufen diese Verify-Funktion direkt auf. Die Funktionskoerper wurden aus `planner.py` entfernt, Tests patchen/verwenden die Verify-Rolle.
+- **Verifikation lokal:** Planner-Agent-/Verify-Klassifikation-/Loop-/Checkpoint-/Control-Gruppe: 174 bestanden, 2 uebersprungen. Ruff bestanden. Die vollstaendige Server-Suite auf dem Elternstand `4e59f8d` bestand laut Nutzer mit 2.821 Tests, 4 uebersprungen und 0 Fehlern; dieser neue Verify-Refactor ist darin noch nicht enthalten.

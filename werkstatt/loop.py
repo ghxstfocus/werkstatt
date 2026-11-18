@@ -1939,13 +1939,13 @@ def _run_plan_preflight_checkpoint(
 ) -> int:
     """Run and persist preflight as an independently resumable action."""
     check_run_lease(state)
-    from werkstatt.planner import _preflight_scan
+    from werkstatt.verify import preflight_scan
 
     started = time.monotonic()
     audit("loop_preflight_start", {"checkpoint_action": True},
           state.project_dir, project_name)
     try:
-        findings = _preflight_scan(state)
+        findings = preflight_scan(state)
         if not isinstance(findings, list) or any(
             not isinstance(item, dict) for item in findings
         ):

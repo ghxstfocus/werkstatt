@@ -333,7 +333,7 @@ def test_preflight_checkpoint_selected_before_architect(tmp_path, monkeypatch):
         "klasse": "syntax", "stage_id": "py_compile",
         "datei": "src/module.py", "text": "SyntaxError",
     }]
-    monkeypatch.setattr("werkstatt.planner._preflight_scan", lambda _state: findings)
+    monkeypatch.setattr("werkstatt.verify.preflight_scan", lambda _state: findings)
     assert loop_mod._run_plan_preflight_checkpoint(st, phase_state, "p") == 0
     assert st.preflight_fehler == findings
     assert phase_state.load_preflight_checkpoint(

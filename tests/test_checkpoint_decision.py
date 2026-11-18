@@ -464,7 +464,7 @@ def test_role_is_selected_before_role_specific_preflight(tmp_path, monkeypatch) 
     monkeypatch.setattr(loop, "check_run_lease", lambda _state: None)
     findings = [{"klasse": "test", "datei": "tests/test_feature.py"}]
     monkeypatch.setattr(
-        "werkstatt.planner._preflight_scan", lambda _state: findings,
+        "werkstatt.verify.preflight_scan", lambda _state: findings,
     )
 
     initial = loop._run_coordinator_action(phase, state)

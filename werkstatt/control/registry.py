@@ -8,7 +8,7 @@ Drift-Check: tools/control_drift.py --check
 """
 from __future__ import annotations
 
-from werkstatt import architect_context, gates, planner, reflection, verify
+from werkstatt import architect_context, gates, reflection, verify
 from werkstatt.antipattern import scan_patches
 from werkstatt.control.control import Control
 
@@ -79,8 +79,8 @@ _reg(Control(
 # ─── PLANNER-GUARDS ─────────────────────────────────────────
 _reg(Control(
     name="preflight_scan",
-    fn=planner._preflight_scan,
-    source="werkstatt.planner._preflight_scan",
+    fn=verify.preflight_scan,
+    source="werkstatt.verify.preflight_scan",
     description="Preflight: ruff/syntax/test/type-Vorfilter",
     hart=False,
 ))

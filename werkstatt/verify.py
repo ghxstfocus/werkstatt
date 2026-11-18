@@ -6,6 +6,7 @@ Test-Patches auf werkstatt.loop._verify_patches etc.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -23,6 +24,76 @@ def audit(*args, **kwargs):
     from werkstatt.loop import audit as _loop_audit
     return _loop_audit(*args, **kwargs)
 from werkstatt.state import RunState
+
+
+def classify_preflight_failure(stage_id: str, failure_text: str) -> str:
+    """Classify a Verify preflight failure by its stage and diagnostics."""
+    if stage_id.startswith("py_compile") or "SyntaxError" in failure_text:
+        return "syntax"
+    if "ModuleNotFoundError" in failure_text or "ImportError" in failure_text:
+        return "env"
+    if stage_id.startswith("ruff"):
+        return "lint"
+    if stage_id.startswith("mypy"):
+        return "type"
+    if stage_id.startswith("pytest"):
+        return "test"
+    return "unknown"
+
+
+def preflight_scan(state: RunState) -> list[dict]:
+    """Run configured project Verify stages and return bounded findings."""
+    project_dir_value = getattr(state, "project_dir", None)
+    if project_dir_value is None:
+        return []
+    project_dir = Path(project_dir_value)
+    contract = project_dir / ".werkstatt" / "verify.json"
+    if not contract.exists():
+        return []
+
+    try:
+        stages = json.loads(contract.read_text(encoding="utf-8")).get(
+            "stages", [],
+        )
+    except (json.JSONDecodeError, OSError):
+        return []
+
+    failures: list[dict] = []
+    for stage in stages:
+        command = stage.get("command")
+        if not command:
+            continue
+        stage_id = stage.get("id", "?")
+        try:
+            result = subprocess.run(
+                command,
+                cwd=str(project_dir),
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+            if result.returncode == 0:
+                continue
+            failure_text = (result.stderr or "") + (result.stdout or "")
+            file_matches = re.findall(
+                r"([a-zA-Z0-9_./-]+\.(?:py|md|yaml|yml|json|txt|toml))",
+                failure_text,
+            )
+            failures.append({
+                "klasse": classify_preflight_failure(stage_id, failure_text),
+                "stage_id": stage_id,
+                "datei": file_matches[0] if file_matches else None,
+                "text": failure_text[:500],
+            })
+        except Exception as exc:
+            failures.append({
+                "klasse": "unknown",
+                "stage_id": stage_id,
+                "datei": None,
+                "text": f"Exception: {exc}",
+            })
+    return failures
 
 
 def _ist_test_datei(pfad: str) -> bool:

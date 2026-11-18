@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from werkstatt.planner import _preflight_scan
 from werkstatt.state import RunState
+from werkstatt.verify import preflight_scan as _preflight_scan
 
 
 def test_planner_explorer_findings_formatter_keeps_all_data() -> None:
@@ -276,20 +276,20 @@ def test_scout_route_decision_explains_escalation(tmp_path):
 
 def test_klassifiziert_env():
     """M-299a: ModuleNotFoundError wird als 'env' klassifiziert."""
-    from werkstatt.planner import _klassifiziere_fehler
-    assert _klassifiziere_fehler("pytest", "ModuleNotFoundError: No module named 'defusedxml'") == "env"
+    from werkstatt.verify import classify_preflight_failure
+    assert classify_preflight_failure("pytest", "ModuleNotFoundError: No module named 'defusedxml'") == "env"
 
 
 def test_klassifiziert_lint():
     """M-299a: ruff-Stage wird als 'lint' klassifiziert."""
-    from werkstatt.planner import _klassifiziere_fehler
-    assert _klassifiziere_fehler("ruff", "error: unused import") == "lint"
+    from werkstatt.verify import classify_preflight_failure
+    assert classify_preflight_failure("ruff", "error: unused import") == "lint"
 
 
 def test_klassifiziert_syntax():
     """M-299a: py_compile wird als 'syntax' klassifiziert."""
-    from werkstatt.planner import _klassifiziere_fehler
-    assert _klassifiziere_fehler("py_compile", "SyntaxError: invalid syntax") == "syntax"
+    from werkstatt.verify import classify_preflight_failure
+    assert classify_preflight_failure("py_compile", "SyntaxError: invalid syntax") == "syntax"
 
 
 @pytest.mark.skip(reason="GOLD: alter JSON-Plan-Pfad entfernt (blocker/follow_up/ignore nicht mehr im Gold-Flow)")

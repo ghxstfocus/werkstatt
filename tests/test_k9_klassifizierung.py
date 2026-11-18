@@ -1,5 +1,5 @@
 """K9: _klassifiziere_fehler matcht Stage-Prefixes."""
-from werkstatt.planner import _klassifiziere_fehler
+from werkstatt.verify import classify_preflight_failure as _klassifiziere_fehler
 
 
 def test_py_compile_changed() -> None:
