@@ -304,6 +304,30 @@ def test_api_index_covers_javascript_and_java_declarations(tmp_path: Path) -> No
     assert _finde_api(index, "RunStats.countRuns")[0]["effects"] == "read"
 
 
+def test_api_index_resolves_module_qualified_top_level_function(tmp_path: Path) -> None:
+    from werkstatt.architect import _pruefe_architect_api_referenzen
+    from werkstatt.scout import _baue_api_index, _finde_api
+
+    target = tmp_path / "werkstatt" / "planner.py"
+    target.parent.mkdir()
+    target.write_text(
+        "def _publish_role_checkpoint(state, role):\n"
+        "    return None\n",
+        encoding="utf-8",
+    )
+    index = _baue_api_index(tmp_path)
+
+    matches = _finde_api(index, "werkstatt.planner._publish_role_checkpoint")
+    assert len(matches) == 1
+    assert matches[0]["pfad"] == "werkstatt/planner.py"
+    assert matches[0]["name"] == "_publish_role_checkpoint"
+    assert _pruefe_architect_api_referenzen(
+        "Die bestehende Funktion `werkstatt.planner._publish_role_checkpoint(state, role)` "
+        "wird aus dem Rollenworker verwendet.",
+        index,
+    ) == []
+
+
 def test_preflight_accepts_source_verified_java_read_api(tmp_path: Path) -> None:
     from werkstatt.architect import _pruefe_architect_api_referenzen
     from werkstatt.scout import _baue_api_index

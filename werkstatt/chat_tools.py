@@ -89,7 +89,9 @@ def _server_command(argv: list[str], *, timeout: int = 10) -> dict[str, Any]:
     }
 
 
-def _server_runtime_config() -> tuple[dict[str, Any] | None, str | None]:
+def _server_runtime_config(
+    *, require_active_checkout: bool = True,
+) -> tuple[dict[str, Any] | None, str | None]:
     """Load a validated, project-specific systemd unit and port mapping."""
     project = _PROJEKTNAME_KONTEXT.get()
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", project):
@@ -120,7 +122,10 @@ def _server_runtime_config() -> tuple[dict[str, Any] | None, str | None]:
     if not isinstance(configured_root, str) or not configured_root:
         return None, "Projektmanifest enthaelt keinen project_dir fuer den Serverabgleich."
     try:
-        if Path(configured_root).expanduser().resolve() != _aktives_projekt_dir():
+        if (
+            require_active_checkout
+            and Path(configured_root).expanduser().resolve() != _aktives_projekt_dir()
+        ):
             return None, "Server-Projektpfad stimmt nicht mit dem aktiven Checkout ueberein."
     except (OSError, RuntimeError):
         return None, "Server-Projektpfad konnte nicht sicher aufgeloest werden."
@@ -201,7 +206,10 @@ def _server_http_probe(port: int) -> dict[str, Any]:
 
 def _server_logs(args: dict[str, Any]) -> str:
     """Return a bounded, redacted tail from the fixed Werkstatt unit journal."""
-    runtime, error = _server_runtime_config()
+    # Logs are read from the unit explicitly bound to this project manifest.
+    # The chat may be operating in a session worktree whose path differs from
+    # the deployed server checkout; that must not disable read-only diagnosis.
+    runtime, error = _server_runtime_config(require_active_checkout=False)
     if runtime is None:
         return json.dumps({
             "zustand": "unsupported" if error and "nicht konfiguriert" in error else "error",
@@ -778,10 +786,14 @@ def _read_active_run(_args: dict[str, Any]) -> str:
         from werkstatt.web.app import _loop_registry
 
         registry_record = _loop_registry().read(project)
-    except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
+    except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error, KeyError) as exc:
         return json.dumps({
             "status": "unknown",
-            "detail": f"Loop-Registry nicht lesbar ({type(exc).__name__}).",
+            "detail": (
+                f"Loop-Registry enthaelt ein fehlendes Feld ({str(exc.args[0])[:80]})."
+                if isinstance(exc, KeyError)
+                else f"Loop-Registry nicht lesbar ({type(exc).__name__})."
+            ),
         }, ensure_ascii=False)
     store = None
     if (
@@ -801,10 +813,14 @@ def _read_active_run(_args: dict[str, Any]) -> str:
                     durable_record = latest_record
                 elif latest_record is not None:
                     latest_terminal_record = latest_record
-        except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
+        except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error, KeyError) as exc:
             return json.dumps({
                 "status": "unknown",
-                "detail": f"Dauerhafter Run-Status nicht lesbar ({type(exc).__name__}).",
+                "detail": (
+                    f"Dauerhafter Run-Status enthaelt ein fehlendes Feld ({str(exc.args[0])[:80]})."
+                    if isinstance(exc, KeyError)
+                    else f"Dauerhafter Run-Status nicht lesbar ({type(exc).__name__})."
+                ),
             }, ensure_ascii=False)
         if durable_record is None and latest_terminal_record is None:
             return json.dumps({"status": "idle", "project": project}, ensure_ascii=False)

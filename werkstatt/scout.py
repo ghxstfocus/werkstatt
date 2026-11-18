@@ -847,9 +847,43 @@ def _finde_api(index: dict, name: str) -> list:
         return []
 
     _matches = []
+    # Fully qualified module functions arrive as e.g.
+    # ``werkstatt.planner.some_helper``.  The final dotted component is the
+    # symbol and the preceding components are a module path, not a class.
+    # Resolve that path before applying the legacy Class.method lookup below.
+    _module_hint = _class_hint.replace(".", "/") + ".py" if _class_hint else ""
+    _module_entry = index.get(_module_hint) if _module_hint else None
+    _lookup_class_hint = _class_hint
+    if isinstance(_module_entry, dict):
+        _lookup_class_hint = ""
+    if not isinstance(_module_entry, dict) and "." in _class_hint:
+        _module_name, _class_name = _class_hint.rsplit(".", 1)
+        _class_module_hint = _module_name.replace(".", "/") + ".py"
+        _class_module_entry = index.get(_class_module_hint)
+        if isinstance(_class_module_entry, dict):
+            _module_hint = _class_module_hint
+            _module_entry = _class_module_entry
+            _lookup_class_hint = _class_name
+    if isinstance(_module_entry, dict):
+        for _fn in _module_entry.get("functions", []):
+            if not _lookup_class_hint and _fn.get("name") == _clean:
+                _matches.append({
+                    "pfad": _module_hint,
+                    "language": _api_language(_module_hint),
+                    "kind": "function",
+                    "name": _fn["name"],
+                    "args": _fn.get("args", []),
+                    "return": _fn.get("return", ""),
+                    "effects": _fn.get("effects", "unknown"),
+                })
+        if _matches and not _lookup_class_hint:
+            return _matches
+
     for _pfad, _info in index.items():
+        if _module_hint and _module_hint in index and _pfad != _module_hint:
+            continue
         # Top-Level-Funktion (nur wenn kein class_hint)
-        if not _class_hint:
+        if not _lookup_class_hint:
             for _fn in _info.get("functions", []):
                 if _fn["name"] == _clean:
                     _matches.append({
@@ -872,7 +906,7 @@ def _finde_api(index: dict, name: str) -> list:
                     })
         # Klassen
         for _c in _info.get("classes", []):
-            if not _class_hint and _c["name"] == _clean:
+            if not _lookup_class_hint and _c["name"] == _clean:
                 _matches.append({
                     "pfad": _pfad,
                     "language": _api_language(_pfad),
@@ -884,7 +918,7 @@ def _finde_api(index: dict, name: str) -> list:
             for _m in _c["methods"]:
                 if _m["name"] != _clean:
                     continue
-                if _class_hint and _c["name"] != _class_hint:
+                if _lookup_class_hint and _c["name"] != _lookup_class_hint:
                     continue
                 _matches.append({
                     "pfad": _pfad,

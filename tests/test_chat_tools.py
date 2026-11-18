@@ -1116,6 +1116,24 @@ def test_loop_status_reports_missing_phase_as_unknown_not_tool_failure(
     assert "Tool-Fehler" not in json.dumps(result)
 
 
+def test_loop_status_reports_registry_key_error_as_unknown(monkeypatch, tmp_path):
+    from werkstatt.web import app
+
+    def broken_read(_project):
+        raise KeyError("phase")
+
+    monkeypatch.setattr(
+        app, "_loop_registry",
+        lambda: SimpleNamespace(read=broken_read),
+    )
+    result = json.loads(chat_tools.execute_tool(
+        "loop_status", {}, project_dir=tmp_path, project_name="alpha",
+    ))
+
+    assert result["status"] == "unknown"
+    assert "fehlendes Feld (phase)" in result["detail"]
+
+
 def test_loop_status_exposes_checkpoint_and_sanitized_events(
     monkeypatch, tmp_path,
 ):
@@ -1671,7 +1689,7 @@ def test_server_status_is_allowlisted_read_only_snapshot(monkeypatch) -> None:
     monkeypatch.setattr(chat_tools, "_server_http_probe", lambda _port: {"ok": True, "status": 401})
     monkeypatch.setattr(
         chat_tools, "_server_runtime_config",
-        lambda: ({"service": "demo-web.service", "port": 8123}, None),
+        lambda **_kwargs: ({"service": "demo-web.service", "port": 8123}, None),
     )
     response = chat_tools.execute_tool(
         "server_status", {}, project_dir=Path.cwd(), project_name="demo",
@@ -1792,6 +1810,42 @@ def test_server_runtime_mapping_is_project_configured_and_path_bound(
         chat_tools._PROJEKTNAME_KONTEXT.reset(name_token)
 
 
+def test_server_logs_work_from_session_worktree_with_manifest_bound_unit(
+    monkeypatch, tmp_path,
+) -> None:
+    from werkstatt import paths
+
+    configured_checkout = tmp_path / "deployed"
+    configured_checkout.mkdir()
+    session_checkout = tmp_path / "session-worktree"
+    session_checkout.mkdir()
+    manifest = tmp_path / "demo.yaml"
+    manifest.write_text(
+        f"project: demo\nproject_dir: {configured_checkout}\n"
+        "server:\n  systemd_unit: demo-web.service\n  port: 8123\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "project_config", lambda _name: manifest)
+    calls: list[list[str]] = []
+
+    def fake_command(argv: list[str], *, timeout: int = 10) -> dict[str, object]:
+        calls.append(argv)
+        return {"ok": True, "returncode": 0, "output": "service started", "truncated": False}
+
+    monkeypatch.setattr(chat_tools, "_server_command", fake_command)
+    result = json.loads(chat_tools.execute_tool(
+        "server_logs", {"lines": 20}, project_dir=session_checkout,
+        project_name="demo",
+    ))
+
+    assert result["zustand"] == "read_only"
+    assert result["service"] == "demo-web.service"
+    assert calls == [[
+        "journalctl", "-u", "demo-web.service", "-n", "20",
+        "--no-pager", "-o", "short-iso",
+    ]]
+
+
 def test_server_logs_are_bounded_and_invalid_line_count_rejected(
     monkeypatch, tmp_path,
 ) -> None:
@@ -1808,7 +1862,7 @@ def test_server_logs_are_bounded_and_invalid_line_count_rejected(
     monkeypatch.setattr(chat_tools, "_server_command", fake_command)
     monkeypatch.setattr(
         chat_tools, "_server_runtime_config",
-        lambda: ({"service": "demo-web.service", "port": 8123}, None),
+        lambda **_kwargs: ({"service": "demo-web.service", "port": 8123}, None),
     )
     invalid = json.loads(chat_tools.execute_tool(
         "server_logs", {"lines": 201}, project_dir=tmp_path,
