@@ -158,6 +158,10 @@ def _pruefe_projektname(name: str) -> str:
     """
     if not isinstance(name, str) or not _PROJEKTNAME_MUSTER.fullmatch(name):
         raise HTTPException(status_code=400, detail="ungueltiger Projektname")
+    # Zusaetzliche Härtung fuer Subprozess-Argumente:
+    # nur ASCII-Bezeichner mit begrenztem Zeichenvorrat erlauben.
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", name) is None:
+        raise HTTPException(status_code=400, detail="ungueltiger Projektname")
     return name
 
 
