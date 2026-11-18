@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 from werkstatt.spec_first import (
+    MAX_SPEC_FILES,
+    _spec_test_schema_errors,
     _validate_test_source,
     run_spec_tests,
     spec_test_manifest_is_current,
@@ -40,6 +42,29 @@ def test_high_risk_goal_selects_spec_first():
 
     assert requires_spec_first("Change API authentication permissions")
     assert not requires_spec_first("Fix typo in README")
+
+
+def test_spec_schema_allows_one_test_per_acceptance_criterion_up_to_limit():
+    generated = {
+        "tests": [
+            {"id": f"AC{index}", "source": f"def test_ac{index}(): pass"}
+            for index in range(1, 10)
+        ],
+    }
+    assert MAX_SPEC_FILES >= 9
+    assert _spec_test_schema_errors(generated) == []
+
+
+def test_spec_schema_rejects_test_count_above_limit():
+    generated = {
+        "tests": [
+            {"id": f"AC{index}", "source": f"def test_ac{index}(): pass"}
+            for index in range(1, MAX_SPEC_FILES + 2)
+        ],
+    }
+    assert _spec_test_schema_errors(generated) == [
+        f"test_count_out_of_range:{MAX_SPEC_FILES + 1}",
+    ]
 
 
 def test_coordinator_selects_spec_builder_before_graph_split(tmp_path):

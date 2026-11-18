@@ -8643,3 +8643,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Die unscharfe `DATEINAME_AEHNLICH`-Ablehnung und ihre nur dafuer benoetigten Hilfsfunktionen sind entfernt. Die bestehende exakte Pfad-/Existenzkorrektur im Planner bleibt zustaendig fuer `create` gegen bereits vorhandene Datei.
 - **Verifikation lokal:** `tests/test_k27_dateiname_aehnlich.py` und `tests/test_hooks_planner_gate.py`: 21 bestanden; `git diff --check` bestanden.
 - **Grenze:** Kein Vollsuite-, Server- oder Produktionsnachweis.
+
+# 2026-11-18 – Spec-First: Testanzahl an Kriterienlimit angleichen
+- **Befund:** Run `werkstatt-20261118-221133-9b1ef6be` hatte neun Akzeptanzkriterien und einen gueltigen Plan. Der Spec-Builder scheiterte zweimal an `test_count_out_of_range:9`, weil die Grenze fuer Spec-Dateien (8) zugleich die Obergrenze fuer Tests war.
+- **Aenderung:** Die Spec-Test-/Dateigrenze ist auf 20 angehoben – passend zum bestehenden Maximum von 20 Akzeptanzkriterien. Die Retry-Anweisung nennt dieselbe Laufzeitgrenze.
+- **Verifikation lokal:** `tests/test_spec_first.py`: 15 bestanden; Regression deckt neun Kriterien sowie Ablehnung oberhalb der Grenze ab.
+- **Grenze:** Kein Vollsuite-, Server- oder Folge-Run-Nachweis.

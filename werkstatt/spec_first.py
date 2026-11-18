@@ -56,7 +56,7 @@ _FORBIDDEN_CALLS = frozenset({
     "open", "system", "popen", "run", "Popen", "check_call",
     "check_output", "urlopen",
 })
-MAX_SPEC_FILES = 8
+MAX_SPEC_FILES = 20
 MAX_SPEC_FILE_CHARS = 12_000
 MAX_SPEC_TOTAL_CHARS = 48_000
 
@@ -434,7 +434,7 @@ def build_spec_test_checkpoint(
             "schema_errors": schema_errors,
             "instruction": (
                 "Regenerate the complete tests list as one JSON object with "
-                "a tests array containing 1 to 8 objects; every object must "
+                f"a tests array containing 1 to {MAX_SPEC_FILES} objects; every object must "
                 "have a string id (AC1, AC2, ...) and a string source "
                 "containing exactly one synchronous pytest test. Correct "
                 "each listed schema error. Use only imports and calls "
