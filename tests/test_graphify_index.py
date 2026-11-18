@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from werkstatt import graphify_index
 from werkstatt.graphify_index import graphify_candidates
@@ -672,6 +675,26 @@ def test_graphify_refresh_finds_cli_beside_venv_python_when_path_is_missing(
 
     assert result["status"] == "refreshed"
     assert observed["argv"][0] == str(executable)
+
+
+def test_graphify_cli_lookup_preserves_venv_path_when_python_is_symlink(
+    tmp_path: Path, monkeypatch,
+):
+    if os.name == "nt":
+        pytest.skip("Linux venv interpreter symlink behavior")
+    scripts = tmp_path / "venv" / "bin"
+    scripts.mkdir(parents=True)
+    system_python = tmp_path / "system-python"
+    system_python.write_text("", encoding="utf-8")
+    venv_python = scripts / "python"
+    venv_python.symlink_to(system_python)
+    graphify = scripts / "graphify"
+    graphify.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(graphify_index.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(graphify_index.sys, "executable", str(venv_python))
+
+    assert graphify_index._graphify_executable() == str(graphify)
 
 
 def test_graphify_parsed_index_is_cached_and_invalidated_on_change(tmp_path: Path):

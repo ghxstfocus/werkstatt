@@ -8605,3 +8605,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** API-Aufloesung unterstuetzt jetzt modulqualifizierte Top-Level-Funktionen und modulqualifizierte Klassenmethoden. `server_logs` darf den im Projektmanifest gebundenen Dienst auch aus einem Chat-Sitzungs-Worktree rein lesend abfragen; `server_status` und Neustart behalten den Checkout-Abgleich. Registry- und RunRecord-KeyErrors werden als `status=unknown` mit Feldhinweis ausgegeben.
 - **Verifikation lokal:** Architect-API- und Chat-Tool-Gruppe: 107 bestanden, 2 uebersprungen. Ruff, gezieltes Mypy, strikter Doku-Drift und `git diff --check` bestanden.
 - **Grenze:** Der Audit belegt keinen erfolgreichen Folge-Run. Die frueheren Audit-Seiten waren nur gekuerzt; der erste Architect-Versuch bleibt unbekannt. Server-Vollsuite, Server-Logs und Produktionsnachweis fehlen; OP-398 bleibt offen.
+
+# 2026-11-18 – Graphify-CLI in Linux-venv finden
+- **Befund:** Der Server bestaetigte `graphifyy==0.9.112` und `.venv/bin/graphify` sowie `graphify --version`. Trotzdem lieferte `_graphify_executable()` `None`, weil `Path(sys.executable).resolve()` den venv-Python-Symlink auf den System-Python aufloeste und danach im falschen Verzeichnis nach der CLI suchte. Daher konnte der Loop den Index nicht bauen und meldete `graphify_status=unavailable`.
+- **Aenderung:** Die CLI-Suche behaelt jetzt den tatsaechlich aufgerufenen venv-Python-Pfad und findet so das benachbarte `.venv/bin/graphify`. Neue Linux-Regression bildet den Symlink-Fall nach.
+- **Verifikation lokal:** Graphify-Index-Gruppe: 22 bestanden, 1 Linux-Symlinktest unter Windows uebersprungen. Ruff, gezieltes Mypy, Doku-Drift und Diff-Check bestanden. Der Symlinktest muss auf dem Linux-Server laufen.
+- **Grenze:** Der Server-Graph wurde bisher nicht aktualisiert oder abgefragt. Nach Pull ist ein Refresh und Graphify-Query-Nachweis erforderlich; OP-398 bleibt offen.

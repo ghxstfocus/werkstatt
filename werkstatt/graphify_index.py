@@ -454,7 +454,10 @@ def _graphify_executable() -> str | None:
     if executable:
         return executable
     script_name = "graphify.exe" if os.name == "nt" else "graphify"
-    environment_script = Path(sys.executable).resolve().parent / script_name
+    # Keep the venv path as invoked.  On Linux, venv/bin/python is commonly a
+    # symlink to the system interpreter; resolving it first loses venv/bin and
+    # makes the sibling venv/bin/graphify executable invisible.
+    environment_script = Path(sys.executable).parent / script_name
     return str(environment_script) if environment_script.is_file() else None
 
 
