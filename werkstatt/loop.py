@@ -3175,7 +3175,7 @@ def _persist_planner_role_stage(
     goal: str,
 ) -> None:
     """Persist one completed role boundary for same-run coordinator resume."""
-    if role not in {"scout", "architect"}:
+    if role not in {"scout", "architect", "planner_split"}:
         raise ValueError("Ungueltiger Planner-Rollenstage")
     if not run_id or not goal:
         raise ValueError("Planner-Rollenstage braucht Run-ID und Ziel")
@@ -3950,7 +3950,19 @@ def _run_pipeline_loop_impl(
                 continue
             if state.planner_step_yielded:
                 completed_role = yielded_after_role or stop_after_role
-                if completed_role not in {"scout", "architect"}:
+                if completed_role not in {"scout", "architect", "planner_split"}:
+                    audit(
+                        "loop_planner_failed",
+                        {
+                            "reason": "planner_role_yield_without_candidate",
+                            "role": str(completed_role or "")[:80],
+                            "action": str(action or "")[:80],
+                            "task_count": len(state.tasks or []),
+                            "candidate_ready": candidate_ready,
+                        },
+                        state.project_dir,
+                        project_name,
+                    )
                     _persist_run_result(
                         EventStore(), project_name, get_run_id(), 1,
                         run_state=state, phase_state=phase_state,

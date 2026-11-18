@@ -8649,3 +8649,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Die Spec-Test-/Dateigrenze ist auf 20 angehoben – passend zum bestehenden Maximum von 20 Akzeptanzkriterien. Die Retry-Anweisung nennt dieselbe Laufzeitgrenze.
 - **Verifikation lokal:** `tests/test_spec_first.py`: 15 bestanden; Regression deckt neun Kriterien sowie Ablehnung oberhalb der Grenze ab.
 - **Grenze:** Kein Vollsuite-, Server- oder Folge-Run-Nachweis.
+
+# 2026-11-18 – Planner-Split-Yield als Checkpoint-Rolle zulassen
+- **Befund:** Nach `planner_split` kann der Loop einen Yield als unerlaubt behandeln: Die Split-Rolle setzte `planner_step_yielded`, aber der Fortsetzungszweig akzeptierte nur `scout` und `architect` und gab andernfalls ohne Diagnose Fehlercode 1 zurueck. Der vorliegende Audit endet direkt nach dem Planner-Checkpoint; fehlende Sequenzen verhindern den Beweis, dass genau dieser Zweig im Run erreicht wurde.
+- **Aenderung:** `planner_split` ist jetzt ein erlaubter persistierter Rollenstage. Ein weiterhin unerwarteter Yield schreibt `loop_planner_failed` mit Rolle, Aktion, Taskzahl und Candidate-Status statt still zurueckzukehren.
+- **Verifikation lokal:** Checkpoint-/Planner-Handoff-/Rollen-Dispatch-/Spec-First-Gruppe: 98 bestanden; Ruff und Diff-Check bestanden.
+- **Grenze:** Der konkrete alte Run ist nicht nachtraeglich aufloesbar; kein Server- oder Folge-Run-Nachweis.

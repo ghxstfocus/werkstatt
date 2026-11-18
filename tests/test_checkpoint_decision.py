@@ -1137,6 +1137,13 @@ def test_planner_role_stage_is_telemetry_not_role_evidence(tmp_path) -> None:
     _persist_planner_role_stage(
         phase, "scout", run_id="run-1", goal="Goal",
     )
+    _persist_planner_role_stage(
+        phase, "planner_split", run_id="run-1", goal="Goal",
+    )
+    assert phase.data["planner_role_stage"] == "planner_split"
+    _persist_planner_role_stage(
+        phase, "scout", run_id="run-1", goal="Goal",
+    )
 
     resumed = PhaseState("demo", base_dir=tmp_path)
     assert resumed.load()
