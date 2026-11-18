@@ -233,3 +233,65 @@ def test_split_checkpoint_corrects_missing_read_task_scope_once(
         and payload.get("korrekturgrund") == "read_task_scope_missing"
         for kind, payload in events
     )
+
+
+def test_split_checkpoint_corrects_unassigned_criteria_once(
+    tmp_path, monkeypatch,
+):
+    from werkstatt.task_graph import TaskGraphError
+
+    criteria = [f"Criterion {index}" for index in range(1, 4)]
+    state = SimpleNamespace(
+        api_key="test-key", project_dir=tmp_path, project_name="demo",
+        run_id="run-criteria", explorer_context={"key_files": []},
+        architect_prose="A" * 80, scout_auftrag={},
+        architect_scout_source_manifest={}, planner_step_yielded=False,
+        planner_yielded_after_role=None, akzeptanzkriterien=criteria,
+        tasks=[], phasen=[], tests=[],
+    )
+    handoff = {
+        "architect_prose": "A" * 80,
+        "architect_scout_report": {"auftrag_prosa": "evidence"},
+        "source_manifest": {"sources": []}, "key_files": [],
+        "architect_input_sha256": "c" * 64,
+    }
+    calls = []
+    events = []
+    monkeypatch.setattr(
+        planner, "_load_current_planner_split_handoff",
+        lambda _state, _goal: handoff,
+    )
+    monkeypatch.setattr(planner, "_publish_role_checkpoint", lambda *_args: None)
+
+    def split(*_args, **kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise TaskGraphError(
+                "Nicht alle Akzeptanzkriterien sind Tasks zugeordnet: AC2, AC3"
+            )
+        return [{
+            "id": "t1", "action": "update", "criterion_refs": ["AC1", "AC2", "AC3"],
+        }]
+
+    monkeypatch.setattr(planner, "_zerlege_in_sub_tasks", split)
+    monkeypatch.setattr(
+        planner, "_normalisiere_task_files", lambda tasks, *_args: tasks,
+    )
+    monkeypatch.setattr(
+        planner, "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+
+    assert run_planner_split_checkpoint(state, goal="approved goal") is True
+    assert len(calls) == 2
+    assert calls[1]["preserve_criteria"] == criteria
+    assert calls[1]["gate_feedback"]["regel"] == (
+        "all_acceptance_criteria_must_be_assigned"
+    )
+    assert "AC2, AC3" in calls[1]["gate_feedback"]["fakt"]
+    assert state.tasks[0]["criterion_refs"] == ["AC1", "AC2", "AC3"]
+    assert any(
+        kind == "planner_plan_abgelehnt"
+        and payload.get("korrekturgrund") == "acceptance_criteria_unassigned"
+        for kind, payload in events
+    )

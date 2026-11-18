@@ -49,6 +49,12 @@ def test_prompt_continues_truncated_reads_and_preserves_user_choice():
     assert "kein Beleg fuer Funktionsverhalten" in prompt
 
 
+def test_prompt_continues_audit_pagination_without_asking_user():
+    prompt = " ".join(chat_agent._SYSTEM_PROMPT.split())
+    assert "rufe audit_query selbst mit since=next_since erneut auf" in prompt
+    assert "Frage den Nutzer bei dieser angeforderten, rein lesenden Pagination nicht" in prompt
+
+
 def test_write_mode_prompt_requires_isolated_workspace_and_handoff_gate() -> None:
     prompt = " ".join(chat_agent._WRITE_PROMPT.split())
     assert "debug_workspace_open" in prompt

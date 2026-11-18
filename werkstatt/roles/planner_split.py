@@ -495,17 +495,42 @@ def run_planner_split_checkpoint(state: Any, *, goal: str) -> bool | None:
             state=state,
         )
     except TaskGraphError as exc:
-        if "Read-Task" in str(exc) and "task_files-Scope" in str(exc):
+        failure = str(exc)
+        missing_read_scope = (
+            "Read-Task" in failure and "task_files-Scope" in failure
+        )
+        missing_criteria = (
+            failure.startswith("Nicht alle Akzeptanzkriterien sind Tasks zugeordnet:")
+        )
+        if missing_read_scope or missing_criteria:
             preserved_criteria = list(state.akzeptanzkriterien or [])
+            correction_rule = (
+                "read_task_requires_concrete_task_files_scope"
+                if missing_read_scope else "all_acceptance_criteria_must_be_assigned"
+            )
+            correction_reason = (
+                "read_task_scope_missing"
+                if missing_read_scope else "acceptance_criteria_unassigned"
+            )
+            correction_explanation = (
+                "Gib fuer jeden read-Task konkrete, existierende, projektrelative "
+                "task_files an, die dieser Task tatsaechlich liest. Uebernimm die "
+                "Kriterien unveraendert und korrigiere nur den Taskgraphen."
+                if missing_read_scope else
+                "Ordne jedes bestehende Akzeptanzkriterium mindestens einem "
+                "passenden Task ueber criterion_refs zu. Erfinde, entferne oder "
+                "formuliere Kriterien nicht um; korrigiere nur die fehlende "
+                "Task-Zuordnung."
+            )
             services.audit("planner_plan_abgelehnt", {
-                "grund": str(exc),
+                "grund": failure,
                 "quelle": "checkpoint_planner_split",
                 "korrekturversuch": 1,
-                "korrekturgrund": "read_task_scope_missing",
+                "korrekturgrund": correction_reason,
             }, state.project_dir, state.project_name)
             services._publish_role_checkpoint(
                 state, "planner_split", "running",
-                "correcting_missing_read_task_scope",
+                f"correcting_{correction_reason}",
                 {"architect_output_sha256": output_sha},
             )
             try:
@@ -518,14 +543,9 @@ def run_planner_split_checkpoint(state: Any, *, goal: str) -> bool | None:
                     aufgabe=goal,
                     state=state,
                     gate_feedback={
-                        "regel": "read_task_requires_concrete_task_files_scope",
-                        "fakt": str(exc),
-                        "erklaerung": (
-                            "Gib fuer jeden read-Task konkrete, existierende, "
-                            "projektrelative task_files an, die dieser Task "
-                            "tatsaechlich liest. Uebernimm die Kriterien "
-                            "unveraendert und korrigiere nur den Taskgraphen."
-                        ),
+                        "regel": correction_rule,
+                        "fakt": failure,
+                        "erklaerung": correction_explanation,
                     },
                     preserve_criteria=preserved_criteria,
                 )
@@ -538,6 +558,7 @@ def run_planner_split_checkpoint(state: Any, *, goal: str) -> bool | None:
                     "grund": str(retry_exc),
                     "quelle": "checkpoint_planner_split",
                     "korrekturversuch": 1,
+                    "korrekturgrund": correction_reason,
                     "korrektur_fehlgeschlagen": True,
                 }, state.project_dir, state.project_name)
                 return False

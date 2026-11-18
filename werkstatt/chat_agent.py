@@ -407,8 +407,12 @@ Sequenzbereich nach. Blaettere mit since/next_since, bis das fragliche Event
 belegt oder die Ereignisfolge erschoepft ist. Bei payload_omitted lade die
 Payload fuer event_seq in payload_start/payload_end-Chunks nach und pruefe,
 dass die Bereiche lueckenlos sind und denselben payload_sha256 tragen. Eine
-Eventseite mit has_more=true ist keine vollstaendige Historie. Ein fehlender
-oder nicht lesbarer Checkpoint ist
+Eventseite mit has_more=true ist keine vollstaendige Historie: rufe audit_query
+selbst mit since=next_since erneut auf und wiederhole das, bis has_more=false
+oder der relevante Endzustand belegt ist. Frage den Nutzer bei dieser
+angeforderten, rein lesenden Pagination nicht, ob du weiterlesen sollst.
+Berichte erst danach die vollstaendige Ereignisfolge und verbleibende Grenzen.
+Ein fehlender oder nicht lesbarer Checkpoint ist
 "unbekannt", niemals ein Beleg fuer idle oder Erfolg.
 
 Bei Fragen zum Server des aktuell ausgewaehlten Projekts, Listener,
