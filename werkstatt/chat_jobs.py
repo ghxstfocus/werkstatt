@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import threading
 import uuid
@@ -865,6 +866,17 @@ def _run_job(
     def event(kind: str, **payload: Any) -> None:
         store.append_event(job_id, kind, payload)
 
+    def publish_tool_result(name: str, content: str) -> None:
+        # Background jobs execute against an isolated session snapshot. A
+        # loop-action proposal must also be durable in the parent session,
+        # because history replay and the confirmation endpoint are scoped to
+        # that parent session. Persist before notifying the browser.
+        if name == "request_loop_action" and parent_session is not None:
+            _project_loop_action_proposal(
+                parent_session, project, name, content,
+            )
+        event("tool_result", name=name, content=content)
+
     def cancel_check() -> bool:
         return store.cancellation_requested(job_id, _WORKER_ID)
 
@@ -932,9 +944,7 @@ def _run_job(
             "on_tool_call": lambda name, args: event(
                 "tool_call", name=name, args=args,
             ),
-            "on_tool_result": lambda name, content: event(
-                "tool_result", name=name, content=content,
-            ),
+            "on_tool_result": publish_tool_result,
             "on_model_request": lambda manifest: event(
                 "model_request", **manifest,
             ),
@@ -1065,6 +1075,24 @@ def sync_completed_job_turns(
     added = 0
     for job in completed:
         job_id = str(job["job_id"])
+        detail = store.get(job_id)
+        if detail is not None:
+            for event_record in detail.get("events", []):
+                payload = event_record.get("payload")
+                if not isinstance(payload, dict):
+                    continue
+                if payload.get("name") != "request_loop_action":
+                    continue
+                content = payload.get("content")
+                if isinstance(content, str):
+                    try:
+                        _project_loop_action_proposal(
+                            session, project, "request_loop_action", content,
+                        )
+                    except (TypeError, ValueError):
+                        # Corrupt historical tool output must not make the
+                        # complete chat transcript unavailable.
+                        continue
         if job.get("answer") is not None and session.append_job_turn(
             job_id, str(job["message"]), str(job["answer"]),
         ):
@@ -1075,6 +1103,38 @@ def sync_completed_job_turns(
             session.append_job_status(job_id, str(job["state"]))
         session.delete_snapshot(job_id)
     return added
+
+
+def _project_loop_action_proposal(
+    session: Any, project: str, tool_name: str, content: str,
+) -> bool:
+    """Persist a valid background proposal in its confirmable parent session."""
+    if tool_name != "request_loop_action":
+        return False
+    try:
+        proposal = json.loads(content)
+    except (TypeError, json.JSONDecodeError):
+        return False
+    if not isinstance(proposal, dict) or proposal.get("zustand") != "proposal":
+        return False
+    proposal_id = proposal.get("proposal_id")
+    if (
+        not isinstance(proposal_id, str)
+        or re.fullmatch(r"[a-f0-9]{32}", proposal_id) is None
+        or proposal.get("project") != project
+        or proposal.get("action") not in {"start", "pause", "resume", "stop"}
+        or not isinstance(proposal.get("arguments"), dict)
+        or not isinstance(proposal.get("expires_at"), str)
+    ):
+        raise ValueError(
+            "Loop-Aktionsvorschlag hat keinen gueltigen Eltern-Session-Vertrag.",
+        )
+    session.append_once(
+        f"chat-loop-action-proposed:{proposal_id}",
+        "loop_action_proposed",
+        proposal,
+    )
+    return True
 
 
 def reconcile_run_inbox(

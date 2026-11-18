@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -140,6 +141,19 @@ def test_run_job_uses_snapshot_and_merges_completed_turn_once(
             "request_sha256": "a" * 64,
             "message_count": 2,
         })
+        proposal = {
+            "zustand": "proposal",
+            "proposal_id": "a" * 32,
+            "action": "start",
+            "arguments": {"op_id": "OP-398"},
+            "summary": "Loop starten: OP-398",
+            "task_preview": "Offene OP-398-Kriterien",
+            "project": "demo",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+        }
+        _kwargs["on_tool_result"](
+            "request_loop_action", json.dumps(proposal),
+        )
         gesehen.append((
             session.session_id,
             [event["payload"].get("text", "") for event in session.load()],
@@ -165,6 +179,13 @@ def test_run_job_uses_snapshot_and_merges_completed_turn_once(
     assert len(job_turns) == 1
     assert job_turns[0]["payload"]["user_text"] == "Neue Frage"
     assert job_turns[0]["payload"]["assistant_text"] == "Neue Antwort"
+    proposal_events = [
+        event for event in merged
+        if event["kind"] == "loop_action_proposed"
+    ]
+    assert len(proposal_events) == 1
+    assert proposal_events[0]["payload"]["proposal_id"] == "a" * 32
+    assert parent.resolve_loop_action("a" * 32, "confirm")[1] == "claimed"
     result = ChatJobStore(db_path).get(job["job_id"])
     assert result is not None
     assert result["state"] == "succeeded"
@@ -177,6 +198,11 @@ def test_run_job_uses_snapshot_and_merges_completed_turn_once(
         "request_sha256": "a" * 64,
         "message_count": 2,
     }
+    assert any(
+        event["kind"] == "tool_result"
+        and event["payload"].get("name") == "request_loop_action"
+        for event in result["events"]
+    )
 
 
 def test_later_same_session_job_sees_prior_unanswered_prompt(
@@ -284,6 +310,60 @@ def test_sync_completed_job_turns_repairs_missing_parent_projection(
         "demo", "session-a", db_pfad=chat_db,
     ).load()
     assert [event["kind"] for event in events] == ["job_turn"]
+
+
+def test_sync_projects_action_proposal_from_completed_background_job(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt import chat_jobs, chat_session
+
+    chat_db = tmp_path / "chat.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: chat_db)
+    parent = chat_session.ChatSession("demo", "session-a", db_pfad=chat_db)
+    store = ChatJobStore(tmp_path / "jobs.db")
+    job, _ = store.create(
+        "session-a", "Starte OP-398", "write",
+        "request-key-action-projection-01",
+    )
+    proposal = {
+        "zustand": "proposal",
+        "proposal_id": "d" * 32,
+        "action": "start",
+        "arguments": {"op_id": "OP-398"},
+        "summary": "Loop starten: OP-398",
+        "project": "demo",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+    }
+    assert store.claim(job["job_id"], "worker-a")
+    store.append_event(
+        job["job_id"], "tool_result",
+        {
+            "name": "request_loop_action",
+            "content": json.dumps(proposal),
+        },
+    )
+    assert store.finish(
+        job["job_id"], answer="Vorschlag bereit.", worker_id="worker-a",
+    )
+
+    assert chat_jobs.sync_completed_job_turns(
+        "demo", "session-a", db_path=store.db_path,
+    ) == 1
+    events = parent.load()
+    proposal_events = [
+        event for event in events
+        if event["kind"] == "loop_action_proposed"
+    ]
+    assert len(proposal_events) == 1
+    assert proposal_events[0]["payload"]["proposal_id"] == "d" * 32
+    assert parent.resolve_loop_action("d" * 32, "confirm")[1] == "claimed"
+    assert chat_jobs.sync_completed_job_turns(
+        "demo", "session-a", db_path=store.db_path,
+    ) == 0
+    assert sum(
+        event["kind"] == "loop_action_proposed" for event in parent.load()
+    ) == 1
 
 
 def test_sync_projects_failed_job_status_without_exposing_error_text(
