@@ -177,6 +177,13 @@ def test_prompt_hands_implementation_requests_to_the_loop():
         ("Bitte bearbeite OP-372 vollstaendig.", "OP-372"),
         ("Ich möchte, dass du OP-372 bearbeitest.", "OP-372"),
         ("Kannst du bitte OP-372 bearbeiten?", "OP-372"),
+        (
+            (
+                "Auftrag: Starte OP-398 auf dem aktuellen Stand. "
+                "Implementiere den bereits erledigten Planner-Fix nicht erneut."
+            ),
+            "OP-398",
+        ),
     ],
 )
 def test_explicit_op_execution_intent_is_distinguished_from_questions(
@@ -356,6 +363,14 @@ def test_chat_remark_cannot_create_loop_action_even_if_model_requests_it(
         ("Ich möchte, dass du den Loop nicht startest.", "start", False),
         ("Starte den Loop nicht", "start", False),
         ("Bitte OP-375 starten", "start", True),
+        (
+            (
+                "Auftrag: Starte OP-398. Der Planner-Fix ist fertig; "
+                "implementiere ihn nicht erneut."
+            ),
+            "start",
+            True,
+        ),
         ("Pausiere den Loop", "pause", True),
         ("Der Loop soll weiterlaufen", "resume", True),
         ("Stoppe den Loop", "stop", True),

@@ -8632,3 +8632,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Audit Seq 796987 meldete `Task t2 verweist auf unbekannte Abhaengigkeit t1_a`. `_merge_mini_tasks` vergab danach neue IDs, remappte aber die Dependencies nicht; beim Zusammenfuehren ging ausserdem die ID des entfernten Tasks verloren.
 - **Änderung:** Alle Eingabe-IDs werden auf ihre ueberlebende Task-ID abgebildet; nach der Umnummerierung werden Dependencies remappt, Selbstverweise verworfen und Ziele dedupliziert. Unbekannte externe IDs bleiben unveraendert. `tests/conftest.py` fuegt den aktuellen Checkout statt fest `/opt/werkstatt` in `sys.path` ein; eine Regression prueft den Importpfad.
 - **Verifikation:** `tests/test_repro_planner_split_renumber.py`, `tests/test_k15a_merge.py`, `tests/test_planner_split_role.py` und `tests/test_loop_task_dependencies.py`: 19 bestanden.
+
+# 2026-11-18 – OP-Handoff erkennt Start trotz unabhängiger Negation
+- **Befund:** Der Chat verwarf „Starte OP-398 … implementiere den erledigten Fix nicht erneut“ als `not_requested`. Eine Negation im spaeteren Satzteil wurde global auf den Startbefehl angewendet.
+- **Änderung:** OP-Ausfuehrungs- und Loop-Aktions-Intents werden je Satzteil geprueft; Negationen wirken nicht mehr auf einen anderen Satzteil. Labels wie `Auftrag:` werden fuer die direkte Befehlspruefung entfernt.
+- **Verifikation:** `tests/test_chat_agent.py` und `tests/test_chat_tools.py`: 158 bestanden, 3 uebersprungen. Regression prueft die konkrete Formulierung fuer OP-398.

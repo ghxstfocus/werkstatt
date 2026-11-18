@@ -66,6 +66,19 @@ _EXPLICIT_OP_EXECUTION = re.compile(
 )
 
 
+def _action_clauses(message: str) -> list[str]:
+    """Keep negations scoped to their action instead of the whole user turn."""
+    normalized = re.sub(
+        r"^\s*(?:auftrag|anweisung|aufgabe)\s*:\s*", "", message,
+        count=1, flags=re.IGNORECASE,
+    )
+    return [
+        clause.strip()
+        for clause in re.split(r"(?<=[.!?;])\s+|[\r\n]+", normalized)
+        if clause.strip()
+    ]
+
+
 def _has_explicit_op_execution_intent(message: str) -> bool:
     """Require directive language, not a mention, question, or negated request."""
     action = _EXPLICIT_OP_EXECUTION.pattern
@@ -79,32 +92,38 @@ def _has_explicit_op_execution_intent(message: str) -> bool:
         re.IGNORECASE,
     ):
         return False
-    if re.search(
-        rf"\b(?:nicht|kein(?:e|en|er|es)?)\b.{{0,40}}{action}|"
-        rf"{action}.{{0,40}}\b(?:nicht|kein(?:e|en|er|es)?)\b",
-        message,
-        re.IGNORECASE,
-    ):
-        return False
     op_ids = _explicit_op_ids(message)
     if not op_ids:
         return False
-    # Questions about an OP or an action are not handoff requests. The one
-    # supported interrogative form is a direct polite request to do the work.
-    if "?" in message and re.search(
-        r"\bkannst\s+du\s+bitte\b", message, re.IGNORECASE,
-    ) is None:
-        return False
-    direct_request = re.search(
-        rf"^\s*(?:bitte\s+)?{action}|"
-        rf"\b(?:bitte|ich\s+(?:will|moechte|möchte))\b"
-        rf".{{0,100}}{action}|"
-        rf"^\s*OP-\d+[a-z]?\b.{{0,60}}{action}|"
-        rf"\bkannst\s+du\s+bitte\b.{{0,100}}{action}",
-        message,
+    negated_action = re.compile(
+        rf"\b(?:nicht|kein(?:e|en|er|es)?)\b.{{0,40}}{action}|"
+        rf"{action}.{{0,40}}\b(?:nicht|kein(?:e|en|er|es)?)\b",
         re.IGNORECASE,
     )
-    return direct_request is not None
+    for clause in _action_clauses(message):
+        if not _explicit_op_ids(clause) or _EXPLICIT_OP_EXECUTION.search(clause) is None:
+            continue
+        if negated_action.search(clause):
+            continue
+        # Questions about an OP/action are not handoffs, except a polite
+        # direct request. Unrelated questions elsewhere in the turn do not
+        # cancel an explicit command.
+        if "?" in clause and re.search(
+            r"\bkannst\s+du\s+bitte\b", clause, re.IGNORECASE,
+        ) is None:
+            continue
+        direct_request = re.search(
+            rf"^\s*(?:bitte\s+)?{action}|"
+            rf"\b(?:bitte|ich\s+(?:will|moechte|möchte))\b"
+            rf".{{0,100}}{action}|"
+            rf"^\s*OP-\d+[a-z]?\b.{{0,60}}{action}|"
+            rf"\bkannst\s+du\s+bitte\b.{{0,100}}{action}",
+            clause,
+            re.IGNORECASE,
+        )
+        if direct_request is not None:
+            return True
+    return False
 
 
 def _explicit_op_execution_request(message: str) -> str | None:
@@ -198,30 +217,33 @@ def _explicit_loop_action_intent(message: str, action: str) -> bool:
     ):
         return False
     verb = pattern.pattern
-    direct_request = re.search(
-        rf"^\s*(?:bitte\s+)?{verb}|"
-        rf"^\s*(?:bitte|ich\s+(?:will|moechte|möchte))\b"
-        rf".{{0,100}}{verb}|"
-        rf"\b(?:kannst|koenntest|könntest|wuerdest|würdest)\s+du\s+bitte\b"
-        rf".{{0,100}}{verb}|"
-        rf"\b(?:der\s+)?loop\s+soll\b.{{0,60}}{verb}",
-        message,
-        re.IGNORECASE,
-    )
-    if direct_request is None:
-        return False
-    if "?" in message and re.search(
-        r"\b(?:kannst|koenntest|könntest|wuerdest|würdest)\s+du\s+bitte\b",
-        message,
-        re.IGNORECASE,
-    ) is None:
-        return False
-    return re.search(
+    negated_action = re.compile(
         rf"\b(?:nicht|kein(?:e|en|er|es)?)\b.{{0,40}}{verb}|"
         rf"{verb}.{{0,40}}\b(?:nicht|kein(?:e|en|er|es)?)\b",
-        message,
         re.IGNORECASE,
-    ) is None
+    )
+    for clause in _action_clauses(message):
+        if pattern.search(clause) is None or negated_action.search(clause):
+            continue
+        direct_request = re.search(
+            rf"^\s*(?:bitte\s+)?{verb}|"
+            rf"^\s*(?:bitte|ich\s+(?:will|moechte|möchte))\b"
+            rf".{{0,100}}{verb}|"
+            rf"\b(?:kannst|koenntest|könntest|wuerdest|würdest)\s+du\s+bitte\b"
+            rf".{{0,100}}{verb}|"
+            rf"\b(?:der\s+)?loop\s+soll\b.{{0,60}}{verb}",
+            clause,
+            re.IGNORECASE,
+        )
+        if direct_request is None:
+            continue
+        if "?" in clause and re.search(
+            r"\b(?:kannst|koenntest|könntest|wuerdest|würdest)\s+du\s+bitte\b",
+            clause, re.IGNORECASE,
+        ) is None:
+            continue
+        return True
+    return False
 
 
 def _explicit_op_ids(message: str) -> tuple[str, ...]:
