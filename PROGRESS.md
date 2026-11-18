@@ -8655,3 +8655,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** `planner_split` ist jetzt ein erlaubter persistierter Rollenstage. Ein weiterhin unerwarteter Yield schreibt `loop_planner_failed` mit Rolle, Aktion, Taskzahl und Candidate-Status statt still zurueckzukehren.
 - **Verifikation lokal:** Checkpoint-/Planner-Handoff-/Rollen-Dispatch-/Spec-First-Gruppe: 98 bestanden; Ruff und Diff-Check bestanden.
 - **Grenze:** Der konkrete alte Run ist nicht nachtraeglich aufloesbar; kein Server- oder Folge-Run-Nachweis.
+
+# 2026-11-19 – Heuristische Task-Abhaengigkeiten zyklusfrei ergaenzen
+- **Befund:** Audit `werkstatt-20261118-225221-b653eece` belegt einen vom Planner-Merge abgeleiteten Zyklus ueber t2–t6. Der Audit enthaelt nicht die einzelnen Abhaengigkeitskanten; ob der Zyklus aus Architect-/Planner-Kanten oder aus der Heuristik entstand, ist nicht belegt.
+- **Aenderung:** Vor jeder heuristischen Zusatzkante wird geprueft, ob der bestehende Voraussetzungspfad dadurch zyklisch wuerde. Solche Heuristikkanten werden ausgelassen und im `planner_deps_abgeleitet`-Audit gezaehlt. Explizite Planner-Kanten werden nicht umgeschrieben und bleiben durch den Graphvalidator fail-closed geprueft.
+- **Verifikation lokal:** Dependency-/Sortier-/Planner-Split-Gruppe: 32 bestanden; Ruff und Diff-Check bestanden.
+- **Grenze:** Der konkrete alte Graph ist nicht verfuegbar; explizite Kantenzyklen werden weiterhin abgelehnt. Kein Server- oder Folge-Run-Nachweis.

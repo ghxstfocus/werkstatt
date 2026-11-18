@@ -38,8 +38,7 @@ def remap_dependencies_to_split_leaves(tasks: list[dict]) -> list[dict]:
                 for parent_dep in candidate.get("dependencies") or []
             }
             leaves = sorted(descendants - referenced)
-            for target in leaves or [dep]:
-                remapped.append(target)
+            remapped.extend(leaves or [dep])
         task["dependencies"] = remapped
     return tasks
 
@@ -233,6 +232,7 @@ def _leite_deps_deterministisch(
     # Architect-Block wird die Dep auf die produzierende Task gemappt.
     _arch_tasks: set[str] = set()
     _quelle_parts: list[str] = []
+    heuristic_cycle_edges_skipped = 0
     if found and arch_deps:
         _quelle_parts.append("architect")
         for t in tasks:
@@ -316,7 +316,14 @@ def _leite_deps_deterministisch(
                     ]
                 if _neue:
                     _alt = set(t.get("dependencies") or [])
-                    t["dependencies"] = sorted(_alt | set(_neue))
+                    for dependency_id in sorted(set(_neue) - _alt):
+                        if _dependency_edge_would_cycle(
+                            tasks, _tid, dependency_id,
+                        ):
+                            heuristic_cycle_edges_skipped += 1
+                            continue
+                        _alt.add(dependency_id)
+                    t["dependencies"] = sorted(_alt)
         if _arch_tasks:
             _quelle_parts.append("heuristik-ergaenzung")
         else:
@@ -336,6 +343,7 @@ def _leite_deps_deterministisch(
             payload = {
                 "quelle": _quelle,
                 "tasks_mit_deps": _mit,
+                "heuristic_cycle_edges_skipped": heuristic_cycle_edges_skipped,
             }
             if audit_call is None:
                 audit("planner_deps_abgeleitet", payload, pd, pn)
@@ -345,6 +353,44 @@ def _leite_deps_deterministisch(
             pass
 
     return tasks
+
+
+def _dependency_edge_would_cycle(
+    tasks: list[dict], task_id: str, dependency_id: str,
+) -> bool:
+    """Return whether adding task_id -> dependency_id closes a cycle.
+
+    Dependencies point from a task to its prerequisites. The new edge is
+    cyclic exactly when dependency_id already reaches task_id by following
+    prerequisite edges. Only heuristic edges use this guard; explicit planner
+    edges remain intact and are rejected by the task-graph validator if bad.
+    """
+    if task_id == dependency_id:
+        return True
+    by_id = {
+        task.get("id"): task
+        for task in tasks
+        if isinstance(task, dict) and isinstance(task.get("id"), str)
+    }
+    pending = [dependency_id]
+    visited: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current == task_id:
+            return True
+        if current in visited:
+            continue
+        visited.add(current)
+        current_task = by_id.get(current)
+        if current_task is None:
+            continue
+        dependencies = current_task.get("dependencies") or []
+        if isinstance(dependencies, list):
+            pending.extend(
+                dependency for dependency in dependencies
+                if isinstance(dependency, str) and dependency not in visited
+            )
+    return False
 
 def _topo_sort_tasks(
     tasks: list[dict], pd=None, pn="?",

@@ -89,6 +89,22 @@ def test_arch_teilweise_heuristik_ergaenzt() -> None:
     assert set(result[2]["dependencies"]) == {"t1", "t2"}
 
 
+def test_heuristik_ueberspringt_kante_die_architect_abhaengigkeit_zyklisch_macht():
+    prosa = """## 5. Welche Dateien haengen voneinander ab?
+
+- src/api.py: tests/test_api.py
+"""
+    tasks = [
+        {"id": "t1", "task_files": ["src/api.py"]},
+        {"id": "t2", "task_files": ["tests/test_api.py"]},
+    ]
+
+    result = planner._leite_deps_deterministisch(tasks, prosa)
+
+    assert result[0]["dependencies"] == ["t2"]
+    assert (result[1].get("dependencies") or []) == []
+
+
 def test_arch_block_leer_heuristik_laeuft() -> None:
     """Architect-Block da, aber ohne Inhalt -> Heuristik laeuft."""
     prosa = """## 5. Welche Dateien haengen voneinander ab?
