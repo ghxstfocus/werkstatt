@@ -257,6 +257,13 @@ def test_spec_builder_and_validator_create_run_bound_frozen_artifact(
             ok=True,
             content=(
                 '{"tests":[{"id":"AC1","source":'
+                '"import os\\ndef test_ac1():\\n    assert True\\n"}]}'
+            ),
+        ),
+        LLMReply(
+            ok=True,
+            content=(
+                '{"tests":[{"id":"AC1","source":'
                 '"from werkstatt.auth import authenticate\\n'
                 'def test_ac1():\\n    assert authenticate(\\\"bad\\\") is False\\n"}]}'
             ),
@@ -273,19 +280,40 @@ def test_spec_builder_and_validator_create_run_bound_frozen_artifact(
         return replies.pop(0)
 
     monkeypatch.setattr(agent, "ask_llm", fake_ask_llm)
-    monkeypatch.setattr(spec_first, "audit", lambda *_a, **_k: True)
+    audit_events = []
+    monkeypatch.setattr(
+        spec_first, "audit",
+        lambda kind, payload, *_args, **_kwargs: audit_events.append(
+            (kind, payload),
+        ) or True,
+    )
     checkpoint = spec_first.build_spec_test_checkpoint(
         state, phase, goal=goal,
     )
     assert checkpoint is not None
     assert [call[1]["rolle"] for call in calls] == [
-        "spec-builder", "spec-validator",
+        "spec-builder", "spec-builder", "spec-validator",
     ]
     assert all(
         call[1]["context_manifest"]["required_context_complete"] is True
         for call in calls
     )
-    spec_prompt = json.loads(calls[0][0][2])
+    retry_prompt = json.loads(calls[1][0][2])
+    assert retry_prompt["previous_validation_feedback"]["reason_codes"] == [
+        "acceptance_criteria_coverage_mismatch",
+        "import_outside_current_source_evidence",
+    ]
+    assert any(
+        kind == "loop_phase"
+        and payload.get("phase") == "spec_builder_candidate"
+        and payload.get("status") == "rejected"
+        and payload.get("reason_codes") == [
+            "acceptance_criteria_coverage_mismatch",
+            "import_outside_current_source_evidence",
+        ]
+        for kind, payload in audit_events
+    )
+    spec_prompt = retry_prompt
     api_surface = spec_prompt["current_public_api_surfaces"][0]["source"]
     assert "def authenticate(token)" in api_surface
     assert "return token" not in api_surface

@@ -303,51 +303,6 @@ def build_spec_test_checkpoint(
         "current_public_api_surfaces": source_evidence,
         "required_test_ids": [f"AC{i + 1}" for i in range(len(criteria))],
     }
-    encoded_payload = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    if len(_SPEC_SYSTEM) + len(encoded_payload) > 18_000:
-        return None
-    audit(
-        "loop_phase",
-        {
-            "phase": "spec_builder_context_budget",
-            "status": "included",
-            "system_chars": len(_SPEC_SYSTEM),
-            "user_chars": len(encoded_payload),
-            "actual_chars": len(_SPEC_SYSTEM) + len(encoded_payload),
-            "required_context_complete": True,
-            "source_file_count": len(sources),
-            "criterion_count": len(criteria),
-        },
-        state.project_dir,
-        state.project_name,
-        run_id=run_id,
-    )
-    manifest = {
-        "budget_event": "spec_builder_context_budget",
-        "required_context_complete": True,
-        "user_sha256": hashlib.sha256(encoded_payload.encode()).hexdigest(),
-        "system_sha256": hashlib.sha256(_SPEC_SYSTEM.encode()).hexdigest(),
-        "source": "goal_criteria_and_hash_validated_public_api_signatures",
-    }
-    reply = ask_llm(
-        api_key, _SPEC_SYSTEM, encoded_payload, model="deepseek-chat",
-        temperature=0.0, timeout=60, max_tokens=6000, state=state,
-        aufgabe="spec-builder", rolle="spec-builder", heartbeat=False,
-        context_manifest=manifest,
-    )
-    generated = _json_reply(reply)
-    raw_tests = generated.get("tests") if isinstance(generated, dict) else None
-    if (
-        not isinstance(raw_tests, list)
-        or not 1 <= len(raw_tests) <= MAX_SPEC_FILES
-        or any(
-            not isinstance(item, dict)
-            or not isinstance(item.get("id"), str)
-            or not isinstance(item.get("source"), str)
-            for item in raw_tests
-        )
-    ):
-        return None
     allowed_modules = {
         ".".join(
             PurePosixPath(record["path"]).with_suffix("").parts[:-1]
@@ -362,28 +317,126 @@ def build_spec_test_checkpoint(
             if segment != "__init__"
         )
     }
-    normalized: list[dict[str, str]] = []
-    seen_ids: set[str] = set()
-    seen_test_names: set[str] = set()
-    for item in raw_tests:
-        test_id = item["id"]
-        source = item["source"]
-        valid, _reason, test_name = _validate_test_source(
-            source, allowed_modules=allowed_modules,
+    normalized: list[dict[str, str]] | None = None
+    retry_feedback: dict[str, Any] | None = None
+    for attempt in range(2):
+        attempt_payload: dict[str, Any] = dict(payload)
+        if retry_feedback is not None:
+            attempt_payload["previous_validation_feedback"] = retry_feedback
+        encoded_payload = json.dumps(
+            attempt_payload, ensure_ascii=False, sort_keys=True,
         )
-        if (
-            not re.fullmatch(r"AC[1-9][0-9]*", test_id)
-            or test_id in seen_ids
-            or not valid or test_name is None
-            or test_name in seen_test_names
-        ):
+        if len(_SPEC_SYSTEM) + len(encoded_payload) > 18_000:
+            audit("loop_phase", {
+                "phase": "spec_builder",
+                "status": "failed",
+                "stage": "retry_context_budget",
+                "reason": "retry_context_over_budget",
+                "attempt": attempt + 1,
+            }, state.project_dir, state.project_name, run_id=run_id)
             return None
-        seen_ids.add(test_id)
-        seen_test_names.add(test_name)
-        normalized.append({
-            "id": test_id, "source": source, "test_name": test_name,
-        })
-    if seen_ids != {f"AC{i + 1}" for i in range(len(criteria))}:
+        audit("loop_phase", {
+            "phase": "spec_builder_context_budget",
+            "status": "included",
+            "attempt": attempt + 1,
+            "system_chars": len(_SPEC_SYSTEM),
+            "user_chars": len(encoded_payload),
+            "actual_chars": len(_SPEC_SYSTEM) + len(encoded_payload),
+            "required_context_complete": True,
+            "source_file_count": len(sources),
+            "criterion_count": len(criteria),
+        }, state.project_dir, state.project_name, run_id=run_id)
+        manifest = {
+            "budget_event": "spec_builder_context_budget",
+            "required_context_complete": True,
+            "user_sha256": hashlib.sha256(encoded_payload.encode()).hexdigest(),
+            "system_sha256": hashlib.sha256(_SPEC_SYSTEM.encode()).hexdigest(),
+            "source": "goal_criteria_and_hash_validated_public_api_signatures",
+            "attempt": attempt + 1,
+        }
+        reply = ask_llm(
+            api_key, _SPEC_SYSTEM, encoded_payload, model="deepseek-chat",
+            temperature=0.0, timeout=60, max_tokens=6000, state=state,
+            aufgabe="spec-builder", rolle="spec-builder", heartbeat=False,
+            context_manifest=manifest,
+        )
+        generated = _json_reply(reply)
+        raw_tests = generated.get("tests") if isinstance(generated, dict) else None
+        reasons: list[str] = []
+        invalid_ids: list[str] = []
+        if (
+            not isinstance(raw_tests, list)
+            or not 1 <= len(raw_tests) <= MAX_SPEC_FILES
+            or any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("id"), str)
+                or not isinstance(item.get("source"), str)
+                for item in raw_tests
+            )
+        ):
+            reasons.append("test_schema_invalid")
+        else:
+            candidate: list[dict[str, str]] = []
+            seen_ids: set[str] = set()
+            seen_test_names: set[str] = set()
+            for item in raw_tests:
+                test_id = item["id"]
+                source = item["source"]
+                valid, validation_reason, test_name = _validate_test_source(
+                    source, allowed_modules=allowed_modules,
+                )
+                if (
+                    not re.fullmatch(r"AC[1-9][0-9]*", test_id)
+                    or test_id in seen_ids
+                    or not valid or test_name is None
+                    or test_name in seen_test_names
+                ):
+                    invalid_ids.append(
+                        test_id if re.fullmatch(r"AC[1-9][0-9]*", test_id)
+                        else "invalid_id",
+                    )
+                    reasons.append(
+                        validation_reason if not valid
+                        else "duplicate_or_invalid_test_id_or_name",
+                    )
+                    continue
+                seen_ids.add(test_id)
+                seen_test_names.add(test_name)
+                candidate.append({
+                    "id": test_id, "source": source,
+                    "test_name": test_name,
+                })
+            required_ids = {f"AC{i + 1}" for i in range(len(criteria))}
+            if seen_ids != required_ids:
+                reasons.append("acceptance_criteria_coverage_mismatch")
+                invalid_ids.extend(sorted(required_ids - seen_ids))
+            if not reasons:
+                normalized = candidate
+                break
+        retry_feedback = {
+            "reason_codes": sorted(set(reasons)),
+            "affected_test_ids": sorted(set(invalid_ids))[:20],
+            "instruction": (
+                "Regenerate the complete tests list. Use only imports and "
+                "calls permitted by the supplied current public API evidence."
+            ),
+        }
+        audit("loop_phase", {
+            "phase": "spec_builder_candidate",
+            "status": "rejected",
+            "attempt": attempt + 1,
+            "reason_codes": retry_feedback["reason_codes"],
+            "affected_test_ids": retry_feedback["affected_test_ids"],
+            "retry_available": attempt == 0,
+        }, state.project_dir, state.project_name, run_id=run_id)
+    if normalized is None:
+        audit("loop_phase", {
+            "phase": "spec_builder",
+            "status": "failed",
+            "stage": "candidate_validation",
+            "reason_codes": retry_feedback["reason_codes"] if retry_feedback else [],
+            "attempts": 2,
+        }, state.project_dir, state.project_name, run_id=run_id)
         return None
 
     validator_payload = json.dumps({
@@ -427,6 +480,25 @@ def build_spec_test_checkpoint(
         or validation.get("uncovered") != []
         or validation.get("invalid_tests") != []
     ):
+        audit("loop_phase", {
+            "phase": "spec_validator",
+            "status": "failed",
+            "reason": (
+                "validator_response_invalid" if validation is None
+                else "validator_rejected_candidate"
+            ),
+            "uncovered_ids": (
+                [item[:40] for item in validation.get("uncovered", [])[:20]
+                 if isinstance(item, str)]
+                if isinstance(validation, dict)
+                and isinstance(validation.get("uncovered"), list) else []
+            ),
+            "invalid_test_count": (
+                len(validation.get("invalid_tests", []))
+                if isinstance(validation, dict)
+                and isinstance(validation.get("invalid_tests"), list) else 0
+            ),
+        }, state.project_dir, state.project_name, run_id=run_id)
         return None
 
     safe_run = re.sub(r"[^A-Za-z0-9_.-]", "_", run_id)[:120]
