@@ -4,7 +4,7 @@ rich>=13
 requests>=2.31
 PyYAML>=6.0,<7
 # Local code graph; code-only index/update never calls a model.
-graphifyy==0.9.107
+graphifyy==0.9.112
 
 # Web-UI (OP-074: FastAPI-Backend mit WebSockets)
 # Version-Pins: getestet mit diesen Versionen, nicht einfach hochziehen
