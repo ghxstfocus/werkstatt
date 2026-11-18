@@ -1434,6 +1434,9 @@ def chat_loop(
     def _finish_time_budget() -> str:
         if on_research_budget is not None and max_elapsed_s is not None:
             on_research_budget(max_elapsed_s)
+        handoff_answer = _handoff_explicit_op_after_budget()
+        if handoff_answer is not None:
+            return handoff_answer
         if not allow_time_budget_finalize:
             answer = json.dumps(
                 {
@@ -1460,6 +1463,70 @@ def chat_loop(
     )
     op_handoff_retry_used = False
     op_handoff_result: dict[str, Any] | None = None
+
+    def _handoff_explicit_op_after_budget() -> str | None:
+        """Do the already-authorized proposal handoff even if research timed out."""
+        nonlocal op_handoff_result
+        if not requested_op or op_handoff_result is not None:
+            return None
+        arguments = {"action": "start", "op_id": requested_op}
+        tool_call_id = f"budget-op-handoff-{current_user_seq}"
+        tool_call = {
+            "id": tool_call_id,
+            "type": "function",
+            "function": {
+                "name": "request_loop_action",
+                "arguments": json.dumps(arguments, ensure_ascii=False),
+            },
+        }
+        session.append("tool_call", {"tool_calls": [tool_call]})
+        if on_tool_call is not None:
+            on_tool_call("request_loop_action", arguments)
+        result_text = execute_tool(
+            "request_loop_action", arguments, tools, mode=mode,
+            project_dir=project_dir, source_project_dir=source_project_dir,
+            project_name=session.project,
+            session_id=origin_session_id or session.session_id,
+            history_before_seq=current_user_seq,
+            history_session_id=session.session_id,
+        )
+        session.append("tool_result", {
+            "tool_call_id": tool_call_id,
+            "name": "request_loop_action",
+            "content": result_text,
+        })
+        if on_tool_result is not None:
+            on_tool_result("request_loop_action", result_text)
+        try:
+            parsed = json.loads(result_text)
+        except (TypeError, json.JSONDecodeError):
+            parsed = {"zustand": "error", "detail": result_text}
+        op_handoff_result = parsed if isinstance(parsed, dict) else {
+            "zustand": "error", "detail": str(parsed),
+        }
+        status = op_handoff_result.get("zustand")
+        if status == "proposal":
+            answer = (
+                f"Der Startvorschlag fuer {requested_op} ist im Chat zur "
+                "Bestaetigung bereit. Der Loop ist noch nicht gestartet; "
+                "nach deiner Bestaetigung zeigt er vor Schreibarbeit sein "
+                "Plan-Gate."
+            )
+        elif status == "already_completed":
+            answer = str(op_handoff_result.get("detail") or "")
+        else:
+            detail = str(op_handoff_result.get("detail") or "")
+            answer = (
+                f"Der Startvorschlag fuer {requested_op} wurde nach Erreichen "
+                "des Recherchebudgets direkt geprueft, aber nicht angelegt. "
+                "Es wurde nichts gestartet."
+                + (f" Grund: {detail}" if detail else "")
+            )
+        if on_chunk is not None and answer:
+            on_chunk(answer)
+        session.append("assistant", {"text": answer})
+        return answer
+
     while max_rounds is None or _rounds < max_rounds:
         _check_cancel(cancel_check)
         if deadline is not None and time.monotonic() >= deadline:

@@ -470,6 +470,46 @@ def test_explicit_op_request_retries_missing_tool_handoff(
     assert proposals[0]["payload"]["arguments"] == {"op_id": "OP-321"}
 
 
+def test_explicit_op_still_creates_proposal_when_research_budget_expires(
+    session: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_session
+
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: session.db_pfad)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n",
+        encoding="utf-8",
+    )
+
+    def expire_before_first_response(*_args, **_kwargs):
+        raise chat_agent.ChatDeadlineExceeded("test research timeout")
+
+    monkeypatch.setattr(
+        chat_agent, "_request_chat_provider", expire_before_first_response,
+    )
+    results: list[dict[str, Any]] = []
+    answer = chat_agent.chat_loop(
+        session,
+        "Starte OP-321 nach den Akzeptanzkriterien.",
+        project_dir=tmp_path,
+        on_tool_result=lambda _name, content: results.append(json.loads(content)),
+    )
+
+    assert "Startvorschlag fuer OP-321 ist im Chat" in answer
+    assert results[0]["zustand"] == "proposal"
+    assert len([
+        event for event in session.load()
+        if event["kind"] == "loop_action_proposed"
+    ]) == 1
+
+
 def test_numbered_reply_uses_only_concrete_previous_start_offer(
     session: ChatSession,
     fake_llm,
