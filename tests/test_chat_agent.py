@@ -959,7 +959,9 @@ def test_system_prompt_requires_exact_op_evidence_before_planning() -> None:
 
 def test_system_prompt_requires_verified_file_line_citations() -> None:
     assert "grep" in chat_agent._SYSTEM_PROMPT
-    assert "Zeichen-Offsets und keine Zeilennummern" in chat_agent._SYSTEM_PROMPT
+    assert "an read_file als start_line/end_line" in chat_agent._SYSTEM_PROMPT
+    assert "start/end" in chat_agent._SYSTEM_PROMPT
+    assert "Zeichen-Offsets" in chat_agent._SYSTEM_PROMPT
     assert "Erfinde keine Zeilenangaben" in chat_agent._SYSTEM_PROMPT
 
 def test_chat_loop_cancelled_before_request_does_not_call_llm(session) -> None:

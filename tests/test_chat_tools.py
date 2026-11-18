@@ -365,6 +365,23 @@ def test_read_file_offsets_are_character_offsets_and_truncation_is_explicit(tmp_
     assert "naechsten start-Offset" in schema
 
 
+def test_read_file_accepts_grep_line_ranges(tmp_path):
+    (tmp_path / "lines.py").write_text(
+        "eins\nzwei\ndrei\nvier\nfuenf\n", encoding="utf-8",
+    )
+
+    result = chat_tools.execute_tool(
+        "read_file",
+        {"path": "lines.py", "start_line": 2, "end_line": 4},
+        project_dir=tmp_path,
+    )
+
+    assert result.startswith("[Gelesene Zeilen: 2-4;")
+    assert result.endswith("zwei\ndrei\nvier\n")
+    schema = chat_tools.CHAT_TOOLS["read_file"]["description"]
+    assert "start_line/end_line" in schema
+
+
 def test_read_file_tail_reports_actual_range_and_file_length(tmp_path):
     (tmp_path / "progress.md").write_text(
         "alt\n" + "x" * 200 + "\nneuester Eintrag\n",
