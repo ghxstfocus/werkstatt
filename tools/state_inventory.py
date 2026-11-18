@@ -52,6 +52,7 @@ BASELINE_GETATTR_ONLY = frozenset({
     "baseline_gruen",
     "builder_failure_detail",
     "explorer_pytest_laufzeit_s",
+    "follow_up_fehler",
     "max_total_llm_s",
     "messungen_nach_apply",
     "op_criteria_progress_marker",
