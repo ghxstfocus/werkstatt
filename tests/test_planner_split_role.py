@@ -163,3 +163,73 @@ def test_split_checkpoint_runs_from_current_handoff_and_yields_to_coordinator(
     assert state.planner_step_yielded is True
     assert state.planner_yielded_after_role == "planner_split"
     assert "planner_plan_erstellt" in events
+
+
+def test_split_checkpoint_corrects_missing_read_task_scope_once(
+    tmp_path, monkeypatch,
+):
+    from werkstatt.task_graph import TaskGraphError
+
+    state = SimpleNamespace(
+        api_key="test-key",
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-2",
+        explorer_context={"key_files": [{"file": "src/a.py"}]},
+        architect_prose="A" * 80,
+        scout_auftrag={},
+        architect_scout_source_manifest={},
+        planner_step_yielded=False,
+        planner_yielded_after_role=None,
+        akzeptanzkriterien=["Original acceptance criterion"],
+        tasks=[],
+        phasen=[],
+        tests=[],
+    )
+    handoff = {
+        "architect_prose": "A" * 80,
+        "architect_scout_report": {"auftrag_prosa": "evidence"},
+        "source_manifest": {"sources": []},
+        "key_files": ["src/a.py"],
+        "architect_input_sha256": "b" * 64,
+    }
+    calls = []
+    events = []
+    monkeypatch.setattr(
+        planner, "_load_current_planner_split_handoff",
+        lambda _state, _goal: handoff,
+    )
+    monkeypatch.setattr(planner, "_publish_role_checkpoint", lambda *_args: None)
+
+    def split(*_args, **kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise TaskGraphError(
+                "Read-Task t1 hat keinen konkreten task_files-Scope."
+            )
+        return [{
+            "id": "t1", "action": "read", "task_files": ["src/a.py"],
+            "criterion_refs": ["AC1"],
+        }]
+
+    monkeypatch.setattr(planner, "_zerlege_in_sub_tasks", split)
+    monkeypatch.setattr(
+        planner, "_normalisiere_task_files", lambda tasks, *_args: tasks,
+    )
+    monkeypatch.setattr(
+        planner, "audit",
+        lambda kind, payload, *_args, **_kwargs: events.append((kind, payload)),
+    )
+
+    assert run_planner_split_checkpoint(state, goal="approved goal") is True
+    assert len(calls) == 2
+    assert calls[1]["preserve_criteria"] == ["Original acceptance criterion"]
+    assert calls[1]["gate_feedback"]["regel"] == (
+        "read_task_requires_concrete_task_files_scope"
+    )
+    assert state.tasks[0]["task_files"] == ["src/a.py"]
+    assert any(
+        kind == "planner_plan_abgelehnt"
+        and payload.get("korrekturgrund") == "read_task_scope_missing"
+        for kind, payload in events
+    )

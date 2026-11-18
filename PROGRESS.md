@@ -8611,3 +8611,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Die CLI-Suche behaelt jetzt den tatsaechlich aufgerufenen venv-Python-Pfad und findet so das benachbarte `.venv/bin/graphify`. Neue Linux-Regression bildet den Symlink-Fall nach.
 - **Verifikation lokal:** Graphify-Index-Gruppe: 22 bestanden, 1 Linux-Symlinktest unter Windows uebersprungen. Ruff, gezieltes Mypy, Doku-Drift und Diff-Check bestanden. Der Symlinktest muss auf dem Linux-Server laufen.
 - **Grenze:** Der Server-Graph wurde bisher nicht aktualisiert oder abgefragt. Nach Pull ist ein Refresh und Graphify-Query-Nachweis erforderlich; OP-398 bleibt offen.
+
+# 2026-11-18 – Planner-Split Read-Scopes gezielt korrigieren
+- **Befund:** Audit `werkstatt-20261118-135725-5966fc06`, Seq 796887, belegt die lokale Ablehnung `Read-Task t1 hat keinen konkreten task_files-Scope`. Im Planner-Split-Prompt beschrieb `task_files` zuvor nur als Dateien, die ein Task aendert; das ist fuer `action=read` widerspruechlich, waehrend der Validator konkrete gelesene Dateien fordert.
+- **Aenderung:** Der Prompt verlangt jetzt bei `read`/`verify` konkrete existierende Pfade aus DATEIEN/aktuellen Belegen. Wenn ein Read-Task trotzdem ohne Scope zurueckkommt, versucht Planner-Split genau eine gezielte Korrektur mit dem Validatorbefund und unveraenderten Akzeptanzkriterien. Zweiter Fehler bleibt sichtbar und fail-closed.
+- **Verifikation:** Noch ausstehend.
+- **Grenze:** Audit-Seiten vor der Ablehnung waren nur gekuerzt. Dieser Fix beweist keinen erfolgreichen Folge-Run; OP-398 bleibt offen.

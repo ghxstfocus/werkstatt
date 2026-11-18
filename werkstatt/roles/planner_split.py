@@ -38,8 +38,12 @@ Jeder Sub-Task:
   Hinweis: Verifikations-Aufgaben (nur pruefen, nichts aendern)
   bevorzugt als "verify" klassifizieren. Der deterministische
   Pre-Check im Planner ist die harte Garantie, nicht der Prompt.
-- task_files: Liste der Dateien, die dieser Sub-Task aendert
-  (max 1 Datei pro Task, wenn moeglich)
+- task_files: Konkrete projektrelative Dateien, auf die dieser Sub-Task
+  zugreift. Bei create/update die Dateien, die er aendert; bei read/verify
+  zwingend die Dateien, die er liest oder prueft. Auch read-Tasks duerfen
+  task_files nie leer lassen. Verwende nur Dateien aus DATEIEN oder den
+  aktuellen Quellbelegen; erfinde keine Pfade. Maximal 1 Datei pro Task,
+  wenn moeglich.
 - architect_start: ERSTE Zeile des Architect-Abschnitts,
   der zu diesem Task gehoert (woertliches Zitat, z.B. "5. Backup").
   FUER __init__.py-Tasks: verwende den exakten Schritt, z.B.
@@ -105,6 +109,11 @@ Antworte NUR mit JSON:
     ...
   ]
 }
+Read-Task-Beispiel:
+{"id":"t1","name":"Status und Modul pruefen","action":"read",
+ "task_files":["docs/STATUS.md"],
+ "architect_start":"1. Bestand","architect_ende":"1. Bestand",
+ "dependencies":[],"criterion_refs":["AC1"]}
 Keine Erklaerung, nur JSON."""
 
 PLANNER_SPLIT_SINGLE_SYSTEM = """Du bist ein Task-Zerleger.
@@ -486,15 +495,62 @@ def run_planner_split_checkpoint(state: Any, *, goal: str) -> bool | None:
             state=state,
         )
     except TaskGraphError as exc:
-        services._publish_role_checkpoint(
-            state, "planner_split", "failed", "task_graph_rejected",
-            {"architect_output_sha256": output_sha},
-        )
-        services.audit("planner_plan_abgelehnt", {
-            "grund": str(exc),
-            "quelle": "checkpoint_planner_split",
-        }, state.project_dir, state.project_name)
-        return False
+        if "Read-Task" in str(exc) and "task_files-Scope" in str(exc):
+            preserved_criteria = list(state.akzeptanzkriterien or [])
+            services.audit("planner_plan_abgelehnt", {
+                "grund": str(exc),
+                "quelle": "checkpoint_planner_split",
+                "korrekturversuch": 1,
+                "korrekturgrund": "read_task_scope_missing",
+            }, state.project_dir, state.project_name)
+            services._publish_role_checkpoint(
+                state, "planner_split", "running",
+                "correcting_missing_read_task_scope",
+                {"architect_output_sha256": output_sha},
+            )
+            try:
+                subtasks = services._zerlege_in_sub_tasks(
+                    state.architect_prosa,
+                    key_files,
+                    state.api_key,
+                    state.project_dir,
+                    state.project_name,
+                    aufgabe=goal,
+                    state=state,
+                    gate_feedback={
+                        "regel": "read_task_requires_concrete_task_files_scope",
+                        "fakt": str(exc),
+                        "erklaerung": (
+                            "Gib fuer jeden read-Task konkrete, existierende, "
+                            "projektrelative task_files an, die dieser Task "
+                            "tatsaechlich liest. Uebernimm die Kriterien "
+                            "unveraendert und korrigiere nur den Taskgraphen."
+                        ),
+                    },
+                    preserve_criteria=preserved_criteria,
+                )
+            except TaskGraphError as retry_exc:
+                services._publish_role_checkpoint(
+                    state, "planner_split", "failed", "task_graph_rejected",
+                    {"architect_output_sha256": output_sha},
+                )
+                services.audit("planner_plan_abgelehnt", {
+                    "grund": str(retry_exc),
+                    "quelle": "checkpoint_planner_split",
+                    "korrekturversuch": 1,
+                    "korrektur_fehlgeschlagen": True,
+                }, state.project_dir, state.project_name)
+                return False
+        else:
+            services._publish_role_checkpoint(
+                state, "planner_split", "failed", "task_graph_rejected",
+                {"architect_output_sha256": output_sha},
+            )
+            services.audit("planner_plan_abgelehnt", {
+                "grund": str(exc),
+                "quelle": "checkpoint_planner_split",
+            }, state.project_dir, state.project_name)
+            return False
 
     if subtasks:
         state.tasks = services._normalisiere_task_files(
