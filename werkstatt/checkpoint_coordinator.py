@@ -302,6 +302,15 @@ def choose_planner_checkpoint_action(
         state.aufgabe, scout_skip_target, state.project_dir,
         explorer_context=state.explorer_context,
     )
+    from werkstatt.spec_first import requires_spec_first
+
+    spec_required = requires_spec_first(
+        state.aufgabe,
+        criteria_count=len(getattr(state, "akzeptanzkriterien", []) or []),
+    )
+    if spec_required and direct_builder_ready:
+        direct_builder_ready = False
+        direct_builder_reason = "high_risk_goal_requires_independent_spec"
     available: set[str] = set()
     if isinstance(state.aufgabe, str) and state.aufgabe.strip():
         available.add("user_goal")
@@ -418,6 +427,33 @@ def choose_planner_checkpoint_action(
         )
         if model_choice is not None and selected_role != role_decision.role:
             reason = "project_coordinator_selected_scout"
+
+    # High-risk work gets an independent, frozen behavior spec after the
+    # Architect has produced criteria and before the task graph is compiled.
+    # A stale existing artifact blocks; it must never silently fall back to a
+    # normal Builder route.
+    spec_checkpoint = phase_data.get("spec_test_checkpoint")
+    if next_role == "split":
+        from werkstatt.spec_first import spec_test_manifest_is_current
+
+        architect_ready = (
+            isinstance(architect_output, str)
+            and len(architect_output.strip()) >= 50
+            and bool(getattr(state, "akzeptanzkriterien", None))
+        )
+        if spec_required:
+            if not architect_ready:
+                next_role = "architect"
+                reason = "spec_first_requires_architect_criteria"
+            elif spec_checkpoint is None:
+                next_role = "spec_builder"
+                reason = "high_risk_goal_requires_independent_frozen_spec"
+            elif not spec_test_manifest_is_current(
+                state.project_dir, spec_checkpoint,
+                run_id=state.run_id, goal=state.aufgabe,
+            ):
+                next_role = "stop_missing_evidence"
+                reason = "frozen_spec_checkpoint_stale_or_missing"
 
     if (
         next_role in {"architect", "split", "dispatch"}

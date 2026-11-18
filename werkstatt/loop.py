@@ -1245,6 +1245,13 @@ def _dispatch_planner_checkpoint_action(
     phase_state: PhaseState,
 ) -> tuple[int, bool]:
     """Route one coordinator action to its role or taskgraph executor."""
+    if action == "planner_spec_builder":
+        from werkstatt.spec_first import build_spec_test_checkpoint
+
+        checkpoint = build_spec_test_checkpoint(
+            state, phase_state, goal=aufgabe,
+        )
+        return (0 if checkpoint is not None else 1), False
     if action in {"planner_scout", "planner_architect"}:
         success = _run_selected_planner_role_action(state, action)
         return (0 if success else 1), False
@@ -1677,7 +1684,8 @@ def _hydrate_plan_candidate(state: RunState, payload: dict) -> bool:
     ):
         return False
     state.preflight_fehler = preflight
-    return True
+    spec_checkpoint = payload.get("spec_test_checkpoint")
+    return spec_checkpoint is None or isinstance(spec_checkpoint, dict)
 
 
 def _run_plan_candidate_approval(
@@ -1765,6 +1773,65 @@ def _run_plan_candidate_prebuild_verify(
             state.project_dir, project_name,
         )
         return 1
+    spec_checkpoint = candidate.get("spec_test_checkpoint")
+    from werkstatt.spec_first import requires_spec_first
+
+    if requires_spec_first(
+        state.aufgabe,
+        criteria_count=len(state.akzeptanzkriterien or []),
+    ) and spec_checkpoint is None:
+        audit(
+            "loop_phase",
+            {"phase": "spec_test_qualification", "status": "blocked",
+             "reason": "high_risk_candidate_missing_frozen_spec"},
+            state.project_dir, project_name,
+        )
+        return 1
+    if spec_checkpoint is not None:
+        from werkstatt.spec_first import (
+            run_spec_tests,
+            spec_test_manifest_is_current,
+        )
+        from werkstatt.verify import _projekt_venv_python
+
+        if not spec_test_manifest_is_current(
+            state.project_dir, spec_checkpoint,
+            run_id=get_run_id(), goal=state.aufgabe,
+        ):
+            audit(
+                "loop_phase",
+                {"phase": "spec_test_qualification", "status": "blocked",
+                 "reason": "frozen_spec_checkpoint_stale"},
+                state.project_dir, project_name,
+            )
+            return 1
+        spec_root = Path(state.project_dir)
+        python_executable = _projekt_venv_python(spec_root, None)
+        from werkstatt.failure_record import _worktree_fingerprint
+
+        worktree_before = _worktree_fingerprint(spec_root)
+        qualification = run_spec_tests(
+            spec_root, spec_checkpoint,
+            python_executable=python_executable,
+            run_id=get_run_id(), goal=state.aufgabe, must_fail=True,
+        )
+        worktree_after = _worktree_fingerprint(spec_root)
+        worktree_stable = (
+            worktree_before is not None
+            and worktree_before == worktree_after
+        )
+        audit(
+            "loop_phase",
+            {"phase": "spec_test_qualification",
+             "status": "passed" if qualification.get("ok") else "blocked",
+             "reason": qualification.get("error"),
+             "worktree_stable": worktree_stable,
+             "case_count": len(qualification.get("cases", [])),
+             "spec_sha256": spec_checkpoint.get("spec_sha256")},
+            state.project_dir, project_name,
+        )
+        if not qualification.get("ok") or not worktree_stable:
+            return 1
     check_run_lease(state)
     verify_ok = _verify_patches(state, phase="pre_build")
     relevant: list[dict[str, Any]] = []
@@ -1821,6 +1888,8 @@ def _run_plan_candidate_prebuild_verify(
         phasen=list(state.phasen),
     )
     phase_state.run_id = get_run_id()
+    if spec_checkpoint is not None:
+        phase_state.data["spec_test_checkpoint"] = spec_checkpoint
     phase_state.data["setup_complete"] = True
     phase_state.data["plan_complete"] = True
     setup_checkpoint = _deterministic_setup_context_checkpoint(state)
@@ -3610,6 +3679,7 @@ def _run_pipeline_loop_impl(
         if action in {
             "planner_scout", "planner_architect",
             "planner_split", "planner_dispatch", "planner_direct",
+            "planner_spec_builder",
         }:
             if phase_state is None:
                 _persist_run_result(
@@ -3661,6 +3731,7 @@ def _run_pipeline_loop_impl(
                 "planner_architect": "architect",
                 "planner_split": "planner_split",
                 "planner_direct": "builder_direct",
+                "planner_spec_builder": "spec_builder",
             }.get(action)
             coordinator_choice = decision.get("coordinator_model_choice")
             if isinstance(coordinator_choice, dict):
@@ -3699,6 +3770,16 @@ def _run_pipeline_loop_impl(
                 state.planner_coordinator_role = None
                 state.planner_coordinator_source_evidence = ()
                 state.planner_yielded_after_role = None
+            if action == "planner_spec_builder":
+                if _rc_plan != 0:
+                    _persist_run_result(
+                        EventStore(), project_name, get_run_id(), 1,
+                        run_state=state, phase_state=phase_state,
+                    )
+                    return 1
+                # One role per checkpoint: let the coordinator inspect the
+                # frozen artifact and choose the next action independently.
+                continue
             if candidate_ready:
                 try:
                     from werkstatt.run_followups import active_chat_followup
@@ -3737,6 +3818,9 @@ def _run_pipeline_loop_impl(
                             phases=list(state.phasen or []),
                             architect_prose=state.architect_prosa or "",
                             preflight_findings=list(state.preflight_fehler or []),
+                            spec_test_checkpoint=phase_state.data.get(
+                                "spec_test_checkpoint",
+                            ),
                         )
                     phase_state.run_id = get_run_id()
                     phase_state.save()
@@ -4046,6 +4130,32 @@ def _run_pipeline_loop_impl(
             return tuple(snapshot)
 
         before = _task_progress_snapshot(phase_state)
+        spec_checkpoint = phase_state.data.get("spec_test_checkpoint")
+        if spec_checkpoint is not None and action in {
+            "execute_task_checkpoint", "review_task_checkpoint",
+            "verify_task_checkpoint",
+        }:
+            from werkstatt.spec_first import spec_test_manifest_is_current
+
+            if not spec_test_manifest_is_current(
+                state.project_dir, spec_checkpoint,
+                run_id=get_run_id(), goal=state.aufgabe,
+            ):
+                audit(
+                    "loop_phase",
+                    {
+                        "phase": "spec_test_integrity",
+                        "status": "blocked",
+                        "reason": "frozen_spec_changed_before_worker_dispatch",
+                        "coordinator_action": action,
+                    },
+                    state.project_dir, project_name,
+                )
+                _persist_run_result(
+                    EventStore(), project_name, get_run_id(), 1,
+                    run_state=state, phase_state=phase_state,
+                )
+                return 1
         task_index_offset = len([
             record for record in phase_state.data.get("tasks", [])
             if isinstance(record, dict)

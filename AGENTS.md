@@ -61,10 +61,16 @@ Proxies duerfen weder Rollenarbeit ausfuehren noch eine globale
 Setup->Plan->Task->Finalize-Reihenfolge erzwingen. Eine einheitliche,
 vollstaendig zielorientierte Koordinatorsteuerung aller Erstlaeufe,
 Fortsetzungen und Gate-Recovery-Pfade ist weiter zu verifizieren.
-- Spec-First mit unabhaengigem Spec-Builder, eingefrorenem Test-Hash und
-  abgeschirmtem Blind-Builder ist in der Produktionssteuerung noch nicht
-  verdrahtet (OP-398); vorhandene `test_spec`-Module nicht als aktiven Pfad
-  behandeln.
+- Der bedarfsweise Spec-First-Pfad fuer risikoreiche Auftraege ist in
+  `checkpoint_coordinator.py` und `spec_first.py` lokal verdrahtet:
+  unabhaengige Verhaltenstests aus Auftrag, Kriterien und hashgebundenen
+  oeffentlichen API-Signaturen (ohne Implementierungsrumpf), Validator,
+  Freeze-Hash, Baseline-Qualifikation vor Build und Phase-End-Verify.
+  Der Builder-Prompt erhaelt keine Tests;
+  Verify-Recovery bekommt nur AC-ID und Fehlerklasse. Server-/Vollsuite-
+  Verifikation und der vollstaendige Produktionsnachweis stehen noch aus
+  (OP-398 offen). Vorhandene aeltere `test_spec`-Module bleiben davon
+  getrennt.
 - Builder bleibt der einzige schreibende Worker je Projekt-Working-Tree.
   Verify bleibt deterministisch; Reviewer und Reflection laufen nach
   Befund und Risiko gemaess Loop-Vertrag.

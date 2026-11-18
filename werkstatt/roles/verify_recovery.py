@@ -108,6 +108,14 @@ def run_phase_end_verify_recovery(
         str(item.get("stage_id") or "?")[:120]
         for item in failed_stages if isinstance(item, dict)
     ))
+    # A frozen spec suite is a coordinator-owned synthetic verify stage, not
+    # a command in verify.json. Re-run configured stages normally; the
+    # coordinator will run the frozen suite again at the next Verify
+    # checkpoint.
+    verify_stage_ids = {
+        stage_id for stage_id in stage_ids
+        if stage_id != "spec_acceptance_tests"
+    }
     errors = [
         f"{item.get('stage_id')}: {str(item.get('error_excerpt') or '')[:500]}"
         for item in failed_stages if isinstance(item, dict)
@@ -136,7 +144,7 @@ def run_phase_end_verify_recovery(
         max_runden=1,
         error_context=_error_context(errors),
         phase="phase_end",
-        verify_stage_ids=set(stage_ids),
+        verify_stage_ids=verify_stage_ids or None,
     ))
     after = _worktree_fingerprint(project_dir)
     changed = before is not None and after is not None and before != after

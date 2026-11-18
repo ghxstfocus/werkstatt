@@ -30,6 +30,8 @@ _ROLE_MODELS = {
     "scout": "deepseek-flash",
     "validator": "deepseek-flash",
     "test-spec-validator": "deepseek-flash",
+    "spec-builder": "deepseek-flash",
+    "spec-validator": "deepseek-flash",
     "chat": "deepseek-flash",
 }
 

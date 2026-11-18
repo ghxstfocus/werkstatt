@@ -503,6 +503,49 @@ def _phase_end_verify_action(
 
         before = _worktree_fingerprint(Path(pd)) if pd else None
         verify_ok = _verify_patches(state, phase="phase_end")
+        spec_checkpoint = phase_state.data.get("spec_test_checkpoint")
+        if spec_checkpoint is not None:
+            from werkstatt.spec_first import run_spec_tests
+            from werkstatt.verify import _projekt_venv_python
+
+            root = Path(pd)
+            spec_result = run_spec_tests(
+                root,
+                spec_checkpoint,
+                python_executable=_projekt_venv_python(root, None),
+                run_id=str(getattr(state, "run_id", "") or ""),
+                goal=state.aufgabe,
+                must_fail=False,
+            )
+            spec_ok = bool(spec_result.get("ok"))
+            cases = spec_result.get("cases", [])
+            case_ids = [
+                str(item.get("test_id") or "")[:80]
+                for item in cases if isinstance(item, dict)
+            ][:12]
+            verify_results = getattr(state, "last_verify_results", None)
+            if not isinstance(verify_results, list):
+                verify_results = []
+                state.last_verify_results = verify_results
+            verify_errors = list(getattr(state, "last_verify_errors", None) or [])
+            state.last_verify_errors = verify_errors
+            verify_results.append({
+                "stage_id": "spec_acceptance_tests",
+                "exit_code": 0 if spec_ok else 1,
+                "ok": spec_ok,
+                # Never retain assertion text or test implementation details
+                # in the Builder's recovery context.
+                "error_excerpt": "" if spec_ok else (
+                    "Frozen acceptance tests failed: "
+                    + ", ".join(case_ids or [str(spec_result.get("error"))])
+                )[:300],
+            })
+            if not spec_ok:
+                verify_errors.append(
+                    "spec_acceptance_tests: frozen acceptance cases failed "
+                    + ", ".join(case_ids or [str(spec_result.get("error"))])
+                )
+                verify_ok = False
         after = _worktree_fingerprint(Path(pd)) if pd else None
         stable = before is not None and before == after
         results = getattr(state, "last_verify_results", None)

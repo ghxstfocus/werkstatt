@@ -184,6 +184,11 @@ class PhaseState:
             "akzeptanzkriterien": self.data.get("akzeptanzkriterien"),
             "phasen": self.data.get("phasen"),
         }
+        # Preserve fingerprints for active pre-Spec-First runs. Only plans
+        # that actually bind an immutable test manifest include this field.
+        spec_checkpoint = self.data.get("spec_test_checkpoint")
+        if spec_checkpoint is not None:
+            payload["spec_test_checkpoint"] = spec_checkpoint
         try:
             encoded = json.dumps(
                 payload,
@@ -310,6 +315,7 @@ class PhaseState:
         phases: list[dict[str, Any]],
         architect_prose: str,
         preflight_findings: list[dict[str, Any]] | None = None,
+        spec_test_checkpoint: dict[str, Any] | None = None,
     ) -> str:
         """Persist a bounded, run-bound plan proposal before human approval."""
         if (
@@ -322,6 +328,10 @@ class PhaseState:
             or not isinstance(phases, list)
             or any(not isinstance(item, dict) for item in phases)
             or not isinstance(architect_prose, str)
+            or (
+                spec_test_checkpoint is not None
+                and not isinstance(spec_test_checkpoint, dict)
+            )
             or (
                 preflight_findings is not None
                 and (
@@ -343,6 +353,7 @@ class PhaseState:
             "phasen": phases,
             "architect_prosa": architect_prose,
             "preflight_findings": preflight_findings or [],
+            "spec_test_checkpoint": spec_test_checkpoint,
         }
         try:
             encoded = json.dumps(
@@ -414,6 +425,10 @@ class PhaseState:
             or not isinstance(payload.get("phasen"), list)
             or any(not isinstance(item, dict) for item in payload["phasen"])
             or not isinstance(payload.get("architect_prosa"), str)
+            or (
+                payload.get("spec_test_checkpoint") is not None
+                and not isinstance(payload.get("spec_test_checkpoint"), dict)
+            )
             or not isinstance(payload.get("preflight_findings", []), list)
             or len(payload.get("preflight_findings", [])) > 500
             or any(
