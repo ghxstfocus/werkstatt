@@ -276,6 +276,27 @@ def _json_reply(reply: Any) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _spec_test_schema_errors(generated: dict[str, Any] | None) -> list[str]:
+    """Describe candidate shape errors without logging generated test code."""
+    if not isinstance(generated, dict):
+        return ["response_not_json_object"]
+    raw_tests = generated.get("tests")
+    if not isinstance(raw_tests, list):
+        return ["tests_missing_or_not_list"]
+    errors = []
+    if not 1 <= len(raw_tests) <= MAX_SPEC_FILES:
+        errors.append(f"test_count_out_of_range:{len(raw_tests)}")
+    for index, item in enumerate(raw_tests, 1):
+        if not isinstance(item, dict):
+            errors.append(f"entry_{index}_not_object")
+            continue
+        if not isinstance(item.get("id"), str):
+            errors.append(f"entry_{index}_id_missing_or_not_string")
+        if not isinstance(item.get("source"), str):
+            errors.append(f"entry_{index}_source_missing_or_not_string")
+    return errors
+
+
 def build_spec_test_checkpoint(
     state: Any, phase_state: Any, *, goal: str,
 ) -> dict[str, Any] | None:
@@ -364,15 +385,9 @@ def build_spec_test_checkpoint(
         raw_tests = generated.get("tests") if isinstance(generated, dict) else None
         reasons: list[str] = []
         invalid_ids: list[str] = []
+        schema_errors = _spec_test_schema_errors(generated)
         if (
-            not isinstance(raw_tests, list)
-            or not 1 <= len(raw_tests) <= MAX_SPEC_FILES
-            or any(
-                not isinstance(item, dict)
-                or not isinstance(item.get("id"), str)
-                or not isinstance(item.get("source"), str)
-                for item in raw_tests
-            )
+            schema_errors
         ):
             reasons.append("test_schema_invalid")
         else:
@@ -416,9 +431,14 @@ def build_spec_test_checkpoint(
         retry_feedback = {
             "reason_codes": sorted(set(reasons)),
             "affected_test_ids": sorted(set(invalid_ids))[:20],
+            "schema_errors": schema_errors,
             "instruction": (
-                "Regenerate the complete tests list. Use only imports and "
-                "calls permitted by the supplied current public API evidence."
+                "Regenerate the complete tests list as one JSON object with "
+                "a tests array containing 1 to 8 objects; every object must "
+                "have a string id (AC1, AC2, ...) and a string source "
+                "containing exactly one synchronous pytest test. Correct "
+                "each listed schema error. Use only imports and calls "
+                "permitted by the supplied current public API evidence."
             ),
         }
         audit("loop_phase", {
@@ -427,6 +447,7 @@ def build_spec_test_checkpoint(
             "attempt": attempt + 1,
             "reason_codes": retry_feedback["reason_codes"],
             "affected_test_ids": retry_feedback["affected_test_ids"],
+            "schema_errors": retry_feedback["schema_errors"],
             "retry_available": attempt == 0,
         }, state.project_dir, state.project_name, run_id=run_id)
     if normalized is None:
@@ -435,6 +456,7 @@ def build_spec_test_checkpoint(
             "status": "failed",
             "stage": "candidate_validation",
             "reason_codes": retry_feedback["reason_codes"] if retry_feedback else [],
+            "schema_errors": retry_feedback["schema_errors"] if retry_feedback else [],
             "attempts": 2,
         }, state.project_dir, state.project_name, run_id=run_id)
         return None

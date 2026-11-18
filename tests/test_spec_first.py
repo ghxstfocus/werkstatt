@@ -324,6 +324,65 @@ def test_spec_builder_and_validator_create_run_bound_frozen_artifact(
     assert state.tests and "SHA-256" in state.tests[0]
 
 
+def test_spec_builder_reports_and_retries_exact_schema_shape_error(
+    tmp_path, monkeypatch,
+):
+    from werkstatt import agent, spec_first
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.state import LLMReply, RunState
+
+    source_path = tmp_path / "src" / "api.py"
+    source_path.parent.mkdir()
+    source_path.write_text("def check():\n    return True\n", encoding="utf-8")
+    digest = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    goal = "Security-sensitive API behavior"
+    state = RunState(
+        api_key="test-key", project_dir=tmp_path, project_name="demo",
+        run_id="run-schema", aufgabe=goal,
+        akzeptanzkriterien=["The API rejects invalid credentials."],
+        explorer_context={"key_files": [{
+            "file": "src/api.py", "source_complete": True,
+            "source_sha256": digest,
+        }]},
+    )
+    phase = PhaseState("demo", base_dir=tmp_path / "state")
+    phase.data = {}
+    replies = [
+        LLMReply(ok=True, content=(
+            '{"tests":[{"id":7,"source":"def test_ac1():\\n    assert True\\n"}]}'
+        )),
+        LLMReply(ok=True, content=(
+            '{"tests":[{"id":"AC1","source":"def test_ac1():\\n    assert True\\n"}]}'
+        )),
+        LLMReply(ok=True, content='{"complete":true,"uncovered":[],"invalid_tests":[]}'),
+    ]
+    calls = []
+
+    def fake_ask_llm(*args, **kwargs):
+        calls.append((args, kwargs))
+        return replies.pop(0)
+
+    monkeypatch.setattr(agent, "ask_llm", fake_ask_llm)
+    audit_events = []
+    monkeypatch.setattr(
+        spec_first, "audit",
+        lambda kind, payload, *_args, **_kwargs: audit_events.append(
+            (kind, payload),
+        ) or True,
+    )
+
+    checkpoint = spec_first.build_spec_test_checkpoint(state, phase, goal=goal)
+
+    assert checkpoint is not None
+    retry = json.loads(calls[1][0][2])["previous_validation_feedback"]
+    assert retry["schema_errors"] == ["entry_1_id_missing_or_not_string"]
+    rejected = next(
+        payload for kind, payload in audit_events
+        if kind == "loop_phase" and payload.get("phase") == "spec_builder_candidate"
+    )
+    assert rejected["schema_errors"] == retry["schema_errors"]
+
+
 def test_spec_test_source_is_constrained_to_one_behavior_test():
     valid, reason, name = _validate_test_source(
         "def test_ac1():\n    assert 1 == 2\n",
