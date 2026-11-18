@@ -8560,3 +8560,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 # 2026-11-18 – Verify-Preflight aus dem Planner geloest
 - **Aenderung:** Klassifikation und Ausfuehrung der Verify-Vorpruefungen liegen jetzt in `werkstatt/verify.py`; Loop und Control-Registry rufen diese Verify-Funktion direkt auf. Die Funktionskoerper wurden aus `planner.py` entfernt, Tests patchen/verwenden die Verify-Rolle.
 - **Verifikation lokal:** Planner-Agent-/Verify-Klassifikation-/Loop-/Checkpoint-/Control-Gruppe: 174 bestanden, 2 uebersprungen. Ruff bestanden. Die vollstaendige Server-Suite auf dem Elternstand `4e59f8d` bestand laut Nutzer mit 2.821 Tests, 4 uebersprungen und 0 Fehlern; dieser neue Verify-Refactor ist darin noch nicht enthalten.
+
+# 2026-11-18 – Task-Worker nach einer Koordinatoraktion yielden lassen
+- **Befund:** `run_task_checkpoint` fuehrte zwar hoechstens einen Worker aus, enthielt aber weiterhin eine interne `while True`-Schleife, die nach dem Worker die naechste Aktion selbst erneut berechnete. Das verschleierte die aeussere Run-Checkpoint-Grenze.
+- **Aenderung:** Interne Auswahl-/Wiederholungsschleife und Task-Schrittzaehler entfernt. Der Task-Worker validiert die uebergebene Koordinatorentscheidung, fuehrt hoechstens eine Aktion aus und kehrt bei jeder Aktion an den aeusseren Run-Koordinator zurueck. Die bestehende Regression sichert `t1=done`, `t2=pending` nach einem einzelnen Dispatch.
+- **Verifikation lokal:** Task-/Checkpoint-/Recovery-Gruppe: 128 bestanden, 2 uebersprungen. Ruff und Compile bestanden. Mypy und Server-Vollsuite fuer diesen Schritt stehen aus.

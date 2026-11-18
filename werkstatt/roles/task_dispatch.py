@@ -187,7 +187,6 @@ def run_task_checkpoint(
     )
     state.tasks_ok_counter = tasks_ok
     i = task_index_offset
-    task_steps = 0
     if coordinator_decision is None:
         audit(
             "loop_failed",
@@ -201,9 +200,8 @@ def run_task_checkpoint(
         phase_state.save()
         return 1, tasks_ok, tasks
     from werkstatt.agent import _enforce_run_budget
-    # M-473: while-Loop statt for. Nach ADaPT-Split wird die
-    # Schleife neu gestartet, damit Sub-Tasks gebaut werden.
-    while True:
+    def _dispatch_one() -> tuple[int, int, list]:
+        nonlocal i, tasks, tasks_ok
         check_run_lease(state)
         if _enforce_run_budget(state):
             phase_state.save()
@@ -289,12 +287,6 @@ def run_task_checkpoint(
         decision_payload = coordinator_decision
 
         decision = decision_payload["decision"]
-        if task_steps >= 1:
-            # A checkpoint may now request a different role (verify, review,
-            # or recovery) after the previous action. Do not run that second
-            # role under the stale coordinator decision.
-            phase_state.save()
-            return 0, tasks_ok, tasks
         if decision == "reject_invalid_task_action":
             audit(
                 "state_contract_violation",
@@ -349,7 +341,7 @@ def run_task_checkpoint(
                       pd, pn)
             if _pending_after:
                 phase_state.save()
-            break
+            return 0, tasks_ok, tasks
         if decision not in {
             "execute_planned_task",
             "verify_task_checkpoint",
@@ -358,7 +350,7 @@ def run_task_checkpoint(
             "recover_verify_failure_checkpoint",
             "reject_stale_verify_failure_checkpoint",
         }:
-            break
+            return 0, tasks_ok, tasks
         if next_task is None:
             audit(
                 "state_contract_violation",
@@ -398,7 +390,6 @@ def run_task_checkpoint(
         _verify_recovery_action = decision == "recover_verify_failure_checkpoint"
         if not _verification_only and not _review_checkpoint_action and not _verify_recovery_action:
             i += 1
-        task_steps += 1
         task_id = next_task.get("id", f"t{i}")
         phase_state.mark_running(task_id)
         task_name = task_obj.get("name", f"Task {i}") if isinstance(task_obj, dict) else str(task_obj)
@@ -539,7 +530,7 @@ def run_task_checkpoint(
                     failure=read_context_error,
                 )
                 group_end()
-                continue
+                return 0, tasks_ok, tasks
             if read_sources:
                 task_obj["checkpoint_read_source_evidence"] = read_sources
                 audit(
@@ -588,7 +579,7 @@ def run_task_checkpoint(
                     failure=read_error,
                 )
                 group_end()
-                continue
+                return 0, tasks_ok, tasks
             audit(
                 "loop_task_read_only",
                 {"task_id": task_id, "name": task_name,
@@ -604,7 +595,7 @@ def run_task_checkpoint(
                 _task_ende(state, phase_state, task_id, ok=True, name=task_name),
                 task_id, task_name, pd, pn,
             )
-            continue
+            return 0, tasks_ok, tasks
 
         # Verify-Task: deterministische Pruefung ohne unnoetigen Reviewer-LLM.
         if next_executor == "verify_only":
@@ -697,7 +688,7 @@ def run_task_checkpoint(
                         if not _v_ok else None
                     ),
                 )
-            continue
+            return 0, tasks_ok, tasks
 
         debugger_fix = getattr(state, "debugger_fix_contract", None)
         if (
@@ -795,7 +786,7 @@ def run_task_checkpoint(
                         getattr(state, "builder_failure_reason", "") or ""
                     )[:1200],
                 )
-                continue
+                return 0, tasks_ok, tasks
 
             # The failed Builder result is the checkpoint input for the next
             # coordinator decision. Recovery, Reviewer and Verify are never
@@ -968,4 +959,4 @@ def run_task_checkpoint(
         group_end()
         return 0, tasks_ok, tasks
 
-    return 0, tasks_ok, tasks
+    return _dispatch_one()
