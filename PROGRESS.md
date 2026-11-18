@@ -8536,3 +8536,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Aenderung:** Builder-Kontext loest nur die referenzierten `ACn` gegen die freigegebene Kriterienliste auf und fuegt sie als erforderlichen Promptabschnitt hinzu. Ungueltige, doppelte oder stale Referenzen blockieren vor dem LLM-Aufruf. Der Builder liest keine Frozen-Spec-Dateien; Tests enthalten jetzt einen privaten Sentinel in einer tatsaechlichen Spec-Testdatei und pruefen, dass nur das zugeordnete Kriterium im Prompt landet.
 - **Verifikation lokal:** Spec-/Builder-/Koordinator-/Planner-Gruppe: 127 bestanden. Erneute Spec-/Builder-/Graphify-Gruppe: 52 bestanden. Ruff, gezieltes Mypy fuer `roles/builder/run.py` und `git diff --check` bestanden. Ein kompletter lokaler Suiteversuch wurde durch die Windows-Laufzeitgrenze nach 1.603 bestanden/7 uebersprungen unterbrochen; bis dahin keine Fehler gemeldet, aber nicht vollstaendig.
 - **Noch offen:** Kein echter LLM-Ende-zu-Ende-Lauf, Servertest oder Produktionsnachweis. OP-398 bleibt offen.
+
+# 2026-11-18 – Chat aktualisiert fehlenden Graphify-Index bei Bedarf
+- **Befund:** Das read-only `graph_query` des Projektchats aktualisierte stale Indizes, fiel bei einem fehlenden Graphify-Index aber unmittelbar auf die dateibasierten Tools zurueck.
+- **Aenderung:** Fehlender, stale oder teilweise stale Index loest jetzt einen einzelnen inkrementellen Refreshversuch aus; nach erfolgreichem Refresh wird dieselbe Abfrage erneut ausgefuehrt. Wenn Graphify nicht installiert/verfuegbar ist, bleibt der sichere `read_file`/`grep`-Fallback sichtbar. Unsichere Indexpfade werden nicht automatisch ueberschrieben.
+- **Verifikation lokal:** Chat-Tool-/Graphify-/Retrieval-Gruppe: 98 bestanden, 2 uebersprungen. Ruff, gezieltes Mypy fuer `chat_tools.py` und `git diff --check` bestanden.
+- **Noch offen:** Kein Server-/Vollsuite-/Produktionsnachweis; OP-396, OP-398 und Graphify-Retrievalqualitaet bleiben offen.

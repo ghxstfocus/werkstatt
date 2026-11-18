@@ -484,7 +484,7 @@ def _graph_query(args: dict[str, Any]) -> str:
     project_dir = _aktives_projekt_dir()
     result = graphify_candidates(project_dir, query, limit=8)
     refresh_status = "not_needed"
-    if result.get("status") in {"partial_stale", "stale"}:
+    if result.get("status") in {"unavailable", "partial_stale", "stale"}:
         refresh = refresh_graphify_index(project_dir)
         refresh_status = str(refresh.get("status", "unknown"))[:80]
         from werkstatt.audit import audit

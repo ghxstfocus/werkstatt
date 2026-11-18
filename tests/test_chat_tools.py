@@ -427,16 +427,77 @@ def test_grep_ohne_pattern() -> None:
     assert "Fehler" in r
 
 
-def test_graph_query_read_tool_falls_back_when_index_missing(tmp_path: Path):
+def test_graph_query_refreshes_missing_index_then_falls_back_if_unavailable(
+    tmp_path: Path, monkeypatch,
+):
+    refresh_calls = []
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.graphify_candidates",
+        lambda *_args, **_kwargs: {
+            "status": "unavailable", "candidates": [],
+            "stale_source_count": 0,
+        },
+    )
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.refresh_graphify_index",
+        lambda *args, **kwargs: refresh_calls.append((args, kwargs))
+        or {"status": "cli_unavailable"},
+    )
+    monkeypatch.setattr("werkstatt.audit.audit", lambda *_args, **_kwargs: True)
+
     result = chat_tools.execute_tool(
         "graph_query", {"query": "wie wird projekt status gelesen"},
         project_dir=tmp_path, mode="read",
     )
     assert "Graphify nicht verfuegbar" in result
+    assert len(refresh_calls) == 1
     read_names = {
         item["function"]["name"] for item in chat_tools.openai_schemas(mode="read")
     }
     assert "graph_query" in read_names
+
+
+def test_graph_query_builds_missing_index_and_returns_fresh_candidates(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    calls = 0
+
+    def candidate_result(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"status": "unavailable", "candidates": []}
+        return {
+            "status": "ok",
+            "index_sha256": "f" * 64,
+            "graphify_version": "0.9.112",
+            "retrieval_method": "graphify_cli_query",
+            "native_query_status": "native_query",
+            "candidates": [{
+                "file": "src/api.py", "source_sha256": "c" * 64,
+            }],
+        }
+
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.graphify_candidates", candidate_result,
+    )
+    monkeypatch.setattr(
+        "werkstatt.graphify_index.refresh_graphify_index",
+        lambda *_args, **_kwargs: {"status": "refreshed", "returncode": 0},
+    )
+    monkeypatch.setattr("werkstatt.audit.audit", lambda *_args, **_kwargs: True)
+
+    result = chat_tools.execute_tool(
+        "graph_query", {"query": "api route"},
+        project_dir=tmp_path, mode="read",
+    )
+    payload = json.loads(result)
+
+    assert calls == 2
+    assert payload["status"] == "orientierung_nur"
+    assert payload["refresh_status"] == "refreshed"
+    assert payload["index_sha256"] == "f" * 64
+    assert payload["candidates"][0]["file"] == "src/api.py"
 
 
 def test_graph_query_keeps_current_candidates_and_marks_partial_staleness(
