@@ -55,17 +55,6 @@ _DOTFILES = frozenset({
     ".editorconfig", ".gitkeep",
 })
 
-# K27b: OP-Serien-Namen (test_foo_op002b2.py) sind bewusste
-# Varianten, nicht Tippfehler. Levenshtein schlaegt sonst Alarm.
-# Live-Beleg 2026-11-01 13:12: OP-002b3 plante
-# test_inventory_op002b3.py, DATEINAME_AEHNLICH lehnte ab
-# (Levenshtein 1 vs test_inventory_op002b2.py) -> Loop-Abbruch
-# ohne User-Frage. Fix: bewusste Serien-Namen ausnehmen.
-_OP_SERIES_RE = re.compile(
-    r"^(?P<base>.+)_op(?P<opnum>\d{3})(?P<letter>[a-z]?)(?P<zaehler>\d*)$"
-)
-
-
 def _deny(regel: str, task_id: str, datei: str,
           erklaerung: str, details: str) -> dict:
     """M-349e: info als Fakt (kein 'plane neu')."""
@@ -88,111 +77,6 @@ def _deny(regel: str, task_id: str, datei: str,
             "verbotene_datei": datei,
         },
     }
-
-
-def _levenshtein(a: str, b: str) -> int:
-    """K27: Einfacher Levenshtein-Abstand (iterativ)."""
-    if len(a) < len(b):
-        a, b = b, a
-    if not b:
-        return len(a)
-    prev = list(range(len(b) + 1))
-    for i, ca in enumerate(a, 1):
-        curr = [i]
-        for j, cb in enumerate(b, 1):
-            cost = 0 if ca == cb else 1
-            curr.append(min(
-                curr[j - 1] + 1,
-                prev[j] + 1,
-                prev[j - 1] + cost,
-            ))
-        prev = curr
-    return prev[-1]
-
-
-def _is_op_series_pair(name_a: str, name_b: str) -> bool:
-    """K27b: Bewusste OP-Serien-Namen erkennen.
-
-    Beide Dateinamen muessen dem Muster
-    <base>_op<3 ziffern><optional letter><zaehler> folgen,
-    dieselbe base und dieselbe op-nummer+letter haben.
-    Nur der abschliessende Zaehler darf sich unterscheiden.
-
-    Beispiel: test_foo_op002b2 vs test_foo_op002b3 -> True.
-    Beispiel: changes_detail vs change_detail -> False (kein Muster).
-    """
-    from pathlib import Path as _P
-    sa = _P(name_a).stem
-    sb = _P(name_b).stem
-    ma = _OP_SERIES_RE.match(sa)
-    mb = _OP_SERIES_RE.match(sb)
-    if not ma or not mb:
-        return False
-    # Gleiche base + gleiche OP-Nummer = bewusste Varianten derselben
-    # OP (Sub-OPs wie 002a, 002b1, 002b2, 002b3 duerfen koexistieren).
-    # Letter und Zaehler werden NICHT verglichen.
-    return (
-        ma.group("base") == mb.group("base")
-        and ma.group("opnum") == mb.group("opnum")
-    )
-
-
-def _check_dateiname_aehnlich(project_dir: str, tasks: list) -> list[dict]:
-    """K27: Findet create-Tasks deren Dateiname einem existierenden
-    File sehr aehnlich ist (Levenshtein <= 2, gleiche Extension).
-
-    Verhindert Architect-Fehler wie 'changes_detail.html' (create)
-    bei existierender 'change_detail.html'.
-    """
-    if not project_dir:
-        return []
-    from pathlib import Path as _P
-    pd = _P(project_dir)
-    if not pd.is_dir():
-        return []
-    _target_dirs: set = set()
-    for t in tasks:
-        if not isinstance(t, dict):
-            continue
-        if t.get("action") != "create":
-            continue
-        for f in (t.get("task_files") or []):
-            if isinstance(f, str):
-                _target_dirs.add((pd / f).parent)
-    koll: list[dict] = []
-    for d in _target_dirs:
-        if not d.is_dir():
-            continue
-        try:
-            existing = list(d.iterdir())
-        except OSError:
-            continue
-        for t in tasks:
-            if not isinstance(t, dict) or t.get("action") != "create":
-                continue
-            for f in (t.get("task_files") or []):
-                if not isinstance(f, str):
-                    continue
-                target = pd / f
-                if target.parent != d:
-                    continue
-                name = target.name
-                ext = target.suffix
-                for e in existing:
-                    if e.is_dir() or e.suffix != ext:
-                        continue
-                    if e.name == name:
-                        continue
-                    if _levenshtein(name, e.name) <= 2:
-                        if _is_op_series_pair(name, e.name):
-                            # K27b: bewusste OP-Serie, kein Tippfehler.
-                            continue
-                        koll.append({
-                            "task_id": t.get("id", "?"),
-                            "geplant": f,
-                            "aehnlich": str(e.relative_to(pd)),
-                        })
-    return koll
 
 
 def check_plan(payload: dict) -> dict:
@@ -399,32 +283,6 @@ def check_plan(payload: dict) -> dict:
                 f"Naechste freie Nummer: {_naechste}.",
                 f"Hoechste vorhandene Nummer: {_hoechste}. "
                 f"Verwende NUR die naechste freie Nummer {_naechste}.",
-            )
-
-    # 7) DATEINAME_AEHNLICH (K27): create auf sehr aehnlichen Namen
-    #    wie existierendes File -> deny mit Hinweis auf existierende Datei.
-    _projdir = payload.get("project_dir") or ""
-    _tasks = payload.get("tasks") or []
-    if _projdir and _tasks:
-        _aehnlich = _check_dateiname_aehnlich(_projdir, _tasks)
-        if _aehnlich:
-            _first = _aehnlich[0]
-            return _deny(
-                "DATEINAME_AEHNLICH",
-                _first.get("task_id", "?"),
-                _first.get("geplant", ""),
-                (
-                    f"Datei '{_first.get('geplant')}' ist sehr aehnlich zu "
-                    f"existierender '{_first.get('aehnlich')}' "
-                    f"(Levenshtein <= 2). "
-                    f"Verwende die existierende Datei (action=update)."
-                ),
-                (
-                    f"Existiert: {_first.get('aehnlich')}. "
-                    f"Pruefe, ob du diese statt '{_first.get('geplant')}' "
-                    f"aendern willst. Wenn die neue Datei wirklich gewollt "
-                    f"ist, benenne sie eindeutig."
-                ),
             )
 
     return {"allow": True, "reason": "", "info": {}}

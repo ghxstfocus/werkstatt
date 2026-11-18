@@ -1,4 +1,4 @@
-"""K27: planner_gate lehnt create ab, wenn aehnlicher Name existiert."""
+"""Planner gate checks real path conflicts, not fuzzy filename similarity."""
 import json
 import subprocess
 import sys
@@ -19,7 +19,7 @@ def _run_hook(payload: dict) -> dict:
     return json.loads(res.stdout)
 
 
-def test_create_aehnlicher_name_deny(tmp_path: Path):
+def test_create_aehnlicher_name_is_not_a_conflict(tmp_path: Path):
     (tmp_path / "apps" / "dashboard" / "templates").mkdir(parents=True)
     (tmp_path / "apps" / "dashboard" / "templates" / "change_detail.html").write_text("x")
     payload = {
@@ -32,9 +32,23 @@ def test_create_aehnlicher_name_deny(tmp_path: Path):
         "architect_prosa": "",
     }
     out = _run_hook(payload)
-    assert out["allow"] is False
-    assert "DATEINAME_AEHNLICH" in out["reason"]
-    assert "change_detail.html" in out["info"]["erklaerung"]
+    assert out["allow"] is True
+
+
+def test_loop_start_is_not_blocked_by_loop_state(tmp_path: Path):
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_loop_state.py").write_text("existing test")
+    payload = {
+        "tasks": [{
+            "id": "t1", "action": "create",
+            "task_files": ["tests/test_loop_start.py"],
+        }],
+        "phasen": [],
+        "project_dir": str(tmp_path),
+        "architect_prosa": "",
+    }
+    out = _run_hook(payload)
+    assert out["allow"] is True
 
 
 def test_create_voellig_neuer_name_ok(tmp_path: Path):

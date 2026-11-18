@@ -8637,3 +8637,9 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Der Chat verwarf „Starte OP-398 … implementiere den erledigten Fix nicht erneut“ als `not_requested`. Eine Negation im spaeteren Satzteil wurde global auf den Startbefehl angewendet.
 - **Änderung:** OP-Ausfuehrungs- und Loop-Aktions-Intents werden je Satzteil geprueft; Negationen wirken nicht mehr auf einen anderen Satzteil. Labels wie `Auftrag:` werden fuer die direkte Befehlspruefung entfernt.
 - **Verifikation:** `tests/test_chat_agent.py` und `tests/test_chat_tools.py`: 158 bestanden, 3 uebersprungen. Regression prueft die konkrete Formulierung fuer OP-398.
+
+# 2026-11-18 – Planner-Gate: fuzzy Dateinamensperre entfernt
+- **Befund:** Der Plan-Gate verglich neue `create`-Dateinamen per Levenshtein-Distanz <= 2 mit vorhandenen Dateien und blockierte dadurch legitime, verschiedene Ziele wie `tests/test_loop_start.py` neben `tests/test_loop_state.py`. Der Vergleich pruefte weder Inhalt noch tatsaechlichen Pfadkonflikt.
+- **Aenderung:** Die unscharfe `DATEINAME_AEHNLICH`-Ablehnung und ihre nur dafuer benoetigten Hilfsfunktionen sind entfernt. Die bestehende exakte Pfad-/Existenzkorrektur im Planner bleibt zustaendig fuer `create` gegen bereits vorhandene Datei.
+- **Verifikation lokal:** `tests/test_k27_dateiname_aehnlich.py` und `tests/test_hooks_planner_gate.py`: 21 bestanden; `git diff --check` bestanden.
+- **Grenze:** Kein Vollsuite-, Server- oder Produktionsnachweis.
