@@ -33,7 +33,7 @@ def main() -> int:
         print(f"\n{len(CONTROL_REGISTRY)} Kontrollen registriert:\n")
         for ctrl in list_controls():
             flag = "HART" if ctrl.hart else "weich"
-            print(f"  [{ctrl.phase.value:14s}] {ctrl.name:32s} ({flag:5s}, prio {ctrl.prioritaet:3d})")
+            print(f"  {ctrl.name:32s} ({flag:5s})")
             print(f"    {ctrl.description}")
             print(f"    source: {ctrl.source}")
             print()

@@ -189,13 +189,17 @@ PROJEKT-DOKU-Sektion (priorisiert, max 4000 Z. je Doc). Bei vagen Aufgaben werde
 geprueft. Kandidat, Blocker und Begruendung muessen sichtbar sein; bei
 Mehrdeutigkeit wird gefragt statt geraten.
 
-## Task-Zerlegung (Plan-first)
+## Task-Graph nur bei Bedarf
 
-Der Planner zerlegt die Architect-Prosa von Anfang an logisch
-(Interface -> Backend -> Tests), `_leite_deps_deterministisch`
-(OP-187) uebersetzt Architect-Aussagen in Dependencies, Topo-Sort
-bestimmt die Reihenfolge. Kein On-Demand-Split bei Fehlschlag
-(ADaPT entfernt 2026-11-08).
+Am Planning-Checkpoint waehlt der Koordinator anhand des Ziels, aktueller
+Quellbelege und Risikos zwischen direktem Einzel-Builder, Architect-Plan und
+Taskgraph-Compiler. Ein Taskgraph ist fuer unabhaengige oder abhaengige
+Teilaufgaben vorgesehen; einfache, belegte Einzeldatei-Aenderungen koennen
+den Split ueberspringen. Der Dispatcher gibt hoechstens einen Task frei und
+entscheidet danach anhand des gespeicherten Fortschritts erneut. Zulassbare
+Verify-Recovery kann die betroffenen freigegebenen Kriterien neu planen; der
+Kandidat durchlaeuft erneut Plan- und Human-Gate. Fehlende Belege, unbekannte
+Fehlerursachen oder Scope-Aenderungen stoppen fail-closed.
 
 
 ## Verify-Stages (post_build, hart/weich)
@@ -215,7 +219,7 @@ zeigt. Bei Verstoss ist die Stage hart und blockiert den Commit; die
 Meldung lautet `BROKEN <name>: <source> nicht importierbar` bzw.
 `DEAD <name>: source zeigt auf andere fn`. Manueller Gegencheck:
 `python3 tools/control_drift.py --list` (zeigt alle registrierten
-Kontrollen mit Phase, Haerte, Prioritaet) und `--dead` (zeigt
+Kontrollen mit Haerte und Quellmodul) und `--dead` (zeigt
 unregistrierte Kandidaten) — damit der Mensch bei rotem Gate weiss,
 welches Kommando die Diagnose liefert, ohne den Code zu lesen.
 - `pytest_regression` (hart, phase_end)
@@ -224,7 +228,7 @@ welches Kommando die Diagnose liefert, ohne den Code zu lesen.
   `python3 tools/doku_check.py --strict --limit 5 --worktree`.
   Code-Aenderungen ohne geaenderte Projektdoku blockieren den Commit.
 
-**Pre-Reviewer-Gate** (`werkstatt/verify_classify.py` + `_phase_tasks_loop`):
+**Pre-Reviewer-Gate** (`werkstatt/verify_classify.py` + Task-Checkpoint):
 Vor jedem Reviewer-Aufruf werden `_v_weich`-Fehler klassifiziert. Harte
 Fehler (py_compile, pytest, ruff F821/F822) fuehren zu `review_result=rejected`
 OHNE LLM-Call. Verhindert, dass der Reviewer Code approved, der gar nicht
@@ -276,8 +280,9 @@ Alle Loop-Kontrollen (Gates, Verify-Stages, Reflections, Guards) sind
 in `werkstatt/control/` als Registry inventarisiert:
 
 - `control/registry.py` — `CONTROL_REGISTRY`, Single Source of Truth.
-- `control/phases.py` — `Phase`-Enum (12 Werte).
-- `control/runner.py` — `run_control(name, ctx)` / `run_phase(phase, ctx)`.
+- `control/runner.py` — `run_control(name, ctx)` fuer einzelne Kontrollen;
+  keine phasenweise Kontrollschleife. Laufaktionen werden am Checkpoint
+  ausgewaehlt.
 - `control/drift.py` — `check_drift()` (Registry vs. Code).
 
 **Pflicht-Befehl vor jedem Commit:**

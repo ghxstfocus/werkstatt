@@ -507,8 +507,9 @@ def _rank_source_files(
         # role. In multi-role handoffs, content evidence must decide which
         # specialists and supporting sources are needed.
         role_path_score = (
-            4.0 * len(role_path_matches)
-            if source_weight == 1.0 and len(requested_role_tokens) == 1
+            4.0 * source_weight * len(role_path_matches)
+            if len(requested_role_tokens) == 1
+            and (source_weight == 1.0 or test_intent)
             else 0.0
         )
         length_penalty = 1 + 0.5 * math.log1p(file_size / 4_096)

@@ -49,8 +49,11 @@ und dispatcht jeweils einen Task mit erneuter Checkpoint-Entscheidung. Der
 Nutzerlauf auf `94bc7bd` hatte 2.418 bestandene, 5 uebersprungene und 6
 fehlgeschlagene Tests; nach dem Resume-Fix bestaetigte der Nutzer fuer
 `1b11dc5` 2.426 bestandene und 5 uebersprungene Vollsuite-Tests. Das ist
-kein Produktionsnachweis. Setup und Planfreigabe sind noch nicht Teil
-einer vollstaendig dynamischen Run-Dispatch-Schleife.
+kein Produktionsnachweis. Setup, Planfreigabe, Task-Dispatch und
+Abschlussaktionen laufen inzwischen als einzelne persistierte
+Koordinator-Entscheidungen. Adaptives Verhalten ueber Erstlauf, Resume und
+Gate-/Verify-Recovery ist noch nicht durch einen vollstaendigen
+Server-Ende-zu-Ende-Lauf belegt.
 
 
 ### 1. Chat und UI als Arbeitsoberflaeche

@@ -1,29 +1,24 @@
-"""werkstatt.control — zentrale Registry aller Loop-Kontrollen.
+"""werkstatt.control — Inventar und Drift-Pruefung der Kontrollen.
 
-Ziel: eine Datei zeigt, welche Kontrollen es gibt, in welcher Phase sie
-laufen und wo sie implementiert sind. Bestehender Code bleibt vorerst
-unveraendert — die Registry ist Single Source of Truth fuer Inventar
-und Drift-Check.
+Die Registry ist kein Ablauf- oder Phasen-Runner. Checkpoint-Entscheidungen
+werden vom zielorientierten Run-Koordinator getroffen.
 
 Public API:
     from werkstatt.control import (
-        Control, Phase,
-        CONTROL_REGISTRY, run_control, run_phase,
+        Control,
+        CONTROL_REGISTRY, run_control,
         check_drift, list_controls,
     )
 """
 from werkstatt.control.control import Control
 from werkstatt.control.drift import check_drift
-from werkstatt.control.phases import Phase
 from werkstatt.control.registry import CONTROL_REGISTRY, list_controls
-from werkstatt.control.runner import run_control, run_phase
+from werkstatt.control.runner import run_control
 
 __all__ = [
     "CONTROL_REGISTRY",
     "Control",
-    "Phase",
     "check_drift",
     "list_controls",
     "run_control",
-    "run_phase",
 ]

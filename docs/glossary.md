@@ -19,9 +19,10 @@ mypy 8, AST 6, Katalog 162. Siehe `../HANDOFF-BASELINE.md`.
 **C-Nummerierung** — Zerlegung von `run_pipeline` in 10 logische
 Bloecke (C0..C9). Doku-Konvention, nicht Code-Reihenfolge.
 
-**Deadlock** — Zyklische Abhaengigkeit zwischen `run_phase`-Aufrufen.
-Sicherung zweistufig: `_phase_wiederaufnahme` (Z.2547/2566) +
-`_phase_main_plan_verarbeiten` (force_new_phase-Korrektur).
+**Deadlock** — Checkpoint ohne sicheren naechsten Schritt, etwa weil
+verbleibende Tasks zyklische Abhaengigkeiten haben. Der Koordinator auditiert
+die Blockade und stoppt, statt dieselbe nicht ausfuehrbare Arbeit zu
+wiederholen.
 
 **Diaetaxis** — Vier Doku-Typen: Tutorial, How-to, Reference,
 Explanation. Siehe `../INDEX.md`.
