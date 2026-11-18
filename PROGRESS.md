@@ -8627,3 +8627,8 @@ stattdessen erkannt und zur Kurskorrektur bzw. belegten Antwort gefuehrt.
 - **Befund:** Der Chat bekam bei `grep` primär Trefferzeilen und musste danach selbst passende `read_file`-Zeilenbereiche ableiten. Bei langen Dateien führte das wiederholt zu fragmentarischen Belegen.
 - **Änderung:** `grep` liefert standardmaessig je drei Zeilen Kontext vor und nach Treffern; der Chat kann dies bis auf 20 Zeilen je Richtung erweitern. Eine Ausgabe oberhalb 80.000 Zeichen wird sichtbar als unvollstaendig markiert. Prompt und Tool-Schema beschreiben das Verhalten.
 - **Verifikation:** Regressionen fuer Kontextzeilen, Parameter-Schema und bestehende Alternationssuche ergaenzt. Serververifikation steht aus.
+
+# 2026-11-18 – Planner-Split remappt Abhaengigkeiten nach Merge und Umnummerierung
+- **Befund:** Audit Seq 796987 meldete `Task t2 verweist auf unbekannte Abhaengigkeit t1_a`. `_merge_mini_tasks` vergab danach neue IDs, remappte aber die Dependencies nicht; beim Zusammenfuehren ging ausserdem die ID des entfernten Tasks verloren.
+- **Änderung:** Alle Eingabe-IDs werden auf ihre ueberlebende Task-ID abgebildet; nach der Umnummerierung werden Dependencies remappt, Selbstverweise verworfen und Ziele dedupliziert. Unbekannte externe IDs bleiben unveraendert. `tests/conftest.py` fuegt den aktuellen Checkout statt fest `/opt/werkstatt` in `sys.path` ein; eine Regression prueft den Importpfad.
+- **Verifikation:** `tests/test_repro_planner_split_renumber.py`, `tests/test_k15a_merge.py`, `tests/test_planner_split_role.py` und `tests/test_loop_task_dependencies.py`: 19 bestanden.

@@ -6,10 +6,14 @@ Audit-Isolierung: kein Test schreibt ins echte
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, "/opt/werkstatt")
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT in sys.path:
+    sys.path.remove(_REPO_ROOT)
+sys.path.insert(0, _REPO_ROOT)
 
 
 @pytest.hookimpl

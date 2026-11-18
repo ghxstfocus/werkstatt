@@ -1031,9 +1031,13 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 1800) -> list[dic
     # den der Builder nicht sauber baut.
     _merge_count: dict[str, int] = {}
     merged: list[dict] = []
+    id_to_survivor: dict[str, str] = {}
     for t in tasks:
         if not merged:
             merged.append(dict(t))
+            task_id = t.get("id")
+            if isinstance(task_id, str):
+                id_to_survivor[task_id] = task_id
             continue
 
         prev = merged[-1]
@@ -1076,9 +1080,12 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 1800) -> list[dic
             )
             if t.get("architect_ende"):
                 prev["architect_ende"] = t["architect_ende"]
+            prev_id = prev.get("id")
+            cur_id = t.get("id")
+            if isinstance(prev_id, str) and isinstance(cur_id, str):
+                id_to_survivor[cur_id] = prev_id
             _deps = set(prev.get("dependencies") or [])
             _deps.update(t.get("dependencies") or [])
-            _deps.discard(prev.get("id"))
             prev["dependencies"] = sorted(_deps)
             _criteria = set(prev.get("criterion_refs") or [])
             _criteria.update(t.get("criterion_refs") or [])
@@ -1094,10 +1101,30 @@ def _merge_mini_tasks(tasks: list[dict], max_merged_len: int = 1800) -> list[dic
                 file=sys.stderr,
             )
             merged.append(dict(t))
+            task_id = t.get("id")
+            if isinstance(task_id, str):
+                id_to_survivor[task_id] = task_id
 
-    # IDs neu vergeben (t1..tN).
+    # IDs neu vergeben und auch zusammengefuehrte IDs auf den
+    # ueberlebenden Task abbilden.
+    renumbered_ids = {
+        str(task.get("id")): f"t{index}"
+        for index, task in enumerate(merged, 1)
+        if isinstance(task.get("id"), str)
+    }
+    id_map = {
+        old_id: renumbered_ids.get(survivor_id, survivor_id)
+        for old_id, survivor_id in id_to_survivor.items()
+    }
     for i, t in enumerate(merged, 1):
         t["id"] = f"t{i}"
+        dependencies: list[str] = []
+        for dependency in t.get("dependencies") or []:
+            target = id_map.get(str(dependency), dependency)
+            if target == t["id"] or target in dependencies:
+                continue
+            dependencies.append(target)
+        t["dependencies"] = sorted(dependencies)
 
     return merged
 
