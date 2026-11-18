@@ -53,6 +53,8 @@ _CHAT_HISTORY_SESSION_ID_KONTEXT: ContextVar[str] = ContextVar(
 )
 _MAX_READ_BYTES = 160_000
 _MAX_GREP_TREFFER = 30
+_MAX_GREP_OUTPUT_CHARS = 80_000
+_MAX_GREP_CONTEXT_LINES = 20
 _TIMEOUT_GREP_S = 10
 _TIMEOUT_GIT_S = 30
 _TIMEOUT_PYTEST_S = 60
@@ -553,19 +555,41 @@ def _grep(args: dict[str, Any]) -> str:
     pattern = str(args.get("pattern", "")).strip()
     if not pattern:
         return "Fehler: pattern fehlt"
+    context_values: dict[str, int] = {}
+    for name in ("context_before", "context_after"):
+        value = args.get(name, 3)
+        if (
+            isinstance(value, bool) or not isinstance(value, int)
+            or value < 0 or value > _MAX_GREP_CONTEXT_LINES
+        ):
+            return (
+                f"Fehler: {name} muss eine ganze Zahl zwischen 0 und "
+                f"{_MAX_GREP_CONTEXT_LINES} sein"
+            )
+        context_values[name] = value
     pfad = _resolved_safe(str(args.get("path", ".")))
     if pfad is None:
         return "Fehler: path ausserhalb Projekt"
     try:
         r = subprocess.run(
-            ["grep", "-Ern", f"--max-count={_MAX_GREP_TREFFER}",
+            ["grep", "-Ern", "-B", str(context_values["context_before"]),
+             "-A", str(context_values["context_after"]),
+             f"--max-count={_MAX_GREP_TREFFER}",
              "--", pattern, str(pfad)],
             capture_output=True, text=True, check=False,
             timeout=_TIMEOUT_GREP_S,
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
         return f"grep-Fehler: {exc}"
-    return (r.stdout or r.stderr or "(kein Treffer)")[:20_000]
+    output = r.stdout or r.stderr or "(kein Treffer)"
+    if len(output) > _MAX_GREP_OUTPUT_CHARS:
+        output = (
+            output[:_MAX_GREP_OUTPUT_CHARS]
+            + f"\n[grep-Ausgabe nach {_MAX_GREP_OUTPUT_CHARS} Zeichen gekuerzt; "
+            "Suche auf Datei oder engeres Muster begrenzen. Der Ausschnitt "
+            "belegt keine Vollstaendigkeit.]"
+        )
+    return output
 
 
 def _graph_query(args: dict[str, Any]) -> str:
@@ -2802,13 +2826,23 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
     "grep": {
         "description": (
             "Sucht mit erweiterten regulaeren Ausdruecken (ERE) in Datei/"
-            f"Verzeichnis; Alternation mit | ist erlaubt (max {_MAX_GREP_TREFFER} Treffer)."
+            f"Verzeichnis; Alternation mit | ist erlaubt (max {_MAX_GREP_TREFFER} Treffer). "
+            "Liefert standardmaessig je 3 Quellzeilen vor/nach jedem Treffer; "
+            "context_before/context_after steuern diesen Zeilenkontext (0 bis 20)."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "pattern": {"type": "string"},
                 "path": {"type": "string"},
+                "context_before": {
+                    "type": "integer", "minimum": 0,
+                    "maximum": _MAX_GREP_CONTEXT_LINES,
+                },
+                "context_after": {
+                    "type": "integer", "minimum": 0,
+                    "maximum": _MAX_GREP_CONTEXT_LINES,
+                },
             },
             "required": ["pattern"],
         },

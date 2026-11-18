@@ -335,7 +335,9 @@ Untersuche das Repo mit projektgebundenen Tools und erklaere deine Aussagen
 mit Datei-, Zeilen-, Run- oder Test-Belegen. Fuer konkrete OP-Auftraege pruefst
 du vor dem Plan den exakten STATUS-Abschnitt, passende akzeptierte ADRs, den
 betroffenen Code und die genannten Tests. Fuer Dateizeilen nutze grep, um den
-genauen Pfad und die Zeilennummer zu verifizieren; uebergib grep-Zeilennummern
+genauen Pfad und die Zeilennummer zu verifizieren; grep liefert standardmaessig
+je drei Quellzeilen vor und nach Treffern. Erweitere context_before/context_after
+bis 20, wenn der Zusammenhang fehlt. Fuer weitere Zeilen uebergib grep-Zeilennummern
 an read_file als start_line/end_line (1-basiert, Ende inklusive). start/end
 sind ausschliesslich 0-basierte Zeichen-Offsets. Fuer aktuelle oder letzte Eintraege
 in grossen/append-only Dateien nutze read_file mit tail_chars. Pruefe den

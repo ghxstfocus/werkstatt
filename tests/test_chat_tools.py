@@ -430,7 +430,10 @@ def test_grep_unterstuetzt_ere_alternation(tmp_path: Path) -> None:
     )
 
     result = chat_tools.execute_tool(
-        "grep", {"pattern": "alpha|beta", "path": "sample.py"},
+        "grep", {
+            "pattern": "alpha|beta", "path": "sample.py",
+            "context_before": 0, "context_after": 0,
+        },
         project_dir=tmp_path,
     )
 
@@ -438,6 +441,24 @@ def test_grep_unterstuetzt_ere_alternation(tmp_path: Path) -> None:
     assert "beta = 2" in result
     assert "gamma = 3" not in result
     assert "Alternation mit |" in chat_tools.CHAT_TOOLS["grep"]["description"]
+
+
+def test_grep_includes_source_context_around_matches(tmp_path: Path) -> None:
+    if shutil.which("grep") is None:
+        pytest.skip("grep ist nicht installiert")
+    (tmp_path / "sample.py").write_text(
+        "def first():\n    pass\n\ndef target():\n    return 7\n",
+        encoding="utf-8",
+    )
+
+    result = chat_tools.execute_tool(
+        "grep", {"pattern": "def target", "path": "sample.py"},
+        project_dir=tmp_path,
+    )
+
+    assert "def target():" in result
+    assert "return 7" in result
+    assert "context_before/context_after" in chat_tools.CHAT_TOOLS["grep"]["description"]
 
 
 def test_grep_ohne_pattern() -> None:
