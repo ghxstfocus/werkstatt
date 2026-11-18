@@ -71,21 +71,41 @@ def test_architect_blocks_missing_required_source_before_model_call(
             "api_auszug": {},
         },
     )
+    source_manifest = {
+        "sources": [],
+        "requested_files": ["module.py"],
+        "omitted_files": [],
+        "rejected_files": [{
+            "path": "module.py", "reason": "outside_project_or_missing",
+        }],
+    }
     monkeypatch.setattr(
         architect,
         "_planner_system",
         lambda *_args, **_kwargs: setattr(
-            state, "architect_scout_source_manifest", {"sources": []},
+            state, "architect_scout_source_manifest", source_manifest,
         ) or "architect instructions",
     )
     calls = []
+    audits = []
     monkeypatch.setattr(architect, "ask_llm", lambda *a, **k: calls.append(a))
-    monkeypatch.setattr(architect, "audit", lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        architect, "audit", lambda kind, payload, *_a, **_k: audits.append(
+            (kind, payload),
+        ),
+    )
 
     assert architect.run_architect(
         state, "Update module.py", "ignored", "key", {},
     ) is False
     assert calls == []
+    blocked = next(
+        payload for kind, payload in audits
+        if kind == "planner_architect_context_budget"
+        and payload.get("scope") == "required_source_evidence"
+    )
+    assert blocked["reason"] == "required_source_not_complete"
+    assert blocked["source_evidence"] == source_manifest
 
 
 def test_scout_architect_prompt_includes_exact_target_api_signatures() -> None:

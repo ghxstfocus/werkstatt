@@ -41,7 +41,13 @@ def test_architect_role_consumes_current_scout_artifact_without_planner_runner(
     from werkstatt.roles import planner_dispatch
 
     goal = "Inspect how the checkpoint coordinator chooses work"
-    report = {"auftrag_prosa": "Check the current checkpoint decision evidence."}
+    report = {
+        "auftrag_prosa": "Check the current checkpoint decision evidence.",
+        "relevante_dateien": [
+            {"pfad": "werkstatt/loop.py", "zeilen": [50]},
+            {"pfad": "werkstatt/roles/criteria_replan.py"},
+        ],
+    }
     scout_fingerprint = "b" * 64
     artifact = make_role_artifact(
         "scout", report, run_id="run-1", goal=goal,
@@ -106,6 +112,7 @@ def test_architect_role_consumes_current_scout_artifact_without_planner_runner(
     assert calls == ["architect"]
     assert persisted == ["handoff"]
     assert state.scout_auftrag == report
+    assert state.architect_required_source_files == []
     assert state.planner_step_yielded is True
     assert state.planner_yielded_after_role == "architect"
 

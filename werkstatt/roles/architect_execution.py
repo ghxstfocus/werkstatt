@@ -319,13 +319,12 @@ def run_architect_role_checkpoint(state: Any, *, goal: str) -> bool:
                 {"grund": "auftrag_prosa_fehlt"}, project_dir, project_name,
             )
             return False
-        state.architect_required_source_files = list(dict.fromkeys(
-            item.get("pfad")
-            for item in scout_report.get("relevante_dateien", [])
-            if isinstance(item, dict)
-            and isinstance(item.get("pfad"), str)
-            and item.get("pfad")
-        ))
+        # Scout-selected files are retrieval targets, not a promise that each
+        # entire file fits in the Architect prompt. Their current, hash-bound
+        # excerpts and explicit omissions are rendered by _planner_system.
+        # Only the deterministic explicit-file route requires a complete
+        # source file before the Architect call.
+        state.architect_required_source_files = []
         state.scout_auftrag = dict(scout_report)
         api_excerpt = scout_report.get("api_auszug") or {}
         state.scout_api_auszug = (

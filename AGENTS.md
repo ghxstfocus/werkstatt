@@ -128,6 +128,12 @@ Rollen-Handoffs werden nach projektlokaler Pfadpruefung erneut aus dem Repo
 gelesen. Auszuege tragen Originalzeilennummern,
 Zeilenbereiche, Vollstaendigkeitsstatus und SHA-256 der Quelldatei. Vom
 Modellgelieferte Dateivorschauen werden nicht als Quellbeleg weitergereicht.
+Die Vollstaendigkeits-Pflicht vor einem Architect-Aufruf gilt fuer den
+deterministischen Direktpfad zu einer ausdruecklich benannten Einzeldatei.
+Breite Scout-Auswahl liefert aktuelle, hashgebundene Auszuege; diese duerfen
+partiell sein, muessen die ausgelassenen Zeilen und nicht aufloesbare Pfade
+sichtbar markieren. Der Architect darf daraus keine Aussagen ueber ungelesene
+Dateibereiche ableiten und muss Belegluecken im Plan benennen.
 Der Scout-Prompt muss den tatsaechlich enthaltenen
 Zeilenumfang anzeigen; ein spaeteres Zeichenlimit darf die Fundstelle nicht
 groesser erscheinen lassen als den uebergebenen Text.

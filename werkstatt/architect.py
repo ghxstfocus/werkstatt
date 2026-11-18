@@ -1897,6 +1897,9 @@ def run_architect(
             "required_files": getattr(
                 state, "architect_required_source_files", [],
             ),
+            "source_evidence": getattr(
+                state, "architect_scout_source_manifest", {},
+            ),
             "reason": _required_source_issue,
         }, pd, pn)
         return False
