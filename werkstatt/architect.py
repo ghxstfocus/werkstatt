@@ -109,6 +109,7 @@ def _format_scout_source_evidence(
     project_dir: str | Path,
     scout_report: dict,
     *,
+    fallback_files: list | None = None,
     max_files: int = 8,
     max_chars: int = 18_000,
     context_lines: int = 10,
@@ -154,12 +155,45 @@ def _format_scout_source_evidence(
         "rejected_files": rejected_files,
         "sources": sources,
         "chars": 0,
+        "selection_source": "scout_report",
     }
-    if not isinstance(report_files, list) or not report_files:
+    report_files = report_files if isinstance(report_files, list) else []
+    scout_candidates = [
+        item for item in report_files
+        if isinstance(item, dict)
+        and isinstance(item.get("pfad"), str)
+        and item["pfad"].strip()
+    ]
+    selection_source = "scout_report"
+    if not scout_candidates:
+        selection_source = "explorer_key_files_fallback"
+        scout_candidates = []
+        for item in fallback_files or []:
+            if not isinstance(item, dict):
+                continue
+            path = item.get("file") or item.get("pfad") or item.get("path")
+            if not isinstance(path, str) or not path.strip():
+                continue
+            scout_candidates.append({
+                "pfad": path,
+                "warum": str(item.get("reason") or item.get("why") or ""),
+                "confidence": str(item.get("confidence") or ""),
+                "_selection_source": selection_source,
+            })
+        confidence_rank = {"high": 0, "medium": 1, "low": 2}
+        scout_candidates.sort(key=lambda item: confidence_rank.get(
+            str(item.get("confidence") or "medium").lower(), 3,
+        ))
+    metadata["selection_source"] = selection_source
+    if not scout_candidates:
         return "", metadata
 
     output = [
-        "## AKTUELLE QUELLBELEGE AUS SCOUT-RELEVANTEN DATEIEN",
+        (
+            "## AKTUELLE QUELLBELEGE AUS SCOUT-RELEVANTEN DATEIEN"
+            if selection_source == "scout_report"
+            else "## AKTUELLE QUELLBELEGE AUS EXPLORER-KEYFILES (SCOUT-LISTE LEER)"
+        ),
         (
             "Projektlokal erneut gelesen. Pfad, Zeilen und SHA-256 beziehen "
             "sich auf den aktuellen Checkout. Quelltext ist nicht "
@@ -171,7 +205,7 @@ def _format_scout_source_evidence(
     content_limit = max(0, max_chars - report_reserve)
     candidates: list[tuple[str, dict]] = []
     seen: set[str] = set()
-    for item in report_files:
+    for item in scout_candidates:
         if not isinstance(item, dict):
             continue
         raw_path = item.get("pfad")
@@ -330,6 +364,9 @@ def _format_scout_source_evidence(
         included_files.append(relative)
         sources.append({
             "path": relative,
+            "selection_source": item.get(
+                "_selection_source", "scout_report",
+            ),
             "source_sha256": digest,
             "excerpt_sha256": hashlib.sha256(block.encode("utf-8")).hexdigest(),
             "excerpt_chars": len(block),
@@ -434,18 +471,68 @@ def _required_source_evidence_issue(
     return None
 
 
-def _format_scout_auftrag(auftrag: dict) -> str:
+def _format_scout_auftrag(
+    auftrag: dict,
+    explorer_files: list | None = None,
+) -> str:
     """OP-385: Scout-Report als einzigen Architect-Prompt-Block rendern.
 
-    Enthaelt alles, was der Architect braucht: Auftrag-Prosa,
-    API-Auszug, Risiken. Keine Explorer-Rohdaten — die sind
-    absichtlich nicht drin (Kontext-Verengung durch Scout).
+    Enthaelt Scout-Befunde und bei leerer Scout-Dateiliste begrenzte,
+    klar als Navigation markierte Explorer-Keyfiles.
     """
     if not isinstance(auftrag, dict) or not auftrag:
         return ""
     teile = ["<scout_auftrag>", "## Auftrag (vom Scout)"]
     prosa = str(auftrag.get("auftrag_prosa") or "").strip()
     teile.append(prosa if prosa else "(kein Prosa-Auftrag vom Scout)")
+    report_files = auftrag.get("relevante_dateien")
+    if isinstance(report_files, list) and report_files:
+        teile.extend(["", "## Vom Scout genannte Dateien (Navigationshinweise)"])
+        for item in report_files[:8]:
+            if not isinstance(item, dict):
+                continue
+            path = item.get("pfad")
+            if not isinstance(path, str) or not path.strip():
+                continue
+            reason = str(item.get("warum") or "").strip()
+            teile.append(
+                f"- {escape(path.strip())}"
+                + (f" — {escape(reason[:300])}" if reason else "")
+            )
+        teile.append(
+            "Diese Pfade sind Hinweise. Verwende fuer Aussagen und API-"
+            "Planung nur die darunter beigefuegten aktuellen Quellbelege."
+        )
+    else:
+        files = []
+        seen_files = set()
+        for item in explorer_files or []:
+            if not isinstance(item, dict):
+                continue
+            path = item.get("file") or item.get("pfad") or item.get("path")
+            if isinstance(path, str) and path.strip() and path.strip() not in seen_files:
+                seen_files.add(path.strip())
+                files.append((path.strip(), item))
+        teile.extend(["", "## Belegluecke: Scout-Dateiliste leer"])
+        if files:
+            teile.append(
+                "Der Scout hat keine relevanten Dateien benannt. Die folgenden "
+                "Explorer-Keyfiles sind nur Navigationskandidaten; sie wurden "
+                "fuer den aktuellen Quellbeleg erneut gelesen und gehasht. "
+                "Erfinde keine anderen Repo-Pfade."
+            )
+            for path, item in files[:8]:
+                reason = str(item.get("reason") or item.get("why") or "").strip()
+                teile.append(
+                    f"- {escape(path)}"
+                    + (f" — {escape(reason[:300])}" if reason else "")
+                )
+        else:
+            teile.append(
+                "Es gibt auch keine Explorer-Keyfiles als aktuelle Quellen. "
+                "Nenne die fehlende Evidenz explizit und erfinde weder Pfade "
+                "noch Schnittstellen."
+            )
     apis = auftrag.get("api_auszug") or {}
     if isinstance(apis, dict) and apis:
         apis_str = _format_scout_apis_arch(apis)
@@ -1414,13 +1501,21 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
         if _project_dir is not None:
             _source_text, _source_manifest = _format_scout_source_evidence(
                 _project_dir, state.scout_auftrag,
+                fallback_files=(
+                    explorer_ctx.get("key_files", [])
+                    if isinstance(explorer_ctx, dict) else []
+                ),
             )
             state.architect_scout_source_manifest = _source_manifest
             if _source_text:
                 scout_source_text = _source_text
                 scout_source_part_index = len(parts)
                 parts.append(_source_text)
-        _sa_str = _format_scout_auftrag(state.scout_auftrag)
+        _sa_str = _format_scout_auftrag(
+            state.scout_auftrag,
+            explorer_ctx.get("key_files", [])
+            if isinstance(explorer_ctx, dict) else [],
+        )
         if _sa_str:
             parts.append(_sa_str)
 

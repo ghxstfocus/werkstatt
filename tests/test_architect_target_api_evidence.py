@@ -790,6 +790,74 @@ def test_scout_handoff_preserves_every_reported_section_without_field_slices() -
     ) in rendered
 
 
+def test_scout_handoff_lists_reported_files_as_navigation_hints() -> None:
+    from werkstatt.architect import _format_scout_auftrag
+
+    rendered = _format_scout_auftrag({
+        "auftrag_prosa": "Pruefe den Dispatch.",
+        "relevante_dateien": [{
+            "pfad": "werkstatt/loop.py",
+            "warum": "Ruft den naechsten Executor auf.",
+        }],
+    })
+
+    assert "werkstatt/loop.py" in rendered
+    assert "Ruft den naechsten Executor auf." in rendered
+    assert "Navigationshinweise" in rendered
+    assert "beigefuegten aktuellen Quellbelege" in rendered
+
+
+def test_empty_scout_file_list_uses_fresh_explorer_keyfile_sources(tmp_path) -> None:
+    from werkstatt.architect import (
+        _format_scout_auftrag,
+        _format_scout_source_evidence,
+    )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "actual.py").write_text(
+        "def actual_dispatch():\n    return 'current source'\n",
+        encoding="utf-8",
+    )
+    explorer_files = [{
+        "file": "actual.py",
+        "confidence": "high",
+        "reason": "Explorer meldete den Dispatcher als Keyfile.",
+    }]
+
+    rendered, manifest = _format_scout_source_evidence(
+        project,
+        {"relevante_dateien": []},
+        fallback_files=explorer_files,
+    )
+    handoff = _format_scout_auftrag(
+        {"auftrag_prosa": "Pruefe den Dispatcher.", "relevante_dateien": []},
+        explorer_files,
+    )
+
+    assert "actual_dispatch" in rendered
+    assert "EXPLORER-KEYFILES (SCOUT-LISTE LEER)" in rendered
+    assert manifest["selection_source"] == "explorer_key_files_fallback"
+    assert manifest["included_files"] == ["actual.py"]
+    assert manifest["sources"][0]["selection_source"] == "explorer_key_files_fallback"
+    assert "Scout-Dateiliste leer" in handoff
+    assert "actual.py" in handoff
+    assert "Erfinde keine anderen Repo-Pfade" in handoff
+
+
+def test_empty_scout_and_explorer_files_expose_missing_evidence() -> None:
+    from werkstatt.architect import _format_scout_auftrag
+
+    rendered = _format_scout_auftrag(
+        {"auftrag_prosa": "Pruefe den Dispatcher.", "relevante_dateien": []},
+        [],
+    )
+
+    assert "Scout-Dateiliste leer" in rendered
+    assert "keine Explorer-Keyfiles" in rendered
+    assert "erfinde weder Pfade noch Schnittstellen" in rendered
+
+
 def test_architect_blocks_oversized_complete_prompt_and_audits_handoff(
     monkeypatch, tmp_path,
 ) -> None:
