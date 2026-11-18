@@ -386,10 +386,92 @@ def _read_file_tail(pfad: Path, tail_chars: int) -> str:
     return marker + "\n" + auszug
 
 
+def _read_file_lines(
+    pfad: Path, start_line: int, end_line: int | None,
+) -> str:
+    """Read an inclusive, one-based line range with an explicit continuation."""
+    if start_line < 1 or (end_line is not None and end_line < start_line):
+        return "Fehler: ungueltiger start_line/end_line-Bereich"
+
+    content_byte_limit = _MAX_READ_BYTES - 1024
+    teile: list[str] = []
+    bytezahl = 0
+    letzte_zeile = start_line - 1
+    zeichen_offset = 0
+    naechster_zeichen_offset: int | None = None
+    truncated = False
+    try:
+        with pfad.open("r", encoding="utf-8", errors="replace") as datei:
+            for aktuelle_zeile, zeile in enumerate(datei, start=1):
+                if aktuelle_zeile < start_line:
+                    zeichen_offset += len(zeile)
+                    continue
+                if end_line is not None and aktuelle_zeile > end_line:
+                    break
+                zeilen_bytes = len(zeile.encode("utf-8"))
+                if bytezahl + zeilen_bytes > content_byte_limit:
+                    truncated = True
+                    naechster_zeichen_offset = zeichen_offset
+                    break
+                teile.append(zeile)
+                bytezahl += zeilen_bytes
+                letzte_zeile = aktuelle_zeile
+                zeichen_offset += len(zeile)
+    except OSError as exc:
+        return f"Fehler beim Lesen: {exc}"
+
+    inhalt = "".join(teile)
+    if letzte_zeile < start_line:
+        if naechster_zeichen_offset is not None:
+            return (
+                f"Fehler: Zeile {start_line} ueberschreitet das read_file-Limit. "
+                f"Gezielt ab dieser Zeile mit read_file(start={naechster_zeichen_offset}) lesen."
+            )
+        return f"Keine Datei-Zeilen ab {start_line} vorhanden."
+    marker = f"[Gelesene Zeilen: {start_line}-{letzte_zeile}"
+    if truncated:
+        if naechster_zeichen_offset is not None:
+            marker += (
+                f". Naechste Zeile ist zu gross; gezielt fortsetzen mit "
+                f"read_file(start={naechster_zeichen_offset})."
+            )
+        else:
+            marker += f". Fortsetzen mit read_file(start_line={letzte_zeile + 1}"
+            if end_line is not None:
+                marker += f", end_line={end_line}"
+            marker += ")."
+    elif end_line is not None:
+        marker += f"; angeforderte Obergrenze {end_line}."
+    else:
+        marker += "; Dateiende erreicht."
+    return marker + "]\n" + inhalt
+
+
 def _read_file(args: dict[str, Any]) -> str:
     pfad = _resolved_safe(str(args.get("path", "")))
     if pfad is None or not pfad.is_file():
         return "Fehler: Datei nicht gefunden oder ausserhalb Projekt"
+    line_range_requested = (
+        args.get("start_line") is not None
+        or args.get("end_line") is not None
+    )
+    if line_range_requested:
+        if (
+            args.get("tail_chars") is not None
+            or args.get("start") is not None
+            or args.get("end") is not None
+        ):
+            return (
+                "Fehler: start_line/end_line darf nicht mit tail_chars "
+                "oder start/end kombiniert werden"
+            )
+        try:
+            start_line = int(args.get("start_line", 1))
+            end_line_value = args.get("end_line")
+            end_line = int(end_line_value) if end_line_value is not None else None
+        except (TypeError, ValueError):
+            return "Fehler: start_line/end_line muessen ganze Zahlen sein"
+        return _read_file_lines(pfad, start_line, end_line)
     if args.get("tail_chars") is not None:
         try:
             start = int(args.get("start", 0))
@@ -2684,8 +2766,10 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
     },
     "read_file": {
         "description": (
-            "Liest Datei-Inhalt mit 0-basierten Zeichen-Offsets (start/end, "
-            "keine Zeilennummern; max 50 KB). Fuer aktuelle Eintraege "
+            "Liest Datei-Inhalt. Fuer Zeilennummern aus grep start_line/end_line "
+            "nutzen (1-basiert, end_line inklusive); fuer beliebige Bereiche "
+            "start/end als 0-basierte Zeichen-Offsets nutzen (keine Zeilennummern; "
+            "max 50 KB). Fuer aktuelle Eintraege "
             "tail_chars nutzen: liefert Dateiende-Auszug, Gesamtlaenge und "
             "Offsets. Gekuerzte Ausgaben nennen den naechsten start-Offset zur Fortsetzung."
         ),
@@ -2695,6 +2779,8 @@ CHAT_TOOLS: dict[str, dict[str, Any]] = {
                 "path": {"type": "string"},
                 "start": {"type": "integer"},
                 "end": {"type": "integer"},
+                "start_line": {"type": "integer", "minimum": 1},
+                "end_line": {"type": "integer", "minimum": 1},
                 "tail_chars": {
                     "type": "integer",
                     "minimum": 1,
