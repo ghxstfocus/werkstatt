@@ -80,10 +80,6 @@ def test_replans_only_missing_criteria_and_preserves_completed_tasks(
     )
 
     phase.run_id = state.run_id
-    monkeypatch.setattr(
-        "werkstatt.planner.run_planner",
-        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
-    )
     monkeypatch.setattr(criteria_replan, "audit", lambda *args, **kwargs: True, raising=False)
 
     assert criteria_replan.replan_unassigned_criteria(state, phase) is True
@@ -104,8 +100,8 @@ def test_replans_only_missing_criteria_and_preserves_completed_tasks(
     assert phase.criteria_progress()["uncovered"] == ["AC2"]
 
 
-def test_checkpoint_replan_prepares_bounded_subgoal_without_calling_planner(
-    tmp_path, monkeypatch,
+def test_checkpoint_replan_prepares_bounded_subgoal(
+    tmp_path,
 ):
     phase = PhaseState("demo", base_dir=tmp_path)
     phase.init_new(
@@ -126,10 +122,6 @@ def test_checkpoint_replan_prepares_bounded_subgoal_without_calling_planner(
         akzeptanzkriterien=list(phase.data["akzeptanzkriterien"]),
     )
     phase.run_id = state.run_id
-    monkeypatch.setattr(
-        "werkstatt.planner.run_planner",
-        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
-    )
 
     assert criteria_replan.replan_unassigned_criteria(
         state, phase,
@@ -170,10 +162,6 @@ def test_checkpoint_replan_candidate_is_gated_before_append(tmp_path, monkeypatc
         akzeptanzkriterien=list(phase.data["akzeptanzkriterien"]),
     )
     phase.run_id = state.run_id
-    monkeypatch.setattr(
-        "werkstatt.planner.run_planner",
-        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
-    )
     assert criteria_replan.replan_unassigned_criteria(
         state, phase,
     ) is True
@@ -262,7 +250,7 @@ def test_checkpoint_candidate_rejects_planner_that_changes_criteria(
 
 
 def test_failed_criterion_replan_preserves_history_until_candidate_approval(
-    tmp_path, monkeypatch,
+    tmp_path,
 ):
     phase = PhaseState("demo", base_dir=tmp_path)
     phase.init_new(
@@ -304,10 +292,6 @@ def test_failed_criterion_replan_preserves_history_until_candidate_approval(
         budget={"max_llm_calls": 20},
     )
     phase.run_id = state.run_id
-    monkeypatch.setattr(
-        "werkstatt.planner.run_planner",
-        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
-    )
     assert criteria_replan.replan_unassigned_criteria(state, phase) is True
     record = criteria_replan.active_criteria_replan(phase)
     assert record is not None
@@ -352,10 +336,6 @@ def test_checkpoint_replan_combines_failed_and_unassigned_criteria(
     )
 
     phase.run_id = state.run_id
-    monkeypatch.setattr(
-        "werkstatt.planner.run_planner",
-        lambda *_args, **_kwargs: pytest.fail("planner must be dispatched later"),
-    )
 
     assert criteria_replan.replan_unassigned_criteria(state, phase) is True
     record = criteria_replan.active_criteria_replan(phase)
@@ -397,8 +377,6 @@ def test_replan_recovers_append_before_ledger_update_for_failed_task(
         run_id="run-failed-replan-resume",
         aufgabe="Goal",
     )
-    monkeypatch.setattr("werkstatt.planner.run_planner", lambda _state: pytest.fail())
-
     assert criteria_replan.replan_unassigned_criteria(state, phase) is True
     assert phase.get_task("failed")["status"] == "superseded"
     assert phase.data["criteria_replans"][0]["status"] == "applied_after_resume"

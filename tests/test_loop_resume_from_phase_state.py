@@ -2,7 +2,7 @@
 
 Regression zu Fix AV-Resume (2026-10-31): PhaseState.tasks ist Source
 of Truth. Wenn PhaseState Tasks liefert, aber tests/akz fehlen, darf
-_plan_gate den Plan nicht ablehnen und run_planner() darf NICHT
+_plan_gate den Plan nicht ablehnen und keine neue Planungsrolle darf
 laufen. Sonst baut der Planner einen neuen Plan und ignoriert die
 7 vorhandenen Tasks.
 """
@@ -53,7 +53,7 @@ class TestResumeFromPhaseState:
         Der Test isoliert die Verzweigung: state.tasks leer initial,
         phase_state.data hat 7 Tasks, keine tests/akz. _plan_gate wuerde
         False liefern. Nach PhaseState-Load muss plan_ok True sein und
-        run_planner NICHT gerufen werden.
+        keine neue Planungsrolle gerufen werden.
         """
         # PhaseState-Datei anlegen
         ps = PhaseState("testprojekt", base_dir=tmp_path / ".werkstatt")

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from werkstatt.planner import _preflight_scan, run_planner
+from werkstatt.planner import _preflight_scan
 from werkstatt.state import RunState
 
 
@@ -33,259 +33,6 @@ def _state(tmp_path):
         file_whitelist=[], api_key="fake", budget={},
         agent_docs={}, project_dir=tmp_path, project_name="p"
     )
-
-
-def test_planner_erstellt_plan(tmp_path):
-    """GOLD: Scout + Architect (Prosa) + Planner (JSON). Drei Calls."""
-    st = _state(tmp_path)
-
-    _scout_json = json.dumps({
-        "ziel": "Test",
-        "relevante_dateien": [{"pfad": "a.py", "zeilen": [1], "warum": "test"}],
-        "api_auszug": {},
-        "vorgeschlagene_aenderungen": ["neue Funktion fix()"],
-        "risiken": [],
-        "auftrag_prosa": "Baue fix() in a.py",
-    })
-    _arch_prosa = (
-        "## Interface\n"
-        "Neue Funktion fix() in a.py.\n\n"
-        "## Logik\n"
-        "Validiert x > 0, ruft helper().\n\n"
-        "## Integration\n"
-        "In main() einbauen.\n\n"
-        "## Tests\n"
-        "test_fix() in tests/test_a.py."
-    )
-    _planner_json = json.dumps({
-        "tasks": [{"id": "t1", "name": "A", "description": "B",
-                   "action": "update", "task_files": ["a.py"]}],
-        "tests": ["test_a"],
-        "akzeptanzkriterien": ["done"],
-    })
-
-    class FakeReply:
-        def __init__(self, content):
-            self.ok = True
-            self.content = content
-
-    _responses = iter([
-        FakeReply(_scout_json),
-        FakeReply(_arch_prosa),
-        FakeReply(_planner_json),
-    ])
-
-    def _fake_ask_llm(*args, **kwargs):
-        return next(_responses)
-
-    with patch("werkstatt.planner.ask_llm", side_effect=_fake_ask_llm):
-        result = run_planner(st)
-        assert result is True
-        assert len(st.tasks) == 1
-        assert st.architect_reasoning_enabled is True
-
-
-def test_checkpoint_selected_direct_builder_skips_planner_roles(
-    tmp_path, monkeypatch,
-):
-    from werkstatt import planner
-
-    source = tmp_path / "src" / "feature.py"
-    source.parent.mkdir()
-    source.write_text("def feature():\n    return 1\n", encoding="utf-8")
-    source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
-    state = _state(tmp_path)
-    state.aufgabe = "Korrigiere den Rückgabewert von feature in src/feature.py"
-    state.explorer_context = {
-        "key_files": [{
-            "file": "src/feature.py",
-            "source_sha256": source_sha256,
-            "source_complete": True,
-        }],
-    }
-    state.planner_action_role = "builder_direct"
-    monkeypatch.setattr(
-        planner, "_deterministic_entfernen_precheck", lambda _state: False,
-    )
-    monkeypatch.setattr(planner, "_erledigte_punkte", lambda _path: "")
-    monkeypatch.setattr(planner, "_migrations_stand", lambda *_args: "")
-    monkeypatch.setattr(
-        planner, "_run_scout",
-        lambda *_args: pytest.fail("Scout must not run on direct Builder route"),
-    )
-    monkeypatch.setattr(
-        planner, "run_architect",
-        lambda *_args, **_kwargs: pytest.fail(
-            "Architect must not run on direct Builder route",
-        ),
-    )
-
-    assert planner.run_planner(state) is True
-    assert state.tasks[0]["task_files"] == ["src/feature.py"]
-    assert state.tasks[0]["action"] == "update"
-    assert state.tasks[0]["criterion_refs"] == ["AC1"]
-    assert state.akzeptanzkriterien == [state.aufgabe]
-    assert state.tests == [
-        (
-            "Die fuer geaenderte Dateien konfigurierte Verify-Suite muss "
-            "erfolgreich sein."
-        ),
-    ]
-    monkeypatch.setattr(
-        "werkstatt.gates._call_hook", lambda *_args, **_kwargs: {"allow": True},
-    )
-    from werkstatt.gates import _plan_gate
-
-    assert _plan_gate(state) is True, state.last_planner_info
-
-
-def test_direct_builder_plan_rejects_source_changed_after_dispatch(
-    tmp_path, monkeypatch,
-):
-    from werkstatt import planner
-
-    source = tmp_path / "src" / "feature.py"
-    source.parent.mkdir()
-    source.write_text("def feature():\n    return 1\n", encoding="utf-8")
-    stale_hash = hashlib.sha256(source.read_bytes()).hexdigest()
-    source.write_text("def feature():\n    return 2\n", encoding="utf-8")
-    state = _state(tmp_path)
-    state.aufgabe = "Korrigiere den Rueckgabewert von feature in src/feature.py"
-    state.explorer_context = {
-        "key_files": [{
-            "file": "src/feature.py",
-            "source_sha256": stale_hash,
-            "source_complete": True,
-        }],
-    }
-    state.planner_action_role = "builder_direct"
-    monkeypatch.setattr(
-        planner, "_deterministic_entfernen_precheck", lambda _state: False,
-    )
-    monkeypatch.setattr(planner, "_erledigte_punkte", lambda _path: "")
-    monkeypatch.setattr(planner, "_migrations_stand", lambda *_args: "")
-    monkeypatch.setattr(
-        planner, "_run_scout",
-        lambda *_args: pytest.fail("stale direct evidence must stop dispatch"),
-    )
-
-    assert planner.run_planner(state) is False
-    assert state.tasks == []
-
-
-def test_planner_can_yield_after_each_required_role(tmp_path, monkeypatch):
-    from werkstatt import planner
-
-    state = _state(tmp_path)
-    state.run_id = "run-1"
-    state.planner_action_role = "scout"
-    state.planner_role_artifacts = {}
-    state.planner_role_artifact_callback = lambda artifact: (
-        state.planner_role_artifacts.__setitem__(artifact["role"], artifact)
-    )
-    scout_fingerprints = []
-    original_scout_fingerprint = planner._scout_input_fingerprint
-    monkeypatch.setattr(
-        planner,
-        "_scout_input_fingerprint",
-        lambda *args: scout_fingerprints.append(
-            original_scout_fingerprint(*args),
-        ) or scout_fingerprints[-1],
-    )
-    report = {
-        "ziel": "Baue Feature X",
-        "relevante_dateien": [{"pfad": "feature.py", "warum": "Ziel"}],
-        "api_auszug": {},
-        "vorgeschlagene_aenderungen": ["Implementiere Feature X"],
-        "risiken": [],
-        "auftrag_prosa": "Implementiere Feature X in feature.py.",
-        "bereits_erfuellt": False,
-        "atomarer_plan": False,
-    }
-    calls = {"scout": 0, "architect": 0, "split": 0}
-
-    monkeypatch.setattr(
-        planner, "_deterministic_entfernen_precheck", lambda _state: False,
-    )
-    monkeypatch.setattr(
-        planner, "_scout_route_decision", lambda *_args: (None, "needs_scout"),
-    )
-    monkeypatch.setattr(planner, "_baue_api_index", lambda _path: {})
-    monkeypatch.setattr(
-        planner, "_run_scout",
-        lambda *_args: calls.__setitem__("scout", calls["scout"] + 1) or report,
-    )
-    monkeypatch.setattr(
-        planner, "_scout_report_hat_architect_auftrag", lambda _report: True,
-    )
-    monkeypatch.setattr(planner, "_pruefe_api_widerspruch", lambda *_args: [])
-    monkeypatch.setattr(
-        planner, "_validate_contract_or_audit", lambda *_args: True,
-    )
-
-    def architect(*_args):
-        calls["architect"] += 1
-        state.architect_prosa = (
-            "## Plan\nImplementiere Feature X in feature.py mit Tests "
-            "und dokumentiere die aktuelle Schnittstelle."
-        )
-        return True
-
-    def split(*_args, **_kwargs):
-        calls["split"] += 1
-        state.akzeptanzkriterien = ["Feature X ist implementiert"]
-        return [{
-            "id": "t1", "name": "Feature X",
-            "action": "update", "task_files": ["feature.py"],
-            "criterion_refs": ["AC1"],
-        }]
-
-    monkeypatch.setattr(planner, "run_architect", architect)
-    monkeypatch.setattr(planner, "_zerlege_in_sub_tasks", split)
-    monkeypatch.setattr(planner, "audit", lambda *_args, **_kwargs: None)
-
-    assert planner.run_planner(state, stop_after_role="scout") is True
-    assert state.planner_step_yielded is True
-    assert calls == {"scout": 1, "architect": 0, "split": 0}
-
-    state.planner_action_role = "architect"
-    assert planner.run_planner(state, stop_after_role="architect") is True
-    assert state.planner_step_yielded is True
-    assert calls == {"scout": 1, "architect": 1, "split": 0}
-
-    state.planner_action_role = "planner_split"
-    assert planner.run_planner(state) is True
-    assert state.planner_step_yielded is False
-    assert len(set(scout_fingerprints[:3])) == 1
-    assert calls == {"scout": 1, "architect": 1, "split": 1}
-
-    from werkstatt import architect as architect_module
-
-    monkeypatch.setattr(
-        architect_module, "_get_architect_model", lambda: "changed-model",
-    )
-    assert planner.run_planner(state) is True
-    assert state.planner_yielded_after_role == "architect"
-    assert calls == {"scout": 1, "architect": 2, "split": 1}
-
-    # A changed candidate source invalidates the cached role output and
-    # re-runs Scout before Architect can consume it.
-    state.docs["a"] = "changed project evidence"
-    assert planner.run_planner(state) is True
-    assert state.planner_step_yielded is True
-    assert state.planner_yielded_after_role == "scout"
-    assert calls == {"scout": 2, "architect": 2, "split": 1}
-
-    state.planner_action_role = "architect"
-    assert planner.run_planner(state, stop_after_role="architect") is True
-    assert state.planner_yielded_after_role == "architect"
-    assert calls == {"scout": 2, "architect": 3, "split": 1}
-
-    state.planner_role_artifact_callback = None
-    state.docs["a"] = "a further changed source"
-    state.planner_action_role = "planner_split"
-    assert planner.run_planner(state) is False
-    assert calls == {"scout": 3, "architect": 3, "split": 1}
 
 
 def test_plan_gate_recovery_reuses_architect_evidence_and_preserves_criteria(
@@ -352,368 +99,67 @@ def test_plan_gate_recovery_rejects_other_gate_codes_before_split(
 
 
 def test_scout_skip_requires_explicit_single_file_and_explorer_evidence(tmp_path):
-    from werkstatt.planner import _scout_skip_target
+    from werkstatt.roles.planner_dispatch import scout_route_decision
 
     target = tmp_path / "werkstatt" / "small.py"
     target.parent.mkdir()
     target.write_text("VALUE = 1\n", encoding="utf-8")
     context = {"key_files": [{"file": "werkstatt/small.py"}]}
 
-    assert _scout_skip_target(
+    assert scout_route_decision(
         "Korrigiere werkstatt/small.py", context, tmp_path,
-    ) == "werkstatt/small.py"
-    assert _scout_skip_target(
+    )[0] == "werkstatt/small.py"
+    assert scout_route_decision(
         "Prüfe den Fehler in werkstatt/small.py", context, tmp_path,
-    ) is None
-    assert _scout_skip_target(
+    )[0] is None
+    assert scout_route_decision(
         "Korrigiere werkstatt/small.py und werkstatt/other.py",
         context, tmp_path,
-    ) is None
-    assert _scout_skip_target(
+    )[0] is None
+    assert scout_route_decision(
         "Korrigiere werkstatt/small.py",
         {"key_files": []}, tmp_path,
-    ) is None
+    )[0] is None
 
     large = tmp_path / "werkstatt" / "large.py"
     large.write_text("VALUE = 'x'\n" + ("# extra context\n" * 500), encoding="utf-8")
-    assert _scout_skip_target(
+    assert scout_route_decision(
         "Korrigiere werkstatt/large.py",
         {"key_files": [{"file": "werkstatt/large.py"}]}, tmp_path,
-    ) is None
+    )[0] is None
     oversized = tmp_path / "werkstatt" / "oversized.py"
     oversized.write_text("# context\n" * 3_000, encoding="utf-8")
-    assert _scout_skip_target(
+    assert scout_route_decision(
         "Korrigiere werkstatt/oversized.py",
         {"key_files": [{"file": "werkstatt/oversized.py"}]}, tmp_path,
-    ) is None
-
-
-def test_planner_skips_scout_but_keeps_architect_and_plan_path(tmp_path):
-    from werkstatt.planner import run_planner
-
-    target = tmp_path / "werkstatt" / "small.py"
-    target.parent.mkdir()
-    target.write_text("VALUE = 1\n", encoding="utf-8")
-    st = _state(tmp_path)
-    st.aufgabe = "Korrigiere werkstatt/small.py"
-    st.explorer_context = {
-        "key_files": [{"file": "werkstatt/small.py"}],
-        "findings": "Datei vorhanden",
-    }
-    role_checkpoints = []
-    st.planner_checkpoint_callback = role_checkpoints.append
-
-    def architect(_state, _aufgabe, _content, _key, _explorer):
-        _state.architect_prosa = "## Aenderung\nAendere VALUE in small.py."
-        return True
-
-    split_tasks = [{
-        "id": "t1",
-        "name": "Kleine Korrektur",
-        "action": "update",
-        "task_files": ["werkstatt/small.py"],
-        "dependencies": [],
-        "description": "Korrigiere die angegebene Stelle.",
-    }]
-    with patch("werkstatt.planner._run_scout", side_effect=AssertionError("Scout unnötig")), \
-         patch("werkstatt.planner.run_architect", side_effect=architect) as mock_architect, \
-         patch("werkstatt.planner._zerlege_in_sub_tasks", return_value=split_tasks), \
-         patch("werkstatt.planner.audit") as mock_audit:
-        assert run_planner(st) is True
-
-    mock_architect.assert_called_once()
-    assert st.architect_reasoning_enabled is False
-    assert st.tasks == split_tasks
-    assert any(
-        call.args[0] == "planner_scout_skipped"
-        for call in mock_audit.call_args_list
-    )
-    assert [(item["role"], item["status"]) for item in role_checkpoints] == [
-        ("scout", "skipped"),
-        ("architect", "running"),
-        ("architect", "completed"),
-        ("planner_split", "running"),
-        ("planner_split", "completed"),
-    ]
-    assert role_checkpoints[2]["output_sha256"]
-    assert role_checkpoints[4]["output_sha256"]
-
-
-def test_literal_single_file_replacement_skips_scout_and_architect(tmp_path):
-    target = tmp_path / "module.py"
-    target.write_text("VALUE = OLD\n", encoding="utf-8")
-    st = _state(tmp_path)
-    st.aufgabe = "Ersetze `OLD` durch `NEW` in module.py."
-    st.explorer_context = {"key_files": [{"file": "module.py"}]}
-    role_checkpoints = []
-    st.planner_checkpoint_callback = role_checkpoints.append
-
-    with patch(
-        "werkstatt.planner._run_scout",
-        side_effect=AssertionError("Scout fuer explizite Ersetzung unnoetig"),
-    ), patch(
-        "werkstatt.planner.run_architect",
-        side_effect=AssertionError("Architect fuer belegte Ersetzung unnoetig"),
-    ), patch("werkstatt.planner.audit") as mock_audit:
-        assert run_planner(st) is True
-
-    assert len(st.tasks) == 1
-    assert st.tasks[0]["task_files"] == ["module.py"]
-    assert "`OLD` durch `NEW`" in st.tasks[0]["description"]
-    assert st.architect_prosa == "[atomarer Plan: deterministische_literal_ersetzung]"
-    assert any(
-        call.args[0] == "planner_atomarer_plan"
-        and call.args[1].get("architect") == "uebersprungen"
-        for call in mock_audit.call_args_list
-    )
-    assert [(item["role"], item["status"]) for item in role_checkpoints] == [
-        ("scout", "skipped"),
-        ("architect", "skipped"),
-        ("planner_split", "skipped"),
-    ]
-
-
-def test_unique_literal_setting_skips_scout_architect_and_split(tmp_path):
-    target = tmp_path / "settings.py"
-    target.write_text("TIMEOUT = 15  # seconds\n", encoding="utf-8")
-    st = _state(tmp_path)
-    st.aufgabe = "Setze TIMEOUT in settings.py auf 30."
-    st.explorer_context = {"key_files": [{"file": "settings.py"}]}
-    role_checkpoints = []
-    st.planner_checkpoint_callback = role_checkpoints.append
-
-    with patch(
-        "werkstatt.planner._run_scout",
-        side_effect=AssertionError("Scout fuer belegte Einzelwertaenderung unnoetig"),
-    ), patch(
-        "werkstatt.planner.run_architect",
-        side_effect=AssertionError("Architect fuer belegte Einzelwertaenderung unnoetig"),
-    ), patch("werkstatt.planner.audit"):
-        assert run_planner(st) is True
-
-    assert len(st.tasks) == 1
-    assert st.tasks[0]["task_files"] == ["settings.py"]
-    assert "TIMEOUT = 15  # seconds` durch `TIMEOUT = 30  # seconds" in (
-        st.tasks[0]["description"]
-    )
-    assert [(item["role"], item["status"]) for item in role_checkpoints] == [
-        ("scout", "skipped"),
-        ("architect", "skipped"),
-        ("planner_split", "skipped"),
-    ]
-
-
-def test_explicit_same_file_literal_batch_skips_all_planning_roles(tmp_path):
-    target = tmp_path / "settings.py"
-    target.write_text("TIMEOUT = 15\nRETRIES = 2\n", encoding="utf-8")
-    st = _state(tmp_path)
-    st.aufgabe = (
-        "Setze TIMEOUT in settings.py auf 30 und setze RETRIES "
-        "in settings.py auf 5"
-    )
-    st.explorer_context = {"key_files": [{"file": "settings.py"}]}
-    role_checkpoints = []
-    st.planner_checkpoint_callback = role_checkpoints.append
-
-    with patch(
-        "werkstatt.planner._run_scout",
-        side_effect=AssertionError("Scout fuer belegten Literal-Batch unnoetig"),
-    ), patch(
-        "werkstatt.planner.run_architect",
-        side_effect=AssertionError("Architect fuer belegten Literal-Batch unnoetig"),
-    ), patch("werkstatt.planner._zerlege_in_sub_tasks") as split:
-        assert run_planner(st) is True
-
-    split.assert_not_called()
-    assert len(st.tasks) == 1
-    assert st.tasks[0]["task_files"] == ["settings.py"]
-    assert "TIMEOUT = 15` durch `TIMEOUT = 30" in st.tasks[0]["description"]
-    assert "RETRIES = 2` durch `RETRIES = 5" in st.tasks[0]["description"]
-    assert [(item["role"], item["status"]) for item in role_checkpoints] == [
-        ("scout", "skipped"),
-        ("architect", "skipped"),
-        ("planner_split", "skipped"),
-    ]
-
-
-def test_architect_single_file_plan_skips_planner_split_with_current_evidence(
-    tmp_path,
-):
-    import hashlib
-
-    target = tmp_path / "src" / "module.py"
-    target.parent.mkdir()
-    content = "def update_value():\n    return 2\n"
-    target.write_text(content, encoding="utf-8")
-    st = _state(tmp_path)
-    st.aufgabe = "Aendere das Verhalten in src/module.py"
-    st.explorer_context = {"key_files": [{"file": "src/module.py"}]}
-    role_checkpoints = []
-    st.planner_checkpoint_callback = role_checkpoints.append
-    prose = (
-        "1. Problem\nDas Verhalten soll geaendert werden.\n"
-        "2. Dateien\nEine Datei.\n"
-        "3. Loesung\n## src/module.py\n"
-        "Aendere update_value so, dass 3 zurueckgegeben wird.\n"
-        "4. Tests\nPruefe den neuen Rueckgabewert.\n"
-        "5. Welche Dateien haengen voneinander ab? (PFLICHT)\n- (keine)\n"
-    )
-
-    def architect(state, *_args):
-        state.architect_prosa = prose
-        state.architect_scout_source_manifest = {
-            "sources": [{
-                "path": "src/module.py",
-                "complete": True,
-                "source_sha256": hashlib.sha256(
-                    target.read_bytes(),
-                ).hexdigest(),
-            }],
-        }
-        return True
-
-    with patch(
-        "werkstatt.planner._run_scout",
-        side_effect=AssertionError("Scout fuer Explorer-belegtes Ziel unnoetig"),
-    ), patch("werkstatt.planner.run_architect", side_effect=architect), patch(
-        "werkstatt.planner._zerlege_in_sub_tasks",
-        side_effect=AssertionError("Planner-Split fuer Einzeldatei unnoetig"),
-    ), patch("werkstatt.planner.audit"):
-        assert run_planner(st) is True
-
-    assert len(st.tasks) == 1
-    assert st.tasks[0]["task_files"] == ["src/module.py"]
-    assert st.akzeptanzkriterien == [st.aufgabe]
-    assert st.tasks[0]["criterion_refs"] == ["AC1"]
-    assert st.planner_plan_candidate_ready is True
-    assert [(item["role"], item["status"]) for item in role_checkpoints][-1] == (
-        "planner_split", "skipped",
-    )
-
-
-def test_architect_independent_file_set_skips_planner_split_with_current_evidence(
-    tmp_path,
-):
-    import hashlib
-
-    paths = ["src/one.py", "src/two.py"]
-    contents = {
-        paths[0]: "def one():\n    return 1\n",
-        paths[1]: "def two():\n    return 2\n",
-    }
-    sources = []
-    for relative, content in contents.items():
-        path = tmp_path / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-        sources.append({
-            "path": relative,
-            "complete": True,
-            "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-        })
-
-    st = _state(tmp_path)
-    st.aufgabe = "Implementiere die beschriebenen Aenderungen in zwei Modulen"
-    st.explorer_context = {
-        "key_files": [{"file": relative} for relative in paths],
-    }
-    prose = (
-        "3. Loesung\n"
-        "## src/one.py\nAendere one wie beschrieben.\n"
-        "## src/two.py\nAendere two wie beschrieben.\n"
-        "5. Welche Dateien haengen voneinander ab? (PFLICHT)\n"
-        "- src/one.py: (keine)\n- src/two.py: (keine)\n"
-    )
-
-    def scout(_state, *_args):
-        return {
-            "ziel": st.aufgabe,
-            "relevante_dateien": [
-                {"pfad": relative, "zeilen": [1], "warum": "aktuell"}
-                for relative in paths
-            ],
-            "api_auszug": {},
-            "vorgeschlagene_aenderungen": ["Aendere beide unabhaengigen Module"],
-            "risiken": [],
-            "auftrag_prosa": st.aufgabe,
-        }
-
-    def architect(_state, *_args):
-        _state.architect_prosa = prose
-        _state.architect_scout_source_manifest = {"sources": sources}
-        return True
-
-    with patch("werkstatt.planner._run_scout", side_effect=scout), patch(
-        "werkstatt.planner.run_architect", side_effect=architect,
-    ), patch(
-        "werkstatt.planner._zerlege_in_sub_tasks",
-        side_effect=AssertionError("Unabhaengiger Dateisatz braucht keinen Split"),
-    ), patch("werkstatt.planner.audit"):
-        assert run_planner(st) is True
-
-    assert [task["task_files"] for task in st.tasks] == [
-        ["src/one.py"], ["src/two.py"],
-    ]
-    assert st.akzeptanzkriterien == [st.aufgabe]
-    assert all(task["criterion_refs"] == ["AC1"] for task in st.tasks)
-    assert st.planner_plan_candidate_ready is True
-
-
-def test_complex_single_file_request_keeps_architect_reasoning_enabled(tmp_path):
-    target = tmp_path / "src" / "auth.py"
-    target.parent.mkdir()
-    target.write_text("def allowed(user):\n    return True\n", encoding="utf-8")
-    st = _state(tmp_path)
-    st.aufgabe = "Korrigiere die Berechtigungsprüfung in src/auth.py"
-    st.explorer_context = {"key_files": [{"file": "src/auth.py"}]}
-    split_tasks = [{
-        "id": "t1", "name": "Update authorization", "action": "update",
-        "task_files": ["src/auth.py"], "criterion_refs": ["AC1"],
-        "dependencies": [], "description": "Implement the approved fix.",
-    }]
-
-    def architect(state, *_args):
-        assert state.architect_reasoning_enabled is True
-        state.architect_prosa = "## src/auth.py\nKorrigiere die Berechtigungsprüfung."
-        return True
-
-    with patch(
-        "werkstatt.planner._run_scout",
-        side_effect=AssertionError("Scout ist fuer den belegten Einzeldateipfad unnoetig"),
-    ), patch("werkstatt.planner.run_architect", side_effect=architect), patch(
-        "werkstatt.planner._zerlege_in_sub_tasks", return_value=split_tasks,
-    ), patch("werkstatt.planner.audit"):
-        assert run_planner(st) is True
-
-    assert st.tasks == split_tasks
-
+    )[0] is None
 
 def test_literal_replacement_with_ambiguous_or_stale_text_falls_back(tmp_path):
-    from werkstatt.planner import _deterministic_literal_replace_plan
+    from werkstatt.roles.builder_direct import build_direct_edit_plan
 
     target = tmp_path / "module.py"
     target.write_text("VALUE = OLD\nCOPY = OLD\n", encoding="utf-8")
-    assert _deterministic_literal_replace_plan(
+    assert build_direct_edit_plan(
         "Ersetze `OLD` durch `NEW` in module.py.", "module.py", tmp_path,
     ) == (None, "alter_text_nicht_eindeutig")
-    assert _deterministic_literal_replace_plan(
+    assert build_direct_edit_plan(
         "Ersetze `MISSING` durch `NEW` in module.py.", "module.py", tmp_path,
     ) == (None, "alter_text_nicht_eindeutig")
-    assert _deterministic_literal_replace_plan(
+    assert build_direct_edit_plan(
         "Aendere die Logik in module.py.", "module.py", tmp_path,
     ) == (None, "kein_expliziter_literalersetzungsausdruck")
     target.write_text("VALUE = OLD\n", encoding="utf-8")
-    assert _deterministic_literal_replace_plan(
+    assert build_direct_edit_plan(
         "Ersetze `OLD` durch `NEW` und module.py.", "module.py", tmp_path,
     ) == (None, "zieldatei_nicht_an_ersetzung_gebunden")
 
 
 def test_unique_literal_setting_can_dispatch_directly_to_builder(tmp_path):
-    from werkstatt.planner import _deterministic_literal_replace_plan
+    from werkstatt.roles.builder_direct import build_direct_edit_plan
 
     target = tmp_path / "settings.py"
     target.write_text("TIMEOUT = 15  # seconds\n", encoding="utf-8")
-    plan, reason = _deterministic_literal_replace_plan(
+    plan, reason = build_direct_edit_plan(
         "Setze TIMEOUT in settings.py auf 30.", "settings.py", tmp_path,
     )
 
@@ -727,12 +173,12 @@ def test_unique_literal_setting_can_dispatch_directly_to_builder(tmp_path):
 
 
 def test_literal_setting_with_duplicate_assignment_stays_on_role_path(tmp_path):
-    from werkstatt.planner import _deterministic_literal_replace_plan
+    from werkstatt.roles.builder_direct import build_direct_edit_plan
 
     target = tmp_path / "settings.py"
     target.write_text("TIMEOUT = 15\nTIMEOUT = 20\n", encoding="utf-8")
 
-    assert _deterministic_literal_replace_plan(
+    assert build_direct_edit_plan(
         "Setze TIMEOUT in settings.py auf 30.", "settings.py", tmp_path,
     ) == (None, "zielvariable_nicht_eindeutig")
 
@@ -770,98 +216,24 @@ def test_atomic_scout_plan_requires_current_unique_evidence(tmp_path):
     )
 
 
-def test_valid_atomic_scout_plan_skips_architect(tmp_path):
-    from werkstatt.planner import run_planner
-
-    target = tmp_path / "module.py"
-    target.write_text("VALUE = OLD\n", encoding="utf-8")
-    st = _state(tmp_path)
-    st.aufgabe = "Ersetze OLD durch NEW in module.py."
-    scout_report = {
-        "auftrag_prosa": "Ersetze OLD durch NEW.",
-        "api_auszug": {},
-        "risiken": [],
-        "atomarer_plan": True,
-        "betroffene_stellen": [{
-            "datei": "module.py",
-            "zeile": 1,
-            "alt": "OLD",
-            "neu": "NEW",
-            "grund": "Konsistente Umbenennung",
-        }],
-    }
-
-    with patch("werkstatt.planner._run_scout", return_value=scout_report), \
-         patch("werkstatt.planner.run_architect",
-               side_effect=AssertionError("Architect unnoetig")):
-        assert run_planner(st) is True
-
-    assert len(st.tasks) == 1
-    assert st.tasks[0]["task_files"] == ["module.py"]
-    assert st.architect_prosa == "[atomarer Plan: Scout]"
-    assert st.planner_plan_candidate_ready is True
-    assert st.planner_step_yielded is False
-
-
-def test_invalid_atomic_scout_plan_escalates_to_architect(tmp_path):
-    from werkstatt.planner import run_planner
-
-    target = tmp_path / "module.py"
-    target.write_text("VALUE = OLD\n", encoding="utf-8")
-    st = _state(tmp_path)
-    scout_report = {
-        "auftrag_prosa": "Ersetze OLD durch NEW.",
-        "api_auszug": {},
-        "risiken": [],
-        "atomarer_plan": True,
-        "betroffene_stellen": [{
-            "datei": "module.py",
-            "zeile": 2,
-            "alt": "OLD",
-            "neu": "NEW",
-            "grund": "Konsistente Umbenennung",
-        }],
-    }
-
-    def architect(_state, _aufgabe, _content, _key, _explorer):
-        _state.architect_prosa = "## Plan\nAendere module.py."
-        return True
-
-    tasks = [{
-        "id": "t1",
-        "name": "Aenderung",
-        "action": "update",
-        "task_files": ["module.py"],
-        "dependencies": [],
-        "description": "Ersetze OLD durch NEW.",
-    }]
-    with patch("werkstatt.planner._run_scout", return_value=scout_report), \
-         patch("werkstatt.planner.run_architect", side_effect=architect) as mock_architect, \
-         patch("werkstatt.planner._zerlege_in_sub_tasks", return_value=tasks):
-        assert run_planner(st) is True
-
-    mock_architect.assert_called_once()
-    assert st.tasks == tasks
-
-
 def test_scout_route_decision_explains_escalation(tmp_path):
-    from werkstatt.planner import _scout_route_decision
+    from werkstatt.roles.planner_dispatch import scout_route_decision
 
     target = tmp_path / "werkstatt" / "small.py"
     target.parent.mkdir()
     target.write_text("VALUE = 1\n", encoding="utf-8")
     context = {"key_files": [{"file": "werkstatt/small.py"}]}
 
-    assert _scout_route_decision(
+    assert scout_route_decision(
         "Pruefe den Fehler in werkstatt/small.py", context, tmp_path,
     ) == (None, "auftrag_enthaelt_breiten_marker:fehler")
-    assert _scout_route_decision(
+    assert scout_route_decision(
         "Korrigiere werkstatt/small.py", context, tmp_path,
     ) == (
         "werkstatt/small.py",
         "explizite_einzeldatei_mit_explorer_beleg",
     )
-    assert _scout_route_decision(
+    assert scout_route_decision(
         "Korrigiere checkpoint handling in werkstatt/small.py",
         context,
         tmp_path,
@@ -869,7 +241,7 @@ def test_scout_route_decision_explains_escalation(tmp_path):
         "werkstatt/small.py",
         "explizite_einzeldatei_mit_explorer_beleg",
     )
-    assert _scout_route_decision(
+    assert scout_route_decision(
         "Fix rapid status updates in werkstatt/small.py",
         context,
         tmp_path,
@@ -877,12 +249,12 @@ def test_scout_route_decision_explains_escalation(tmp_path):
         "werkstatt/small.py",
         "explizite_einzeldatei_mit_explorer_beleg",
     )
-    assert _scout_route_decision(
+    assert scout_route_decision(
         "Analysiere die Architektur in werkstatt/small.py",
         context,
         tmp_path,
     ) == (None, "auftrag_enthaelt_breiten_marker:architektur")
-    assert _scout_route_decision(
+    assert scout_route_decision(
         "Analyze the architecture in werkstatt/small.py",
         context,
         tmp_path,
@@ -892,7 +264,7 @@ def test_scout_route_decision_explains_escalation(tmp_path):
         relative = f"werkstatt/{filename}"
         target = tmp_path / relative
         target.write_text("VALUE = 1\n", encoding="utf-8")
-        assert _scout_route_decision(
+        assert scout_route_decision(
             f"Fix {relative}",
             {"key_files": [{"file": relative}]},
             tmp_path,
@@ -900,23 +272,6 @@ def test_scout_route_decision_explains_escalation(tmp_path):
             relative,
             "explizite_einzeldatei_mit_explorer_beleg",
         )
-
-
-def test_planner_ohne_key(tmp_path):
-    st = _state(tmp_path)
-    st.api_key = ""
-    assert run_planner(st) is False
-
-
-def test_planner_llm_fehler(tmp_path):
-    st = _state(tmp_path)
-    
-    class FakeReply:
-        ok = False
-        error = "timeout"
-    
-    with patch("werkstatt.planner.ask_llm", return_value=FakeReply()):
-        assert run_planner(st) is False
 
 
 def test_klassifiziert_env():
@@ -938,44 +293,6 @@ def test_klassifiziert_syntax():
 
 
 @pytest.mark.skip(reason="GOLD: alter JSON-Plan-Pfad entfernt (blocker/follow_up/ignore nicht mehr im Gold-Flow)")
-def test_planner_blocker_follow_up_ignore(tmp_path):
-    """M-299e: Planner klassifiziert Preflight-Fehler."""
-    st = _state(tmp_path)
-    st.aufgabe = "Test-Aufgabe"
-    st.docs = {}
-    st.preflight_fehler = [
-        {"klasse": "syntax", "stage_id": "py_compile", "datei": None, "text": "SyntaxError"},
-    ]
-    st.follow_up_fehler = [
-        {"klasse": "type", "stage_id": "mypy", "datei": None, "text": "unused-ignore"},
-    ]
-
-    mock_reply = MagicMock()
-    mock_reply.ok = True
-    mock_reply.content = json.dumps({
-        "tasks": [{"id": "t1", "name": "Fix", "description": "Fix syntax", "akzeptanzkriterien": ["ok"]}],
-        "tests": ["test_fix"],
-        "akzeptanzkriterien": ["fix laeuft"],
-        "blocker": [{"klasse": "syntax", "text": "SyntaxError"}],
-        "follow_up": [{"klasse": "type", "text": "unused-ignore"}],
-        "ignore": [],
-    })
-
-    with patch("werkstatt.planner._run_scout", return_value={
-    "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
-    "api_auszug": {},
-    "risiken": [],
-    "bereits_erfuellt": False,
-}), \
-         patch("werkstatt.planner.ask_llm", return_value=mock_reply):
-        rc = run_planner(st)
-
-    assert rc is True
-    assert len(st.blocker_fehler) == 1
-    assert st.blocker_fehler[0]["klasse"] == "syntax"
-    assert len(st.follow_up_fehler) == 1
-    assert st.follow_up_fehler[0]["klasse"] == "type"
-    assert st.ignore_fehler == []
 
 
 def test_preflight_scan_klassifiziert(tmp_path):
@@ -1006,216 +323,9 @@ def test_preflight_scan_klassifiziert(tmp_path):
     assert "lint" in klassen
 
 
-def test_planner_deklariert_task_files(tmp_path):
-    """M-306b: Planner speichert task_files aus Plan."""
-    import json
-    from unittest.mock import MagicMock, patch
-
-    from werkstatt.planner import run_planner
-
-    st = _state(tmp_path)
-    st.aufgabe = "Repariere"
-    st.docs = {}
-    st.preflight_fehler = [
-        {"klasse": "type", "stage_id": "mypy", "datei": "core/a.py", "text": "err"},
-    ]
-
-    mock_reply = MagicMock()
-    mock_reply.ok = True
-    mock_reply.content = json.dumps({
-        "tasks": [{
-            "id": "t1", "name": "Fix a.py", "description": "...",
-            "action": "write",
-            "task_files": ["core/a.py"],
-            "akzeptanzkriterien": ["ok"],
-        }],
-        "tests": ["t1"],
-        "akzeptanzkriterien": ["akz"],
-        "blocker": [{"klasse": "type", "text": "err"}],
-        "follow_up": [],
-        "ignore": [],
-    })
-
-    with patch("werkstatt.planner._run_scout", return_value={
-            "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
-            "api_auszug": {},
-            "risiken": [],
-            "bereits_erfuellt": False,
-        }), \
-         patch("werkstatt.planner.ask_llm", return_value=mock_reply):
-        rc = run_planner(st)
-
-    assert rc is True
-    assert len(st.tasks) == 1
-    assert st.tasks[0]["task_files"] == ["core/a.py"]
-
-
 @pytest.mark.skip(reason="GOLD: alter JSON-Plan-Pfad entfernt (action-Default kommt vom Planner-Split)")
-def test_planner_action_missing(tmp_path):
-    """M-306d: Planner-Task ohne action-Feld -> Default write + Audit."""
-    import json
-    from unittest.mock import MagicMock, patch
-
-    from werkstatt.planner import run_planner
-
-    st = _state(tmp_path)
-    st.aufgabe = "Test"
-    st.docs = {}
-
-    mock_reply = MagicMock()
-    mock_reply.ok = True
-    mock_reply.content = json.dumps({
-        "tasks": [{"id": "t1", "name": "Task ohne action"}],
-        "tests": ["test"],
-        "akzeptanzkriterien": ["akz"],
-        "blocker": [], "follow_up": [], "ignore": [],
-    })
-
-    with patch("werkstatt.planner.ask_llm", return_value=mock_reply), \
-         patch("werkstatt.planner.audit") as mock_audit:
-        rc = run_planner(st)
-
-    assert rc is True
-    # M-317: action-Default ist "update" (nicht "write")
-    assert st.tasks[0]["action"] == "update"
-    # Audit wurde aufgerufen
-    assert any(
-        c[0][0] == "planner_action_missing"
-        for c in mock_audit.call_args_list
-    )
-
-def test_planner_liest_progress(tmp_path):
-    """M-307b-3 (N2): Planner-Prompt enthaelt PROGRESS.md-Inhalt."""
-    import json
-    from unittest.mock import MagicMock, patch
-
-    from werkstatt.planner import run_planner
-
-    # PROGRESS.md mit 2 Bloecken anlegen
-    (tmp_path / "PROGRESS.md").write_text(
-        "# Fortschritt: test\n\n"
-        "## 2026-10-24T10:00:00 -- Vorheriger Task 1\n"
-        "- **Status:** done\n"
-        "- **Dateien:** a.py\n\n"
-        "## 2026-10-24T10:05:00 -- Vorheriger Task 2\n"
-        "- **Status:** failed\n"
-        "- **Info:** builder_failed\n",
-        encoding="utf-8",
-    )
-
-    st = _state(tmp_path)
-    st.aufgabe = "Test-Aufgabe"
-    st.docs = {}
-
-    captured = {"calls": []}
-
-    def _mock_ask_llm(api_key, system, user_content, **kwargs):
-        captured["calls"].append(user_content)
-        reply = MagicMock()
-        reply.ok = True
-        reply.content = json.dumps({
-            "tasks": [{"id": "t1", "name": "Task 1"}],
-            "tests": ["test"],
-            "akzeptanzkriterien": ["akz"],
-            "blocker": [], "follow_up": [], "ignore": [],
-        })
-        return reply
-
-    with patch("werkstatt.planner._run_scout", return_value={
-        "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
-        "api_auszug": {},
-        "risiken": [],
-        "bereits_erfuellt": False,
-    }), \
-         patch("werkstatt.planner.ask_llm", side_effect=_mock_ask_llm):
-        rc = run_planner(st)
-
-    assert rc is True
-    # Der Scout ist gemockt; Architect und Planner-Split folgen.
-    # PROGRESS.md-Inhalt geht an den Architect als Ausfuehrungskontext.
-    _alle = "\n".join(captured["calls"])
-    assert "PROJEKT-FORTSCHRITT" in _alle
-    assert "Vorheriger Task 1" in _alle
-    assert "Vorheriger Task 2" in _alle
-    assert "builder_failed" in _alle
-
 
 @pytest.mark.skip(reason="GOLD: alter JSON-Plan-Pfad entfernt (phasen kommen vom Planner-Split, nicht direkt aus JSON)")
-def test_planner_speichert_phasen(tmp_path):
-    """M-310: Planner speichert phasen in state."""
-    import json
-    from unittest.mock import MagicMock, patch
-
-    from werkstatt.planner import run_planner
-
-    st = _state(tmp_path)
-    st.aufgabe = "Test"
-    st.docs = {}
-
-    mock_reply = MagicMock()
-    mock_reply.ok = True
-    mock_reply.content = json.dumps({
-        "phasen": [
-            {"id": "p1", "titel": "Vorbereitung", "parent_id": None,
-             "tasks": ["t1"]},
-        ],
-        "tasks": [{"id": "t1", "name": "Task 1", "action": "write"}],
-        "tests": ["test"],
-        "akzeptanzkriterien": ["akz"],
-        "blocker": [], "follow_up": [], "ignore": [],
-    })
-
-    with patch("werkstatt.planner.ask_llm", return_value=mock_reply):
-        rc = run_planner(st)
-
-    assert rc is True
-    assert len(st.phasen) == 1
-    assert st.phasen[0]["id"] == "p1"
-    assert st.phasen[0]["titel"] == "Vorbereitung"
-
-
-def test_planner_action_create_update(tmp_path):
-    """M-317: Planner akzeptiert action=create und action=update."""
-    import json
-    from unittest.mock import MagicMock, patch
-
-    from werkstatt.planner import run_planner
-
-    st = _state(tmp_path)
-    st.aufgabe = "Test"
-    st.docs = {}
-
-    mock_reply = MagicMock()
-    mock_reply.ok = True
-    mock_reply.content = json.dumps({
-        "tasks": [
-            {
-                "id": "t1", "name": "Neu", "action": "create",
-                "criterion_refs": ["AC1"],
-            },
-            {
-                "id": "t2", "name": "Update", "action": "update",
-                "criterion_refs": ["AC1"],
-            },
-        ],
-        "tests": ["t"],
-        "akzeptanzkriterien": ["a"],
-        "blocker": [], "follow_up": [], "ignore": [],
-    })
-
-    with patch("werkstatt.planner._run_scout", return_value={
-            "auftrag_prosa": "Arbeite die angeforderte Aufgabe in den betroffenen Dateien um.",
-            "api_auszug": {},
-            "risiken": [],
-            "bereits_erfuellt": False,
-        }), \
-         patch("werkstatt.planner.ask_llm", return_value=mock_reply):
-        rc = run_planner(st)
-
-    assert rc is True
-    assert st.tasks[0]["action"] == "create"
-    assert st.tasks[1]["action"] == "update"
-
 
 
 def test_planner_split_persistiert_abnahmekriterien_und_originalauftrag(tmp_path):
@@ -1497,39 +607,6 @@ def test_planner_split_stops_if_source_changes_after_architect(tmp_path):
         if name == "planner_split_context_budget"
     )
     assert event["reason"] == "source_changed_between_architect_and_planner"
-
-
-def test_run_planner_behaelt_kriterien_des_planner_splits(tmp_path):
-    """Ein nachgelagerter Planner-Schritt darf Kriterien nicht wieder loeschen."""
-    st = _state(tmp_path)
-    st.explorer_context = {"key_files": [{"file": "werkstatt/demo.py"}]}
-
-    def _architect(_state, _aufgabe, _content, _key, _explorer):
-        _state.architect_prosa = "## werkstatt/demo.py\nAendere den Handler."
-        return True
-
-    def _split(*_args, state=None, **_kwargs):
-        state.akzeptanzkriterien = ["Handler gibt 404 bei unbekanntem Projekt."]
-        return [{
-            "id": "t1",
-            "name": "Handler anpassen",
-            "action": "update",
-            "task_files": ["werkstatt/demo.py"],
-            "dependencies": [],
-            "description": "Aendere den Handler.",
-        }]
-
-    with patch("werkstatt.planner._run_scout", return_value={
-        "auftrag_prosa": "Aendere den Handler.", "api_auszug": {},
-        "risiken": [], "bereits_erfuellt": False,
-    }), \
-         patch("werkstatt.planner.run_architect", side_effect=_architect), \
-         patch("werkstatt.planner._zerlege_in_sub_tasks", side_effect=_split):
-        assert run_planner(st) is True
-
-    assert st.akzeptanzkriterien == [
-        "Handler gibt 404 bei unbekanntem Projekt.",
-    ]
 
 
 def test_criteria_coverage_requires_known_references():

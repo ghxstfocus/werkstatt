@@ -6,21 +6,9 @@ Architect-Pfad).
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-from unittest.mock import patch
-
-sys.path.insert(0, "/opt/werkstatt")
-
 from werkstatt.planner import (
     _tasks_aus_betroffenen_stellen,
-    run_planner,
 )
-
-_here = Path(__file__).parent
-if str(_here) not in sys.path:
-    sys.path.insert(0, str(_here))
-from factories import mk_state  # noqa: E402
 
 
 class TestTasksAusStellen:
@@ -79,52 +67,3 @@ class TestTasksAusStellen:
         assert len(tasks) == 1
         assert "Z. 10" in tasks[0]["description"]
         assert "Z. 20" not in tasks[0]["description"]
-
-
-
-class TestSkipArchitect:
-    def test_atomarer_plan_ruft_keinen_architect(self, tmp_path) -> None:
-        """Fix AY: atomarer_plan=True -> run_planner baut Task direkt
-        aus betroffene_stellen, ohne Architect-LLM-Call."""
-        target = tmp_path / "a.py"
-        lines = ["nothing"] * 20
-        lines[9] = "x"
-        lines[19] = "p"
-        target.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        st = mk_state(
-            project_dir=tmp_path,
-            project_name="testproj",
-            api_key="sk-test",
-            aufgabe="ersetze x durch y in a.py",
-            docs=None,
-            tasks=[],
-            akzeptanzkriterien=[],
-            explorer_context={},
-        )
-        scout = {
-            "atomarer_plan": True,
-            "auftrag_prosa": "Setze die gemeldeten Stellen um.",
-            "api_auszug": {},
-            "risiken": [],
-            "bereits_erfuellt": False,
-            "betroffene_stellen": [
-                {"datei": "a.py", "zeile": 10, "alt": "x",
-                 "neu": "y", "grund": "g1"},
-                {"datei": "a.py", "zeile": 20, "alt": "p",
-                 "neu": "q", "grund": "g2"},
-            ],
-        }
-        with patch("werkstatt.planner._deterministic_entfernen_precheck",
-                   return_value=False), \
-             patch("werkstatt.planner._run_scout",
-                   return_value=scout), \
-             patch("werkstatt.planner.ask_llm") as _llm, \
-             patch("werkstatt.planner.audit"):
-            ok = run_planner(st)
-        assert ok is True
-        assert len(st.tasks) == 1
-        assert st.tasks[0]["task_files"] == ["a.py"]
-        assert "Z. 10" in st.tasks[0]["description"]
-        assert "Z. 20" in st.tasks[0]["description"]
-        # Beweis: kein Architect-LLM-Call.
-        _llm.assert_not_called()

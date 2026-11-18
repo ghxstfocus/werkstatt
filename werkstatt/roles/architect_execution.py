@@ -193,7 +193,10 @@ def run_architect_role_checkpoint(state: Any, *, goal: str) -> bool:
         make_role_artifact,
         validate_role_artifact,
     )
-    from werkstatt.roles.planner_dispatch import scout_route_decision
+    from werkstatt.roles.planner_dispatch import (
+        architect_reasoning_route,
+        scout_route_decision,
+    )
 
     project_dir = Path(state.project_dir)
     project_name = state.project_name
@@ -427,7 +430,7 @@ def run_architect_role_checkpoint(state: Any, *, goal: str) -> bool:
     )
 
     state.architect_reasoning_enabled, reasoning_reason = (
-        planner.architect_reasoning_route(goal, skip_path)
+        architect_reasoning_route(goal, skip_path)
     )
     planner.audit(
         "planner_architect_reasoning_route",

@@ -36,6 +36,33 @@ def _state(tmp_path: Path, aufgabe: str):
     )
 
 
+def test_source_inventory_excludes_graphify_cache_directories(tmp_path):
+    from werkstatt import explorer
+
+    source = tmp_path / "src" / "feature.py"
+    source.parent.mkdir()
+    source.write_text("def quasar_ledger_sync(): return True\n", encoding="utf-8")
+    graph_dirs = [
+        tmp_path / "graphify-out",
+        tmp_path / ".werkstatt" / "graphify-out",
+    ]
+    for graph_dir in graph_dirs:
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "graph.json").write_text(
+            '{"label":"quasar_ledger_sync"}', encoding="utf-8",
+        )
+
+    paths, scan_ok, truncated, _source = explorer._list_source_file_inventory(
+        tmp_path, query="quasar ledger sync",
+    )
+
+    assert scan_ok is True
+    assert truncated is False
+    relative_paths = {Path(item).relative_to(tmp_path).as_posix() for item in paths}
+    assert "src/feature.py" in relative_paths
+    assert not any("graphify-out" in path for path in relative_paths)
+
+
 def test_grep_fallback_findet_dateien_bei_backtick_suchbegriff(tmp_path):
     """Aufgabe mit `require_ws_auth` und vorhandener Datei -> key_files > 0."""
     (tmp_path / "werkstatt").mkdir()

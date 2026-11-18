@@ -115,6 +115,10 @@ def _list_source_file_inventory(
                     if (
                         relative.is_absolute()
                         or ".." in relative.parts
+                        or any(
+                            part.casefold() == "graphify-out"
+                            for part in relative.parts
+                        )
                         or relative.suffix.casefold() not in extensions
                     ):
                         continue
@@ -133,6 +137,7 @@ def _list_source_file_inventory(
             ".ruff_cache", "node_modules", "dist", "build", ".next",
             ".nuxt", "coverage", ".tox", ".nox", ".cache", "venv",
             "site-packages", "target",
+            "graphify-out",
         }
 
         def record_scan_error(_error: OSError) -> None:

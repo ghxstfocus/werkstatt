@@ -24,34 +24,33 @@ def _write_index(
         ),
         encoding="utf-8",
     )
+    nodes = [{
+        "id": "n1",
+        "label": "phase state checkpoint",
+        "source_file": rel,
+        "file_type": "code",
+    }]
+    links = []
+    related = root / "tests/test_checkpoint_decision.py"
+    if related.is_file():
+        nodes.append({
+            "id": "n2",
+            "label": "checkpoint decision",
+            "source_file": "tests/test_checkpoint_decision.py",
+            "file_type": "code",
+        })
+        links.append({
+            "source": "n1",
+            "target": "n2",
+            "relation": "calls",
+            "confidence": "EXTRACTED",
+        })
     (output / "graph.json").write_text(
-        json.dumps(
-            {
-                "graph": {"schema_version": "1", "graphify_version": "test"},
-                "nodes": [
-                    {
-                        "id": "n1",
-                        "label": "phase state checkpoint",
-                        "source_file": rel,
-                        "file_type": "code",
-                    },
-                    {
-                        "id": "n2",
-                        "label": "checkpoint decision",
-                        "source_file": "tests/test_checkpoint_decision.py",
-                        "file_type": "code",
-                    },
-                ],
-                "links": [
-                    {
-                        "source": "n1",
-                        "target": "n2",
-                        "relation": "calls",
-                        "confidence": "EXTRACTED",
-                    }
-                ],
-            }
-        ),
+        json.dumps({
+            "graph": {"schema_version": "1", "graphify_version": "test"},
+            "nodes": nodes,
+            "links": links,
+        }),
         encoding="utf-8",
     )
 
@@ -188,6 +187,34 @@ def test_graphify_index_uses_generic_project_relative_source_paths(
     assert result["candidates"][0]["source_sha256"] == hashlib.sha256(
         source.read_bytes(),
     ).hexdigest()
+
+
+def test_graphify_candidates_never_return_its_own_cache_files(
+    tmp_path: Path, monkeypatch,
+):
+    source = tmp_path / "src" / "api.py"
+    source.parent.mkdir()
+    source.write_text("def checkpoint_state(): return True\n", encoding="utf-8")
+    _write_index(tmp_path, source, rel="src/api.py")
+    graph_path = tmp_path / "graphify-out" / "graph.json"
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    graph["nodes"].append({
+        "id": "cache",
+        "label": "checkpoint state graph index",
+        "source_file": "graphify-out/graph.json",
+        "file_type": "code",
+    })
+    graph["links"].append({
+        "source": "n1", "target": "cache", "relation": "indexes",
+        "confidence": "EXTRACTED",
+    })
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
+    monkeypatch.setattr(graphify_index, "_graphify_executable", lambda: None)
+
+    result = graphify_candidates(tmp_path, "checkpoint state", limit=5)
+
+    assert result["candidates"]
+    assert all("graphify-out" not in item["file"] for item in result["candidates"])
 
 
 def test_graphify_indexes_and_hashes_are_isolated_between_projects(

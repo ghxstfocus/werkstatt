@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import werkstatt.roles.builder as builder_mod
 from werkstatt import loop as loop_mod
-from werkstatt.loop import _plan_gate, _verify_patches, run_pipeline_loop
+from werkstatt.loop import _plan_gate, _verify_patches
 from werkstatt.phase_state import PhaseState
 from werkstatt.state import RunState
 from werkstatt.verify import _stage_anzahl, _stage_count_by_phase, _stage_ids
@@ -184,32 +184,6 @@ def test_stage_count_by_phase(tmp_path):
     assert _stage_count_by_phase(tmp_path, "build") == 0
 
 
-def test_loop_stops_when_planner_evidence_is_missing(tmp_path):
-    # A role without its required source evidence must not be called.
-    st = _state(tmp_path, tasks=False)
-    with patch(
-        "werkstatt.planner.run_planner",
-        side_effect=AssertionError("Planner darf ohne Belege nicht laufen"),
-    ):
-        rc = run_pipeline_loop("p", "a", [st])
-        assert rc == 1
-
-
-def test_loop_does_not_verify_before_planner_evidence_is_ready(tmp_path):
-    """A Verify action cannot run before the coordinator has a valid plan."""
-    st = _state(tmp_path)
-    # Task-Datei explizit setzen, damit die Klassifikation sie findet.
-    st.tasks = [{"id": "t1", "name": "Update README.md", "description": "Add line"}]
-    # Preflight-Fehler in derselben Datei (Task-Datei) -> BLOCKER
-    st.preflight_fehler = [
-        {"klasse": "syntax", "stage_id": "py_compile", "datei": "README.md", "text": "SyntaxError"},
-    ]
-    with patch("werkstatt.loop._verify_patches") as verify:
-        rc = run_pipeline_loop("p", "a", [st])
-        assert rc == 1
-        verify.assert_not_called()
-
-
 def test_loop_cli_help_zeigt_usage():
     """CLI --help: argparse-usage + Exit 0."""
     result = subprocess.run(
@@ -304,54 +278,6 @@ def test_terminal_action_retry_key_requires_checkpoint_progress(tmp_path):
     assert loop_mod._checkpoint_action_key("phase_end_verify", repeated) == key
     assert loop_mod._checkpoint_action_key("phase_end_verify", advanced) != key
     assert loop_mod._checkpoint_action_key("execute_task_checkpoint", first) is None
-
-def test_loop_patch_reflection_bei_old_string_not_found(tmp_path):
-    """M-298d: old_string_not_found triggert Reflection, nicht stumm weiter."""
-    st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Update README", "file": "README.md"}]
-    st.tests = ["Test 1"]
-    st.akzeptanzkriterien = ["Kriterium 1"]
-    (tmp_path / "README.md").write_text("# Test\n")
-    bad_patch = [{"action": "update", "file": "README.md",
-                  "old_string": "NICHT_VORHANDEN", "new_string": "Neu"}]
-
-    def _mock_builder(state):
-        state.patches = bad_patch
-        return True
-
-    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.loop.run_builder", side_effect=_mock_builder), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_reviewer", return_value=True), \
-             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("werkstatt.loop._reflection_loop", return_value=False), \
-         patch("werkstatt.loop.audit"):
-        rc = run_pipeline_loop("p", "a", [st])
-    assert rc == 1
-
-
-def test_loop_patch_post_apply_verify(tmp_path):
-    """M-298d: Patch der nicht greift triggert Reflection."""
-    st = _state(tmp_path)
-    st.tasks = [{"id": "t1", "name": "Update README", "file": "README.md"}]
-    (tmp_path / "README.md").write_text("# Test\n")
-    # Patch ersetzt String, aber write schlaegt fehl (simuliert via Patch-Mock)
-    with patch("werkstatt.loop._verify_patches", side_effect=_verify_ok_with_evidence), \
-         patch("werkstatt.loop.run_builder", return_value=True), \
-         patch("werkstatt.loop.run_explorer", return_value={"key_files": [], "findings": "", "next_reads": []}), \
-         patch("werkstatt.loop.run_reviewer", return_value=True), \
-             patch("werkstatt.reviewer.run_phase_end_review", return_value=True), \
-         patch("werkstatt.loop._reflection_loop", return_value=False), \
-         patch("werkstatt.loop.audit"):
-        # Patch: old_string existiert, aber new_string wird nicht geschrieben
-        # (weil write_text via Mock fehlschlaegt - hier: Patches leer
-        #  nach Anwendung, Post-Verify findet nichts)
-        st.patches = []
-        rc = run_pipeline_loop("p", "a", [st])
-    # Ohne Patch kein Diff -> Reviewer oder Verify schlaegt zu
-    # (Test prueft nur, dass Loop nicht crasht)
-    assert rc in (0, 1)
-
 
 def test_verify_patches_phase_filter(tmp_path):
     """M-299a: _verify_patches filtert nach phase."""

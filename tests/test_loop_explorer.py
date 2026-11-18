@@ -272,7 +272,7 @@ def test_migrations_stand_mit_dateien(tmp_path):
 def test_explorer_llm_fehler(tmp_path):
     """Fail-safe: leere, aber definierte Form (nicht None/{}).
 
-    Der Aufrufer (run_planner) kann immer out["key_files"] lesen.
+    Der Rollen-Dispatcher kann immer out["key_files"] lesen.
     """
     s = _state(tmp_path)
     with patch("werkstatt.explorer._messen", return_value={}), \

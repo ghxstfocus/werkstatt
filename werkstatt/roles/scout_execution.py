@@ -204,6 +204,9 @@ def run_scout_role_checkpoint(
         make_role_artifact,
         validate_role_artifact,
     )
+    from werkstatt.roles.builder_direct import (
+        build_direct_edit_plan as deterministic_literal_replace_plan,
+    )
     from werkstatt.roles.planner_dispatch import scout_route_decision
 
     state.planner_step_yielded = False
@@ -248,7 +251,7 @@ def run_scout_role_checkpoint(
         skip_path=skip_path,
         route_reason=route_reason,
         services=ScoutRoleServices(
-            direct_plan=shared._deterministic_literal_replace_plan,
+            direct_plan=deterministic_literal_replace_plan,
             build_index=shared._baue_api_index,
             input_fingerprint=shared._scout_input_fingerprint,
             validate_artifact=validate_role_artifact,

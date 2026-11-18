@@ -1618,7 +1618,7 @@ def _planner_system(aufgabe: str, explorer_ctx: dict | None = None, state=None) 
 # Prototyp v2 (2026-11-01): Strukturierter Architect-Docs-Kontext.
 # Ziel: 34801-Z.-User-Prompt auf ~8000 Z. reduzieren, davon 29289 Z.
 # ROADMAP. Reducer behalten die Struktur (Sektionen, Header), kuerzen
-# den Inhalt. Aktiv nur bei WERKSTATT_ARCHITECT_PROMPT=v2.
+# den Inhalt. Dieser strukturierte Kontext ist der aktive Architect-Pfad.
 # =====================================================================
 
 

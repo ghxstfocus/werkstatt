@@ -189,21 +189,6 @@ def test_selbst_check_block_format():
     assert "Migrationsnummer" in result
 
 
-# --- Env-Schalter in planner.py (statischer Check) ---
-
-def test_planner_hat_env_schalter():
-    src = (Path(__file__).resolve().parents[1] / "werkstatt" / "planner.py").read_text(encoding="utf-8")
-    assert "WERKSTATT_ARCHITECT_PROMPT" in src
-    assert '!= "v1"' in src
-    assert "build_architect_docs_context_v2" in src
-    assert "_build_selbst_check_block" in src
-
-
-def test_alte_user_content_form_noch_da():
-    """Der alte Pfad bleibt als else-Zweig erhalten (kein Zwang zu v2)."""
-    src = (Path(__file__).resolve().parents[1] / "werkstatt" / "planner.py").read_text(encoding="utf-8")
-    assert 'f"Aufgabe: {aufgabe}' in src
-
 def test_planner_system_liest_file_feld():
     """OP-137 Regression: key_files haben 'file', nicht 'pfad'/'path'.
 

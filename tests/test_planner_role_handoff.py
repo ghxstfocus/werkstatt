@@ -81,7 +81,7 @@ def test_planner_handoff_is_rejected_after_source_changes(tmp_path):
     assert planner._load_current_planner_split_handoff(state, goal) is None
 
 
-def test_planner_split_action_compiles_from_handoff_without_run_planner(
+def test_planner_split_action_compiles_from_current_handoff(
     tmp_path, monkeypatch,
 ):
     state, goal, _source = _state_with_persisted_handoff(tmp_path)
@@ -96,12 +96,6 @@ def test_planner_split_action_compiles_from_handoff_without_run_planner(
 
     monkeypatch.setattr(planner, "_zerlege_in_sub_tasks", compile_graph)
     monkeypatch.setattr(planner, "_normalisiere_task_files", lambda tasks, *_: tasks)
-    monkeypatch.setattr(
-        planner, "run_planner",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("current handoff must bypass the planner orchestrator"),
-        ),
-    )
     monkeypatch.setattr(loop, "_plan_gate", lambda _state: True)
 
     result = loop._dispatch_planner_checkpoint_action(
@@ -114,24 +108,14 @@ def test_planner_split_action_compiles_from_handoff_without_run_planner(
     assert [task["id"] for task in state.tasks] == ["t1"]
 
 
-def test_stale_handoff_yields_to_coordinator_for_role_refresh(
-    tmp_path, monkeypatch,
-):
+def test_stale_handoff_yields_to_coordinator_for_role_refresh(tmp_path):
     state, goal, source = _state_with_persisted_handoff(tmp_path)
     source.write_text("def changed():\n    return False\n", encoding="utf-8")
-    calls = []
-
-    monkeypatch.setattr(
-        "werkstatt.planner.run_planner",
-        lambda *_args, **_kwargs: calls.append("legacy_runner_called"),
-    )
-
     result = loop._dispatch_planner_checkpoint_action(
         state, "planner_split", goal, "sample", object(),
     )
 
     assert result == (0, False)
-    assert calls == []
     assert state.planner_plan_candidate_ready is False
     assert state.planner_step_yielded is True
     assert state.planner_yielded_after_role == "scout"

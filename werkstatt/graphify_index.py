@@ -128,6 +128,14 @@ def _safe_relative(root: Path, raw: object) -> str | None:
     return relative
 
 
+def _is_graphify_artifact(relative: str) -> bool:
+    """Index/cache files are never source candidates, even if indexed."""
+    return any(
+        part.casefold() == "graphify-out"
+        for part in relative.replace("\\", "/").split("/")
+    )
+
+
 @lru_cache(maxsize=8)
 def _load_manifest_snapshot(
     path_text: str,
@@ -229,7 +237,7 @@ def _rank_graph_paths(
             continue
         node_by_id[node["id"]] = node
         rel = _safe_relative(root, node.get("source_file"))
-        if rel:
+        if rel and not _is_graphify_artifact(rel):
             source_paths[node["id"]] = rel
     file_tokens: dict[str, set[str]] = {}
     for node_id, node in node_by_id.items():
@@ -498,8 +506,9 @@ def _query_graphify_cli_cached(
 
 def _git_ignored_paths(root: Path, paths: list[str]) -> set[str]:
     """Do not return ignored scratch/build files from an older graph snapshot."""
+    graphify_artifacts = {path for path in paths if _is_graphify_artifact(path)}
     if not paths or not (root / ".git").exists():
-        return set()
+        return graphify_artifacts
     try:
         completed = subprocess.run(
             ["git", "check-ignore", "-z", "--stdin"],
@@ -511,10 +520,12 @@ def _git_ignored_paths(root: Path, paths: list[str]) -> set[str]:
             timeout=2,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return set()
+        return graphify_artifacts
     if completed.returncode not in (0, 1):
-        return set()
-    return {path for path in (completed.stdout or "").split("\0") if path}
+        return graphify_artifacts
+    return graphify_artifacts | {
+        path for path in (completed.stdout or "").split("\0") if path
+    }
 
 
 def _native_subgraph_paths(output: str) -> list[str]:

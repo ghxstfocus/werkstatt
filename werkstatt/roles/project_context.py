@@ -167,10 +167,10 @@ def collect_project_context(
         _skip_reason = "approved_debugger_diff_has_pinned_scope"
     elif len(_explizite_dateien) == 1:
         try:
-            from werkstatt.planner import _scout_route_decision
+            from werkstatt.roles.planner_dispatch import scout_route_decision
 
             _candidate = _explizite_dateien[0]
-            _scout_target, _skip_reason = _scout_route_decision(
+            _scout_target, _skip_reason = scout_route_decision(
                 _explorer_request,
                 {"key_files": [{"file": _candidate}]},
                 pd,

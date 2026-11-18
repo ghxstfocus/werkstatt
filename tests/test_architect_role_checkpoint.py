@@ -38,6 +38,7 @@ def test_architect_role_consumes_current_scout_artifact_without_planner_runner(
     tmp_path, monkeypatch,
 ):
     from werkstatt import architect, planner, progress
+    from werkstatt.roles import planner_dispatch
 
     goal = "Inspect how the checkpoint coordinator chooses work"
     report = {"auftrag_prosa": "Check the current checkpoint decision evidence."}
@@ -65,7 +66,8 @@ def test_architect_role_consumes_current_scout_artifact_without_planner_runner(
         lambda _sections: ("bounded execution context", {"chars": 27}),
     )
     monkeypatch.setattr(
-        planner, "architect_reasoning_route", lambda *_args: (False, "routine"),
+        planner_dispatch, "architect_reasoning_route",
+        lambda *_args: (False, "routine"),
     )
     monkeypatch.setattr(planner, "_validate_contract_or_audit", lambda *_args: True)
     monkeypatch.setattr(planner, "_architect_input_fingerprint", lambda *_args: "c" * 64)
@@ -92,13 +94,6 @@ def test_architect_role_consumes_current_scout_artifact_without_planner_runner(
             AssertionError("Architect must not call Scout"),
         ),
     )
-    monkeypatch.setattr(
-        planner, "run_planner",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("Architect must not enter planner runner"),
-        ),
-    )
-
     assert run_architect_role_checkpoint(state, goal=goal) is True
     assert calls == ["architect"]
     assert persisted == ["handoff"]

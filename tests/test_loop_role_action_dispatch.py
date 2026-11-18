@@ -6,8 +6,9 @@ from werkstatt.state import RunState
 
 
 def test_active_runtime_exposes_no_planner_compatibility_runner():
-    from werkstatt import runtime_compat, task_runner
+    from werkstatt import planner, runtime_compat, task_runner
 
+    assert not hasattr(planner, "run_planner")
     assert not hasattr(loop, "run_planner")
     assert not hasattr(runtime_compat, "run_planner")
     assert not hasattr(task_runner, "run_planner")
@@ -31,12 +32,6 @@ def test_selected_scout_and_architect_actions_dispatch_directly_to_role_runner(
             or goal == actual_state.aufgabe
         ),
     )
-    monkeypatch.setattr(
-        "werkstatt.planner.run_planner",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("selected roles must not enter Planner runner"),
-        ),
-    )
     state = RunState(aufgabe="Inspect a project source")
 
     assert loop._run_selected_planner_role_action(state, "planner_scout")
@@ -44,11 +39,7 @@ def test_selected_scout_and_architect_actions_dispatch_directly_to_role_runner(
     assert calls == [(state, "scout"), (state, "architect")]
 
 
-def test_planner_dispatch_action_cannot_use_direct_role_dispatch(monkeypatch):
-    def forbidden(*_args, **_kwargs):
-        raise AssertionError("non-role actions must use their selected executor")
-
-    monkeypatch.setattr("werkstatt.planner.run_planner", forbidden)
+def test_planner_dispatch_action_cannot_use_direct_role_dispatch():
     assert not loop._run_selected_planner_role_action(
         RunState(aufgabe="Build"), "planner_dispatch",
     )
@@ -134,12 +125,6 @@ def test_planner_split_checkpoint_dispatch_bypasses_planner_compatibility(
     monkeypatch.setattr(
         "werkstatt.roles.planner_split.run_planner_split_checkpoint",
         run_split,
-    )
-    monkeypatch.setattr(
-        "werkstatt.planner.run_planner",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("valid split handoff must not enter Planner facade"),
-        ),
     )
     monkeypatch.setattr(loop, "_plan_gate", lambda _state: True)
 

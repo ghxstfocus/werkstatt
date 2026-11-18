@@ -918,7 +918,7 @@ def _pruefe_api_widerspruch(
     Rueckgabe: list[dict] mit {"datei", "symbol", "art",
     "gefunden_in"}. Leer, wenn kein Widerspruch.
 
-    Der Aufrufer (run_planner) entscheidet, was mit den
+    Der Checkpoint-Koordinator entscheidet, was mit den
     Befunden passiert (Audit + Prompt-Block, kein Verwerfen).
     """
     if not isinstance(scout_report, dict):
