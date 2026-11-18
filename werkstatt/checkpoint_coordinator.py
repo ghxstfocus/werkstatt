@@ -331,7 +331,44 @@ def choose_planner_checkpoint_action(
     role_artifacts = getattr(state, "planner_role_artifacts", {})
     if not isinstance(role_artifacts, dict):
         role_artifacts = {}
-    scout_artifact = role_artifacts.get("scout")
+    raw_scout_artifact = role_artifacts.get("scout")
+    scout_artifact = None
+    scout_artifact_current = False
+    if isinstance(raw_scout_artifact, dict):
+        # The role chooser must apply the same current-input fingerprint as
+        # the Scout and Architect workers. Merely finding a self-consistent
+        # persisted artifact is not enough: its repository/context inputs may
+        # have changed since Scout produced it.
+        try:
+            from werkstatt import planner
+            from werkstatt.planner_artifacts import validate_role_artifact
+
+            raw_key_files = (
+                state.explorer_context.get("key_files", [])
+                if isinstance(state.explorer_context, dict) else []
+            )
+            key_files = [
+                item["file"] for item in raw_key_files
+                if isinstance(item, dict)
+                and isinstance(item.get("file"), str)
+            ] if isinstance(raw_key_files, list) else []
+            code_index = planner._baue_api_index(Path(state.project_dir))
+            current_input_sha256 = planner._scout_input_fingerprint(
+                state, state.aufgabe, code_index, key_files,
+            )
+            if current_input_sha256:
+                scout_artifact = validate_role_artifact(
+                    raw_scout_artifact,
+                    role="scout",
+                    run_id=getattr(state, "run_id", "") or "",
+                    goal=state.aufgabe,
+                    input_sha256=current_input_sha256,
+                )
+                scout_artifact_current = scout_artifact is not None
+        except (OSError, RuntimeError, TypeError, ValueError):
+            # Missing or unreadable current inputs fail closed and route back
+            # to Scout; Architect will never receive a stale handoff.
+            scout_artifact = None
     scout_report = (
         scout_artifact.get("output")
         if isinstance(scout_artifact, dict) else None
@@ -526,6 +563,11 @@ def choose_planner_checkpoint_action(
             "planner_role_required_evidence": list(role_decision.required_evidence),
             "planner_role_missing_evidence": list(role_decision.missing_evidence),
             "planner_role_missing_inputs": list(role_decision.missing_inputs),
+            "planner_scout_artifact_current": scout_artifact_current,
+            "planner_scout_artifact_stale": (
+                isinstance(raw_scout_artifact, dict)
+                and not scout_artifact_current
+            ),
             "scout_route_reason": scout_route_reason,
             "direct_builder_ready": direct_builder_ready,
             "direct_builder_reason": direct_builder_reason,

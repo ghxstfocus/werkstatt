@@ -457,6 +457,11 @@ def test_role_is_selected_before_role_specific_preflight(tmp_path, monkeypatch) 
     )
     state.coordinator_setup_context_ready = True
     state.explorer_context = _deterministic_explorer_context(tmp_path)
+    monkeypatch.setattr("werkstatt.planner._baue_api_index", lambda _root: {})
+    monkeypatch.setattr(
+        "werkstatt.planner._scout_input_fingerprint",
+        lambda *_args: "a" * 64,
+    )
     source = tmp_path / "src" / "feature.py"
     source.parent.mkdir(exist_ok=True)
     source.write_text("VALUE = 1\n", encoding="utf-8")
@@ -485,6 +490,21 @@ def test_role_is_selected_before_role_specific_preflight(tmp_path, monkeypatch) 
     state.planner_role_artifacts = {
         "scout": make_role_artifact(
             "scout", {"auftrag_prosa": "Belegte Untersuchung"},
+            run_id="preflight-run", goal=goal, input_sha256="b" * 64,
+        ),
+    }
+    stale_scout = loop._run_coordinator_action(phase, state)
+    assert stale_scout["coordinator_action"] == "planner_scout"
+    assert stale_scout["decision_basis"][
+        "planner_scout_artifact_current"
+    ] is False
+    assert stale_scout["decision_basis"][
+        "planner_scout_artifact_stale"
+    ] is True
+
+    state.planner_role_artifacts = {
+        "scout": make_role_artifact(
+            "scout", {"auftrag_prosa": "Belegte Untersuchung"},
             run_id="preflight-run", goal=goal, input_sha256="a" * 64,
         ),
     }
@@ -504,6 +524,9 @@ def test_role_is_selected_before_role_specific_preflight(tmp_path, monkeypatch) 
     assert next_decision["coordinator_action"].startswith("planner_")
     assert next_decision["decision_basis"][
         "preflight_checkpoint_current"
+    ] is True
+    assert next_decision["decision_basis"][
+        "planner_scout_artifact_current"
     ] is True
     assert "preflight_findings" in next_decision["decision_basis"][
         "planner_role_available_evidence"
@@ -939,7 +962,12 @@ def test_run_coordinator_selects_scout_without_setup_and_hydrates_plan_on_resume
 ) -> None:
     from werkstatt.loop import _run_coordinator_action
 
-    state = RunState(aufgabe="Goal")
+    state = RunState(aufgabe="Goal", project_dir=tmp_path)
+    monkeypatch.setattr("werkstatt.planner._baue_api_index", lambda _root: {})
+    monkeypatch.setattr(
+        "werkstatt.planner._scout_input_fingerprint",
+        lambda *_args: "b" * 64,
+    )
     missing_setup = _run_coordinator_action(None, state)
     assert missing_setup["coordinator_action"] == "planner_scout"
     assert missing_setup["next_executor"] == "planner_scout"

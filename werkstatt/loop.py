@@ -2617,6 +2617,7 @@ def _safe_coordinator_decision_basis(raw: Any) -> dict[str, Any] | None:
         "plan_fingerprint_matches",
         "plan_candidate_current", "plan_candidate_approved",
         "preflight_checkpoint_current",
+        "planner_scout_artifact_current", "planner_scout_artifact_stale",
     ):
         if isinstance(raw.get(key), bool):
             safe[key] = raw[key]
@@ -3216,15 +3217,19 @@ def run_pipeline_loop(
     return 1
 
 
-_TERMINAL_CHECKPOINT_ACTIONS = frozenset({
+_CHECKPOINT_ACTIONS_WITH_REPEAT_GUARD = frozenset({
     "phase_end_review", "human_gate", "phase_end_verify",
     "commit_run", "post_commit_verify", "finalize_run",
+    # A stale Scout/Architect handoff must not spin the planner forever.
+    # These workers may be retried only after their persisted PhaseState
+    # changes; repeated selection against identical evidence fails closed.
+    "planner_scout", "planner_architect", "planner_split",
 })
 
 
 def _checkpoint_action_key(action: object, phase_state: PhaseState | None) -> tuple[str, str] | None:
-    """Fingerprint terminal action input so an unchanged stale retry stops."""
-    if action not in _TERMINAL_CHECKPOINT_ACTIONS:
+    """Fingerprint guarded action input so unchanged retries stop."""
+    if action not in _CHECKPOINT_ACTIONS_WITH_REPEAT_GUARD:
         return None
     checkpoint_data = phase_state.data if phase_state is not None else {}
     try:

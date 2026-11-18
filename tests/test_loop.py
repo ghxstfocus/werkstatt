@@ -263,8 +263,8 @@ def test_loop_resume_selects_only_pending_checkpoint_task(tmp_path):
     assert decision["next_task_id"] == "t2"
 
 
-def test_terminal_action_retry_key_requires_checkpoint_progress(tmp_path):
-    """Only the same terminal action with byte-equivalent state is a retry."""
+def test_guarded_action_retry_key_requires_checkpoint_progress(tmp_path):
+    """Repeated terminal and role actions stop without new checkpoint state."""
     first = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     first.data = {"phase_end_review_checkpoint": {"sha256": "a" * 64}}
     repeated = PhaseState("p", base_dir=tmp_path / ".werkstatt")
@@ -277,6 +277,10 @@ def test_terminal_action_retry_key_requires_checkpoint_progress(tmp_path):
     assert key is not None
     assert loop_mod._checkpoint_action_key("phase_end_verify", repeated) == key
     assert loop_mod._checkpoint_action_key("phase_end_verify", advanced) != key
+    role_key = loop_mod._checkpoint_action_key("planner_architect", first)
+    assert role_key is not None
+    assert loop_mod._checkpoint_action_key("planner_architect", repeated) == role_key
+    assert loop_mod._checkpoint_action_key("planner_architect", advanced) != role_key
     assert loop_mod._checkpoint_action_key("execute_task_checkpoint", first) is None
 
 def test_verify_patches_phase_filter(tmp_path):
@@ -305,9 +309,20 @@ def test_preflight_checkpoint_selected_before_architect(tmp_path, monkeypatch):
     st.coordinator_setup_context_ready = True
     st.explorer_context = {"findings": "aktueller Projektkontext"}
     st.planner_role_artifacts = {
-        "scout": {"output": {"auftrag_prosa": "Aktueller Scout-Bericht."}},
+        "scout": None,
     }
     st.run_id = "preflight-checkpoint-run"
+    monkeypatch.setattr("werkstatt.planner._baue_api_index", lambda _root: {})
+    monkeypatch.setattr(
+        "werkstatt.planner._scout_input_fingerprint",
+        lambda *_args: "c" * 64,
+    )
+    from werkstatt.planner_artifacts import make_role_artifact
+
+    st.planner_role_artifacts["scout"] = make_role_artifact(
+        "scout", {"auftrag_prosa": "Aktueller Scout-Bericht."},
+        run_id=st.run_id, goal=st.aufgabe, input_sha256="c" * 64,
+    )
     phase_state = PhaseState("p", base_dir=tmp_path / ".werkstatt")
     phase_state.run_id = st.run_id
     phase_state.init_new(st.aufgabe, [], tests=[], akzeptanzkriterien=[])
