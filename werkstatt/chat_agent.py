@@ -115,6 +115,53 @@ def _explicit_op_execution_request(message: str) -> str | None:
     return op_ids[0] if len(op_ids) == 1 else None
 
 
+def _contextual_start_choice(
+    message: str, previous_events: list[dict[str, Any]],
+) -> str | None:
+    """Bind a bare first-option reply to a concrete immediately prior offer.
+
+    The numeric reply is accepted only when the preceding assistant turn
+    explicitly framed two choices, named exactly one OP, and offered to create
+    a start proposal for that OP. This never authorizes a run start itself;
+    the normal proposal UI and confirmation remain required.
+    """
+    if re.fullmatch(r"\s*(?:1|option\s*1)\s*[.!]?\s*", message, re.IGNORECASE) is None:
+        return None
+
+    previous_answer = ""
+    for event in reversed(previous_events):
+        kind = event.get("kind")
+        payload = event.get("payload")
+        if kind == "user":
+            return None
+        if not isinstance(payload, dict):
+            continue
+        if kind == "assistant":
+            previous_answer = str(payload.get("text") or "")
+            break
+        if kind == "job_turn":
+            previous_answer = str(payload.get("assistant_text") or "")
+            break
+    if not previous_answer:
+        return None
+
+    answer = previous_answer.casefold()
+    offers_choices = bool(re.search(
+        r"\b(?:zwei|2)\s+(?:optionen|wege)\b|"
+        r"\bwelchen\s+(?:weg|pfad)\b|\bwelche\s+option\b",
+        answer,
+    ))
+    offers_start_proposal = bool(re.search(
+        r"\b(?:start|starten)\b.{0,180}\b(?:vorschlag|anlegen|erstellen)\b|"
+        r"\b(?:vorschlag|anlegen|erstellen)\b.{0,180}\b(?:start|starten)\b",
+        answer,
+    ))
+    op_ids = _explicit_op_ids(previous_answer)
+    if offers_choices and offers_start_proposal and len(op_ids) == 1:
+        return op_ids[0]
+    return None
+
+
 _LOOP_ACTION_INTENT = {
     "start": re.compile(
         r"\b(?:starte|starten|start|beginne|beginnen|bearbeite|bearbeiten|"
@@ -1094,6 +1141,8 @@ def chat_loop(
     _check_cancel(cancel_check)
     if not isinstance(reasoning_enabled, bool):
         raise TypeError("reasoning_enabled muss bool sein")
+    prior_events = session.load()
+    contextual_start_op = _contextual_start_choice(message, prior_events)
     user_payload: dict[str, Any] = {
         "text": message, "mode": mode,
         "reasoning_enabled": reasoning_enabled,
@@ -1187,7 +1236,9 @@ def chat_loop(
     _rounds = 0
     _recent_tool_fingerprints: list[str] = []
     _warned_tool_cycles: set[tuple[str, ...]] = set()
-    requested_op = _explicit_op_execution_request(message)
+    requested_op = (
+        _explicit_op_execution_request(message) or contextual_start_op
+    )
     op_handoff_retry_used = False
     op_handoff_result: dict[str, Any] | None = None
     while max_rounds is None or _rounds < max_rounds:
@@ -1323,8 +1374,14 @@ def chat_loop(
                 on_tool_call(name, args)
             requested_action = str(args.get("action", "")).casefold()
             requested_tool_op = str(args.get("op_id", "")).upper()
-            if name == "request_loop_action" and not _explicit_loop_action_intent(
-                message, requested_action,
+            contextual_choice_matches = (
+                contextual_start_op is not None
+                and requested_action == "start"
+                and requested_tool_op == contextual_start_op
+            )
+            if name == "request_loop_action" and not (
+                _explicit_loop_action_intent(message, requested_action)
+                or contextual_choice_matches
             ):
                 ergebnis = json.dumps({
                     "zustand": "not_requested",

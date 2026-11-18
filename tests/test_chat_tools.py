@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -1083,6 +1084,38 @@ def test_loop_status_returns_idle_when_project_has_no_run(monkeypatch, tmp_path)
     assert json.loads(result) == {"status": "idle", "project": "alpha"}
 
 
+def test_loop_status_reports_missing_phase_as_unknown_not_tool_failure(
+    monkeypatch, tmp_path,
+):
+    from werkstatt.event_store import EventStore
+    from werkstatt.web import app
+
+    monkeypatch.setattr(
+        app, "_loop_registry",
+        lambda: SimpleNamespace(read=lambda _project: {
+            "run_id": "alpha-run-1", "state": "running",
+            "updated_at": 12.5,
+        }),
+    )
+    store = EventStore(tmp_path / "events.db")
+    store.create_run_record("alpha", "alpha-run-1", "Check status")
+
+    def missing_phase(*_args, **_kwargs):
+        raise KeyError("phase")
+
+    monkeypatch.setattr(store, "get_run_snapshot", missing_phase)
+    monkeypatch.setattr("werkstatt.event_store.EventStore", lambda: store)
+
+    result = json.loads(chat_tools.execute_tool(
+        "loop_status", {}, project_dir=tmp_path, project_name="alpha",
+    ))
+
+    assert result["status"] == "running"
+    assert result["checkpoint_status"] == "unknown"
+    assert "fehlendes Feld: phase" in result["detail"]
+    assert "Tool-Fehler" not in json.dumps(result)
+
+
 def test_loop_status_exposes_checkpoint_and_sanitized_events(
     monkeypatch, tmp_path,
 ):
@@ -1583,6 +1616,40 @@ def test_loop_action_tool_only_persists_proposal_and_revalidates_op(
     assert proposal["selection_reason"]
     events = chat_session.ChatSession("demo", "session-1", db_pfad=db).load()
     assert [event["kind"] for event in events] == ["loop_action_proposed"]
+
+
+def test_rejected_loop_proposal_does_not_block_a_fresh_proposal(
+    tmp_path, monkeypatch,
+) -> None:
+    from werkstatt import chat_session
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-321: Eindeutige Arbeit\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_321.py\n",
+        encoding="utf-8",
+    )
+    db = tmp_path / "sessions.db"
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: db)
+
+    def request_proposal() -> dict[str, Any]:
+        return json.loads(chat_tools.execute_tool(
+            "request_loop_action", {"action": "start", "op_id": "OP-321"},
+            project_dir=tmp_path, project_name="demo", session_id="session-1",
+        ))
+
+    first = request_proposal()
+    session = chat_session.ChatSession("demo", "session-1", db_pfad=db)
+    rejected = session.resolve_loop_action(first["proposal_id"], "reject")
+    assert rejected is not None and rejected[1] == "rejected"
+
+    second = request_proposal()
+
+    assert second["zustand"] == "proposal"
+    assert second["proposal_id"] != first["proposal_id"]
 
 
 def test_server_status_is_allowlisted_read_only_snapshot(monkeypatch) -> None:

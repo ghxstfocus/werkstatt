@@ -1246,9 +1246,18 @@ def _read_active_run(_args: dict[str, Any]) -> str:
             }
             for event in events
         ]
-    except (OSError, RuntimeError, ValueError, ImportError, sqlite3.Error) as exc:
+    except (
+        OSError, RuntimeError, ValueError, ImportError, sqlite3.Error, KeyError,
+    ) as exc:
         result["checkpoint_status"] = "unknown"
-        result["detail"] = f"Run-Daten nicht lesbar ({type(exc).__name__})."
+        if isinstance(exc, KeyError):
+            field = str(exc.args[0])[:80] if exc.args else "unbekannt"
+            result["detail"] = (
+                f"Run-Daten unvollstaendig (fehlendes Feld: {field}); "
+                "der aktive Zustand ist unbekannt."
+            )
+        else:
+            result["detail"] = f"Run-Daten nicht lesbar ({type(exc).__name__})."
     return json.dumps(result, ensure_ascii=False)
 
 

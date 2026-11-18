@@ -446,6 +446,68 @@ def test_explicit_op_request_retries_missing_tool_handoff(
     assert proposals[0]["payload"]["arguments"] == {"op_id": "OP-321"}
 
 
+def test_numbered_reply_uses_only_concrete_previous_start_offer(
+    session: ChatSession,
+    fake_llm,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from werkstatt import chat_session
+
+    monkeypatch.setattr(chat_session, "_db_pfad", lambda _project: session.db_pfad)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "STATUS.md").write_text(
+        "### OP-398: Kleine bestaetigte Aufgabe\n"
+        "- **Status:** open\n"
+        "- **Akzeptanzkriterien:** Ergebnis belegbar.\n"
+        "- **Tests:** pytest -q tests/test_398.py\n",
+        encoding="utf-8",
+    )
+    session.append("assistant", {"text": (
+        "Zwei Optionen: Du bestaetigst, dass ich den Start von OP-398 "
+        "als Vorschlag anlegen soll, oder wir klaeren zuerst loop_status. "
+        "Welchen Weg willst du?"
+    )})
+    fake_llm(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "start-op-398",
+                "type": "function",
+                "function": {
+                    "name": "request_loop_action",
+                    "arguments": json.dumps({"action": "start", "op_id": "OP-398"}),
+                },
+            }],
+        },
+        {"role": "assistant", "content": "Vorschlag erstellt."},
+    )
+    results: list[dict[str, Any]] = []
+
+    answer = chat_agent.chat_loop(
+        session,
+        "1",
+        project_dir=tmp_path,
+        on_tool_result=lambda _name, content: results.append(json.loads(content)),
+    )
+
+    assert "Startvorschlag fuer OP-398 ist im Chat" in answer
+    assert results[0]["zustand"] == "proposal"
+    assert results[0]["arguments"] == {"op_id": "OP-398"}
+
+
+def test_number_without_prior_choice_does_not_authorize_loop_action(
+    session: ChatSession,
+) -> None:
+    assert chat_agent._contextual_start_choice("1", []) is None
+    session.append("assistant", {"text": "Ich habe drei Dateien gefunden."})
+    assert chat_agent._contextual_start_choice("1", session.load()) is None
+    session.append("user", {"text": "Noch eine andere Frage."})
+    assert chat_agent._contextual_start_choice("1", session.load()) is None
+
+
 def test_explicit_op_request_never_claims_proposal_without_tool_evidence(
     session: ChatSession,
     fake_llm,
