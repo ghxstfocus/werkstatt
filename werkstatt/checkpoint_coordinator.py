@@ -473,15 +473,19 @@ def choose_planner_checkpoint_action(
     if next_role == "split":
         from werkstatt.spec_first import spec_test_manifest_is_current
 
-        architect_ready = (
+        architect_output_ready = (
             isinstance(architect_output, str)
             and len(architect_output.strip()) >= 50
-            and bool(getattr(state, "akzeptanzkriterien", None))
         )
         if spec_required:
-            if not architect_ready:
+            if not architect_output_ready:
                 next_role = "architect"
                 reason = "spec_first_requires_architect_criteria"
+            elif not getattr(state, "akzeptanzkriterien", None):
+                # The split/compiler is the producer of structured criteria.
+                # Re-running Architect cannot materialize them; it reuses the
+                # same valid prose artifact and makes no checkpoint progress.
+                reason = "spec_first_requires_planner_split_criteria"
             elif spec_checkpoint is None:
                 next_role = "spec_builder"
                 reason = "high_risk_goal_requires_independent_frozen_spec"

@@ -94,6 +94,136 @@ def test_coordinator_selects_spec_builder_before_graph_split(tmp_path):
     assert decision["reason"] == "high_risk_goal_requires_independent_frozen_spec"
 
 
+def test_missing_structured_criteria_dispatches_split_instead_of_architect_replay(
+    tmp_path,
+):
+    from werkstatt.checkpoint_coordinator import choose_planner_checkpoint_action
+    from werkstatt.planner_artifacts import make_role_artifact
+    from werkstatt.state import RunState
+
+    goal = "Change authentication permissions in werkstatt/auth.py"
+    source = "def authenticate(token):\n    return token == 'ok'\n"
+    target = tmp_path / "werkstatt" / "auth.py"
+    target.parent.mkdir()
+    target.write_text(source, encoding="utf-8")
+    source_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+    state = RunState(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+        aufgabe=goal,
+        explorer_context={"key_files": [{
+            "file": "werkstatt/auth.py",
+            "source_complete": True,
+            "source_sha256": source_hash,
+        }]},
+        preflight_checkpoint_ready=True,
+    )
+    state.planner_role_artifacts = {
+        "architect": make_role_artifact(
+            "architect",
+            "Implement the approved authentication behavior and reject invalid permissions.",
+            run_id="run-1", goal=goal, input_sha256="b" * 64,
+        ),
+    }
+
+    decision = choose_planner_checkpoint_action(
+        state,
+        phase_data={"tasks": []},
+        planner_role_stage="architect",
+        plan_checkpoint_complete=False,
+        plan_goal_matches=False,
+        plan_run_matches=False,
+        plan_project_matches=False,
+        plan_fingerprint_matches=False,
+        explicit_source_context_ready=True,
+        preserve_failed_tasks_on_setup=False,
+    )
+
+    assert decision["coordinator_action"] == "planner_split"
+    assert decision["decision_basis"]["planner_role_selected"] == "planner_split"
+    assert decision["reason"] == "spec_first_requires_planner_split_criteria"
+
+
+def _unapproved_high_risk_candidate(tmp_path):
+    from werkstatt.phase_state import PhaseState
+    from werkstatt.state import RunState
+
+    goal = "Security-sensitive API migration behavior"
+    phase_state = PhaseState("demo", base_dir=tmp_path / ".werkstatt")
+    tasks = [{
+        "id": "t1", "name": "Apply migration", "action": "update",
+        "criterion_refs": ["AC1"], "task_files": ["src/api.py"],
+    }]
+    criteria = ["Invalid API permissions are rejected."]
+    phase_state.init_new(
+        goal, tasks, tests=["pytest -q"],
+        akzeptanzkriterien=criteria, phasen=[],
+    )
+    phase_state.run_id = "run-1"
+    phase_state.data["run_id"] = "run-1"
+    phase_state.record_plan_candidate(
+        goal=goal, run_id="run-1", tasks=tasks, tests=["pytest -q"],
+        criteria=criteria, phases=[], architect_prose="Approved design.",
+        preflight_findings=[],
+    )
+    source_path = tmp_path / "src" / "api.py"
+    source_path.parent.mkdir()
+    source_path.write_text(
+        "def check_permission(token: str) -> bool:\n    return bool(token)\n",
+        encoding="utf-8",
+    )
+    source_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    state = RunState(
+        project_dir=tmp_path,
+        project_name="demo",
+        run_id="run-1",
+        aufgabe=goal,
+        explorer_context={"key_files": [{
+            "file": "src/api.py",
+            "source_complete": True,
+            "source_sha256": source_hash,
+        }]},
+    )
+    return phase_state, state
+
+
+def test_high_risk_candidate_runs_spec_builder_before_plan_gate(tmp_path):
+    from werkstatt.loop import _run_coordinator_action
+
+    phase_state, state = _unapproved_high_risk_candidate(tmp_path)
+
+    decision = _run_coordinator_action(phase_state, state)
+
+    assert decision["coordinator_action"] == "planner_spec_builder"
+    assert decision["next_executor"] == "planner_spec_builder"
+    assert decision["decision_basis"]["criteria_count"] == 1
+
+
+def test_valid_frozen_spec_is_bound_into_candidate_before_plan_gate(
+    tmp_path, monkeypatch,
+):
+    from werkstatt import spec_first
+    from werkstatt.loop import _run_coordinator_action
+
+    phase_state, state = _unapproved_high_risk_candidate(tmp_path)
+    original = phase_state.data["plan_candidate_checkpoint"]["candidate_sha256"]
+    spec_checkpoint = {"schema_version": 1, "run_id": "run-1", "test_count": 1}
+    phase_state.data["spec_test_checkpoint"] = spec_checkpoint
+    monkeypatch.setattr(
+        spec_first, "spec_test_manifest_is_current", lambda *_args, **_kwargs: True,
+    )
+
+    decision = _run_coordinator_action(phase_state, state)
+    candidate = phase_state.load_plan_candidate(goal=state.aufgabe, run_id="run-1")
+    record = phase_state.data["plan_candidate_checkpoint"]
+
+    assert decision["coordinator_action"] == "plan_approval_gate"
+    assert candidate is not None
+    assert candidate["spec_test_checkpoint"] == spec_checkpoint
+    assert record["candidate_sha256"] != original
+
+
 def test_spec_builder_and_validator_create_run_bound_frozen_artifact(
     tmp_path, monkeypatch,
 ):

@@ -2165,7 +2165,106 @@ def _run_coordinator_action(phase_state, state: RunState) -> dict:
             goal=state.aufgabe, run_id=state.run_id,
         )
     if candidate_payload is not None and isinstance(candidate_record, dict):
-        candidate_digest = candidate_record.get("candidate_sha256")
+        if not _hydrate_plan_candidate(state, candidate_payload):
+            return {
+                "decision": "stop_missing_evidence",
+                "coordinator_action": "stop_missing_evidence",
+                "reason": "plan_candidate_cannot_restore_required_fields",
+                "decision_basis": {"plan_candidate_current": False},
+            }
+        from werkstatt.spec_first import (
+            requires_spec_first,
+            spec_test_manifest_is_current,
+        )
+
+        candidate_criteria = state.akzeptanzkriterien or []
+        spec_required = requires_spec_first(
+            state.aufgabe, criteria_count=len(candidate_criteria),
+        )
+        spec_checkpoint = phase_data.get("spec_test_checkpoint")
+        if spec_required and not candidate_criteria:
+            return {
+                "decision": "stop_missing_evidence",
+                "coordinator_action": "stop_missing_evidence",
+                "reason": "spec_first_candidate_acceptance_criteria_missing",
+                "decision_basis": {"plan_candidate_current": True},
+            }
+        if spec_required and spec_checkpoint is None:
+            if not state.explorer_context:
+                _restore_deterministic_setup_context(phase_state, state)
+            from werkstatt.spec_first import _source_evidence
+
+            if not _source_evidence(state):
+                return {
+                    "decision": "prepare_approved_work_graph",
+                    "coordinator_action": "refresh_project_evidence",
+                    "reason": "spec_builder_requires_current_public_api_evidence",
+                    "next_executor": "project_context_tools",
+                    "decision_basis": {
+                        "plan_candidate_current": True,
+                        "criteria_count": len(candidate_criteria),
+                        "setup_context_ready": False,
+                    },
+                }
+            return {
+                "decision": "prepare_approved_work_graph",
+                "coordinator_action": "planner_spec_builder",
+                "reason": "high_risk_candidate_requires_independent_frozen_spec",
+                "next_executor": "planner_spec_builder",
+                "decision_basis": {
+                    "plan_candidate_current": True,
+                    "candidate_task_count": len(candidate_payload["tasks"]),
+                    "criteria_count": len(candidate_criteria),
+                    "spec_checkpoint_current": False,
+                },
+            }
+        if spec_required and not spec_test_manifest_is_current(
+            state.project_dir, spec_checkpoint,
+            run_id=state.run_id, goal=state.aufgabe,
+        ):
+            return {
+                "decision": "stop_missing_evidence",
+                "coordinator_action": "stop_missing_evidence",
+                "reason": "frozen_spec_checkpoint_stale_or_missing",
+                "decision_basis": {
+                    "plan_candidate_current": True,
+                    "spec_checkpoint_current": False,
+                },
+            }
+        if (
+            spec_required
+            and candidate_payload.get("spec_test_checkpoint") != spec_checkpoint
+        ):
+            # Binding the frozen tests changes the approved candidate. Persist
+            # the new digest before showing a human gate, invalidating any
+            # approval that applied to a candidate without those tests.
+            candidate_digest = phase_state.record_plan_candidate(
+                goal=state.aufgabe,
+                run_id=state.run_id,
+                tasks=state.tasks,
+                tests=state.tests,
+                criteria=state.akzeptanzkriterien,
+                phases=state.phasen,
+                architect_prose=state.architect_prosa,
+                preflight_findings=state.preflight_fehler,
+                spec_test_checkpoint=spec_checkpoint,
+            )
+            phase_state.save()
+            candidate_payload = phase_state.load_plan_candidate(
+                goal=state.aufgabe, run_id=state.run_id,
+            )
+            if candidate_payload is None:
+                return {
+                    "decision": "stop_missing_evidence",
+                    "coordinator_action": "stop_missing_evidence",
+                    "reason": "spec_bound_plan_candidate_unreadable",
+                    "decision_basis": {"plan_candidate_current": False},
+                }
+        candidate_record = phase_state.data.get("plan_candidate_checkpoint")
+        candidate_digest = (
+            candidate_record.get("candidate_sha256")
+            if isinstance(candidate_record, dict) else None
+        )
         candidate_approved = phase_state.plan_candidate_is_approved(
             goal=state.aufgabe, run_id=state.run_id,
         )

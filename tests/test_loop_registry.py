@@ -50,6 +50,23 @@ def test_registrierung_pause_und_idle_sind_restartfest(tmp_path: Path):
     assert idle["pid"] is None
 
 
+def test_dead_run_releases_project_for_a_fresh_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from werkstatt.web import loop_registry as registry_module
+
+    registry = LoopProcessRegistry(tmp_path / "registry.db")
+    assert registry.reserve("demo", "failed-run") == (True, None)
+    registry.register("demo", "failed-run", os.getpid())
+    monkeypatch.setattr(registry_module, "_pid_alive", lambda *_args: False)
+
+    failed = registry.read("demo")
+
+    assert failed is not None
+    assert failed["state"] == "idle"
+    assert registry.reserve("demo", "fresh-run") == (True, None)
+
+
 def test_startkontext_bleibt_nach_restart_und_idle_erhalten(tmp_path: Path) -> None:
     db = tmp_path / "registry.db"
     first_worker = LoopProcessRegistry(db)
