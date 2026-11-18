@@ -30,10 +30,14 @@ def remap_dependencies_to_split_leaves(tasks: list[dict]) -> list[dict]:
             descendants = {
                 item for item in surviving if item.startswith(dep + "_")
             } if dep not in surviving else set()
-            leaves = sorted(
-                item for item in descendants
-                if not any(other.startswith(item + "_") for other in descendants)
-            )
+            referenced = {
+                str(parent_dep)
+                for candidate in tasks
+                if isinstance(candidate, dict)
+                and str(candidate.get("id")) in descendants
+                for parent_dep in candidate.get("dependencies") or []
+            }
+            leaves = sorted(descendants - referenced)
             for target in leaves or [dep]:
                 remapped.append(target)
         task["dependencies"] = remapped

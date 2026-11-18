@@ -82,5 +82,5 @@ def test_dependency_on_recursively_split_task_maps_to_surviving_leaves() -> None
         _task("t8", ["t4_b"], file="d.py"),
     ]
     remap_dependencies_to_split_leaves(tasks)
-    assert tasks[-1]["dependencies"] == ["t4_b_a_y", "t4_b_b"]
+    assert tasks[-1]["dependencies"] == ["t4_b_b"]
     assert _topo_sort_tasks(tasks)[-1]["id"] == "t8"
