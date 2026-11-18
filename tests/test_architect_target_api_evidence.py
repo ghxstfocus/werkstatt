@@ -594,9 +594,9 @@ def test_api_preflight_never_slices_source_midline_at_budget(tmp_path) -> None:
 
 
 def test_execution_context_budget_keeps_sections_whole_and_reports_omissions() -> None:
-    from werkstatt.planner import _budget_architect_execution_context
+    from werkstatt.architect_context import budget_architect_execution_context
 
-    context, metadata = _budget_architect_execution_context(
+    context, metadata = budget_architect_execution_context(
         [("PRIORITAET", "p" * 11000), ("NACHRANGIG", "n" * 2000)],
     )
 
@@ -623,7 +623,7 @@ def test_execution_context_budget_keeps_sections_whole_and_reports_omissions() -
     ).hexdigest()
     assert "prompt_start" not in omitted
 
-    tiny, tiny_metadata = _budget_architect_execution_context(
+    tiny, tiny_metadata = budget_architect_execution_context(
         [("PRIORITAET", "x" * 100)], max_chars=80,
     )
     assert len(tiny) <= 80
@@ -631,9 +631,9 @@ def test_execution_context_budget_keeps_sections_whole_and_reports_omissions() -
 
 
 def test_preflight_findings_are_prioritized_over_long_progress_history() -> None:
-    from werkstatt.planner import _budget_architect_execution_context
+    from werkstatt.architect_context import budget_architect_execution_context
 
-    context, metadata = _budget_architect_execution_context(
+    context, metadata = budget_architect_execution_context(
         [
             ("PROJEKT-FORTSCHRITT (Historie)", "H" * 12_500),
             ("PREFLIGHT-FEHLER (aktuelle Pflichtbefunde)", "Befund: Ruff Fehler"),
@@ -651,9 +651,9 @@ def test_preflight_findings_are_prioritized_over_long_progress_history() -> None
 
 
 def test_architect_execution_context_manifest_covers_all_included_sections() -> None:
-    from werkstatt.planner import _budget_architect_execution_context
+    from werkstatt.architect_context import budget_architect_execution_context
 
-    context, metadata = _budget_architect_execution_context(
+    context, metadata = budget_architect_execution_context(
         [("ZIEL", "konkrete Aufgabe"), ("QUELLEN", "aktuelle Belege")],
     )
 

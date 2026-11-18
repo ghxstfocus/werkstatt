@@ -186,7 +186,7 @@ def run_architect_role_checkpoint(state: Any, *, goal: str) -> bool:
     """
     from pathlib import Path
 
-    from werkstatt import planner
+    from werkstatt import architect_context, planner
     from werkstatt.architect import build_architect_docs_context_v2
     from werkstatt.checkpoint_coordinator import apply_checkpoint_role_choice
     from werkstatt.planner_artifacts import (
@@ -311,7 +311,9 @@ def run_architect_role_checkpoint(state: Any, *, goal: str) -> bool:
             state.planner_yielded_after_role = "scout"
             return True
         scout_report = scout_artifact["output"]
-        if not planner._scout_report_hat_architect_auftrag(scout_report):
+        if not architect_context.scout_report_has_architect_assignment(
+            scout_report,
+        ):
             planner.audit(
                 "planner_scout_json_fehler",
                 {"grund": "auftrag_prosa_fehlt"}, project_dir, project_name,
@@ -361,7 +363,7 @@ def run_architect_role_checkpoint(state: Any, *, goal: str) -> bool:
     from werkstatt import progress
     from werkstatt.phase_state import PhaseState
 
-    completed = planner._erledigte_punkte(project_dir)
+    completed = architect_context.completed_project_points(project_dir)
     recent_progress = progress.read_recent(project_dir, n=10)
     phase_state = PhaseState(
         project_name, base_dir=project_dir / ".werkstatt",
@@ -383,7 +385,7 @@ def run_architect_role_checkpoint(state: Any, *, goal: str) -> bool:
         ]
     preflight = list(getattr(state, "preflight_fehler", []) or [])
     follow_up = list(getattr(state, "follow_up_fehler", []) or [])
-    migration_status = planner._migrations_stand(project_dir)
+    migration_status = architect_context.migration_status(project_dir)
     planner_info = getattr(state, "last_planner_info", None)
     sections: list[tuple[str, str]] = []
     if preflight:
@@ -422,7 +424,7 @@ def run_architect_role_checkpoint(state: Any, *, goal: str) -> bool:
     (
         state.architect_execution_context,
         execution_manifest,
-    ) = planner._budget_architect_execution_context(sections)
+    ) = architect_context.budget_architect_execution_context(sections)
     state.architect_execution_context_manifest = execution_manifest
     planner.audit(
         "planner_architect_context_budget", execution_manifest,
@@ -461,7 +463,7 @@ def run_architect_role_checkpoint(state: Any, *, goal: str) -> bool:
         scout_report=scout_report,
         scout_input_sha256=scout_input_sha256,
         services=ArchitectRoleServices(
-            input_fingerprint=planner._architect_input_fingerprint,
+            input_fingerprint=architect_context.architect_input_fingerprint,
             validate_artifact=validate_role_artifact,
             make_artifact=make_role_artifact,
             run_architect=planner.run_architect,

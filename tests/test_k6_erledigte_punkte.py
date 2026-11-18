@@ -2,7 +2,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from werkstatt.planner import _erledigte_punkte
+from werkstatt.architect_context import completed_project_points as _erledigte_punkte
 
 
 def test_ohne_alles_leer(tmp_path: Path) -> None:

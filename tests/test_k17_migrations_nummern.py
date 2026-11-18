@@ -1,7 +1,8 @@
 """K17: Architect bekommt Migrationsstand deterministisch im Kontext."""
 from pathlib import Path
 
-from werkstatt.planner import ARCHITECT_SYSTEM, _migrations_stand
+from werkstatt.architect import ARCHITECT_SYSTEM
+from werkstatt.architect_context import migration_status as _migrations_stand
 
 
 def test_prompt_enthaelt_migrations_regel():

@@ -8,7 +8,7 @@ Drift-Check: tools/control_drift.py --check
 """
 from __future__ import annotations
 
-from werkstatt import gates, planner, reflection, verify
+from werkstatt import architect_context, gates, planner, reflection, verify
 from werkstatt.antipattern import scan_patches
 from werkstatt.control.control import Control
 
@@ -86,8 +86,8 @@ _reg(Control(
 ))
 _reg(Control(
     name="pruefe_migrations_kollision",
-    fn=planner._pruefe_migrations_kollision,
-    source="werkstatt.planner._pruefe_migrations_kollision",
+    fn=architect_context.migration_collisions,
+    source="werkstatt.architect_context.migration_collisions",
     description="Migrations-Kollision im Plan verhindern",
     hart=True,
 ))

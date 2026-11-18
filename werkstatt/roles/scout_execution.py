@@ -278,7 +278,9 @@ def run_scout_role_checkpoint(
             state.project_name,
         )
 
-    if not shared._scout_report_hat_architect_auftrag(report):
+    from werkstatt.architect_context import scout_report_has_architect_assignment
+
+    if not scout_report_has_architect_assignment(report):
         shared.audit(
             "planner_scout_json_fehler",
             {"grund": "auftrag_prosa_fehlt"},

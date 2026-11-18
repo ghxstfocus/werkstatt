@@ -37,7 +37,7 @@ def _state(tmp_path, *, artifacts=None):
 def test_architect_role_consumes_current_scout_artifact_without_planner_runner(
     tmp_path, monkeypatch,
 ):
-    from werkstatt import architect, planner, progress
+    from werkstatt import architect, architect_context, planner, progress
     from werkstatt.roles import planner_dispatch
 
     goal = "Inspect how the checkpoint coordinator chooses work"
@@ -57,12 +57,17 @@ def test_architect_role_consumes_current_scout_artifact_without_planner_runner(
         lambda *_args: scout_fingerprint,
     )
     monkeypatch.setattr(planner, "_pruefe_api_widerspruch", lambda *_args: [])
-    monkeypatch.setattr(planner, "_scout_report_hat_architect_auftrag", lambda _r: True)
-    monkeypatch.setattr(planner, "_erledigte_punkte", lambda _root: "")
-    monkeypatch.setattr(progress, "read_recent", lambda *_args, **_kwargs: "")
-    monkeypatch.setattr(planner, "_migrations_stand", lambda _root: "")
     monkeypatch.setattr(
-        planner, "_budget_architect_execution_context",
+        architect_context, "scout_report_has_architect_assignment",
+        lambda _r: True,
+    )
+    monkeypatch.setattr(
+        architect_context, "completed_project_points", lambda _root: "",
+    )
+    monkeypatch.setattr(progress, "read_recent", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(architect_context, "migration_status", lambda _root: "")
+    monkeypatch.setattr(
+        architect_context, "budget_architect_execution_context",
         lambda _sections: ("bounded execution context", {"chars": 27}),
     )
     monkeypatch.setattr(
@@ -70,7 +75,10 @@ def test_architect_role_consumes_current_scout_artifact_without_planner_runner(
         lambda *_args: (False, "routine"),
     )
     monkeypatch.setattr(planner, "_validate_contract_or_audit", lambda *_args: True)
-    monkeypatch.setattr(planner, "_architect_input_fingerprint", lambda *_args: "c" * 64)
+    monkeypatch.setattr(
+        architect_context, "architect_input_fingerprint",
+        lambda *_args: "c" * 64,
+    )
     monkeypatch.setattr(planner, "_publish_role_checkpoint", lambda *_args: None)
     monkeypatch.setattr(planner, "audit", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(

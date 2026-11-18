@@ -1,9 +1,11 @@
 """K17b: Migrations-Kollision deterministisch (Gate + Prompt)."""
 from pathlib import Path
 
-from werkstatt.planner import (
-    _migrations_stand,
-    _pruefe_migrations_kollision,
+from werkstatt.architect_context import (
+    migration_collisions as _pruefe_migrations_kollision,
+)
+from werkstatt.architect_context import (
+    migration_status as _migrations_stand,
 )
 
 # --- Ebene 1: Prompt (pflicht-Block, nur Fakten) ---
