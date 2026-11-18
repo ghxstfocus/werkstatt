@@ -5,7 +5,7 @@ from pathlib import Path
 
 import werkstatt
 from werkstatt.planner import _merge_mini_tasks
-from werkstatt.task_graph import _topo_sort_tasks
+from werkstatt.task_graph import _topo_sort_tasks, remap_dependencies_to_split_leaves
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -72,3 +72,15 @@ def test_unbekannte_dependency_bleibt_unveraendert() -> None:
 
     assert result[1]["id"] == "t2"
     assert result[1]["dependencies"] == ["t9"]
+
+
+def test_dependency_on_recursively_split_task_maps_to_surviving_leaves() -> None:
+    tasks = [
+        _task("t4_b_a_x", [], file="a.py"),
+        _task("t4_b_a_y", ["t4_b_a_x"], file="b.py"),
+        _task("t4_b_b", ["t4_b_a_y"], file="c.py"),
+        _task("t8", ["t4_b"], file="d.py"),
+    ]
+    remap_dependencies_to_split_leaves(tasks)
+    assert tasks[-1]["dependencies"] == ["t4_b_a_y", "t4_b_b"]
+    assert _topo_sort_tasks(tasks)[-1]["id"] == "t8"

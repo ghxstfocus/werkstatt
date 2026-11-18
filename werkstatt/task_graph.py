@@ -14,6 +14,31 @@ from werkstatt.audit import audit
 class TaskGraphError(ValueError):
     """A generated task graph is structurally unsafe to execute."""
 
+
+def remap_dependencies_to_split_leaves(tasks: list[dict]) -> list[dict]:
+    """Remap edges from removed recursive-split parents to surviving leaves."""
+    surviving = {
+        str(task.get("id")) for task in tasks
+        if isinstance(task, dict) and task.get("id")
+    }
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        remapped: list[str] = []
+        for dependency in task.get("dependencies") or []:
+            dep = str(dependency)
+            descendants = {
+                item for item in surviving if item.startswith(dep + "_")
+            } if dep not in surviving else set()
+            leaves = sorted(
+                item for item in descendants
+                if not any(other.startswith(item + "_") for other in descendants)
+            )
+            for target in leaves or [dep]:
+                remapped.append(target)
+        task["dependencies"] = remapped
+    return tasks
+
 def _validate_read_task_scopes(tasks: list[dict], project_dir) -> None:
     """Require every planned read task to name current, project-local files."""
     root = Path(project_dir).resolve(strict=True)

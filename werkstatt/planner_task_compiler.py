@@ -207,6 +207,10 @@ def run_planner_split_pipeline(
             else:
                 _final.append(t)
 
+    # Recursive on-demand splits may remove IDs still referenced downstream.
+    from werkstatt.task_graph import remap_dependencies_to_split_leaves
+    _final = remap_dependencies_to_split_leaves(_final)
+
     # K61a: task_files normalisieren (Dateiname -> voller Pfad).
     # Vor K20, damit _korrigiere_aktion auf korrekten Pfaden arbeitet.
     _final = _normalisiere_task_files(
