@@ -23,7 +23,7 @@ __all__ = ["chat_loop"]
 
 _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 _DEFAULT_MAX_ROUNDS: int | None = None
-_DEFAULT_MAX_ELAPSED_S = 120.0
+_DEFAULT_MAX_ELAPSED_S = 600.0
 _CHAT_REQUEST_MESSAGE_MANIFEST_LIMIT = 96
 
 
